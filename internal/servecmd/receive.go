@@ -22,18 +22,14 @@ import (
 	"github.com/amrshadid/nopacs/internal/receive/stow"
 	"github.com/amrshadid/nopacs/internal/receive/supervise"
 	"github.com/amrshadid/nopacs/internal/registry"
+	"github.com/amrshadid/nopacs/internal/server"
 	"github.com/amrshadid/nopacs/internal/settingvalue"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// The directories of the data directory the receivers use.
-const (
-	// IncomingDirName holds the incoming area: <data-dir>/incoming/<tenant>.
-	IncomingDirName = "incoming"
-	// TLSDirName holds each tenant's receiver certificates:
-	// <data-dir>/tls/<tenant> (receiver.proto, ReceiverTls).
-	TLSDirName = "tls"
-)
+// IncomingDirName holds the incoming area: <data-dir>/incoming/<tenant>.
+// Each tenant's receiver certificates are in server.TLSDir.
+const IncomingDirName = "incoming"
 
 // Runner is a part of the server that runs beside the API: started once the
 // server listens, stopped before the server stops, so it never uses a
@@ -137,7 +133,7 @@ func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantNam
 			}
 			return dimse.New(dimse.Config{
 				Receiver: spec.Receiver, BindAddress: spec.BindAddress, Sink: spec.Sink,
-				TLSDir:  filepath.Join(d.DataDir, TLSDirName, spec.Tenant),
+				TLSDir:  server.TLSDir(d.DataDir, spec.Tenant),
 				Refusal: dimse.Refusal(spec.Refusal), Report: dimse.Report(spec.Report),
 				Logger: log.With("tenant", spec.Tenant),
 			})

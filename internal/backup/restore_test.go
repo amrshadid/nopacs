@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -134,6 +135,20 @@ func TestRestoreRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// A sender whose TLS files are in the data directory, which a backup
+		// does not hold.
+		if _, err := r.st.(tenant.Sending).AddSender(ctx, tlsSender("peer"), time.Now(), r.audit(), nil); err != nil {
+			t.Fatal(err)
+		}
+		tlsDir := server.TLSDir(r.dataDir, "lab")
+		if err := os.MkdirAll(tlsDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"ca.pem", "client.pem", "client.key"} {
+			if err := os.WriteFile(filepath.Join(tlsDir, name), []byte("a site's file"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
 		path, sum := r.backup()
 		if len(sum.Sections) != 2 || sum.Sections[1].Tenant != "lab" || sum.Sections[1].Point.EventHistory != history ||
 			sum.Sections[1].Point.LastCorrection == "" || sum.Sections[1].Point.LastReception == "" {
@@ -190,6 +205,10 @@ func TestRestoreRoundTrip(t *testing.T) {
 		var out strings.Builder
 		if err := rep.Print(&out); err != nil || !strings.Contains(out.String(), "Keys: all 2 suspended") {
 			t.Fatalf("the report reads %q (%v)", out.String(), err)
+		}
+		if !strings.Contains(out.String(), "sender peer: TLS certificate authorities ca.pem, TLS client certificate client.pem, TLS private key client.key") ||
+			strings.Contains(out.String(), "a site's file") {
+			t.Fatalf("the report does not name the sender's TLS files the restored data directory lacks, or prints one:\n%s", out.String())
 		}
 
 		r.dataDir, r.masterAddr = target, cfg.MasterAddress

@@ -23,6 +23,17 @@ import (
 // is unique (with the row's id after it) and never one a label folds to.
 const movedPrefix = "~rebuild~"
 
+// closeHistorySQL moves the feed's mark of what was pruned to just before
+// the newest event, the new history's first, written just before it in the
+// same transaction (tenant.Events, "Histories"): no read answers an event of
+// the old history again, and the empty cursor reads from the new one's
+// first. The newest id is that event's: SQLite runs one writer, and on
+// Postgres the feed's writers take its lock before they take an id and the
+// transaction holds it, so every other event's id is lower, and one less than it is at or past every one of
+// them however the ids skip. The old rows are left for the pruning.
+const closeHistorySQL = `UPDATE event_marks SET pruned_through = (SELECT max(id) FROM events) - 1
+	WHERE pruned_through < (SELECT max(id) FROM events) - 1`
+
 // endRebuildIn ends the rebuild job of r with the build's counts in st and
 // its tallies with more, writes its event, and returns it as it is after.
 func (k Rebuild) endRebuildIn(ctx context.Context, tx SendingTx, r rebuildRow, st tenant.RebuildProgress, more map[string]int64,
@@ -187,6 +198,9 @@ func (k Rebuild) ActivateCatalog(ctx context.Context, fence tenant.WorkFence, no
 			return err
 		}
 		if err := tx.WriteEvents(ctx, e); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, closeHistorySQL); err != nil {
 			return err
 		}
 		out, err = k.endRebuildIn(ctx, tx, r, st, map[string]int64{tenant.TallyActivated: 1}, now)

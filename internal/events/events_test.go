@@ -449,14 +449,15 @@ func TestWakeReachesOnlyItsTenant(t *testing.T) {
 // TestKeepAlive guards the keep-alive: a stream opens with one carrying its
 // starting cursor; an idle stream gets another once the interval passes
 // with nothing sent, and not before; its cursor, past events the filter
-// left out, resumes a new stream exactly after what was read.
+// left out, resumes a new stream exactly after what was read. Each names
+// the feed's history its cursor belongs to.
 func TestKeepAlive(t *testing.T) {
 	b, clock := newTest(t, Config{})
-	feed := &fakeFeed{}
+	feed := &fakeFeed{history: "h1"}
 	feed.write(4)
 	s := start(t, b, Watch{Tenant: "lab", Reader: feed, Types: []tenant.EventType{tenant.EventReceiverHealth}}, nil)
-	if k := s.keepAlive(t); k.Cursor != "4" {
-		t.Errorf("the opening keep-alive's cursor = %q, want 4 (from now)", k.Cursor)
+	if k := s.keepAlive(t); k.Cursor != "4" || k.History != "h1" {
+		t.Errorf("the opening keep-alive's cursor and history = %q, %q, want 4 (from now) and h1", k.Cursor, k.History)
 	}
 	feed.write(4) // 5 to 8: 5 and 8 are health events
 	b.Wake("lab")
@@ -473,8 +474,8 @@ func TestKeepAlive(t *testing.T) {
 	clock.Advance(time.Second)
 	tick(t, b, clock)
 	k := s.keepAlive(t)
-	if k.Cursor != "10" || !k.Time.Equal(clock.Now()) {
-		t.Errorf("the idle keep-alive = %+v, want cursor 10, past what the filter left out, at %v", k, clock.Now())
+	if k.Cursor != "10" || k.History != "h1" || !k.Time.Equal(clock.Now()) {
+		t.Errorf("the idle keep-alive = %+v, want cursor 10, past what the filter left out, of history h1, at %v", k, clock.Now())
 	}
 	s.stop()
 	if err := <-s.done; !errors.Is(err, context.Canceled) {

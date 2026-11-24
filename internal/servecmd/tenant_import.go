@@ -161,6 +161,7 @@ func printImport(w io.Writer, dir string, rep backup.ImportReport) error {
 	if rep.Result.QuarantineMarked > 0 {
 		fmt.Fprintf(&b, "  %d quarantined files' bytes stayed in the other installation's incoming area; their records say so\n", rep.Result.QuarantineMarked)
 	}
+	b.WriteString(backup.CredentialsText(rep.Result.Credentials))
 	b.WriteString("Keys and grants stayed with the other installation: grant this installation's keys on the tenant.\n")
 	fmt.Fprintf(&b, "\nStart the server with:\n  nopacs-server serve --data-dir %s\n", dir)
 	_, err := io.WriteString(w, b.String())

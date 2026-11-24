@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/core/reception"
 	"github.com/amrshadid/nopacs/internal/driver/sqlkit"
-	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -45,8 +43,14 @@ const (
 	// eventsAfterSQL reads the events after an id: the table's own key.
 	eventsAfterSQL = `SELECT id, type, at, payload FROM events WHERE id > $1 ORDER BY id LIMIT $2`
 	// eventHighSQL reads the feed's place: the newest id committed, or the
-	// mark of what was pruned when every event is gone.
-	eventHighSQL = `SELECT greatest(coalesce((SELECT max(id) FROM events), 0), pruned_through), pruned_through FROM event_marks WHERE only_row`
+	// mark of what was pruned when every event is gone; the mark; and the
+	// feed's history.
+	eventHighSQL = `SELECT greatest(coalesce((SELECT max(id) FROM events), 0), pruned_through), pruned_through,
+		(SELECT id FROM event_history WHERE only_row) FROM event_marks WHERE only_row`
+	// leftBelowSQL reads the mark and whether events are left at or below
+	// it: an earlier history's, which an activation moved the mark past
+	// without removing them.
+	leftBelowSQL = `SELECT pruned_through, EXISTS (SELECT 1 FROM events WHERE id <= pruned_through) FROM event_marks WHERE only_row`
 	// lastCheckpointSQL reads the newest checkpoint, if any.
 	lastCheckpointSQL = `SELECT at, through FROM event_checkpoints ORDER BY at DESC LIMIT 1`
 	// pruneTargetSQL reads the newest event a checkpoint older than a time
@@ -131,32 +135,20 @@ func decisionEventInTx(ctx context.Context, tx pgx.Tx, q tenant.QuarantinedFile)
 	return tenant.QuarantineDecidedEvent(q, files, bytes)
 }
 
-// eventCursor returns the cursor after the event with this id. The tenant
-// it belongs to is a field of the cursor rather than the cursor's own
-// binding, so a cursor of another tenant's feed is told apart from one
-// altered or of another list (tenant.ErrForeignCursor).
-func (t *Tenant) eventCursor(id int64) string {
-	return sqlkit.EncodeCursor(listEvents, "", t.binding(), strconv.FormatInt(id, 10))
+// eventCursor returns the cursor after the event with this id, in the
+// feed's history. The tenant and the history are fields of the cursor
+// rather than its binding, so a cursor of another tenant's feed
+// (tenant.ErrForeignCursor) or of an earlier history
+// (tenant.ErrHistoryChanged) is told apart from one altered.
+func (t *Tenant) eventCursor(id int64, history string) string {
+	return sqlkit.EventCursor(listEvents, t.binding(), id, history)
 }
 
-// eventPosition decodes a feed cursor into the id it is after, or -1 for
-// the empty cursor, which reads from the oldest event kept.
-func (t *Tenant) eventPosition(cursor string) (int64, error) {
-	if cursor == "" {
-		return -1, nil
-	}
-	f, err := sqlkit.DecodeCursor(cursor, listEvents, "", 2)
-	if err != nil {
-		return 0, err
-	}
-	if f[0] != t.binding() {
-		return 0, tenant.ForeignCursor()
-	}
-	id, err := sqlkit.DecodeCursorInt(f[1])
-	if err != nil || id < 0 {
-		return 0, fault.New(fault.Invalid, "the page token is not one this list returned with these arguments")
-	}
-	return id, nil
+// eventPosition decodes a feed cursor into the id it is after and its
+// history, or -1 for the empty cursor, which reads from the oldest event
+// kept.
+func (t *Tenant) eventPosition(cursor string) (int64, string, error) {
+	return sqlkit.EventPosition(cursor, listEvents, t.binding())
 }
 
 // readFeed runs fn in one read-only transaction at repeatable read, so
@@ -176,10 +168,11 @@ func (t *Tenant) readFeed(ctx context.Context, message string, fn func(tx pgx.Tx
 	return nil
 }
 
-// feedHigh reads the feed's place in tx.
-func feedHigh(ctx context.Context, tx pgx.Tx) (high, pruned int64, err error) {
-	err = tx.QueryRow(ctx, eventHighSQL).Scan(&high, &pruned)
-	return high, pruned, err
+// feedHigh reads the feed's place in tx: the newest event, the mark of what
+// was pruned, and the history.
+func feedHigh(ctx context.Context, tx pgx.Tx) (high, pruned int64, history string, err error) {
+	err = tx.QueryRow(ctx, eventHighSQL).Scan(&high, &pruned, &history)
+	return high, pruned, history, err
 }
 
 // AppendEvents implements tenant.Events.
@@ -268,25 +261,19 @@ func (t *Tenant) ReadEvents(ctx context.Context, after string, types []tenant.Ev
 	if err := tenant.ValidateEventRead(types, limit); err != nil {
 		return tenant.EventPage{}, err
 	}
-	pos, err := t.eventPosition(after)
+	pos, cursorHistory, err := t.eventPosition(after)
 	if err != nil {
 		return tenant.EventPage{}, err
 	}
 	var page tenant.EventPage
 	err = t.readFeed(ctx, "the events cannot be read", func(tx pgx.Tx) error {
-		high, pruned, err := feedHigh(ctx, tx)
+		high, pruned, history, err := feedHigh(ctx, tx)
 		if err != nil {
 			return err
 		}
-		from := pos
-		switch {
-		case pos < 0:
-			from = pruned
-		case pos < pruned, pos > high:
-			// Before what was pruned, or after the newest event the feed
-			// holds: a database restored from an older backup, whose events
-			// at and before the cursor are not those the reader saw.
-			return tenant.CursorExpired()
+		from, err := sqlkit.EventFrom(pos, cursorHistory, high, pruned, history)
+		if err != nil {
+			return err
 		}
 		query, args := eventsQuery(sqlkit.DistinctTypes(types), from, limit)
 		rows, err := tx.Query(ctx, query, args...)
@@ -304,7 +291,7 @@ func (t *Tenant) ReadEvents(ctx context.Context, after string, types []tenant.Ev
 				unreadable++
 			}
 			ids = append(ids, id)
-			return tenant.Event{Cursor: t.eventCursor(id), Type: tenant.EventType(typ), Time: at.UTC(), Payload: p}, nil
+			return tenant.Event{Cursor: t.eventCursor(id, history), Type: tenant.EventType(typ), Time: at.UTC(), Payload: p}, nil
 		})
 		if err != nil {
 			return err
@@ -316,7 +303,7 @@ func (t *Tenant) ReadEvents(ctx context.Context, after string, types []tenant.Ev
 		if len(events) == limit {
 			next = ids[len(ids)-1]
 		}
-		page = tenant.EventPage{Events: events, Cursor: t.eventCursor(next), Unreadable: unreadable}
+		page = tenant.EventPage{Events: events, Cursor: t.eventCursor(next, history), Unreadable: unreadable, History: history}
 		return nil
 	})
 	if err != nil {
@@ -325,12 +312,18 @@ func (t *Tenant) ReadEvents(ctx context.Context, after string, types []tenant.Ev
 	return page, nil
 }
 
+// EventCursorHistory implements tenant.Events.
+func (t *Tenant) EventCursorHistory(cursor string) (string, error) {
+	_, history, err := t.eventPosition(cursor)
+	return history, err
+}
+
 // EventCursor implements tenant.Events.
 func (t *Tenant) EventCursor(ctx context.Context) (string, error) {
 	var cursor string
 	err := t.readFeed(ctx, "the event feed's place cannot be read", func(tx pgx.Tx) error {
-		high, _, err := feedHigh(ctx, tx)
-		cursor = t.eventCursor(high)
+		high, _, history, err := feedHigh(ctx, tx)
+		cursor = t.eventCursor(high, history)
 		return err
 	})
 	return cursor, err
@@ -341,7 +334,7 @@ func (t *Tenant) EventCursor(ctx context.Context) (string, error) {
 func (t *Tenant) StatusSnapshot(ctx context.Context) (tenant.StatusSnapshot, error) {
 	var s tenant.StatusSnapshot
 	err := t.readFeed(ctx, "the tenant's status cannot be read", func(tx pgx.Tx) error {
-		high, _, err := feedHigh(ctx, tx)
+		high, _, history, err := feedHigh(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -395,7 +388,7 @@ func (t *Tenant) StatusSnapshot(ctx context.Context) (tenant.StatusSnapshot, err
 		if err != nil {
 			return err
 		}
-		s = tenant.StatusSnapshot{EventCursor: t.eventCursor(high), Catalog: *c, QuarantinedFiles: files,
+		s = tenant.StatusSnapshot{EventCursor: t.eventCursor(high, history), History: history, Catalog: *c, QuarantinedFiles: files,
 			QuarantinedBytes: bytes, InProgress: tenant.InProgressSteps(counts), IncomingBytes: incoming + bytes,
 			StorageBytes: storages, JobsInProgress: jobs}
 		return nil
@@ -418,7 +411,7 @@ func (t *Tenant) CheckpointEvents(ctx context.Context, at time.Time) error {
 		if err := lockFeed(ctx, tx); err != nil {
 			return err
 		}
-		high, _, err := feedHigh(ctx, tx)
+		high, _, _, err := feedHigh(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -446,14 +439,27 @@ func (t *Tenant) CheckpointEvents(ctx context.Context, at time.Time) error {
 // PruneEvents implements tenant.Events. The newest checkpoint older than
 // before says up to which event to remove; every event up to it is removed
 // in order, in transactions of at most PruneStep events, each holding the
-// feed's lock while it moves the mark with what it removes.
+// feed's lock while it moves the mark with what it removes. Events an
+// earlier history left at or below the mark are removed the same way,
+// whatever the checkpoints say: no read answers them.
 func (t *Tenant) PruneEvents(ctx context.Context, before time.Time, limit int) (int, bool, error) {
 	if err := tenant.ValidatePrune(before, limit); err != nil {
 		return 0, false, err
 	}
 	var target int64
 	err := t.readFeed(ctx, "the events cannot be pruned", func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, pruneTargetSQL, eventTime(before)).Scan(&target)
+		if err := tx.QueryRow(ctx, pruneTargetSQL, eventTime(before)).Scan(&target); err != nil {
+			return err
+		}
+		var pruned int64
+		var left bool
+		if err := tx.QueryRow(ctx, leftBelowSQL).Scan(&pruned, &left); err != nil {
+			return err
+		}
+		if left {
+			target = max(target, pruned)
+		}
+		return nil
 	})
 	if err != nil || target < 0 {
 		return 0, false, err

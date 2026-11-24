@@ -264,3 +264,70 @@ func TestWatchAllKeepAliveNamesOnlyWhatChanged(t *testing.T) {
 		t.Errorf("the cursors a client keeps are %v, want a and c at 1 and b at 3", s.cursors)
 	}
 }
+
+// TestWatchAllKeepAliveNamesHistories guards the histories a stream of
+// every tenant gives, each with its cursor, as the contract names them: the
+// opening keep-alive names the history of every cursor it names, those
+// started from now and those given alike; an idle one names neither; one
+// after a tenant's events names that tenant's cursor and history alone.
+func TestWatchAllKeepAliveNamesHistories(t *testing.T) {
+	b, clock := newTest(t, Config{})
+	ts := &fakeTenants{}
+	feeds := map[string]*fakeFeed{}
+	for _, n := range []string{"a", "b"} {
+		feeds[n] = &fakeFeed{history: "history-" + n}
+		feeds[n].write(1)
+		ts.set(n, feeds[n])
+	}
+	s := start(t, b, Watch{}, &WatchAll{Tenants: ts, Cursors: map[string]string{"a": "1"}})
+	k := s.keepAlive(t)
+	if fmt.Sprint(k.TenantCursors) != "map[a:1 b:1]" || fmt.Sprint(k.TenantHistories) != "map[a:history-a b:history-b]" {
+		t.Errorf("the opening keep-alive names the cursors %v and histories %v, want each tenant's cursor with its history", k.TenantCursors,
+			k.TenantHistories)
+	}
+	b.idle(t, "")
+	clock.Advance(DefaultKeepAlive)
+	tick(t, b, clock)
+	if k := s.keepAlive(t); len(k.TenantHistories) != 0 || len(k.TenantCursors) != 0 {
+		t.Errorf("an idle keep-alive names the cursors %v and histories %v, want none", k.TenantCursors, k.TenantHistories)
+	}
+	feeds["b"].write(1)
+	b.Wake("b")
+	s.eventIDs(t, 1)
+	b.idle(t, "")
+	clock.Advance(DefaultKeepAlive)
+	tick(t, b, clock)
+	if k := s.keepAlive(t); fmt.Sprint(k.TenantCursors) != "map[b:2]" || fmt.Sprint(k.TenantHistories) != "map[b:history-b]" {
+		t.Errorf("the keep-alive after b's event: cursors %v, histories %v; want b at 2 with its history alone", k.TenantCursors, k.TenantHistories)
+	}
+}
+
+// TestWatchAllSendsAHistoryLearnedLater guards a cursor given at the start
+// for a tenant whose database does not answer: the opening keep-alive names
+// it with an empty history, and once the tenant answers and is read, a
+// keep-alive names the same cursor again with its history.
+func TestWatchAllSendsAHistoryLearnedLater(t *testing.T) {
+	b, clock := newTest(t, Config{})
+	ts := &fakeTenants{}
+	c := &fakeFeed{history: "history-c"}
+	c.write(1)
+	c.down.Store(true)
+	ts.set("c", c)
+	s := start(t, b, Watch{}, &WatchAll{Tenants: ts, Cursors: map[string]string{"c": "1"}})
+	if k := s.keepAlive(t); fmt.Sprint(k.TenantCursors) != "map[c:1]" || fmt.Sprint(k.TenantHistories) != "map[c:]" {
+		t.Fatalf("the opening keep-alive names %v with histories %v, want c at 1 with no history yet", k.TenantCursors, k.TenantHistories)
+	}
+	c.down.Store(false)
+	for range 5 {
+		b.idle(t, "")
+		clock.Advance(DefaultMaxBackoff)
+		tick(t, b, clock)
+		if k := s.keepAlive(t); k.TenantHistories["c"] == "history-c" {
+			if k.TenantCursors["c"] != "1" {
+				t.Errorf("the history came with the cursor %q, want 1", k.TenantCursors["c"])
+			}
+			return
+		}
+	}
+	t.Fatal("no keep-alive named c's history once it answered")
+}

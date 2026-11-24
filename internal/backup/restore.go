@@ -119,6 +119,9 @@ type TenantResult struct {
 	Relinked int64
 	// Loss is what could not be brought back.
 	Loss TenantLoss
+	// Credentials are the TLS files its receivers and senders name that the
+	// data directory restored into lacks: a backup holds none of them.
+	Credentials []Credential
 }
 
 // Restore restores the backup in cfg.File into an empty data directory, with

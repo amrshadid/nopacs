@@ -2,7 +2,6 @@ package servecmd
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/amrshadid/nopacs/internal/api"
 	"github.com/amrshadid/nopacs/internal/checkedread"
@@ -15,6 +14,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/registry"
 	"github.com/amrshadid/nopacs/internal/scrub"
 	"github.com/amrshadid/nopacs/internal/send"
+	"github.com/amrshadid/nopacs/internal/server"
 	"github.com/amrshadid/nopacs/internal/settingvalue"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -51,7 +51,7 @@ func newSending(d Deps, reg *registry.Registry, wake func(tenantName string), re
 			return string(plain), nil
 		},
 		Reads:  reads,
-		TLSDir: func(tenantName string) string { return filepath.Join(d.DataDir, TLSDirName, tenantName) },
+		TLSDir: func(tenantName string) string { return server.TLSDir(d.DataDir, tenantName) },
 		Wake:   wake,
 		Logger: d.Log,
 	})

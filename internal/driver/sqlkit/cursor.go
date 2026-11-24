@@ -11,6 +11,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
 // MaxCursorLength bounds a cursor a caller hands back. A cursor holds the
@@ -124,6 +125,62 @@ func DecodeCursorInt(field string) (int64, error) {
 		return 0, errBadCursor()
 	}
 	return v, nil
+}
+
+// EventCursor returns the cursor of a tenant's event feed after the event
+// with this id, in the history named, for the feed's list and the tenant's
+// binding. The tenant and the history are fields rather than the cursor's
+// binding, so that a cursor of another tenant or of another history is told
+// apart from one altered (EventPosition).
+func EventCursor(list, tenantBinding string, id int64, history string) string {
+	return EncodeCursor(list, "", tenantBinding, strconv.FormatInt(id, 10), history)
+}
+
+// EventPosition decodes a cursor EventCursor made into the id it is after
+// and its history, or -1 for the empty cursor. A cursor of another tenant
+// holds tenant.ErrForeignCursor. A cursor of the feed made by an earlier
+// version, which names no history, answers the empty history, which is
+// none a feed holds: it is refused as one of another history, and its
+// reader starts over from a status rather than being told its cursor was
+// never valid. Any other cursor is Invalid.
+func EventPosition(cursor, list, tenantBinding string) (int64, string, error) {
+	if cursor == "" {
+		return -1, "", nil
+	}
+	f, err := DecodeCursor(cursor, list, "", 3)
+	if err != nil {
+		old, oldErr := DecodeCursor(cursor, list, "", 2)
+		if oldErr != nil {
+			return 0, "", err
+		}
+		f = append(old, "")
+	}
+	if f[0] != tenantBinding {
+		return 0, "", tenant.ForeignCursor()
+	}
+	id, err := DecodeCursorInt(f[1])
+	if err != nil || id < 0 {
+		return 0, "", errBadCursor()
+	}
+	return id, f[2], nil
+}
+
+// EventFrom returns the id a read of the feed starts after, from the
+// position and history of its cursor (EventPosition) and the feed's place
+// in the read's snapshot: the newest event, the mark of what was pruned,
+// and the history. The empty cursor starts at the mark. A cursor of
+// another history, or after the newest event, is refused with
+// tenant.HistoryChanged; one before the mark with tenant.CursorExpired.
+func EventFrom(pos int64, cursorHistory string, high, pruned int64, history string) (int64, error) {
+	switch {
+	case pos < 0:
+		return pruned, nil
+	case cursorHistory != history, pos > high:
+		return 0, tenant.HistoryChanged()
+	case pos < pruned:
+		return 0, tenant.CursorExpired()
+	}
+	return pos, nil
 }
 
 // TimePosition is where a newest-first list resumes: the time and id of the

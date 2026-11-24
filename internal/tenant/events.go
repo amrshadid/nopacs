@@ -3,6 +3,7 @@ package tenant
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/core/reception"
@@ -80,10 +81,14 @@ import (
 //     filtered or not;
 //   - an event after a status snapshot's cursor is a change that snapshot's
 //     counts do not hold, and an event at or before it is one they do;
-//   - a cursor that names a point before what was pruned, or after the
-//     newest event the feed holds (a database restored from an older
-//     backup), is refused with ErrCursorExpired, never answered from another
-//     point; a cursor of another tenant's feed holds ErrForeignCursor;
+//   - a cursor that names a point before what was pruned is refused with
+//     ErrCursorExpired, and one of another history of the feed, or after
+//     the newest event it holds, with ErrHistoryChanged: never answered from
+//     another point; a cursor of another tenant's feed holds
+//     ErrForeignCursor;
+//   - every page and status names the feed's history it was read in, and a
+//     history's first event is the one that began it (CatalogRebuilt): no
+//     event of an earlier history is answered in a later one;
 //   - pruning never removes an event that a reader whose cursor is at or
 //     past the pruning's mark has not been offered: what is pruned is always
 //     a prefix of the feed, in the feed's order.
@@ -130,6 +135,24 @@ import (
 // CheckpointEvents), and pruning removes every event up to the newest
 // checkpoint older than the retention period (PruneEvents). The store knows
 // what was pruned by a mark, moved in the transaction that prunes.
+//
+// # Histories
+//
+// A cursor also names the feed's history (Rebuilding.EventHistory), which a
+// rebuild that makes its shadow the catalog in use replaces: a restore, an
+// import or a load ends in one, and so does a rebuild of replace mode. The
+// activation moves the mark of what was pruned past every event of the old
+// history, in its own transaction, just before the new history's first
+// event: no read answers an old event again, the empty cursor reads from
+// that first event, and a cursor of the old history is refused
+// (ErrHistoryChanged). The old rows are left for PruneEvents, which removes
+// every event below the mark whatever its checkpoints say, in its short
+// steps: an activation does not hold the writer for as long as removing a
+// history kept for the retention period would take. Keeping the old events
+// readable under their own history was not chosen: a reader with an old
+// cursor must read the catalog again whatever events it is given, the
+// contract answers no event of another history, and it would take a
+// history column on every event.
 type Events interface {
 	// AppendEvents writes up to MaxEventBatch events the server reports,
 	// all or none, and returns how many were new. Each has a key the
@@ -145,10 +168,18 @@ type Events interface {
 	// cursor, in commit order, of the types given (all types when none; at
 	// most MaxEventTypes, each one EventTypes lists), with the cursor to
 	// resume from. An empty after reads from the oldest event kept. A
-	// cursor before what was pruned or after the newest event holds
-	// ErrCursorExpired; a cursor of another tenant's feed holds
+	// cursor before what was pruned holds ErrCursorExpired; one of another
+	// history of the feed (a cursor made by an earlier version, which
+	// names none, included) or after the newest event holds
+	// ErrHistoryChanged; a cursor of another tenant's feed holds
 	// ErrForeignCursor; any other cursor not made by this feed is Invalid.
 	ReadEvents(ctx context.Context, after string, types []EventType, limit int) (EventPage, error)
+	// EventCursorHistory returns the id of the feed's history a cursor this
+	// feed made names, read from the cursor alone, without the database:
+	// "" for the empty cursor and for a cursor made before cursors named a
+	// history. A cursor of another tenant's feed holds ErrForeignCursor;
+	// any other cursor not made by this feed is Invalid.
+	EventCursorHistory(cursor string) (string, error)
 	// EventCursor returns the cursor after the newest event committed: a
 	// read from it answers the events committed later, which is where a
 	// reader that starts "from now" starts.
@@ -174,7 +205,9 @@ type Events interface {
 	// with what it removes, so the writer is never held for long and a
 	// reader whose cursor it passed is answered ErrCursorExpired on its next
 	// read, never a gap. A checkpoint that can prune nothing more is
-	// removed with the last events it covered.
+	// removed with the last events it covered. Events an earlier history
+	// left below the mark are removed whatever the checkpoints say, since
+	// no read answers them.
 	PruneEvents(ctx context.Context, before time.Time, limit int) (removed int, more bool, err error)
 }
 
@@ -207,21 +240,47 @@ const (
 
 // ErrCursorExpired is in the chain of a read whose cursor the feed can no
 // longer answer from: it points before the oldest event kept (events after
-// it were pruned), or after the newest event the feed holds (the database
-// was restored from an older backup, so the events at and before it are not
-// the ones the reader saw). Either way the events after it can no longer all
-// be answered, and the reader does the same thing: it reads a status again
-// and follows from its cursor. Its kind is fault.OutOfRange: the cursor was
-// well formed and this feed's own, and sending it again fails again. The
-// sentinel names this one case of that kind, which a watch tells apart from
-// a feed that fails (package events).
+// it were pruned), or it belongs to another history of the feed
+// (ErrHistoryChanged). Either way the events after it can no longer all be
+// answered, and the reader does the same thing: it reads a status again and
+// follows from its cursor. Its kind is fault.OutOfRange: the cursor was well
+// formed and this tenant's own, and sending it again fails again. The
+// sentinel names this case of that kind, which a watch tells apart from a
+// feed that fails (package events).
 var ErrCursorExpired = errors.New("the feed can no longer answer from this cursor")
 
-// CursorExpired returns the refusal of a read whose cursor the feed can no
-// longer answer from.
+// ErrHistoryChanged is in the chain of a read whose cursor belongs to
+// another history of the feed than the one it holds now: its database was
+// restored, imported or loaded, or a rebuild replaced its catalog, each of
+// which begins a new history (StatusSnapshot.History), or the cursor points
+// after the newest event the feed holds. The events the reader built its
+// view from are not those of this history, so it reads the catalog again,
+// not only the events after a status. ErrCursorExpired is in its chain too,
+// since everything a reader of an expired cursor does it does as well.
+var ErrHistoryChanged = fmt.Errorf("the cursor belongs to another history of the feed: %w", ErrCursorExpired)
+
+// The reasons the contract names for a cursor the feed can no longer answer
+// from, written at the start of the refusal's message.
+const (
+	// ReasonCursorExpired is a cursor before the oldest event kept.
+	ReasonCursorExpired = "CURSOR_EXPIRED"
+	// ReasonHistoryChanged is a cursor of another history of the feed.
+	ReasonHistoryChanged = "EVENT_HISTORY_CHANGED"
+)
+
+// CursorExpired returns the refusal of a read whose cursor points before
+// the oldest event the feed keeps.
 func CursorExpired() error {
 	return fault.Wrap(fault.OutOfRange, ErrCursorExpired,
-		"the cursor is outside the events the feed keeps; read the status again and watch from its event cursor")
+		ReasonCursorExpired+": the cursor is before the oldest event the feed keeps; read the status again and watch from its event cursor")
+}
+
+// HistoryChanged returns the refusal of a read whose cursor belongs to
+// another history of the feed.
+func HistoryChanged() error {
+	return fault.Wrap(fault.OutOfRange, ErrHistoryChanged,
+		ReasonHistoryChanged+": the cursor belongs to another history of the tenant's event feed (its database was restored, imported or "+
+			"loaded, or its catalog rebuilt); read the status and the catalog again and watch from the status's event cursor")
 }
 
 // ErrForeignCursor is in the chain of a read whose cursor was made by the
@@ -284,6 +343,9 @@ type EventPage struct {
 	// knows whose payload could not be read back, answered with no
 	// payload.
 	Unreadable int
+	// History is the id of the feed's history the page was read in
+	// (ValidateEventHistory), read in the same snapshot as its events.
+	History string
 }
 
 // StepCount is how many receptions are in one step.
@@ -300,6 +362,9 @@ type StatusSnapshot struct {
 	// EventCursor is the feed's place in the snapshot: a read from it
 	// answers exactly the events whose changes the counts do not hold.
 	EventCursor string
+	// History is the id of the feed's history in the snapshot, the one
+	// EventCursor belongs to.
+	History string
 	// Catalog are the catalog's running totals.
 	Catalog CatalogCounts
 	// QuarantinedFiles and QuarantinedBytes are the quarantine's totals:

@@ -266,6 +266,9 @@ func reconcileImport(ctx context.Context, cfg ImportConfig, row master.Tenant, s
 		return res, 0, fault.New(fault.Internal, "backup: this database type cannot be reconciled")
 	}
 	var err error
+	if res.Credentials, err = missingCredentials(ctx, p, cfg.DataDir, row.Name); err != nil {
+		return res, 0, err
+	}
 	if res.QuarantineMarked, err = rs.MarkQuarantineLost(ctx); err != nil {
 		return res, 0, err
 	}

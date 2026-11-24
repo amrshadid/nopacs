@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
 // TestCursorRoundTrip guards that a cursor gives back the fields it was made
@@ -103,5 +105,60 @@ func TestCursorRefuses(t *testing.T) {
 	}
 	if _, err := DecodeCursorInt("12x"); fault.KindOf(err) != fault.Invalid {
 		t.Errorf("DecodeCursorInt(12x) = %v, want Invalid", err)
+	}
+}
+
+// TestEventCursorHistory guards the history an event cursor names: a cursor
+// gives back its id and history; one of another history, or past the
+// newest event, is refused as a changed history, and one before the mark
+// as expired; a cursor of the format before histories, which names none,
+// is refused as a changed history rather than as never valid; another
+// tenant's is foreign; and the empty cursor starts at the mark.
+func TestEventCursorHistory(t *testing.T) {
+	const list, tenantBinding = "tenant-events", "t1"
+	h1, h2 := strings.Repeat("a", 32), strings.Repeat("b", 32)
+	id, history, err := EventPosition(EventCursor(list, tenantBinding, 41, h1), list, tenantBinding)
+	if err != nil || id != 41 || history != h1 {
+		t.Fatalf("EventPosition = %d, %q, %v; want 41, %q", id, history, err, h1)
+	}
+	if from, err := EventFrom(41, h1, 50, 10, h1); err != nil || from != 41 {
+		t.Errorf("EventFrom of the same history = %d, %v; want 41", from, err)
+	}
+	if from, err := EventFrom(-1, "", 50, 10, h1); err != nil || from != 10 {
+		t.Errorf("EventFrom of the empty cursor = %d, %v; want the mark 10", from, err)
+	}
+	refused := []struct {
+		name          string
+		pos           int64
+		history       string
+		target        error
+		reason        string
+		historyChange bool
+	}{
+		{"another history", 41, h2, tenant.ErrHistoryChanged, tenant.ReasonHistoryChanged, true},
+		{"another history before the mark", 3, h2, tenant.ErrHistoryChanged, tenant.ReasonHistoryChanged, true},
+		{"past the newest event", 51, h1, tenant.ErrHistoryChanged, tenant.ReasonHistoryChanged, true},
+		{"before the mark", 3, h1, tenant.ErrCursorExpired, tenant.ReasonCursorExpired, false},
+	}
+	for _, c := range refused {
+		_, err := EventFrom(c.pos, c.history, 50, 10, h1)
+		if !errors.Is(err, c.target) || !errors.Is(err, tenant.ErrCursorExpired) || fault.KindOf(err) != fault.OutOfRange ||
+			errors.Is(err, tenant.ErrHistoryChanged) != c.historyChange || !strings.HasPrefix(fault.Message(err), c.reason+":") {
+			t.Errorf("%s: EventFrom = %v (kind %v), want %v of kind OutOfRange beginning %s", c.name, err, fault.KindOf(err), c.target, c.reason)
+		}
+	}
+	old := EncodeCursor(list, "", tenantBinding, "41")
+	id, history, err = EventPosition(old, list, tenantBinding)
+	if err != nil || id != 41 || history != "" {
+		t.Fatalf("EventPosition of a cursor without a history = %d, %q, %v; want 41 and no history", id, history, err)
+	}
+	if _, err := EventFrom(id, history, 50, 10, h1); !errors.Is(err, tenant.ErrHistoryChanged) {
+		t.Errorf("EventFrom of a cursor without a history = %v, want ErrHistoryChanged", err)
+	}
+	if _, _, err := EventPosition(EventCursor(list, "t2", 41, h1), list, tenantBinding); !errors.Is(err, tenant.ErrForeignCursor) {
+		t.Errorf("EventPosition of another tenant's cursor = %v, want ErrForeignCursor", err)
+	}
+	if _, _, err := EventPosition(EncodeCursor(list, "", tenantBinding, "41", h1, "x"), list, tenantBinding); fault.KindOf(err) != fault.Invalid {
+		t.Errorf("EventPosition of a cursor with a field too many = %v, want Invalid", err)
 	}
 }

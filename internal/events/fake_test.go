@@ -128,6 +128,9 @@ type fakeFeed struct {
 	// recreated, when set, makes it a tenant created again under its name:
 	// any cursor but the empty one is another tenant's.
 	recreated atomic.Bool
+	// history is the history id each page names, set before a watch reads
+	// the feed.
+	history string
 }
 
 // write adds n events.
@@ -147,6 +150,15 @@ func keeps(types []tenant.EventType, t tenant.EventType) bool {
 		}
 	}
 	return false
+}
+
+// EventCursorHistory implements Reader: every cursor but the empty one is
+// of the feed's history.
+func (f *fakeFeed) EventCursorHistory(cursor string) (string, error) {
+	if cursor == "" {
+		return "", nil
+	}
+	return f.history, nil
 }
 
 // ReadEvents implements Reader.
@@ -196,7 +208,7 @@ func (f *fakeFeed) ReadEvents(ctx context.Context, after string, types []tenant.
 		f.blocked <- struct{}{}
 		<-f.hold
 	}
-	return tenant.EventPage{Events: out, Cursor: strconv.FormatInt(next, 10)}, nil
+	return tenant.EventPage{Events: out, Cursor: strconv.FormatInt(next, 10), History: f.history}, nil
 }
 
 // EventCursor implements Reader.

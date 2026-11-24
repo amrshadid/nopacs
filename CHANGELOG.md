@@ -202,6 +202,19 @@ the code before this release is in github.com/amrshadid/coria.
   tenant (who may read corrections); a reader gets the same not found as for a
   label never used, so a relabel made to remove an identifying label stays
   done.
+- A restore, an import or a rebuild that replaces the catalog begins a new
+  event history for clients: a cursor of the old history (or one past the
+  newest event) is refused OUT_OF_RANGE with a message beginning
+  EVENT_HISTORY_CHANGED, the new history's first event is catalog_rebuilt and
+  no event of the old history is served in it; GetStatus carries the history id
+  (event_history) and every keep-alive carries it with each cursor it names; an
+  expired cursor's message begins CURSOR_EXPIRED; cursors made before this
+  version are refused once as of another history.
+- The restore and import reports name, by file name only, each TLS file a
+  receiver or sender names that the data directory lacks (a backup holds
+  none), under "external credentials to re-enter", one that cannot be looked
+  at as not checked, never failing the restore; and they say the network
+  listener's certificate and key are not in a backup.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

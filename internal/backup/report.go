@@ -93,10 +93,30 @@ func (r Report) Print(w io.Writer) error {
 		fmt.Fprintf(&b, "    quarantine: %d held files (%d bytes) whose bytes were in incoming; their records came back,\n"+
 			"      %d of them marked incoming lost\n", t.Loss.QuarantineFiles, t.Loss.QuarantineBytes, t.QuarantineMarked)
 		b.WriteString("    events after its recovery point; the feed begins a new history, which tells every consumer\n")
+		b.WriteString(CredentialsText(t.Credentials))
 	}
 	b.WriteString("\nAudit entries written after each recovery point are gone; the restore's own entry is in the master's log.\n")
+	b.WriteString("The network listener's certificate and key are files named when the server starts, not in a backup:\n" +
+		"give them again if they were in the data directory.\n")
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// CredentialsText returns the lines that name the TLS files a tenant's
+// receivers and senders name that the data directory lacks, by name only,
+// or "" when none is missing: a backup or an export holds none, and a
+// receiver without its files does not listen, a sender cannot connect.
+func CredentialsText(creds []Credential) string {
+	if len(creds) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	c := output.Clean
+	fmt.Fprintf(&b, "  external credentials to re-enter: files kept in the data directory, never in a backup; put each in %s\n", c(creds[0].Dir))
+	for _, x := range creds {
+		fmt.Fprintf(&b, "    %s %s: %s\n", x.Kind, c(x.Name), strings.Join(cleanAll(x.Files), ", "))
+	}
+	return b.String()
 }
 
 // cleanAll returns each of s cleaned (output.Clean).

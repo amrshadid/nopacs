@@ -86,7 +86,11 @@ func BenchmarkReadEventsPage(b *testing.B) {
 		b.Fatal(err)
 	}
 	b.Logf("built a feed of %d events in %v", total, time.Since(built).Round(time.Second))
-	middle := s.eventCursor(total / 2)
+	history, err := s.EventHistory(ctx)
+	if err != nil {
+		b.Fatal(err)
+	}
+	middle := s.eventCursor(total/2, history)
 	end, err := s.EventCursor(ctx)
 	if err != nil {
 		b.Fatal(err)

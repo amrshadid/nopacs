@@ -43,7 +43,13 @@ type follow struct {
 	// only when its cursor differs.
 	sent      string
 	sentKnown bool
-	listed    bool // in the latest listing; a tenant not listed is paused, its cursor kept
+	// history is the id of the feed's history cursor belongs to, set with
+	// it and sent with it: "" for the empty cursor, or one given at the
+	// start whose database did not answer yet. sentHistory is the one the
+	// last keep-alive gave: a cursor given at the start is sent again with
+	// its history once a read has learned it, though the cursor is the same.
+	history, sentHistory string
+	listed               bool // in the latest listing; a tenant not listed is paused, its cursor kept
 	// failing is set while the tenant is skipped after a read that failed
 	// or did not answer; it is tried again at retry, after backoff.
 	failing bool
@@ -94,7 +100,10 @@ func (b *Broadcaster) readTenant(ctx context.Context, ts Tenants, types []tenant
 //
 // The first message is a keep-alive with the cursor of every tenant it
 // follows (Full); a later one names the tenants whose cursor changed since
-// the one before. A tenant named in Cursors starts from its cursor; one not named
+// the one before, each with the history its cursor belongs to. A
+// tenant whose cursor belongs to another history of its feed ends the
+// stream as an expired one does (tenant.ErrHistoryChanged, which holds
+// tenant.ErrCursorExpired). A tenant named in Cursors starts from its cursor; one not named
 // starts from now, or with Resume from its first event kept; a tenant
 // listed later starts from its first event. A tenant missing from a listing
 // is paused, not forgotten, and continues from its cursor when listed
@@ -165,11 +174,13 @@ func (b *Broadcaster) WatchAll(ctx context.Context, w WatchAll, send Send) error
 	// tenants, a mostly idle stream's keep-alive is a few bytes rather
 	// than the whole map every interval.
 	keepAlive := func(full bool) Message {
-		k := &KeepAlive{Time: b.cfg.Clock.Now(), Full: full, TenantCursors: map[string]string{}}
+		k := &KeepAlive{Time: b.cfg.Clock.Now(), Full: full, TenantCursors: map[string]string{}, TenantHistories: map[string]string{}}
 		for n, f := range follows {
-			if f.known && (full || !f.sentKnown || f.sent != f.cursor) {
-				k.TenantCursors[n] = f.cursor
-				f.sent, f.sentKnown = f.cursor, true
+			if f.known && (full || !f.sentKnown || f.sent != f.cursor || f.sentHistory != f.history) {
+				// A history is sent with every cursor sent, and never
+				// alone.
+				k.TenantCursors[n], k.TenantHistories[n] = f.cursor, f.history
+				f.sent, f.sentHistory, f.sentKnown = f.cursor, f.history, true
 			}
 			if f.failing && f.listed {
 				k.Unanswered = append(k.Unanswered, n)
@@ -192,14 +203,24 @@ func (b *Broadcaster) WatchAll(ctx context.Context, w WatchAll, send Send) error
 		return err
 	}
 	for n, f := range follows {
-		if !f.fromNow {
+		if !f.fromNow && f.cursor == "" {
 			continue
 		}
-		if r, err := w.Tenants.Reader(ctx, n); err == nil {
-			if c, err := r.EventCursor(ctx); err == nil {
-				f.cursor, f.known, f.fromNow = c, true, false
-			}
+		r, err := w.Tenants.Reader(ctx, n)
+		if err != nil {
+			continue
 		}
+		if f.fromNow {
+			c, err := r.EventCursor(ctx)
+			if err != nil {
+				continue
+			}
+			f.cursor, f.known, f.fromNow = c, true, false
+		}
+		// The history a cursor names, read from the cursor alone; a cursor
+		// that is not this feed's is refused at its first read, and goes
+		// out with no history until then.
+		f.history, _ = r.EventCursorHistory(f.cursor)
 	}
 	if ctx.Err() != nil {
 		return ended(ctx)
@@ -343,21 +364,22 @@ func (b *Broadcaster) WatchAll(ctx context.Context, w WatchAll, send Send) error
 			case errors.Is(res.err, tenant.ErrForeignCursor):
 				// The name is another tenant now, created again: its feed
 				// is followed from its first event.
-				f.cursor, f.known, f.fromNow = "", true, false
+				f.cursor, f.history, f.known, f.fromNow = "", "", true, false
 				enqueue(res.name)
 				continue
 			case res.err != nil:
 				skip(f)
 				continue
 			}
-			f.cursor, f.known, f.fromNow, f.failing, f.backoff = res.cursor, true, false, false, 0
+			// The page was read from res.cursor, so both are of its history.
+			f.cursor, f.history, f.known, f.fromNow, f.failing, f.backoff = res.cursor, res.page.History, true, false, false, 0
 			for i := range res.page.Events {
 				if err := send(ctx, Message{Tenant: res.name, Event: &res.page.Events[i]}); err != nil {
 					return sendFailed(ctx, err)
 				}
 				lastSent = b.cfg.Clock.Now()
 			}
-			f.cursor = res.page.Cursor
+			f.cursor, f.history = res.page.Cursor, res.page.History
 			if again || len(res.page.Events) == b.cfg.PageSize {
 				enqueue(res.name)
 			}

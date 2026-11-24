@@ -432,13 +432,7 @@ func testRebuildActivates(e *renv) {
 	if after == history || tenant.ValidateEventHistory(after) != nil {
 		e.Errorf("the event history after activation is %q, before %q", after, history)
 	}
-	events, _ := e.readAll(start, 100, tenant.EventCatalogRebuilt)
-	if len(events) != 1 {
-		e.Fatalf("%d catalog_rebuilt events, want 1", len(events))
-	}
-	if p, ok := events[0].Payload.(*tenant.CatalogRebuilt); !ok || p.Job != "rb-1" || p.Instances != 7 || !p.NewHistory {
-		e.Errorf("the catalog_rebuilt event is %+v", events[0].Payload)
-	}
+	e.checkNewHistory(start, history, after, "rb-1")
 	tallies, err := e.p.JobTallies(e.ctx, "rb-1")
 	e.ok("JobTallies", err)
 	if len(tallies) != 1 || tallies[0].Key != tenant.TallyActivated || tallies[0].Count != 1 {
@@ -449,7 +443,7 @@ func testRebuildActivates(e *renv) {
 	if again.State != j.State || !again.Ended.Equal(j.Ended) {
 		e.Errorf("an activation sent again changed the job: %+v", again)
 	}
-	if events, _ := e.readAll(start, 100, tenant.EventCatalogRebuilt); len(events) != 1 {
+	if events, _ := e.readAll("", 100, tenant.EventCatalogRebuilt); len(events) != 1 {
 		e.Errorf("an activation sent again wrote another event")
 	}
 	e.ok("DropShadow", e.p.DropShadow(e.ctx, "rb-1"))

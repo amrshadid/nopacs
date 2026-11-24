@@ -43,7 +43,11 @@ func TestScaleEventFeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("seeded %d in %v", n, time.Since(t0))
-	mid := p.eventCursor(int64(n / 2))
+	history, err := p.EventHistory(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mid := p.eventCursor(int64(n/2), history)
 	measure := func(what string, f func() error) {
 		t0 := time.Now()
 		if err := f(); err != nil {

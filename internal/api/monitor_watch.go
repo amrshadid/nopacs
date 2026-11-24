@@ -65,6 +65,15 @@ func watchDetails(r *v1.WatchRequest) map[string]string {
 // contract says: the first message a keep-alive, the caller's key and grant
 // checked again every RecheckInterval, one audit entry when the stream
 // opens and one when it ends, with how many events it carried.
+//
+// A cursor of another history of a tenant's feed ends the stream with
+// OUT_OF_RANGE and a message beginning EVENT_HISTORY_CHANGED, whether it was
+// given or reached while the stream was open. A stream opened from now
+// takes the feed's cursor and then reads from it: a rebuild that makes its
+// shadow the catalog in use between those two reads ends the stream at
+// once the same way, and the client recovers the same way, from a new
+// status. The events of the old history stay in the database, never
+// answered, until the next pruning removes them.
 func (s monitorService) Watch(ctx context.Context, req *v1.WatchRequest, stream nopacsv1connect.MonitorServiceWatchServerStream) error {
 	c := s.c
 	d, err := c.decision(ctx, nopacsv1connect.MonitorServiceWatchProcedure)
@@ -229,6 +238,7 @@ func watchMessage(m events.Message) *v1.WatchResponse {
 	if k := m.KeepAlive; k != nil {
 		return &v1.WatchResponse{Kind: &v1.WatchResponse_KeepAlive{KeepAlive: &v1.WatchKeepAlive{
 			Time: timestamp(k.Time), Cursor: k.Cursor, TenantCursors: k.TenantCursors, UnansweredTenants: k.Unanswered, Full: k.Full,
+			EventHistory: k.History, TenantEventHistories: k.TenantHistories,
 		}}}
 	}
 	return &v1.WatchResponse{Kind: &v1.WatchResponse_Event{Event: eventMessage(m.Tenant, *m.Event)}}

@@ -4,13 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/core/reception"
 	"github.com/amrshadid/nopacs/internal/driver/sqlkit"
-	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -46,9 +44,14 @@ const (
 	// events_by_type.
 	eventsOfTypeSQL = `SELECT id, type, at, payload FROM events WHERE type = ? AND id > ? ORDER BY id LIMIT ?`
 	// eventHighSQL reads the feed's place: the newest id committed, or the
-	// mark of what was pruned when every event is gone. max(id) is the end
-	// of the table's key.
-	eventHighSQL = `SELECT max(coalesce((SELECT max(id) FROM events), 0), pruned_through), pruned_through FROM event_marks WHERE one = 1`
+	// mark of what was pruned when every event is gone; the mark; and the
+	// feed's history. max(id) is the end of the table's key.
+	eventHighSQL = `SELECT max(coalesce((SELECT max(id) FROM events), 0), pruned_through), pruned_through,
+		(SELECT id FROM event_history WHERE one = 1) FROM event_marks WHERE one = 1`
+	// leftBelowSQL reads the mark and whether events are left at or below
+	// it: an earlier history's, which an activation moved the mark past
+	// without removing them.
+	leftBelowSQL = `SELECT pruned_through, EXISTS (SELECT 1 FROM events WHERE id <= pruned_through) FROM event_marks WHERE one = 1`
 	// lastCheckpointSQL reads the newest checkpoint, if any.
 	lastCheckpointSQL = `SELECT at, through FROM event_checkpoints ORDER BY at DESC LIMIT 1`
 	// insertCheckpointSQL records one.
@@ -129,40 +132,30 @@ func writeDecisionEvent(ctx context.Context, tx *sql.Tx, q tenant.QuarantinedFil
 	return err
 }
 
-// eventCursor returns the cursor after the event with this id. The tenant
-// it belongs to is a field of the cursor (as a binding, a hash of its id)
-// rather than the cursor's own binding, so a cursor of another tenant's feed
-// is told apart from one altered or of another list: a stream that follows
-// tenants by name starts a tenant created again under a name from its first
-// event on exactly that answer (tenant.ErrForeignCursor).
-func (t *Tenant) eventCursor(id int64) string {
-	return sqlkit.EncodeCursor(listEvents, "", t.binding(), strconv.FormatInt(id, 10))
+// eventCursor returns the cursor after the event with this id, in the
+// feed's history. The tenant it belongs to is a field of the cursor (as a
+// binding, a hash of its id) rather than the cursor's own binding, so a
+// cursor of another tenant's feed is told apart from one altered or of
+// another list: a stream that follows tenants by name starts a tenant
+// created again under a name from its first event on exactly that answer
+// (tenant.ErrForeignCursor). The history is a field too, so a cursor of an
+// earlier history is refused as one (tenant.ErrHistoryChanged).
+func (t *Tenant) eventCursor(id int64, history string) string {
+	return sqlkit.EventCursor(listEvents, t.binding(), id, history)
 }
 
-// eventPosition decodes a feed cursor into the id it is after, or -1 for
-// the empty cursor, which reads from the oldest event kept.
-func (t *Tenant) eventPosition(cursor string) (int64, error) {
-	if cursor == "" {
-		return -1, nil
-	}
-	f, err := sqlkit.DecodeCursor(cursor, listEvents, "", 2)
-	if err != nil {
-		return 0, err
-	}
-	if f[0] != t.binding() {
-		return 0, tenant.ForeignCursor()
-	}
-	id, err := sqlkit.DecodeCursorInt(f[1])
-	if err != nil || id < 0 {
-		return 0, tenantBadCursor()
-	}
-	return id, nil
+// eventPosition decodes a feed cursor into the id it is after and its
+// history, or -1 for the empty cursor, which reads from the oldest event
+// kept.
+func (t *Tenant) eventPosition(cursor string) (int64, string, error) {
+	return sqlkit.EventPosition(cursor, listEvents, t.binding())
 }
 
-// tenantBadCursor is the refusal of a cursor that decodes but cannot be one
-// the feed made, in the words of every other refused cursor.
-func tenantBadCursor() error {
-	return fault.New(fault.Invalid, "the page token is not one this list returned with these arguments")
+// feedPlace reads the feed's place in tx: the newest event, the mark of
+// what was pruned, and the history.
+func feedPlace(ctx context.Context, tx *sql.Tx) (high, pruned int64, history string, err error) {
+	err = tx.QueryRowContext(ctx, eventHighSQL).Scan(&high, &pruned, &history)
+	return high, pruned, history, err
 }
 
 // AppendEvents implements tenant.Events.
@@ -252,25 +245,19 @@ func (t *Tenant) ReadEvents(ctx context.Context, after string, types []tenant.Ev
 	if err := tenant.ValidateEventRead(types, limit); err != nil {
 		return tenant.EventPage{}, err
 	}
-	pos, err := t.eventPosition(after)
+	pos, cursorHistory, err := t.eventPosition(after)
 	if err != nil {
 		return tenant.EventPage{}, err
 	}
 	var page tenant.EventPage
 	err = t.readTx(ctx, "the events cannot be read", func(tx *sql.Tx) error {
-		var high, pruned int64
-		if err := tx.QueryRowContext(ctx, eventHighSQL).Scan(&high, &pruned); err != nil {
+		high, pruned, history, err := feedPlace(ctx, tx)
+		if err != nil {
 			return err
 		}
-		from := pos
-		switch {
-		case pos < 0:
-			from = pruned
-		case pos < pruned, pos > high:
-			// Before what was pruned, or after the newest event the feed
-			// holds: a database restored from an older backup, whose events
-			// at and before the cursor are not those the reader saw.
-			return tenant.CursorExpired()
+		from, err := sqlkit.EventFrom(pos, cursorHistory, high, pruned, history)
+		if err != nil {
+			return err
 		}
 		query, args := eventsQuery(sqlkit.DistinctTypes(types), from, limit)
 		rows, err := tx.QueryContext(ctx, query, args...)
@@ -287,7 +274,7 @@ func (t *Tenant) ReadEvents(ctx context.Context, after string, types []tenant.Ev
 				unreadable++
 			}
 			ids = append(ids, id)
-			return tenant.Event{Cursor: t.eventCursor(id), Type: tenant.EventType(typ), Time: fromMicros(at), Payload: p}, nil
+			return tenant.Event{Cursor: t.eventCursor(id, history), Type: tenant.EventType(typ), Time: fromMicros(at), Payload: p}, nil
 		})
 		if err != nil {
 			return err
@@ -304,7 +291,7 @@ func (t *Tenant) ReadEvents(ctx context.Context, after string, types []tenant.Ev
 		if len(events) == limit {
 			next = ids[len(ids)-1]
 		}
-		page = tenant.EventPage{Events: events, Cursor: t.eventCursor(next), Unreadable: unreadable}
+		page = tenant.EventPage{Events: events, Cursor: t.eventCursor(next, history), Unreadable: unreadable, History: history}
 		return nil
 	})
 	if err != nil {
@@ -313,16 +300,19 @@ func (t *Tenant) ReadEvents(ctx context.Context, after string, types []tenant.Ev
 	return page, nil
 }
 
+// EventCursorHistory implements tenant.Events.
+func (t *Tenant) EventCursorHistory(cursor string) (string, error) {
+	_, history, err := t.eventPosition(cursor)
+	return history, err
+}
+
 // EventCursor implements tenant.Events.
 func (t *Tenant) EventCursor(ctx context.Context) (string, error) {
 	var cursor string
 	err := t.readTx(ctx, "the event feed's place cannot be read", func(tx *sql.Tx) error {
-		var high, pruned int64
-		if err := tx.QueryRowContext(ctx, eventHighSQL).Scan(&high, &pruned); err != nil {
-			return err
-		}
-		cursor = t.eventCursor(high)
-		return nil
+		high, _, history, err := feedPlace(ctx, tx)
+		cursor = t.eventCursor(high, history)
+		return err
 	})
 	return cursor, err
 }
@@ -332,8 +322,8 @@ func (t *Tenant) EventCursor(ctx context.Context) (string, error) {
 func (t *Tenant) StatusSnapshot(ctx context.Context) (tenant.StatusSnapshot, error) {
 	var s tenant.StatusSnapshot
 	err := t.readTx(ctx, "the tenant's status cannot be read", func(tx *sql.Tx) error {
-		var high, pruned int64
-		if err := tx.QueryRowContext(ctx, eventHighSQL).Scan(&high, &pruned); err != nil {
+		high, _, history, err := feedPlace(ctx, tx)
+		if err != nil {
 			return err
 		}
 		if t.seams.betweenReads != nil {
@@ -377,7 +367,7 @@ func (t *Tenant) StatusSnapshot(ctx context.Context) (tenant.StatusSnapshot, err
 		if err != nil {
 			return err
 		}
-		s = tenant.StatusSnapshot{EventCursor: t.eventCursor(high), Catalog: *c, QuarantinedFiles: files,
+		s = tenant.StatusSnapshot{EventCursor: t.eventCursor(high, history), History: history, Catalog: *c, QuarantinedFiles: files,
 			QuarantinedBytes: bytes, InProgress: tenant.InProgressSteps(counts), IncomingBytes: incoming + bytes,
 			StorageBytes: storages, JobsInProgress: jobs}
 		return nil
@@ -397,12 +387,12 @@ func (t *Tenant) CheckpointEvents(ctx context.Context, at time.Time) error {
 	}
 	when := micros(at)
 	return t.write(ctx, "the event feed's checkpoint cannot be written", func(tx *sql.Tx, _ *tenantStatements) error {
-		var high, pruned int64
-		if err := tx.QueryRowContext(ctx, eventHighSQL).Scan(&high, &pruned); err != nil {
+		high, _, _, err := feedPlace(ctx, tx)
+		if err != nil {
 			return err
 		}
 		var lastAt, lastThrough int64
-		err := tx.QueryRowContext(ctx, lastCheckpointSQL).Scan(&lastAt, &lastThrough)
+		err = tx.QueryRowContext(ctx, lastCheckpointSQL).Scan(&lastAt, &lastThrough)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 		case err != nil:
@@ -427,13 +417,26 @@ func (t *Tenant) CheckpointEvents(ctx context.Context, at time.Time) error {
 // mark with what it removes. An event at or below that one cannot be
 // written later (ids only grow), and another pruning meanwhile only leaves
 // less to remove, so the read need not be in the transactions that remove.
+// Events an earlier history left at or below the mark are removed the same
+// way, whatever the checkpoints say: no read answers them.
 func (t *Tenant) PruneEvents(ctx context.Context, before time.Time, limit int) (int, bool, error) {
 	if err := tenant.ValidatePrune(before, limit); err != nil {
 		return 0, false, err
 	}
 	var target int64
 	err := t.readTx(ctx, "the events cannot be pruned", func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, pruneTargetSQL, micros(before)).Scan(&target)
+		if err := tx.QueryRowContext(ctx, pruneTargetSQL, micros(before)).Scan(&target); err != nil {
+			return err
+		}
+		var pruned int64
+		var left bool
+		if err := tx.QueryRowContext(ctx, leftBelowSQL).Scan(&pruned, &left); err != nil {
+			return err
+		}
+		if left {
+			target = max(target, pruned)
+		}
+		return nil
 	})
 	if err != nil || target < 0 {
 		return 0, false, err

@@ -318,9 +318,22 @@ after that a keep-alive comes whenever 15 seconds pass without an event. The
 client stores the cursor of every message it receives. If the stream drops,
 it calls `Watch` again with the last cursor and loses nothing, as long as that
 cursor is younger than `events.retention`. An older cursor is answered
-`OUT_OF_RANGE`, and so is a cursor after the newest event the tenant holds,
-as after its database was restored from an older backup; the client then
+`OUT_OF_RANGE` with a message that begins `CURSOR_EXPIRED`; the client then
 calls `GetStatus` again and watches from the new `eventCursor`.
+
+The status and every keep-alive also carry `eventHistory`, the id of the
+tenant's event history (`tenantEventHistories` by tenant, with every tenant).
+A restore, an import, a load, or a rebuild that replaces the catalog begins a
+new history: its first event is `catalog_rebuilt`, no event of the old history
+is answered in it, and a cursor of the old history (or one after the newest
+event) is answered `OUT_OF_RANGE` with a message that begins
+`EVENT_HISTORY_CHANGED`. The client then reads the catalog again, not only the
+counts, and watches from the new status's `eventCursor`. A client keys what it
+has seen by history and cursor together. A stream opened without a cursor can
+end the same way at once, when the new history begins between the moment it
+takes the tenant's position and its first read; the client does the same. The
+old history's events stay in the tenant's database, never answered, until the
+next pass of retention (at most an hour) removes them.
 
 A client that watches every tenant (the installation as scope) keeps the
 `tenantCursors` of the last keep-alive, which names every tenant the stream

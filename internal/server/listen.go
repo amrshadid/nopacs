@@ -22,6 +22,12 @@ const SocketName = "nopacs.sock"
 // <data-dir>/run, private to the user that runs the server.
 func RunDir(dataDir string) string { return filepath.Join(dataDir, "run") }
 
+// TLSDir returns the directory of a tenant's TLS files, which its receivers
+// and senders name (receiver.proto, ReceiverTls; sender.proto, SenderTls):
+// <data-dir>/tls/<tenant>. A backup holds none of them: they are the site's
+// credentials, given again after a restore onto a new data directory.
+func TLSDir(dataDir, tenantName string) string { return filepath.Join(dataDir, "tls", tenantName) }
+
 // SocketPath returns the local socket's path for a data directory.
 func SocketPath(dataDir string) string { return filepath.Join(RunDir(dataDir), SocketName) }
 

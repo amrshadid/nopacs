@@ -34,7 +34,11 @@ It does not hold:
   A restore expects to find them where they were;
 - **the bytes in the incoming area** of the server's disk: files a sender was
   told were received but that were not archived yet, and the bytes of held
-  quarantined files. Their records are in the backup; the bytes are not.
+  quarantined files. Their records are in the backup; the bytes are not;
+- **the TLS files** receivers and senders name, in each tenant's TLS directory
+  (`tls/<tenant>/` in the data directory), nor the network listener's
+  certificate and key named when the server starts. The configuration that names
+  them comes back; the files are the site's credentials, kept with them.
 
 Each database is read as of one moment, its *recovery point*. Anything changed
 after it is not in the backup.
@@ -227,6 +231,12 @@ the receptions that were unfinished (the sender must send those files again),
 the bytes of held quarantined files that were in the incoming area (their records
 come back marked *incoming lost*), the events after the recovery point, and the
 audit entries after it. The restore's own audit entry is in the master's log.
+Under *external credentials to re-enter* it names, by file name only, each TLS
+file a receiver or a sender names that the restored data directory lacks
+(`sender peer: TLS certificate authorities ca.pem, TLS client certificate
+client.pem, TLS private key client.key`): put each back in `tls/<tenant>/`
+before that receiver or sender is used; without them a receiver does not listen
+and a sender cannot connect. An import names them the same way.
 
 Start the server afterwards with `nopacs-server serve --data-dir /var/lib/nopacs`.
 

@@ -17,6 +17,8 @@ type Reader interface {
 	ReadEvents(ctx context.Context, after string, types []tenant.EventType, limit int) (tenant.EventPage, error)
 	// EventCursor is tenant.Events.EventCursor.
 	EventCursor(ctx context.Context) (string, error)
+	// EventCursorHistory is tenant.Events.EventCursorHistory.
+	EventCursorHistory(cursor string) (string, error)
 }
 
 // Tenants lists the tenants a stream of every tenant follows and gives each
@@ -140,6 +142,9 @@ type KeepAlive struct {
 	// Cursor is, on one tenant, where the stream has read up to, past the
 	// events its filter left out.
 	Cursor string
+	// History is, on one tenant, the id of the feed's history Cursor
+	// belongs to (tenant.EventPage.History).
+	History string
 	// Full is set, with every tenant, on the keep-alive that opens the
 	// stream, whose TenantCursors name every tenant it follows; a later
 	// keep-alive names only the tenants whose cursor changed since the
@@ -155,6 +160,14 @@ type KeepAlive struct {
 	// out: resumed without it, it starts from its first event, which loses
 	// nothing. A copy, the caller's to keep.
 	TenantCursors map[string]string
+	// TenantHistories are, with every tenant, the history id each cursor
+	// of TenantCursors belongs to, by tenant name: every tenant named there
+	// is named here, in the same full or changed-only way. The history is
+	// read from the cursor itself (Reader.EventCursorHistory) or from the
+	// page that gave it; it is empty for the empty cursor, and for a cursor
+	// given at the start whose tenant's database did not answer yet. A
+	// copy, the caller's to keep.
+	TenantHistories map[string]string
 	// Unanswered are, with every tenant, the tenants the stream is
 	// skipping for now because their last read failed or did not answer
 	// in time, in order of name: they are tried again after a while, and
@@ -499,7 +512,10 @@ func (b *Broadcaster) Watch(ctx context.Context, w Watch, send Send) error {
 	if err != nil {
 		return b.readFailed(ctx, err)
 	}
-	if err := send(ctx, Message{Tenant: w.Tenant, KeepAlive: &KeepAlive{Time: b.cfg.Clock.Now(), Cursor: cursor}}); err != nil {
+	// A read refuses a cursor of another history, so the cursor the page
+	// was read from is of the page's history.
+	history := page.History
+	if err := send(ctx, Message{Tenant: w.Tenant, KeepAlive: &KeepAlive{Time: b.cfg.Clock.Now(), Cursor: cursor, History: history}}); err != nil {
 		return sendFailed(ctx, err)
 	}
 	lastSent := b.cfg.Clock.Now()
@@ -510,10 +526,10 @@ func (b *Broadcaster) Watch(ctx context.Context, w Watch, send Send) error {
 			}
 			lastSent = b.cfg.Clock.Now()
 		}
-		cursor = page.Cursor
+		cursor, history = page.Cursor, page.History
 		if len(page.Events) < b.cfg.PageSize {
 			if now := b.cfg.Clock.Now(); now.Sub(lastSent) >= b.cfg.KeepAlive {
-				if err := send(ctx, Message{Tenant: w.Tenant, KeepAlive: &KeepAlive{Time: now, Cursor: cursor}}); err != nil {
+				if err := send(ctx, Message{Tenant: w.Tenant, KeepAlive: &KeepAlive{Time: now, Cursor: cursor, History: history}}); err != nil {
 					return sendFailed(ctx, err)
 				}
 				lastSent = now

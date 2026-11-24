@@ -226,7 +226,7 @@ func TestEventFeedUnderAdversaries(t *testing.T) {
 				limit := 1 + rng.IntN(5)
 				from := int64(-1)
 				if cursor != "" {
-					f, err := p.eventPosition(cursor)
+					f, _, err := p.eventPosition(cursor)
 					if err != nil {
 						t.Errorf("position: %v", err)
 						return
@@ -248,14 +248,14 @@ func TestEventFeedUnderAdversaries(t *testing.T) {
 					t.Errorf("read: %v", err)
 					return
 				}
-				to, err := p.eventPosition(page.Cursor)
+				to, _, err := p.eventPosition(page.Cursor)
 				if err != nil {
 					t.Errorf("position: %v", err)
 					return
 				}
 				rec := pageRec{reader: r, from: from, to: to, types: types, source: source}
 				for _, e := range page.Events {
-					id, _ := p.eventPosition(e.Cursor)
+					id, _, _ := p.eventPosition(e.Cursor)
 					rec.ids = append(rec.ids, id)
 					rec.typesGot = append(rec.typesGot, e.Type)
 				}

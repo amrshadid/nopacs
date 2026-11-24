@@ -49,6 +49,10 @@ func reconcile(ctx context.Context, cfg RestoreConfig, m master.Store, installat
 		return res, fault.New(fault.Internal, "backup: this database type cannot be reconciled")
 	}
 	var err error
+	// Read first, so a reconcile that fails later still names them.
+	if res.Credentials, err = missingCredentials(ctx, p, cfg.DataDir, t.row.Name); err != nil {
+		return res, err
+	}
 	if res.QuarantineMarked, err = rs.MarkQuarantineLost(ctx); err != nil {
 		return res, err
 	}

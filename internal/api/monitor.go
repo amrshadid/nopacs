@@ -103,7 +103,7 @@ func (c *core) tenantStatus(ctx context.Context, name string, st tenant.Store) *
 		if ok {
 			if s, err := feed.StatusSnapshot(ctx); err == nil {
 				snap, snapped = s, true
-				ts.EventCursor = s.EventCursor
+				ts.EventCursor, ts.EventHistory = s.EventCursor, s.History
 				ts.Counts = countsMessage(s)
 			}
 		}
