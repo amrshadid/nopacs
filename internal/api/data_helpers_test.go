@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,6 +45,34 @@ type dataServer struct {
 	seq    atomic.Int64
 	// h is the handlers served, set by serveWeb.
 	h api.Handlers
+	// cuts are the causes of the answers a handler aborted after they
+	// began, by request id.
+	cuts sync.Map
+}
+
+// abortLikeServer is deferred by a stand-in: as the server does, it takes
+// the cause of an answer its handler aborted after it began (a panic that
+// wraps http.ErrAbortHandler) and hands net/http the sentinel itself, which
+// it closes the connection on quietly. Any other panic goes on as it is.
+func (s *dataServer) abortLikeServer(id string) {
+	p := recover()
+	if p == nil {
+		return
+	}
+	if err, ok := p.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+		s.cuts.Store(id, err)
+		panic(http.ErrAbortHandler)
+	}
+	panic(p)
+}
+
+// cut returns the cause of the abort of the answer to the request id, nil
+// for an answer not aborted.
+func (s *dataServer) cut(id string) error {
+	if err, ok := s.cuts.Load(id); ok {
+		return err.(error)
+	}
+	return nil
 }
 
 // serveData starts the download's stand-in over the installation e, and
@@ -73,6 +102,7 @@ func serveData(t testing.TB, e *env) *dataServer {
 func (s *dataServer) downloadStandIn(h api.Handlers, w http.ResponseWriter, r *http.Request) {
 	id := fmt.Sprintf("dl-%06d", s.seq.Add(1))
 	w.Header().Set(api.RequestIDHeader, id)
+	defer s.abortLikeServer(id)
 	segs := strings.Split(r.URL.EscapedPath(), "/")
 	if (r.Method != http.MethodGet && r.Method != http.MethodHead) || len(segs) != 8 || segs[1] != "tenants" || segs[3] != "instances" {
 		http.NotFound(w, r)

@@ -63,6 +63,27 @@ func (t *Tenant) RelinkHidden(ctx context.Context) (int64, error) {
 	return t.sending().RelinkHidden(ctx)
 }
 
+// UnhiddenDeletes implements tenant.Restoring.
+func (t *Tenant) UnhiddenDeletes(ctx context.Context) ([]string, error) {
+	return t.sending().UnhiddenDeletes(ctx)
+}
+
+// HideDeletes implements tenant.Restoring.
+func (t *Tenant) HideDeletes(ctx context.Context, deletes []tenant.DeleteToHide) (tenant.Hidden, error) {
+	return t.sending().HideDeletes(ctx, deletes)
+}
+
+// OwnAdoptedReplace implements tenant.Restoring.
+func (t *Tenant) OwnAdoptedReplace(ctx context.Context, rec record.Correction, storage string,
+	sizeOf func(ctx context.Context, key string) (int64, error), now time.Time) error {
+	return t.sending().OwnAdoptedReplace(ctx, rec, storage, sizeOf, now)
+}
+
+// HoldCommittedDeletes implements tenant.Restoring.
+func (t *Tenant) HoldCommittedDeletes(ctx context.Context) (int64, error) {
+	return t.sending().HoldCommittedDeletes(ctx)
+}
+
 // MarkQuarantineLost implements tenant.Restoring.
 func (t *Tenant) MarkQuarantineLost(ctx context.Context) (int64, error) {
 	return t.sending().MarkQuarantineLost(ctx)

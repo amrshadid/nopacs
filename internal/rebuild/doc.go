@@ -24,7 +24,9 @@
 //     withdrawn data is the worse error. The server's rebuilds and a
 //     restore's apply each record as the correction's row says (ByRow):
 //     a delete prepared, undone or abandoned there hides nothing, whatever
-//     its record says. Each delete applied is tallied unresolved
+//     its record says, and a record with no row is read as its verified
+//     record says, by the rule a restore adopts it by
+//     (record.Correction.Alone). Each delete applied is tallied unresolved
 //     (tenant.TallyUnresolvedCorrection). A relabel's record hides the tree its state
 //     says is not the archive's (the old labels once published, the new
 //     ones before), so the two trees a relabel leaves during its grace are

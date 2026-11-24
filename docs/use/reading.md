@@ -50,3 +50,30 @@ Each read is checked as its bytes go out and is bounded: what a check cuts, what
 does not check, the 413 limits of a search and the open-read slots are in
 [internal/api](../../internal/api/doc.go) (its bounds of the reads) and
 [internal/checkedread](../../internal/checkedread/doc.go) (what a checked read guarantees).
+
+## When a read fails
+
+A read that meets a failure before its answer has begun (a scan's metadata file
+missing from its storage, an instance's file short or changed) is answered with an
+error status and a message, as any request is: `500` with
+`{"code":"data_loss","message":"the scan's metadata file is missing from the storage"}`,
+for example. A DICOMweb answer (QIDO-RS, WADO-RS, metadata, frames, bulk data) holds
+its first 64 KiB before it sends its status, and a download its first piece, so a
+failure within them is answered that way.
+
+A failure met after the answer has begun cannot change its status, which is already
+sent. The server ends the answer short, and the client can tell:
+
+| Answer | What the client sees |
+|---|---|
+| QIDO-RS, WADO-RS metadata (a JSON array) | the array has no closing `]`; the body ends without its last chunk |
+| WADO-RS instances, frames, bulk data (multipart) | the body has no closing boundary (`--boundary--`) |
+| One instance, a bare instance, a bulk window (with `Content-Length`) | fewer bytes than `Content-Length` |
+
+Over HTTP/1.1 the connection is closed before the body's end, which a client reports
+as an error (curl exits non-zero, 18 for a body short of its length; Python raises
+`http.client.IncompleteRead`); over HTTP/2 the stream is reset. Treat any such
+answer as failed and ask again: a download resumes by range. Either way the request
+is audited as failed with its reason, and the server's log line of the request names
+the failure (`"code":"data_loss"`, for example), never `"ok"`. `DataService/ReadFiles`
+ends its stream with an error instead, which the client reads as one.

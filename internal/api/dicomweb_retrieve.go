@@ -16,17 +16,33 @@ import (
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// webStream writes a streamed answer of the retrieve service: its status
-// and headers with its first byte, each write under the stall rule of a
-// download, and the end of the request recorded as a download's is.
+// webStream writes a streamed answer of the DICOMweb services: its first
+// streamHold bytes held, then its status and headers with them, each write
+// under the stall rule of a download, and the end of the request recorded
+// as a download's is.
+//
+// The bytes are held so that a failure the answer meets early (a scan's
+// metadata file missing from its storage, a short instance) is answered
+// with its error status (PS3.18 8.6.1.2) and not as a 200 cut short: once
+// the status is given to net/http it cannot be taken back, and net/http
+// itself holds a few kilobytes before any reaches the client, so a stream
+// aborted inside them would reach the client as a connection closed with
+// no answer at all. streamHold is larger than what net/http holds (its
+// response and connection buffers, 2 and 4 KiB; an HTTP/2 stream's, 4
+// KiB), so once the status is given, it is on its way.
 type webStream struct {
 	x     *webRequest
 	ctx   context.Context
 	rc    *http.ResponseController
 	head  func()
 	begun bool
+	held  []byte
 	sent  int64
 }
+
+// streamHold is how many bytes of a streamed answer are held before its
+// status is written.
+const streamHold = 64 << 10
 
 // openStream holds one of the caller's open reads (holdRead) and starts
 // the recheck of its key, for an answer whose head writes the status. The
@@ -40,15 +56,40 @@ func (x *webRequest) openStream(ctx context.Context, head func()) (*webStream, f
 	return s, func() { stop(); x.release() }, nil
 }
 
-// Write writes bytes of the body, writing the head first.
+// Write writes bytes of the body: held while the answer holds fewer than
+// streamHold bytes, then the head and everything held.
 func (s *webStream) Write(b []byte) (int, error) {
 	if err := s.ctx.Err(); err != nil {
 		return 0, context.Cause(s.ctx)
 	}
-	if !s.begun {
-		s.head()
-		s.begun = true
+	if !s.begun && len(s.held)+len(b) < streamHold {
+		s.held = append(s.held, b...)
+		return len(b), nil
 	}
+	if err := s.begin(); err != nil {
+		return 0, err
+	}
+	return s.write(b)
+}
+
+// begin writes the head and the bytes held, once.
+func (s *webStream) begin() error {
+	if s.begun {
+		return nil
+	}
+	s.head()
+	s.begun = true
+	held := s.held
+	s.held = nil
+	if len(held) == 0 {
+		return nil
+	}
+	_, err := s.write(held)
+	return err
+}
+
+// write writes bytes to the client under the stall rule.
+func (s *webStream) write(b []byte) (int, error) {
 	// A client that reads nothing for StallTimeout is let go.
 	_ = s.rc.SetWriteDeadline(time.Now().Add(StallTimeout))
 	n, err := s.x.w.Write(b)
@@ -57,38 +98,45 @@ func (s *webStream) Write(b []byte) (int, error) {
 }
 
 // end records how the answer ended and returns the error for the server
-// to write, when nothing of the answer was written yet. Once the answer
+// to write, when nothing of the answer was written yet: the bytes held are
+// dropped and the client is answered the error's status. Once the answer
 // has begun, a failure cannot be said in it: net/http closes the
-// connection, or resets the HTTP/2 stream, so the multipart body never
-// reaches its closing boundary and a client sees it is not whole.
+// connection, or resets the HTTP/2 stream, so a JSON array never reaches
+// its closing bracket nor a multipart body its closing boundary, and a
+// client sees it is not whole (abortAnswer).
 func (s *webStream) end(err error, results int) error {
 	x := s.x
+	if err == nil {
+		err = s.begin()
+	}
 	facts := x.facts(map[string]string{detailResults: strconv.Itoa(results), detailBytes: strconv.FormatInt(s.sent, 10)})
 	refusal, refused := refusedWhileOpen(s.ctx)
+	reason := "the answer ended before its last byte: the client went away or stalled, or the server stopped"
 	switch {
 	case err == nil:
-		if !s.begun {
-			s.head()
-		}
 		x.c.record(x.d, x.st, master.OutcomeDone, "", facts)
 		return nil
 	case !s.begun && refused:
 		// Confirm recorded the refusal.
+		s.held = nil
 		return x.c.toAPI(x.d, refusal)
 	case !s.begun:
+		s.held = nil
 		return x.c.failWith(x.d, x.st, facts, err)
 	case !refused:
-		reason := "the answer ended before its last byte: the client went away or stalled, or the server stopped"
 		if checkedread.Mismatched(err) || isFault(err) {
 			reason = fault.Message(err)
 		}
 		x.c.record(x.d, x.st, master.OutcomeFailed, reason, facts)
+	default:
+		reason = fault.Message(refusal)
 	}
 	if checkedread.Mismatched(err) {
 		x.c.log.Error("api: a DICOMweb answer was cut: an instance's bytes on its storage do not match its manifest",
 			"request_id", x.w.Header().Get(RequestIDHeader), "scan", x.object, "error", err.Error())
 	}
-	panic(http.ErrAbortHandler)
+	abortAnswer(err, reason)
+	return nil
 }
 
 // copyRange copies length bytes of the object key of the scan's storage

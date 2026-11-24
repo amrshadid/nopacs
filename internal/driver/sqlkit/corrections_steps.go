@@ -279,32 +279,19 @@ func (k Sending) publishReplace(ctx context.Context, tx SendingTx, c tenant.Corr
 	if err != nil {
 		return fault.Wrap(fault.Internal, err, "a revision key cannot be made")
 	}
-	var reception string
-	var qsize int64
-	var kept bool
-	found, err := tx.QueryRow(ctx, `SELECT reception_id, size, content_kept FROM quarantine WHERE id = ? AND state = 'held'`,
-		[]any{c.Quarantine}, &reception, &qsize, &kept)
+	q, found, err := heldQuarantine(ctx, tx, c.Quarantine)
 	if err != nil {
 		return err
 	}
 	if !found {
 		return fault.Wrap(fault.Precondition, tenant.ErrTargetChanged, "the quarantined file is no longer held")
 	}
+	reception := q.reception
 	var archived any
 	if c.NewSHA256 != c.ReceivedSHA256 {
 		archived = c.NewSHA256[:]
 	}
-	// The revision it supersedes is the one object it owns.
-	if _, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
-		sop_instance_uid, storage_key, size, sha256, outcome) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, '') ON CONFLICT DO NOTHING`,
-		c.ID, s.storage, s.path.Subject, s.path.Session, s.path.Scan, in.uid, in.raw, in.size, in.archived[:]); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO instance_revisions (sop_instance_uid, revision, sha256, size, storage, storage_key,
-		correction_id, fate, purged) VALUES (?, ?, ?, ?, ?, ?, ?, 'superseded', ?) ON CONFLICT (sop_instance_uid, revision)
-		DO UPDATE SET sha256 = excluded.sha256, size = excluded.size, storage = excluded.storage, storage_key = excluded.storage_key,
-		correction_id = excluded.correction_id, fate = excluded.fate, purged = excluded.purged`,
-		in.uid, in.revision, in.archived[:], in.size, s.storage, in.key, c.ID, k.D.Bool(false)); err != nil {
+	if err := k.ownSuperseded(ctx, tx, c.ID, s.storage, s.path, in.uid, in.key, in.raw, in.size, in.archived, in.revision); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE instances SET storage_key = ?, sha256 = ?, archived_sha256 = ?, size = ?, byte_offset = 0,
@@ -340,15 +327,57 @@ func (k Sending) publishReplace(ctx context.Context, tx SendingTx, c tenant.Corr
 	if _, err := ClearDamageInTx(ctx, tx, in.uid); err != nil {
 		return err
 	}
-	held := int64(0)
-	if kept {
-		held = qsize
-	}
-	if _, err := tx.Exec(ctx, `UPDATE quarantine SET state = 'released', decided_at = ?, release_mode = 'overwrite' WHERE id = ?`,
-		k.D.Time(cc.Now), c.Quarantine); err != nil {
+	return k.releaseOverwritten(ctx, tx, c.Quarantine, q, cc.Now)
+}
+
+// heldFile is a quarantined file still held, as a replace's publish reads
+// it.
+type heldFile struct {
+	reception string
+	size      int64
+	kept      bool
+}
+
+// heldQuarantine reads the quarantined file id while it is held; false
+// when it is not.
+func heldQuarantine(ctx context.Context, tx SendingTx, id string) (heldFile, bool, error) {
+	var q heldFile
+	found, err := tx.QueryRow(ctx, `SELECT reception_id, size, content_kept FROM quarantine WHERE id = ? AND state = 'held'`,
+		[]any{id}, &q.reception, &q.size, &q.kept)
+	return q, found, err
+}
+
+// ownSuperseded records what a published replace owns of the revision it
+// supersedes: the revision's object, the one its purge removes (raw is the
+// key the catalog held, "" for the layout's), and the revision in the
+// instance's history as superseded by it.
+func (k Sending) ownSuperseded(ctx context.Context, tx SendingTx, id, storage string, p label.Path, uid, key, raw string, size int64,
+	sum tenant.SHA256, revision int) error {
+	if _, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
+		sop_instance_uid, storage_key, size, sha256, outcome) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, '') ON CONFLICT DO NOTHING`,
+		id, storage, p.Subject, p.Session, p.Scan, uid, raw, size, sum[:]); err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE quarantine_totals SET files = files - 1, bytes = bytes - ?`, held)
+	_, err := tx.Exec(ctx, `INSERT INTO instance_revisions (sop_instance_uid, revision, sha256, size, storage, storage_key,
+		correction_id, fate, purged) VALUES (?, ?, ?, ?, ?, ?, ?, 'superseded', ?) ON CONFLICT (sop_instance_uid, revision)
+		DO UPDATE SET sha256 = excluded.sha256, size = excluded.size, storage = excluded.storage, storage_key = excluded.storage_key,
+		correction_id = excluded.correction_id, fate = excluded.fate, purged = excluded.purged`,
+		uid, revision, sum[:], size, storage, key, id, k.D.Bool(false))
+	return err
+}
+
+// releaseOverwritten releases the quarantined file a published replace
+// put in place, and takes it out of the quarantine's totals.
+func (k Sending) releaseOverwritten(ctx context.Context, tx SendingTx, id string, q heldFile, now time.Time) error {
+	held := int64(0)
+	if q.kept {
+		held = q.size
+	}
+	if _, err := tx.Exec(ctx, `UPDATE quarantine SET state = 'released', decided_at = ?, release_mode = 'overwrite' WHERE id = ?`,
+		k.D.Time(now), id); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE quarantine_totals SET files = files - 1, bytes = bytes - ?`, held)
 	return err
 }
 
@@ -402,20 +431,7 @@ func (k Sending) UndoCorrection(ctx context.Context, id, reason string, now time
 			if err := k.checkNoRebuild(ctx, tx); err != nil {
 				return err
 			}
-			if err := k.showTarget(ctx, tx, *c); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(ctx, `DELETE FROM deleted_targets WHERE correction_id = ?`, c.ID); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(ctx, `UPDATE corrections SET undo_reason = ?, unresolved = ? WHERE id = ?`, reason, k.D.Bool(false),
-				c.ID); err != nil {
-				return err
-			}
-			if err := k.setState(ctx, tx, c, corr.StateUndone, now, ""); err != nil {
-				return err
-			}
-			if err := changedEvent(ctx, tx, *c, now); err != nil {
+			if err := k.undoDeleteIn(ctx, tx, c, reason, "", now); err != nil {
 				return err
 			}
 		default:
@@ -423,6 +439,25 @@ func (k Sending) UndoCorrection(ctx context.Context, id, reason string, now time
 		}
 		return tx.Audited(ctx, audit, guard)
 	})
+}
+
+// undoDeleteIn undoes a committed delete: what it hid shown again, what
+// names its data dropped, its state undone with why as its state reason.
+func (k Sending) undoDeleteIn(ctx context.Context, tx SendingTx, c *tenant.Correction, reason, why string, now time.Time) error {
+	if err := k.showTarget(ctx, tx, *c); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM deleted_targets WHERE correction_id = ?`, c.ID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE corrections SET undo_reason = ?, unresolved = ? WHERE id = ?`, reason, k.D.Bool(false),
+		c.ID); err != nil {
+		return err
+	}
+	if err := k.setState(ctx, tx, c, corr.StateUndone, now, why); err != nil {
+		return err
+	}
+	return changedEvent(ctx, tx, *c, now)
 }
 
 // StartPurge implements tenant.Corrections.

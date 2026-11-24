@@ -167,7 +167,9 @@ func (s *Server) envelope(next http.Handler) http.Handler {
 		defer func() {
 			if p := recover(); p != nil {
 				if isAbort(p) {
-					panic(p)
+					// The sentinel itself: net/http closes the connection
+					// quietly only for it, not for a panic that wraps it.
+					panic(http.ErrAbortHandler)
 				}
 				attrs := append([]slog.Attr{
 					slog.String("request_id", id),

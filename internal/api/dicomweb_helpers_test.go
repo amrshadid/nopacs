@@ -68,6 +68,7 @@ func serveWebWith(t testing.TB, e *env, reads *checkedread.Slots) *dataServer {
 func (s *dataServer) webStandIn(h api.Handlers, w http.ResponseWriter, r *http.Request) {
 	id := fmt.Sprintf("web-%06d", s.seq.Add(1))
 	w.Header().Set(api.RequestIDHeader, id)
+	defer s.abortLikeServer(id)
 	segs := strings.Split(r.URL.EscapedPath(), "/")
 	if (r.Method != http.MethodGet && r.Method != http.MethodHead) || len(segs) < 5 || segs[1] != "tenants" || segs[3] != "dicom-web" {
 		http.NotFound(w, r)

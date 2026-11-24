@@ -104,9 +104,10 @@ func TestRestoreSuspendsKeyWhateverItHeld(t *testing.T) {
 // TestRestoreDoesNotTrustAPurgedRecord guards that a record on a storage
 // saying a delete the backup has no row of was purged (one that verifies
 // under the key file: what the installation could have written after the
-// backup, or anyone holding its key file) purges nothing: the subject, whose data
-// is still on the storage, stays in the rebuilt catalog, and the delete is
-// committed and unresolved for an admin to decide, on each database type.
+// backup, or anyone holding its key file) purges nothing: the subject,
+// whose data is still on the storage, is hidden as the record says, its
+// data kept, and the delete is committed and unresolved for an admin to
+// undo or purge, on each database type.
 func TestRestoreDoesNotTrustAPurgedRecord(t *testing.T) {
 	onBoth(t, func(t *testing.T, pg bool) {
 		r := newRig(t, pg)
@@ -117,12 +118,19 @@ func TestRestoreDoesNotTrustAPurgedRecord(t *testing.T) {
 		r.forgeRecord(forged.ID, func(c *record.Correction) {
 			c.State, c.Purge = record.StatePurged, &record.Purge{Removed: 3}
 		})
+		stored := r.storedKeys()
 		rep, err := r.restoreFresh(path)
 		if err != nil {
 			t.Fatalf("the restore failed: %v", err)
 		}
-		if got := r.subjects(r.p); !slices.Equal(got, all) {
-			t.Fatalf("the restored catalog holds %v, want every subject %v", got, all)
+		if got := r.subjects(r.p); slices.Contains(got, all[0]) || len(got) != len(all)-1 {
+			t.Fatalf("the restored catalog holds %v, want every subject but %s", got, all[0])
+		}
+		kept := r.storedKeys()
+		for _, k := range stored {
+			if !slices.Contains(kept, k) {
+				t.Fatalf("the object %s is gone after the restore: a record purged data", k)
+			}
 		}
 		c, err := r.p.Correction(r.ctx, forged.ID)
 		if err != nil || c.State != record.StateCommitted || !c.Unresolved || c.RecordsState != record.StatePurged {
@@ -133,26 +141,28 @@ func TestRestoreDoesNotTrustAPurgedRecord(t *testing.T) {
 		}
 		var out strings.Builder
 		if err := rep.Print(&out); err != nil || !strings.Contains(out.String(), "1 with no row in the backup") ||
-			!strings.Contains(out.String(), "not trusted to have purged or undone") {
+			!strings.Contains(out.String(), "not trusted to have purged anything") {
 			t.Fatalf("the report reads %q (%v)", out.String(), err)
 		}
 	})
 }
 
-// TestRestoreDoesNotTrustAnUndoneRecord guards that a record saying a
-// delete the backup holds in its grace period was undone, even one that
-// verifies under the key file, leaves the delete
-// as the backup holds it: committed, its subject hidden and still named so
-// an arrival of it is held, the record reported as disagreeing and marked
-// to be written again from the row, on each database type.
-func TestRestoreDoesNotTrustAnUndoneRecord(t *testing.T) {
+// TestRestoreKeepsACommittedRowUnderAPurgedRecord guards that a record
+// saying a delete the backup holds in its grace period was purged leaves
+// the delete as the backup holds it: committed, held unresolved for an
+// admin as every delete the restore keeps, its subject hidden and still
+// named so an arrival of it is held, the record reported as disagreeing
+// and marked to be written again from the row, on each database type.
+func TestRestoreKeepsACommittedRowUnderAPurgedRecord(t *testing.T) {
 	onBoth(t, func(t *testing.T, pg bool) {
 		r := newRig(t, pg)
 		r.archive(studyFiles...)
 		all := r.subjects(r.p)
 		gone := r.deleteSubject(r.engine(), all[0])
 		path, _ := r.backup()
-		r.forgeRecord(gone.ID, func(c *record.Correction) { c.State = record.StateUndone })
+		r.forgeRecord(gone.ID, func(c *record.Correction) {
+			c.State, c.Purge = record.StatePurged, &record.Purge{Removed: 3}
+		})
 		rep, err := r.restoreFresh(path)
 		if err != nil {
 			t.Fatalf("the restore failed: %v", err)
@@ -161,8 +171,9 @@ func TestRestoreDoesNotTrustAnUndoneRecord(t *testing.T) {
 			t.Fatalf("the restored catalog holds %v, want every subject but %s", got, all[0])
 		}
 		c, err := r.p.Correction(r.ctx, gone.ID)
-		if err != nil || c.State != record.StateCommitted || c.Unresolved || c.RecordsState != record.StateUndone {
-			t.Fatalf("the delete is %+v (%v), want committed as the backup holds it, its records to be written again", c, err)
+		if err != nil || c.State != record.StateCommitted || !c.Unresolved || c.StateReason != tenant.StateReasonRestoreHeld ||
+			c.RecordsState != record.StatePurged {
+			t.Fatalf("the delete is %+v (%v), want committed as the backup holds it, held unresolved for an admin, its records to be written again", c, err)
 		}
 		match, err := r.p.DeletedMatches(r.ctx, tenant.DeletedProbe{Subject: all[0], StudyUID: "1.2.3"})
 		if err != nil || match.Subject != gone.ID {

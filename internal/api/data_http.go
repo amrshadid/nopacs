@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -227,7 +228,40 @@ func (c *core) download(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	// else can be said. net/http closes the connection, or resets the
 	// HTTP/2 stream, before the last byte, and the client sees a body
 	// short of its Content-Length.
-	panic(http.ErrAbortHandler)
+	reason := "the download ended before its last byte: the client went away or stalled, or the server stopped"
+	if refused {
+		reason = fault.Message(refusal)
+		err = refusal
+	} else if checkedread.Mismatched(err) || isFault(err) {
+		err = instanceFailure(err, path)
+	}
+	abortAnswer(err, reason)
+	return nil
+}
+
+// abortedAnswer is the panic that aborts an answer already begun: it is
+// net/http's http.ErrAbortHandler, so every recover lets it through and
+// net/http closes the connection, and it carries why the answer was cut,
+// so the server's log line of the request names the failure and never
+// reads as a success.
+type abortedAnswer struct{ cause error }
+
+// Error names the cause.
+func (a abortedAnswer) Error() string { return "the answer was cut: " + a.cause.Error() }
+
+// Unwrap returns http.ErrAbortHandler and the cause, so errors.Is finds
+// the one and fault.KindOf the other.
+func (a abortedAnswer) Unwrap() []error { return []error{http.ErrAbortHandler, a.cause} }
+
+// abortAnswer aborts an answer already begun, its cause err: a fault as it
+// is, as is the end of the request's context; any other error (a write to
+// a client that went away or stalled) is Unavailable with reason, the
+// message the audit entry gives.
+func abortAnswer(err error, reason string) {
+	if !isFault(err) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		err = fault.Wrap(fault.Unavailable, err, reason)
+	}
+	panic(abortedAnswer{cause: err})
 }
 
 // fileSender is a storage's stream that can write its next bytes to a

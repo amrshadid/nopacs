@@ -1,7 +1,10 @@
 package tenant
 
 import (
+	"context"
+	"crypto/sha256"
 	"errors"
+	"io"
 
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/layout"
@@ -16,6 +19,48 @@ import (
 type ScanSnapshot struct {
 	Manifest, Metadata         SHA256
 	ManifestSize, MetadataSize int64
+}
+
+// ObjectReader reads an object of a storage (blob.Store's Read).
+type ObjectReader interface {
+	Read(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
+}
+
+// ReadScanSnapshot reads the manifest and metadata of the scan at p on a
+// storage: what a delete's purge may remove of the scan, and only while
+// their bytes are these. One not there stays zero.
+func ReadScanSnapshot(ctx context.Context, st ObjectReader, p label.Path) (ScanSnapshot, error) {
+	var snap ScanSnapshot
+	mk, err := layout.ManifestKey(p)
+	if err != nil {
+		return snap, err
+	}
+	sk, err := layout.MetadataKey(p)
+	if err != nil {
+		return snap, err
+	}
+	for _, x := range []struct {
+		key  string
+		sum  *SHA256
+		size *int64
+	}{{mk, &snap.Manifest, &snap.ManifestSize}, {sk, &snap.Metadata, &snap.MetadataSize}} {
+		rc, err := st.Read(ctx, x.key, 0, -1)
+		if fault.KindOf(err) == fault.NotFound {
+			continue
+		}
+		if err != nil {
+			return snap, err
+		}
+		h := sha256.New()
+		n, err := io.Copy(h, rc)
+		_ = rc.Close()
+		if err != nil {
+			return snap, fault.Wrap(fault.Unavailable, err, "an object cannot be read")
+		}
+		h.Sum(x.sum[:0])
+		*x.size = n
+	}
+	return snap, nil
 }
 
 // The order of a correction's objects, the order a purge removes them in:

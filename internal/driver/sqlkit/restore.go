@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/core/label"
+	"github.com/amrshadid/nopacs/internal/core/layout"
 	corr "github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -100,19 +102,52 @@ func (k Sending) AdoptCorrection(ctx context.Context, rec corr.Correction, stora
 			if err := k.insertAdopted(ctx, tx, rec, now); err != nil {
 				return err
 			}
-			return k.adoptScans(ctx, tx, rec, storage, adoptedState(rec))
+			state, _ := rec.Alone()
+			return k.adoptScans(ctx, tx, rec, storage, state)
 		case row.kind != rec.Kind:
 			// The backup's row wins; the record is answered as one that
 			// disagrees with it, and changes nothing.
 			out = tenant.AdoptedDisagrees
 			return nil
-		case row.unresolved && row.stateReason == tenant.StateReasonUnresolved:
+		case row.kind == corr.KindDelete && row.state == corr.StateCommitted && rec.State == corr.StateUndone:
+			// An undo after the backup: the engine writes a record undone
+			// only once the database's undo has committed, so the verified
+			// record proves it, whatever made the row (a request, or an
+			// earlier restore from a record). The row is undone as an undo
+			// does it, what it hid shown again; kept committed, its purge
+			// would remove data the tenant took the delete of back.
+			out = tenant.AdoptedMoved
+			c, err := k.correctionIn(ctx, tx, rec.ID, "")
+			if err != nil {
+				return err
+			}
+			if err := k.undoDeleteIn(ctx, tx, &c, reasonUndoneByRecord, tenant.StateReasonFromRecord, now); err != nil {
+				return err
+			}
+			_, err = tx.Exec(ctx, `UPDATE corrections SET records_state = ? WHERE id = ?`, string(rec.State), rec.ID)
+			return err
+		case row.stateReason == tenant.StateReasonUnresolved:
 			out = tenant.AdoptedScans
 			return k.adoptScans(ctx, tx, rec, storage, row.state)
+		case row.state == corr.StatePrepared && (rec.State.After(row.state, rec.Kind) ||
+			rec.Kind == corr.KindDelete && rec.State == corr.StatePrepared):
+			// The backup was taken before the correction's request was
+			// answered, and its record, which verified, says how it went:
+			// the row knows no outcome, so it takes the record's, by the
+			// rule a rebuild reads a record with no row by. A row left
+			// prepared would be rolled back at the next start, against
+			// what the storages hold (a replace's new revision removed,
+			// which the rebuilt catalog names). A delete whose record is
+			// still prepared may have been published and answered with
+			// its record's rewrite failed: it is taken as committed, and
+			// unresolved, as a record with no row is.
+			out = tenant.AdoptedMoved
+			return k.moveAdopted(ctx, tx, rec, storage, now)
 		case rec.State.After(row.state, rec.Kind):
-			// A record is not authenticated: the row stays as the backup
-			// holds it, so a record cannot end a delete (dropping what it
-			// hid, or showing its data again) or purge it. Its records are
+			// A row the backup holds committed or further stays as it is
+			// for a record of its purge: the purge began past its point of
+			// no return, and the row's own purge, which finds what it
+			// removed gone, ends it. Its records are
 			// marked as written with the record's state, so a start writes
 			// them again from the row.
 			out = tenant.AdoptedDisagrees
@@ -124,22 +159,237 @@ func (k Sending) AdoptCorrection(ctx context.Context, rec corr.Correction, stora
 	return out, err
 }
 
-// adoptedState is the state a row made from rec takes. A record is not
-// authenticated, so it never makes a row in an end it cannot come back
-// from: a delete, whatever its record says, is committed and unresolved,
-// holding its data for an admin's decision (an undo or a purge), so a
-// record cannot purge data or end a delete made after the backup; a
-// prepared or abandoned relabel or replace is abandoned, since no row is
-// left to finish or undo its writes; one published is committed and
-// unresolved, never purged.
-func adoptedState(rec corr.Correction) corr.State {
-	switch {
-	case rec.Kind == corr.KindDelete:
-		return corr.StateCommitted
-	case rec.State == corr.StatePrepared || rec.State == corr.StateAbandoned:
-		return corr.StateAbandoned
+// reasonUndoneByRecord is the undo reason of a delete a restore undid as
+// its record says: a record holds only its reason's digest.
+const reasonUndoneByRecord = "undone after the backup, as its record says"
+
+// moveAdopted moves a row the backup holds prepared to the state its
+// record is read in alone (record.Correction.Alone): committed and
+// unresolved, its times the record's, naming a delete's data, a replace
+// published with what its publish writes (publishReplace); or abandoned,
+// a delete naming nothing.
+func (k Sending) moveAdopted(ctx context.Context, tx SendingTx, rec corr.Correction, storage string, now time.Time) error {
+	state, unresolved := rec.Alone()
+	if rec.Kind == corr.KindReplace && state == corr.StateCommitted {
+		if err := k.publishMovedReplace(ctx, tx, rec.ID, storage, now); err != nil {
+			return err
+		}
 	}
-	return corr.StateCommitted
+	var committed, purgeAfter, endedAt any
+	if rec.State.Published() || rec.State == corr.StateUndone {
+		committed, purgeAfter = k.D.Time(rec.CommittedAt), k.D.Time(rec.PurgeAfter)
+	} else if state == corr.StateCommitted {
+		committed, purgeAfter = k.D.Time(rec.Created), k.D.Time(rec.Created)
+	}
+	if ended(state) {
+		endedAt = k.D.Time(now)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE corrections SET state = ?, records_state = ?, committed_at = ?, purge_after = ?, ended_at = ?,
+		state_reason = ?, unresolved = ?, restore_line = NULL WHERE id = ?`, string(state), string(rec.State), committed, purgeAfter,
+		endedAt, tenant.StateReasonFromRecord, k.D.Bool(unresolved), rec.ID); err != nil {
+		return err
+	}
+	if rec.Kind == corr.KindDelete && state != corr.StateCommitted {
+		_, err := tx.Exec(ctx, `DELETE FROM deleted_targets WHERE correction_id = ?`, rec.ID)
+		return err
+	}
+	return k.adoptScans(ctx, tx, rec, storage, state)
+}
+
+// publishMovedReplace writes, for a replace the backup holds prepared that
+// a restore moves to committed, what its publish writes outside the
+// catalog (publishReplace), from what its prepare recorded: the
+// superseded revision it owns, which its purge removes; the revision in
+// the instance's history; its quarantined file released. The backup holds
+// no catalog: the restore's rebuild reads the new revision from the
+// storage's manifest.
+func (k Sending) publishMovedReplace(ctx context.Context, tx SendingTx, id, storage string, now time.Time) error {
+	c, err := k.correctionIn(ctx, tx, id, "")
+	if err != nil {
+		return err
+	}
+	p, uid := c.Target.Path(), c.Target.Instance
+	raw := c.InstanceKey
+	if plain, err := layout.InstanceKey(p, uid); err == nil && plain == raw {
+		raw = ""
+	}
+	if err := k.ownSuperseded(ctx, tx, id, storage, p, uid, c.InstanceKey, raw, c.InstanceSize, c.OldSHA256, c.OldRevision); err != nil {
+		return err
+	}
+	if _, err := ClearDamageInTx(ctx, tx, uid); err != nil {
+		return err
+	}
+	q, found, err := heldQuarantine(ctx, tx, c.Quarantine)
+	if err != nil || !found {
+		return err
+	}
+	return k.releaseOverwritten(ctx, tx, c.Quarantine, q, now)
+}
+
+// OwnAdoptedReplace implements tenant.Restoring: a replace made committed
+// from its record alone gets what its publish writes outside the catalog
+// (ownSuperseded, releaseOverwritten), from the record: the superseded
+// revision's key from the scan's labels, the UID and the old revision, its
+// checksum the record's, its size the storage's (sizeOf; a revision gone
+// from the storage owns nothing); the quarantined file the one still held
+// of that UID and the new revision's checksum, when the backup holds it.
+func (k Sending) OwnAdoptedReplace(ctx context.Context, rec corr.Correction, storage string,
+	sizeOf func(ctx context.Context, key string) (int64, error), now time.Time) error {
+	if rec.Kind != corr.KindReplace || rec.Replace == nil {
+		return nil
+	}
+	if state, _ := rec.Alone(); state != corr.StateCommitted {
+		return nil
+	}
+	s := rec.Scans[0]
+	p := label.Path{Subject: s.Subject, Session: s.Session, Scan: s.Scan}
+	uid := rec.Replace.SOPInstanceUID
+	plain, err := layout.InstanceKey(p, uid)
+	if err != nil {
+		return fault.Wrap(fault.Invalid, err, "a replace's instance key cannot be made")
+	}
+	key, raw := plain, ""
+	if rec.Replace.OldRevision > 1 {
+		if key, err = layout.RevisionKey(p, uid, rec.Replace.OldRevision); err != nil {
+			return fault.Wrap(fault.Invalid, err, "a replace's revision key cannot be made")
+		}
+		raw = key
+	}
+	var old, sum tenant.SHA256
+	if b, err := hex.DecodeString(rec.Replace.OldSHA256); err == nil && len(b) == len(old) {
+		copy(old[:], b)
+	}
+	if b, err := hex.DecodeString(rec.Replace.NewSHA256); err == nil && len(b) == len(sum) {
+		copy(sum[:], b)
+	}
+	size, err := sizeOf(ctx, key)
+	if fault.KindOf(err) == fault.NotFound {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return k.Host.Write(ctx, "the replace cannot be given what its publish writes", func(tx SendingTx) error {
+		if err := k.ownSuperseded(ctx, tx, rec.ID, storage, p, uid, key, raw, size, old, rec.Replace.OldRevision); err != nil {
+			return err
+		}
+		if _, err := ClearDamageInTx(ctx, tx, uid); err != nil {
+			return err
+		}
+		var qid string
+		found, err := tx.QueryRow(ctx, `SELECT id FROM quarantine WHERE state = 'held' AND sop_instance_uid = ? AND sha256 = ? ORDER BY id`,
+			[]any{uid, sum[:]}, &qid)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE corrections SET instance_key = ?, instance_size = ?, quarantine_id = ? WHERE id = ?`,
+			key, size, qid, rec.ID); err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		q, _, err := heldQuarantine(ctx, tx, qid)
+		if err != nil {
+			return err
+		}
+		return k.releaseOverwritten(ctx, tx, qid, q, now)
+	})
+}
+
+// HoldCommittedDeletes implements tenant.Restoring.
+func (k Sending) HoldCommittedDeletes(ctx context.Context) (int64, error) {
+	var n int64
+	err := k.Host.Write(ctx, "the deletes a restore keeps cannot be held", func(tx SendingTx) error {
+		var err error
+		n, err = tx.Exec(ctx, `UPDATE corrections SET unresolved = ?, state_reason = ? WHERE kind = 'delete' AND state = 'committed'
+			AND unresolved = ?`, k.D.Bool(true), tenant.StateReasonRestoreHeld, k.D.Bool(false))
+		return err
+	})
+	return n, err
+}
+
+// unhiddenDeletes selects the deletes committed that hide no row: those a
+// restore made committed from their records, whose data the backup's
+// catalog-less load hid nowhere.
+const unhiddenDeletes = `SELECT id FROM corrections AS c WHERE kind = 'delete' AND state = 'committed'
+	AND NOT EXISTS (SELECT 1 FROM hidden_scans AS h WHERE h.correction_id = c.id)
+	AND NOT EXISTS (SELECT 1 FROM hidden_instances AS h WHERE h.correction_id = c.id) ORDER BY id`
+
+// UnhiddenDeletes implements tenant.Restoring.
+func (k Sending) UnhiddenDeletes(ctx context.Context) ([]string, error) {
+	var out []string
+	err := k.Host.Read(ctx, "the deletes that hide nothing cannot be read", func(tx SendingTx) error {
+		out = nil
+		return tx.Query(ctx, unhiddenDeletes, nil, func(r Row) error {
+			var id string
+			err := r.Scan(&id)
+			out = append(out, id)
+			return err
+		})
+	})
+	return out, err
+}
+
+// HideDeletes implements tenant.Restoring: each delete hides what the
+// rebuilt catalog holds of its target, as its publish does (hideTarget),
+// owning its scans' manifest and metadata as their snapshots say, so an
+// undo shows it again from what was hidden and its purge removes what a
+// purge of a delete removes. A target the catalog does not hold hides
+// nothing.
+func (k Sending) HideDeletes(ctx context.Context, deletes []tenant.DeleteToHide) (tenant.Hidden, error) {
+	var out tenant.Hidden
+	for _, d := range deletes {
+		id := d.ID
+		if err := tenant.ValidateCorrectionID(id); err != nil {
+			return out, err
+		}
+		err := k.Host.Write(ctx, "a delete cannot hide what the rebuilt catalog holds of it", func(tx SendingTx) error {
+			c, err := k.correctionIn(ctx, tx, id, k.D.Lock)
+			if err != nil {
+				return err
+			}
+			if c.Kind != corr.KindDelete || c.State != corr.StateCommitted {
+				return nil
+			}
+			r, err := resolveTarget(ctx, tx, c.Target, true)
+			if fault.KindOf(err) == fault.NotFound {
+				// The rebuild cataloged the delete's data to be hidden here:
+				// one that holds what it names under other labels would be
+				// left shown, so the restore fails rather than show it.
+				q, arg := `SELECT 1 FROM scans AS s JOIN correction_scans AS c ON c.series_uid = s.series_uid WHERE c.correction_id = ?`, any(id)
+				if c.Target.Instance != "" {
+					q, arg = `SELECT 1 FROM instances WHERE sop_instance_uid = ?`, c.Target.Instance
+				}
+				held, err := exists(ctx, tx, q, arg)
+				if err != nil || !held {
+					return err
+				}
+				return fault.New(fault.Precondition, "the delete "+id+" names data the rebuilt catalog holds under other labels; it cannot be hidden")
+			}
+			if err != nil {
+				return err
+			}
+			if err := k.hideTarget(ctx, tx, id, r, d.Snapshots); err != nil {
+				return err
+			}
+			var whole, part int64
+			if _, err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM hidden_scans WHERE correction_id = ?),
+				(SELECT count(DISTINCT scan_id) FROM hidden_instances WHERE correction_id = ?
+					AND scan_id NOT IN (SELECT id FROM hidden_scans WHERE correction_id = ?))`, []any{id, id, id}, &whole, &part); err != nil {
+				return err
+			}
+			if c.Unresolved {
+				out.Unresolved++
+			}
+			out.Scans += whole + part
+			return nil
+		})
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
 }
 
 // ended reports whether s is an end of the state machine.
@@ -149,7 +399,7 @@ func ended(s corr.State) bool {
 
 // insertAdopted writes the row of a correction known only from its record.
 func (k Sending) insertAdopted(ctx context.Context, tx SendingTx, rec corr.Correction, now time.Time) error {
-	state := adoptedState(rec)
+	state, unresolved := rec.Alone()
 	first := rec.Scans[0]
 	level := rec.Level
 	subject, session, scan, instance, to := first.Subject, "", "", "", ""
@@ -185,14 +435,13 @@ func (k Sending) insertAdopted(ctx context.Context, tx SendingTx, rec corr.Corre
 	case rec.State.Published() || rec.State == corr.StateUndone:
 		committed, purgeAfter = k.D.Time(rec.CommittedAt), k.D.Time(rec.PurgeAfter)
 	case state == corr.StateCommitted:
-		// A delete found prepared or abandoned: published now by the
-		// restore, its purge left to an admin, since it is unresolved.
+		// A delete found prepared: published now by the restore, its purge
+		// left to an admin, since it is unresolved.
 		committed, purgeAfter = k.D.Time(rec.Created), k.D.Time(rec.Created)
 	}
 	if ended(state) {
 		endedAt = k.D.Time(now)
 	}
-	unresolved := state == corr.StateCommitted
 	subjects, sessions := map[string]bool{}, map[string]bool{}
 	for _, s := range rec.Scans {
 		subjects[s.Subject] = true

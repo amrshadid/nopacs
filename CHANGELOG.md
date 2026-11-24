@@ -153,6 +153,24 @@ the code before this release is in github.com/amrshadid/coria.
   directory is known by its identity, not the spelling of its root; an S3
   sweep of old uploads that was refused, cut short or left an abort failed
   runs again at the next open.
+- A DICOMweb answer that fails within its first 64 KiB (a scan's metadata
+  file missing from its storage, an instance's file short or changed) is
+  answered with its error status (500 data_loss) instead of a connection
+  closed with no answer; one cut after it began ends short; the server logs
+  the request with the failure's code and cause, never "ok" (the plain
+  download too).
+- A restore reads each verified correction record by the rule a rebuild
+  reads a record with no row by: a delete abandoned or undone after the
+  backup shows its data (one the backup holds committed but undone since is
+  undone); a delete committed, purged or still prepared stays hidden and
+  unresolved, an undo after the restore shows its data again, and its purge
+  removes all of it; a correction the backup holds prepared is moved to the
+  state its record says, and a replace published since gets what its publish
+  writes, so it keeps its new revision and its purge removes the old one.
+- After a restore every delete the backup holds committed is unresolved and
+  none is purged until an admin undoes or purges it (`nopacs correction undo`
+  / `purge`): an undo whose record was not rewritten cannot be told apart,
+  and a purge cannot be undone; the report counts them.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

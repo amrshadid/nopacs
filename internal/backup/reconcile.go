@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"strconv"
 	"time"
 
@@ -84,13 +85,95 @@ func reconcile(ctx context.Context, cfg RestoreConfig, m master.Store, installat
 			return res, err
 		}
 	}
+	// A delete the backup holds committed is purged only once an admin
+	// confirms it: a record lagging an undo made after the backup cannot
+	// be told apart from one that did not, and a purge cannot be undone.
+	if res.Held, err = rs.HoldCommittedDeletes(ctx); err != nil {
+		return res, err
+	}
+	// The deletes made committed from their records hide nothing yet: the
+	// backup holds no catalog. Their data is cataloged by the rebuild and
+	// then hidden as a publish hides it, so an undo shows it again and a
+	// purge removes what a purge of a delete removes.
+	unhidden, err := rs.UnhiddenDeletes(ctx)
+	if err != nil {
+		return res, err
+	}
+	deletes, err := snapshotsOf(ctx, p, unhidden, func(ctx context.Context, name string) (blob.Store, error) {
+		for _, s := range storages {
+			if s.Name == name {
+				return opener.Open(ctx, pt, s)
+			}
+		}
+		return nil, fault.New(fault.NotFound, "the tenant has no storage "+name)
+	})
+	if err != nil {
+		return res, err
+	}
+	cfg.catalogFirst = unhidden
 	job, tallies, err := rebuildCatalog(ctx, cfg, m, t, p, opener, now)
 	res.Rebuild, res.Tallies = job, tallies
 	if err != nil {
 		return res, err
 	}
+	hidden, err := rs.HideDeletes(ctx, deletes)
+	if err != nil {
+		return res, err
+	}
+	res.Tallies = addTally(res.Tallies, tenant.TallyUnresolvedCorrection, hidden.Unresolved)
+	res.Tallies = addTally(res.Tallies, tenant.TallyLeftOutDeleted, hidden.Scans)
 	res.Relinked, err = rs.RelinkHidden(ctx)
 	return res, err
+}
+
+// snapshotsOf reads, for each delete of ids, its scans' manifest and
+// metadata on their storages (tenant.ReadScanSnapshot), under the labels
+// the delete names them by.
+func snapshotsOf(ctx context.Context, p tenant.Pipeline, ids []string, open func(context.Context, string) (blob.Store, error)) ([]tenant.DeleteToHide, error) {
+	out := make([]tenant.DeleteToHide, 0, len(ids))
+	held := map[string]blob.Store{}
+	defer func() {
+		for _, st := range held {
+			_ = st.Close()
+		}
+	}()
+	for _, id := range ids {
+		scans, err := p.CorrectionScans(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		d := tenant.DeleteToHide{ID: id, Snapshots: map[string]tenant.ScanSnapshot{}}
+		for _, s := range scans {
+			st, ok := held[s.Storage]
+			if !ok {
+				if st, err = open(ctx, s.Storage); err != nil {
+					return nil, err
+				}
+				held[s.Storage] = st
+			}
+			if d.Snapshots[s.SeriesUID], err = tenant.ReadScanSnapshot(ctx, st, s.Path); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// addTally adds n to the tally key of tallies, as the rebuild counts what
+// it leaves out: the deletes HideDeletes hid after it are reported as if
+// it had left their data out.
+func addTally(tallies []tenant.JobTally, key string, n int64) []tenant.JobTally {
+	if n == 0 {
+		return tallies
+	}
+	for i := range tallies {
+		if tallies[i].Key == key {
+			tallies[i].Count += n
+			return tallies
+		}
+	}
+	return append(tallies, tenant.JobTally{Key: key, Count: n})
 }
 
 // listStorages returns every storage of the tenant.
@@ -228,8 +311,8 @@ type recordAuth struct {
 // verify was not written by this installation for this tenant, or was
 // changed since: anyone who can write to a storage can put one there, so it
 // is counted and named in the report and treated as if it were not there.
-// The rules for a record that verifies are unchanged: it alone still never
-// decides what its row says (tenant.Restoring.AdoptCorrection).
+// A record that verifies is read as it says, by the rule a rebuild reads a
+// record with no row by (tenant.Restoring.AdoptCorrection).
 func adoptRecords(ctx context.Context, st blob.Store, rs tenant.Restoring, auth recordAuth, storage string, now time.Time, res *TenantResult) error {
 	token := ""
 	for range maxListPages {
@@ -267,6 +350,15 @@ func adoptRecords(ctx context.Context, st blob.Store, rs tenant.Restoring, auth 
 			switch got {
 			case tenant.AdoptedAdded:
 				res.Added++
+				sizeOf := func(ctx context.Context, key string) (int64, error) {
+					info, err := st.Stat(ctx, key)
+					return info.Size, err
+				}
+				if err := rs.OwnAdoptedReplace(ctx, rec, storage, sizeOf, now); err != nil {
+					return err
+				}
+			case tenant.AdoptedMoved:
+				res.Moved++
 			case tenant.AdoptedDisagrees:
 				res.Disagreed++
 				if len(res.Disagreements) < maxDisagreements {
@@ -337,8 +429,14 @@ func rebuildCatalog(ctx context.Context, cfg RestoreConfig, m master.Store, t op
 		Logger:       cfg.Log,
 		// A record that verifies was written by this installation, but may
 		// be older or newer than the backup; after the adoption every record
-		// has a row, so the row decides.
-		Decide:   rebuild.ByRow,
+		// has a row, so the row decides, but for the deletes whose data is
+		// cataloged to be hidden after (catalogFirst).
+		Decide: func(ctx context.Context, p tenant.Pipeline, c record.Correction) (record.Correction, bool, error) {
+			if slices.Contains(cfg.catalogFirst, c.ID) {
+				return c, false, nil
+			}
+			return rebuild.ByRow(ctx, p, c)
+		},
 		Keys:     cfg.Keys,
 		TenantID: tenantID,
 	})

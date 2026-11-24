@@ -190,8 +190,10 @@ func TestDICOMwebFrameListIsBounded(t *testing.T) {
 
 // TestDICOMwebFramesCutAChangedFrame guards the check of each frame against
 // the SHA-256 its line records: a frame whose stored bytes were changed
-// after it was archived (the file's size the same) is never sent as whole;
-// the frames before it are sent whole and the body is cut before its
+// after it was archived (the file's size the same) is never sent as whole.
+// The frames before it are held with the answer's first bytes, so the
+// failure is answered 500 before any of them reaches the client; had the
+// answer begun, they would be sent whole and the body cut before its
 // closing boundary, as a changed instance is.
 func TestDICOMwebFramesCutAChangedFrame(t *testing.T) {
 	w := newWebFixture(t)
@@ -226,8 +228,8 @@ func TestDICOMwebFramesCutAChangedFrame(t *testing.T) {
 	for _, r := range table[0] {
 		frame1 = append(frame1, file[r.Offset:r.Offset+r.Length]...)
 	}
-	if !bytes.Contains(a.body, frame1) {
-		t.Error("the frame before the changed one was not sent whole")
+	if a.status != http.StatusInternalServerError || bytes.Contains(a.body, frame1) {
+		t.Errorf("a changed frame within the bytes an answer holds: %d, %d bytes; want 500 with no frame", a.status, len(a.body))
 	}
 	if bytes.Contains(a.body, changed[at-16:at+1]) {
 		t.Error("the changed bytes reached the client")

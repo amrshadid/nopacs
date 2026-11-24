@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -43,6 +44,10 @@ type Call struct {
 	// message failed (replayStream), for the reason of the entry pass writes
 	// when the request ends without one.
 	unreadable atomic.Bool
+	// cut is why the handler aborted an answer it had begun (a panic that
+	// is http.ErrAbortHandler with its cause), so the request's log line
+	// names that failure: pass returns no error when the abort unwinds it.
+	cut error
 }
 
 // callKey is the context key of a request's Call.
@@ -294,8 +299,14 @@ func (s *Server) run(ctx context.Context, call *Call, next func(context.Context)
 		if p := recover(); p != nil {
 			if isAbort(p) {
 				// net/http's own way to abort a response; it must reach
-				// net/http, which closes the connection quietly.
-				panic(p)
+				// net/http, which closes the connection quietly only for
+				// the sentinel itself, so a panic that wraps it with its
+				// cause leaves the cause here, for the log line.
+				call.cut = errAborted
+				if p != any(http.ErrAbortHandler) {
+					call.cut, _ = p.(error)
+				}
+				panic(http.ErrAbortHandler)
 			}
 			attrs := append([]slog.Attr{
 				slog.String("request_id", call.RequestID),
@@ -313,9 +324,18 @@ func (s *Server) run(ctx context.Context, call *Call, next func(context.Context)
 // message, so nothing of the panic reaches the caller.
 var errPanic = fault.New(fault.Internal, "internal error")
 
+// errAborted is the failure of an answer its handler aborted after it began
+// with http.ErrAbortHandler alone, which names no cause.
+var errAborted = fault.New(fault.Unavailable, "the answer was cut before its last byte")
+
 // finish logs the request's line and counts it in the metrics.
 func (s *Server) finish(ctx context.Context, x exchange, call *Call, start time.Time, err error) {
 	markPath(ctx)
+	if err == nil && call.cut != nil {
+		// The handler aborted its answer after it began: a failure, whatever
+		// pass returned while the abort unwound it.
+		err = call.cut
+	}
 	took := time.Since(start)
 	code := codeName(s.code(err))
 	s.metrics.Observe(x.metric, code, took)

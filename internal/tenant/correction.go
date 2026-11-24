@@ -260,6 +260,17 @@ const OriginPerson = "person"
 // storage with no row.
 const StateReasonUnresolved = "found on storage without its row"
 
+// StateReasonFromRecord is the state reason of a correction a restore found
+// prepared in its backup and moved to the state its record says
+// (Restoring.AdoptCorrection).
+const StateReasonFromRecord = "moved by a restore to the state its record says"
+
+// StateReasonRestoreHeld is the state reason of a delete a restore kept
+// committed as its backup holds it, unresolved until an admin confirms it
+// (Restoring.HoldCommittedDeletes): a record lagging an undo made after the
+// backup cannot be told apart, and a purge cannot be undone.
+const StateReasonRestoreHeld = "kept by a restore: undo it, or purge it to confirm it"
+
 // CorrectionTarget names what a correction acts on, by labels and, for one
 // instance, its SOP Instance UID.
 type CorrectionTarget struct {

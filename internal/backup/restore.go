@@ -58,6 +58,9 @@ type RestoreConfig struct {
 	// method and localUser name the audit entries the reconcile writes:
 	// an import's; "" for a restore's.
 	method, localUser string
+	// catalogFirst are the deletes whose data the rebuild catalogs, for
+	// the reconcile to hide after it (tenant.Restoring.HideDeletes).
+	catalogFirst []string
 }
 
 // DefaultRebuildTimeout bounds one tenant's rebuild at restore.
@@ -89,9 +92,13 @@ type TenantResult struct {
 	QuarantineMarked int64
 	// Owners are the owner generations taken, by storage.
 	Owners []Owner
-	// Added, Disagreed and Scans count the correction records adopted
-	// (tenant.Adopted); Records counts every record read.
-	Added, Disagreed, Scans, Records int
+	// Added, Moved, Disagreed and Scans count the correction records
+	// adopted (tenant.Adopted); Records counts every record read.
+	Added, Moved, Disagreed, Scans, Records int
+	// Held counts the deletes the backup holds committed that the restore
+	// kept, each now unresolved until an admin confirms it
+	// (tenant.Restoring.HoldCommittedDeletes).
+	Held int64
 	// Disagreements are the ids of the first records that disagree with the
 	// backup's rows (at most maxDisagreements).
 	Disagreements []string

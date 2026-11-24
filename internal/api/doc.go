@@ -112,6 +112,19 @@
 //     stored file changed without a change of size is not found by the
 //     metadata service.
 //
+// A failure an answer meets before its status is written (a scan's metadata
+// file missing from its storage, an instance's file short or changed) is
+// answered with its error's status, 500 for data loss, and recorded as
+// failed with its reason (PS3.18 8.6.1.2). A DICOMweb answer holds its first
+// 64 KiB before its status (webStream), and a download its first piece
+// (checkedread.CopyChecked), so a failure within them is answered so. One
+// met later cuts the answer short: net/http closes the connection (or
+// resets the HTTP/2 stream), so a JSON array lacks its closing bracket, a
+// multipart body its closing boundary, and a download its last bytes, and
+// the request is recorded as failed with its reason. The panic that aborts
+// it (abortAnswer) carries its cause, which the server's log line of the
+// request names, never "ok".
+//
 // A search (PS3.18 10.6.3) has three bounds, and holds one scan's metadata
 // file open at a time:
 //

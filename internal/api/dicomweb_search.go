@@ -109,22 +109,28 @@ func (x *webRequest) search(ctx context.Context) error {
 		return x.fail(err)
 	}
 	h := x.w.Header()
-	if q.Fuzzy {
-		h.Add("Warning", dicomweb.Warning(x.r, dicomweb.WarnFuzzy))
-	}
-	if q.Capped {
-		h.Add("Warning", dicomweb.Warning(x.r, dicomweb.WarnCapped))
-	}
-	if ans.more {
-		h.Add("Warning", dicomweb.Warning(x.r, dicomweb.WarnMore))
+	// The Warnings are of a success: set with its status, so an answer
+	// that fails before it begins carries none.
+	warn := func() {
+		if q.Fuzzy {
+			h.Add("Warning", dicomweb.Warning(x.r, dicomweb.WarnFuzzy))
+		}
+		if q.Capped {
+			h.Add("Warning", dicomweb.Warning(x.r, dicomweb.WarnCapped))
+		}
+		if ans.more {
+			h.Add("Warning", dicomweb.Warning(x.r, dicomweb.WarnMore))
+		}
 	}
 	if ans.n == 0 {
 		// No match is a success with nothing in it (PS3.18 10.6.3.2).
+		warn()
 		x.w.WriteHeader(http.StatusNoContent)
 		x.done(0)
 		return nil
 	}
 	stream, stop, err := x.openStream(ctx, func() {
+		warn()
 		h.Set("Content-Type", media)
 		x.w.WriteHeader(http.StatusOK)
 	})

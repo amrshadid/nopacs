@@ -112,14 +112,39 @@ What it does, in order:
      other installation still writing the storage goes unnoticed (see
      [Fenced](#fenced));
    - the correction records on the storages, which may be newer than the
-     backup, are read, and none is trusted alone. A record with no row in the
-     backup becomes a correction left *unresolved* for an admin to decide: a
-     delete holds its data hidden until an admin undoes or purges it, and the
-     record's word that it was purged or undone is not taken. A record that
-     disagrees with the backup's row leaves the row as it is, and is reported.
-     A record that does not verify under this key file for this tenant is
-     treated as if it were not there, and reported;
-   - the catalog is rebuilt from the storages;
+     backup, are read. A record that does not verify under this key file for
+     this tenant is treated as if it were not there, and reported. One that
+     verifies is the tenant's own word, read by the same rule a rebuild reads a
+     record with no row by. A record with no row in the backup becomes a
+     correction as it says: a delete abandoned or undone shows its data; a
+     delete committed, purging, purged, or still prepared (no one knows how it
+     ended) holds its data hidden, left *unresolved* until an admin undoes or
+     purges it, since no data is purged on a record's word; a relabel or a
+     replace published is left unresolved, one prepared or abandoned is
+     abandoned. A row the backup holds still prepared (the backup was taken
+     before its request was answered) is moved to the state its record says,
+     in the same way, and reported; left prepared, the server's start would
+     roll it back against what the storages hold. A delete the backup holds
+     committed whose record says undone is undone, its data shown: the record
+     is written only once the undo has committed, and the delete kept would be
+     purged after its grace. A delete whose row the backup holds prepared and
+     whose record still says prepared (published, its record not rewritten)
+     is taken as committed and unresolved. A record of a purge over a row the
+     backup holds committed leaves the row as it is, and is reported;
+   - every delete the backup holds committed that the restore keeps is left
+     *unresolved*, and none is purged until an admin confirms it: an undo made
+     after the backup whose record was not rewritten looks the same as no
+     undo, and a purge cannot be taken back. The report counts them. Review
+     them with `nopacs correction list <tenant> --kind delete` and
+     `nopacs correction show`; undo one that was undone with
+     `nopacs correction undo`, and confirm one with `nopacs correction purge`,
+     which purges it now (there is no way to confirm one and let its grace
+     period run on);
+   - the catalog is rebuilt from the storages; a delete made committed from its
+     record then hides its data in the rebuilt catalog as its publish would, so
+     an admin's undo shows it again and a purge removes all of it, the scans'
+     manifest and metadata included; a replace made committed from its record
+     owns the revision it superseded, so its purge removes it;
    - a new event history begins, which tells every consumer of the feed to start
      again.
 5. **Writes the installation's id last.** A restore stopped half way leaves a data

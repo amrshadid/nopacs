@@ -39,9 +39,20 @@ func (r Report) Print(w io.Writer) error {
 		}
 		fmt.Fprintf(&b, "  correction records read: %d\n", t.Records)
 		if t.Added > 0 {
-			fmt.Fprintf(&b, "    %d with no row in the backup: each made a correction, unresolved, whatever its record says\n"+
-				"      (a delete holds its data hidden, and its arrivals held, until an admin undoes or purges it; a record\n"+
-				"      is not trusted to have purged or undone anything)\n", t.Added)
+			fmt.Fprintf(&b, "    %d with no row in the backup: each made a correction as its record says (a delete abandoned\n"+
+				"      or undone shows its data; any other holds its data hidden, and its arrivals held, unresolved until an\n"+
+				"      admin undoes or purges it: a record is not trusted to have purged anything)\n", t.Added)
+		}
+		if t.Moved > 0 {
+			fmt.Fprintf(&b, "    %d whose row the backup holds behind its record: each row was moved to the state its record says\n"+
+				"      (one prepared before its request was answered and published since is unresolved, its purge left to\n"+
+				"      an admin; a delete undone since is undone, its data shown)\n", t.Moved)
+		}
+		if t.Held > 0 {
+			fmt.Fprintf(&b, "  %d deletes the backup holds committed are kept, each unresolved: none is purged until an admin\n"+
+				"    confirms it, since an undo made after the backup whose record was not rewritten cannot be told\n"+
+				"    apart. Review each (nopacs correction list <tenant> --kind delete); undo one that was undone\n"+
+				"    (nopacs correction undo), or confirm one by purging it now (nopacs correction purge)\n", t.Held)
 		}
 		if t.Disagreed > 0 {
 			fmt.Fprintf(&b, "    %d that disagree with the backup's row: the row was kept as the backup holds it, and the\n"+

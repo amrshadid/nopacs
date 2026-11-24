@@ -27,11 +27,15 @@ func (s rowStore) Correction(context.Context, string) (tenant.Correction, error)
 // hides from the build (hides.add). A delete hides its scan while its row
 // is committed, purging or purged, and nothing while it is prepared,
 // undone or abandoned, whatever the record says; a record of another kind
-// than its row applies nothing; a record with no row applies as it reads
-// (a prepared delete as committed); a row that cannot be read fails; a
-// delete adopted from its record alone that says purged hides nothing; a
-// relabel hides the new tree until its row is published and the old tree
-// after; a replace hides nothing.
+// than its row applies nothing; a record with no row applies as its record
+// reads, by the rule a restore adopts it by: a delete committed, purging,
+// purged or still prepared hides its scan, one abandoned or undone hides
+// nothing, a relabel published hides its old tree and one prepared or
+// abandoned its new tree, a replace nothing; a row that cannot be read
+// fails; a delete adopted from its record alone, its row committed and
+// unresolved, hides its scan whatever its record says; a relabel hides the
+// new tree until its row is published and the old tree after; a replace
+// hides nothing.
 func TestByRow(t *testing.T) {
 	scan := record.Scan{Subject: "sub-01", Session: "ses-01", Scan: "scan-01", SeriesUID: "1.2.3"}
 	old := hideKey(label.Path{Subject: "sub-01", Session: "ses-01", Scan: "scan-01"}, "1.2.3")
@@ -47,6 +51,7 @@ func TestByRow(t *testing.T) {
 		return rowStore{row: tenant.Correction{ID: "c1", Kind: k, State: s}}
 	}
 	unavailable := fault.New(fault.Unavailable, "the database does not answer")
+	noRow := rowStore{err: fault.New(fault.NotFound, "no such correction")}
 	for _, c := range []struct {
 		name    string
 		rec     record.Correction
@@ -62,11 +67,21 @@ func TestByRow(t *testing.T) {
 		{name: "delete, row undone, record committed", rec: del(record.StateCommitted), store: row(record.KindDelete, record.StateUndone), applied: true},
 		{name: "delete, row abandoned, record prepared", rec: del(record.StatePrepared), store: row(record.KindDelete, record.StateAbandoned), applied: true},
 		{name: "record of another kind than its row", rec: del(record.StateCommitted), store: row(record.KindRelabel, record.StateCommitted)},
-		{name: "no row", rec: del(record.StatePrepared), store: rowStore{err: fault.New(fault.NotFound, "no such correction")}, applied: true,
-			hides: []string{old}},
+		{name: "no row, delete prepared", rec: del(record.StatePrepared), store: noRow, applied: true, hides: []string{old}},
+		{name: "no row, delete committed", rec: del(record.StateCommitted), store: noRow, applied: true, hides: []string{old}},
+		{name: "no row, delete purging", rec: del(record.StatePurging), store: noRow, applied: true, hides: []string{old}},
+		{name: "no row, delete purged", rec: del(record.StatePurged), store: noRow, applied: true, hides: []string{old}},
+		{name: "no row, delete abandoned", rec: del(record.StateAbandoned), store: noRow, applied: true},
+		{name: "no row, delete undone", rec: del(record.StateUndone), store: noRow, applied: true},
+		{name: "no row, relabel prepared", rec: relabel(record.StatePrepared), store: noRow, applied: true, hides: []string{renamed}},
+		{name: "no row, relabel abandoned", rec: relabel(record.StateAbandoned), store: noRow, applied: true, hides: []string{renamed}},
+		{name: "no row, relabel committed", rec: relabel(record.StateCommitted), store: noRow, applied: true, hides: []string{old}},
+		{name: "no row, replace committed", rec: record.Correction{ID: "c1", Kind: record.KindReplace, Level: record.LevelInstance,
+			State: record.StateCommitted, Scans: []record.Scan{scan}}, store: noRow, applied: true},
 		{name: "row unreadable", rec: del(record.StateCommitted), store: rowStore{err: unavailable}, err: true},
 		{name: "delete adopted from its record alone, purged", rec: del(record.StatePurged), store: rowStore{row: tenant.Correction{ID: "c1",
-			Kind: record.KindDelete, State: record.StateCommitted, Unresolved: true, StateReason: tenant.StateReasonUnresolved}}},
+			Kind: record.KindDelete, State: record.StateCommitted, Unresolved: true, StateReason: tenant.StateReasonUnresolved}},
+			applied: true, hides: []string{old}},
 		{name: "relabel, row prepared", rec: relabel(record.StateCommitted), store: row(record.KindRelabel, record.StatePrepared), applied: true,
 			hides: []string{renamed}},
 		{name: "relabel, row committed", rec: relabel(record.StatePrepared), store: row(record.KindRelabel, record.StateCommitted), applied: true,
