@@ -210,6 +210,15 @@ func jobKindText(j *v1.Job) (string, string) {
 		// The path can name a person and is shown by "job show" alone.
 		return "import " + ij.GetReceiver(), "a directory"
 	}
+	if sj := j.GetScrub(); sj != nil {
+		if sj.GetStorage() == "" {
+			return "scrub", "every storage"
+		}
+		return "scrub", "storage " + sj.GetStorage()
+	}
+	if rj := j.GetRebuild(); rj != nil {
+		return "rebuild " + rebuildMode(rj.GetMode()), "the catalog"
+	}
 	return j.GetSend().GetSender(), output.JobTarget(j.GetSend())
 }
 

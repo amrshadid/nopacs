@@ -27,14 +27,18 @@ lists a sender in its forward-to makes one for each reception it completes. A
 deid job judges archived instances against a de-identification profile version
 and changes nothing ("deid check", "deid dry-run"). An import job hands the
 files of a directory under an import root to an import receiver ("job import";
-its files and units are listed by "job files" and "job units"). A
+its files and units are listed by "job files" and "job units"). A scrub job
+reads every stored object again and compares it with the catalog ("job scrub";
+what it found is listed by "job findings" and "job finding"). A rebuild job makes
+the catalog again from the storages, to compare it with the one in use or to
+replace it ("job rebuild"). A
 job ends done (every instance sent), partial (some refused, the others sent),
 failed (some not sent because the attempts ran out) or canceled.
 Every command takes the tenant first. Creating, canceling and retrying, and
 listing an import's files and units, need the operator role on the tenant; the
 others need the reader role.`,
-		a.newJobCreate(), a.newJobImport(), a.newJobGet(), a.newJobList(), a.newJobWatch(), a.newJobCancel(), a.newJobRetry(), a.newJobFailures(),
-		a.newJobFiles(), a.newJobUnits())
+		a.newJobCreate(), a.newJobImport(), a.newJobScrub(), a.newJobRebuild(), a.newJobGet(), a.newJobList(), a.newJobWatch(), a.newJobCancel(), a.newJobRetry(), a.newJobFailures(),
+		a.newJobFiles(), a.newJobUnits(), a.newJobFindings(), a.newJobFinding())
 }
 
 // jobDetails lists one job as labeled values.
@@ -62,15 +66,22 @@ func (a *app) jobDetails(j *v1.Job) []output.Pair {
 	if ij := j.GetImportJob(); ij != nil {
 		pairs = append(pairs, importJobDetails(ij)...)
 	}
+	if sj := j.GetScrub(); sj != nil {
+		pairs = append(pairs, scrubJobDetails(sj)...)
+	}
+	if rj := j.GetRebuild(); rj != nil {
+		pairs = append(pairs, rebuildJobDetails(rj)...)
+	}
+	sentLabel, refusedLabel := countLabels(j)
 	if j.GetReason() != "" {
 		pairs = append(pairs, output.Pair{Label: "Reason", Value: j.GetReason()})
 	}
 	pairs = append(pairs,
-		output.Pair{Label: "Progress", Value: output.JobBar(cn, 22) + " " + output.JobProgress(cn)},
+		output.Pair{Label: "Progress", Value: output.JobBar(cn, 22) + " " + output.JobProgressOf(j)},
 		output.Pair{Label: "Instances", Value: fmt.Sprintf("%d, %s", cn.GetInstances(), output.Human(cn.GetBytes()))},
-		output.Pair{Label: "Sent", Value: fmt.Sprintf("%d, %s", cn.GetInstancesSent(), output.Human(cn.GetBytesSent()))},
+		output.Pair{Label: sentLabel, Value: fmt.Sprintf("%d, %s", cn.GetInstancesSent(), output.Human(cn.GetBytesSent()))},
 		output.Pair{Label: "Warned", Value: fmt.Sprintf("%d, %s", cn.GetInstancesWarned(), output.Human(cn.GetBytesWarned()))},
-		output.Pair{Label: "Refused", Value: fmt.Sprintf("%d, %s", cn.GetInstancesRefused(), output.Human(cn.GetBytesRefused()))},
+		output.Pair{Label: refusedLabel, Value: fmt.Sprintf("%d, %s", cn.GetInstancesRefused(), output.Human(cn.GetBytesRefused()))},
 		output.Pair{Label: "Remaining", Value: fmt.Sprintf("%d, %s", cn.GetInstancesRemaining(), output.Human(cn.GetBytesRemaining()))},
 		output.Pair{Label: "Created by", Value: output.Dash(j.GetCreatedByKeyId())},
 		output.Pair{Label: "Created", Value: a.when(j.GetCreateTime())},
@@ -257,7 +268,7 @@ is inclusive and --until is exclusive.`,
 					})
 				}
 				return a.write(func(w io.Writer) error {
-					return output.Table(w, a.style(), []string{"ID", "SENDER", "SENDS", "STATE", "DONE", "SENT", "REFUSED", "REMAINING", "CREATED"}, rows)
+					return output.Table(w, a.style(), []string{"ID", "KIND", "ON", "STATE", "DONE", "OK", "NOT OK", "REMAINING", "CREATED"}, rows)
 				})
 			})
 		}),
@@ -501,7 +512,7 @@ func (a *app) watchLine(j *v1.Job, when string) error {
 		return a.write(func(w io.Writer) error { return output.JSONMessage(w, j) })
 	}
 	return a.write(func(w io.Writer) error {
-		line := fmt.Sprintf("%s  %s  %s %s", when, padState(output.JobState(j.GetState())), output.JobBar(j.GetCounts(), 22), output.JobProgress(j.GetCounts()))
+		line := fmt.Sprintf("%s  %s  %s %s", when, padState(output.JobState(j.GetState())), output.JobBar(j.GetCounts(), 22), output.JobProgressOf(j))
 		if j.GetReason() != "" {
 			line += " (" + output.Clean(j.GetReason()) + ")"
 		}

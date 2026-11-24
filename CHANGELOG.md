@@ -135,6 +135,10 @@ the code before this release is in github.com/amrshadid/coria.
   `ReplicaService` and `RetentionService`.
 - The command line `nopacs` for every service, with `--json` output and named
   client contexts, and an interactive program (`nopacs` with no arguments).
+- `nopacs job scrub`, `job rebuild` (`--mode compare|replace`; a replace needs
+  `--yes` and says what it does), `job findings` and `job finding` make and
+  read scrub and rebuild jobs; `job show`, `list` and `watch` follow them in
+  their own words (read good / with a finding; cataloged / left out).
 - Generated clients for Python (`nopacs`, `clients/python`) and TypeScript
   (`nopacs`, `clients/typescript`), tested against a real server.
 - Proofs from outside the binary (`make prove` and its sections) with tools

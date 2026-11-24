@@ -67,7 +67,7 @@ func TestJobCommands(t *testing.T) {
 	r.fake.SetJob("lab1", "job_3", v1.JobState_JOB_STATE_DONE, counts(10, 10, 0, 0))
 	list := r.run("job", "list", "lab1", "--state", "partial", "--state", "done")
 	if list.code != 0 || !strings.Contains(list.stdout, "job_2") || !strings.Contains(list.stdout, "job_3") || strings.Contains(list.stdout, "job_1") ||
-		!strings.Contains(list.stdout, "ID     SENDER  SENDS           STATE    DONE  SENT  REFUSED  REMAINING  CREATED") {
+		!strings.Contains(list.stdout, "ID     KIND  ON              STATE    DONE  OK  NOT OK  REMAINING  CREATED") {
 		t.Errorf("job list --state:\n%s", list.stdout)
 	}
 	if res := r.run("job", "list", "lab1", "--in-progress", "--sender", "pacs", "--json"); res.code != 0 {

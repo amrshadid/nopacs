@@ -181,12 +181,10 @@ const (
 	RebuildJobMode_REBUILD_JOB_MODE_COMPARE RebuildJobMode = 1
 	// Build a shadow catalog, then make it the catalog in use in one
 	// transaction; the catalog in use serves until then, and the tenant's
-	// receivers refuse new data while the shadow is built. Needs admin on
-	// the tenant. Not served yet: CreateJob answers an admin unimplemented,
-	// and an operator permission denied, until the tenant's receivers pause
-	// and corrections are held back while the shadow is built. The
-	// activation is refused, and the job ends failed, while a job not ended
-	// names a scan the rebuilt catalog removes or changes.
+	// receivers refuse new data from the moment the job is queued until it
+	// ends. Needs admin on the tenant; an operator is answered permission
+	// denied. The activation is refused, and the job ends failed, while a
+	// job not ended names a scan the rebuilt catalog removes or changes.
 	RebuildJobMode_REBUILD_JOB_MODE_REPLACE RebuildJobMode = 2
 )
 

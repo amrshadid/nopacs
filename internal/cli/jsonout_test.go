@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
@@ -41,6 +42,8 @@ func TestWriteJSONOutputs(t *testing.T) {
 	for _, id := range []string{"q-release", "q-reject", "q-replace"} {
 		r.fake.AddQuarantined("lab1", &v1.QuarantinedFile{Id: id, Reason: v1.QuarantineReason_QUARANTINE_REASON_BAD_LABEL, State: v1.QuarantineState_QUARANTINE_STATE_HELD, Receiver: "scanner1", ContentKept: true, QuarantineTime: timestamppb.New(fixedNow)}, `{}`)
 	}
+	r.fake.AddScrubFinding("lab1", &v1.ScrubFinding{Id: "fnd_1", Kind: v1.ScrubFindingKind_SCRUB_FINDING_KIND_MISSING, Storage: "main", Key: "k", SubjectLabel: "sub-1",
+		SessionLabel: "ses-1", ScanLabel: "scan-1", InstanceId: "i-1", ExpectedSize: proto.Int64(10), Job: "job_2", FindTime: timestamppb.New(fixedNow)})
 	work := t.TempDir()
 	doc := writeFile(t, work, "research.json", basicJSON)
 	ct, err := os.ReadFile(filepath.Join("..", "receive", "testdata", "ct5n-2062.dcm"))
@@ -80,6 +83,10 @@ func TestWriteJSONOutputs(t *testing.T) {
 		{"job-import", []string{"job", "import", "lab1", "old-tree", "proj1"}},
 		{"job-files", []string{"job", "files", "lab1", "job_1"}},
 		{"job-units", []string{"job", "units", "lab1", "job_1"}},
+		{"job-scrub", []string{"job", "scrub", "lab1", "--storage", "main"}},
+		{"job-findings", []string{"job", "findings", "lab1", "--cleared"}},
+		{"job-finding", []string{"job", "finding", "lab1", "fnd_1"}},
+		{"job-rebuild-compare", []string{"job", "rebuild", "lab1", "--mode", "compare"}},
 		{"tenant-status", []string{"tenant", "status", "lab1"}},
 		{"reception-list", []string{"reception", "list", "lab1"}},
 		{"reception-show", []string{"reception", "show", "lab1", "rcp-retry"}},

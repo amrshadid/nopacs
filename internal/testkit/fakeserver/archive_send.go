@@ -462,6 +462,12 @@ func (h jobHandler) CreateJob(_ context.Context, req *v1.CreateJobRequest) (*v1.
 	if ij := req.GetImportJob(); ij != nil {
 		return s.createImportJob(req.GetTenant(), ij)
 	}
+	if sj := req.GetScrub(); sj != nil {
+		return s.createScrubJob(req.GetTenant(), sj)
+	}
+	if rj := req.GetRebuild(); rj != nil {
+		return s.createRebuildJob(req.GetTenant(), rj)
+	}
 	in := req.GetSend()
 	if in == nil {
 		return nil, fault.New(fault.Invalid, "send: a kind is required")

@@ -41,6 +41,7 @@ EXPECTED = {
     "profile-try-local": None, "profile-lookup-import": None, "profile-lookup-list": "tables",
     "deid-code": None, "receiver-route-export": None, "receiver-route-import": None,
     "receiver-add-import": None, "job-import": None, "job-files": "files", "job-units": "units",
+    "job-scrub": None, "job-findings": "findings", "job-finding": None, "job-rebuild-compare": None,
     "version": None,
     "whoami": None,
     "tenant-create": None,

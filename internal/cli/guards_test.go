@@ -435,6 +435,7 @@ func TestGrammar(t *testing.T) {
 		"sender add": true, "sender list": true, "sender show": true, "sender set": true, "sender remove": true, "sender test": true,
 		"job create": true, "job show": true, "job list": true, "job watch": true, "job cancel": true, "job retry": true, "job failures": true,
 		"job import": true, "job files": true, "job units": true,
+		"job scrub": true, "job rebuild": true, "job findings": true, "job finding": true,
 		"deid check": true, "deid dry-run": true, "deid code": true,
 		"profile create": true, "profile get": true, "profile list": true, "profile versions": true, "profile export": true,
 		"profile validate": true, "profile describe": true, "profile try": true, "profile explain": true, "profile diff": true,

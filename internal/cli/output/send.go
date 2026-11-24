@@ -196,13 +196,37 @@ func JobBar(c *v1.JobCounts, width int) string {
 
 // JobProgress words a job's counts in one line: how many instances have an
 // answer of those counted, with the warned and refused ones and the scans.
-func JobProgress(c *v1.JobCounts) string {
-	s := fmt.Sprintf("%d of %d instances answered (%d%%): %d sent", JobDone(c), c.GetInstances(), JobPercent(c), c.GetInstancesSent())
+func JobProgress(c *v1.JobCounts) string { return jobProgress(c, "sent", "refused") }
+
+// JobProgressOf is JobProgress in the words of the job's kind: a scrub's
+// instances are read good or with a finding, a rebuild's cataloged or left
+// out, and the others' sent or refused.
+func JobProgressOf(j *v1.Job) string {
+	sent, refused := JobCountWords(j)
+	return jobProgress(j.GetCounts(), sent, refused)
+}
+
+// JobCountWords names the two outcomes of a job's instances as its kind
+// means them, in lower case.
+func JobCountWords(j *v1.Job) (sent, refused string) {
+	switch j.GetKind().(type) {
+	case *v1.Job_Scrub:
+		return "read good", "with a finding"
+	case *v1.Job_Rebuild:
+		return "cataloged", "left out"
+	}
+	return "sent", "refused"
+}
+
+// jobProgress words counts with the given names of the sent and refused
+// outcomes.
+func jobProgress(c *v1.JobCounts, sentWord, refusedWord string) string {
+	s := fmt.Sprintf("%d of %d instances answered (%d%%): %d %s", JobDone(c), c.GetInstances(), JobPercent(c), c.GetInstancesSent(), sentWord)
 	if c.GetInstancesWarned() > 0 {
 		s += fmt.Sprintf(", %d with a warning", c.GetInstancesWarned())
 	}
 	if c.GetInstancesRefused() > 0 {
-		s += fmt.Sprintf(", %d refused", c.GetInstancesRefused())
+		s += fmt.Sprintf(", %d %s", c.GetInstancesRefused(), refusedWord)
 	}
 	s += fmt.Sprintf("; %d remaining", c.GetInstancesRemaining())
 	if c.GetScans() > 0 {

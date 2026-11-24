@@ -21,6 +21,8 @@ import (
 // tests hold.
 type corrections struct {
 	byTenant map[string][]*v1.Correction
+	// findings are each tenant's scrub findings, as AddScrubFinding gave them.
+	findings map[string][]*v1.ScrubFinding
 	next     int
 }
 
@@ -269,17 +271,6 @@ func (h correctionHandler) AllowArrivals(_ context.Context, req *v1.AllowArrival
 	}
 	c.Holds, c.ArrivalsAllowed = kept, len(kept) == 0
 	return &v1.AllowArrivalsResponse{Correction: c}, nil
-}
-
-// ListScrubFindings answers none: the fake runs no scrub.
-func (h correctionHandler) ListScrubFindings(_ context.Context, req *v1.ListScrubFindingsRequest) (*v1.ListScrubFindingsResponse, error) {
-	s := h.s
-	err := s.beginCorrection(req.GetTenant(), "", false)
-	defer s.mu.Unlock()
-	if err != nil {
-		return nil, err
-	}
-	return &v1.ListScrubFindingsResponse{Findings: []*v1.ScrubFinding{}}, nil
 }
 
 // ResolveInstances answers every pair unknown: the fake holds no instance.
