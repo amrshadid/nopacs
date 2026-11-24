@@ -1,0 +1,1151 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "nopacs/v1/profile.proto";
+
+// ReceiverService adds, reads, changes and removes a tenant's receivers. A
+// receiver is a way for data to arrive at a tenant: it admits the senders
+// its configuration lists, writes each file it receives to the server's
+// incoming area, and groups what it receives into receptions
+// (ReceptionService), one per study and arrival, which are archived to its
+// storage under labels its naming rule makes. Every type of receiver shares
+// that part of its configuration; what belongs to its protocol is in its
+// type's message. This version has three types. A DIMSE receiver is a DICOM
+// listener (PS3.8 upper layer, PS3.7 message exchange) on one port of the
+// server, which accepts C-STORE requests (PS3.4 Annex B) for the SOP classes
+// it accepts, answers C-ECHO (PS3.4 Annex A) to an admitted caller, and
+// answers nothing else. A stow receiver takes the instances a key it lists
+// stores over HTTP into the tenant's DICOMweb service (STOW-RS, PS3.18
+// 10.5); it holds no port (StowReceiver). An import receiver never listens:
+// it takes the files an import job (JobService, ImportJob) reads from a
+// directory the installation names, and holds how their paths are read for
+// labels (ImportReceiver).
+//
+// Where an import may read is the installation's, never a tenant's, so a
+// tenant's admin cannot make the server read any file of the machine it
+// runs on, or another tenant's tree. Two settings hold it:
+//
+//   - import.roots: the directories an import may read, one per line, each
+//     "name=/absolute/path", such as "old=/mnt/old-archive"; a name is 1
+//     to 63 of a-z, 0-9 and "-", starting with a letter, and a path at most
+//     4096 bytes. At most 64 roots. Installation-only. Empty by default, so
+//     no import reads anything until a root is named. A path is resolved
+//     through its links when the value is set, and a value is refused when
+//     a root, so resolved, is, contains or lies inside a root of
+//     storage.directory-roots, the server's data directory, its incoming
+//     area, the directory of the installation key file, or another import
+//     root, so an import can never read the archive's own files or its
+//     secrets. A job is refused when its root now resolves elsewhere than
+//     when it was set, and a unit whose root does so, or cannot be opened,
+//     fails with the reason "root unavailable"; everything under a root is
+//     read without following any link. Its paths are answered only to an
+//     admin on the installation; any other caller is answered the roots'
+//     names alone, one per line, as for storage.directory-roots. Removing
+//     or changing a root an import receiver names is refused
+//     (precondition), as for every setting a receiver uses.
+//   - import.allowed-roots: the names of the roots a tenant's import
+//     receivers may read, separated by commas, such as "old". Set on a
+//     tenant by the installation's admin only; it has no installation
+//     value. Empty by default, so a tenant cannot add an import receiver
+//     until a root is allotted to it. A root may be allotted to several
+//     tenants: allotting it is the installation's decision that each may
+//     read all of it. Taking back a root one of the tenant's import
+//     receivers names is refused (precondition).
+//
+// An import reads and never writes: nothing in a root is created, changed,
+// moved or deleted by the server.
+//
+// The server makes what listens match what is configured: a receiver added,
+// changed or removed is started, restarted or stopped without a restart of
+// the server. A change that restarts a listener finishes the stores in
+// flight, within a bound, before the listener stops.
+//
+// The ports and addresses a DIMSE receiver may listen on are the
+// installation's, not the tenant's, and so is the room a tenant may take in
+// the server's incoming area. Three settings (SettingsService) hold them:
+//
+//   - receiver.ports: the ports allotted to a tenant, as ports and ranges
+//     separated by commas, such as "11112,11120-11129". Set on a tenant by
+//     the installation's admin only; it has no installation value. Empty by
+//     default, so a tenant cannot add a DIMSE receiver until ports are
+//     allotted to it. A value that overlaps another tenant's allotment is
+//     refused, so two tenants' receivers never contend for a port.
+//   - receiver.bind-addresses: the addresses of the server receivers may
+//     listen on, as IP addresses separated by commas; the first is the
+//     default for a receiver that names none. Installation-only. Empty by
+//     default: every receiver then listens on every address, and none may
+//     name one.
+//   - incoming.limit: the most bytes a tenant may hold in the server's
+//     incoming area, as a size such as "200GiB", or "0" for no limit of its
+//     own. Set on a tenant by the installation's admin only; the
+//     installation's value is the default for every tenant. Built-in
+//     default "0". A tenant at its limit has its receivers refuse new
+//     associations until it is under it again.
+//   - receiver.header-limit: the most bytes of a received file read as its
+//     header, everything before its pixel data, as a size from "1MiB" to
+//     "4GiB". Installation-only, since it bounds the server's memory, which
+//     tenants share. Built-in default "64MiB". A file whose header is longer
+//     is quarantined with QUARANTINE_REASON_HEADER_TOO_LARGE, its bytes kept
+//     and the bound in its details, so it can be released once the bound is
+//     raised. A change applies within a second, with no restart.
+//   - storage.reserve: the free space kept on every disk or store data is
+//     written to (the server's incoming area, and each storage whose free
+//     space is known), below which receivers refuse new associations as a
+//     temporary failure and a store in flight is answered A700, "Refused:
+//     Out of Resources" (PS3.4 B.2.3), so senders keep their copies. One or
+//     two terms separated by a comma, each a size such as "10GiB" or a
+//     percentage of the disk's size, or of a storage's capacity_bytes, such
+//     as "10%"; with two, the reserve is the larger. Installation-only, so
+//     no tenant can lower it. Built-in default "10%,10GiB".
+//   - receiver.allow-as-received: "true" when a receiver of the tenant may
+//     archive what it receives as received (Receiver.as_received), "false"
+//     when every receiver must de-identify. Set on a tenant by the
+//     installation's admin only; the installation's value is the default
+//     for every tenant. Built-in default "false". A tenant that had
+//     receivers before receivers could de-identify holds "true", so they
+//     archive as they did. Turning it off does not change a receiver that
+//     archives as received; it refuses a receiver added or changed to.
+//
+// A rule that depends on what the installation allows is answered
+// "precondition" when it fails: the same request may succeed once the
+// installation allows it.
+//
+// Every method acts inside one tenant, named by the request's tenant field,
+// so a request into a tenant that is not ready is answered UNAVAILABLE. No
+// answer of this service speaks of another tenant.
+service ReceiverService {
+  // AddReceiver adds a receiver to a tenant. It starts listening when it is
+  // enabled; its health says whether it could.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver's name as its
+  // object, and its type, port, AE title and storage in details; for an
+  // import receiver, its root's name and its layout, never a path.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also, for an import receiver, a naming template that uses a part
+  // neither its naming pattern nor its layout or map gives, or a part both
+  // would fill; a pattern, a map file or a map configuration that breaks
+  // its rule), not found (a tenant that does
+  // not exist, for a caller who may list every
+  // tenant), conflict (the tenant has a receiver with that name, or a
+  // removed receiver of that name is still named by receptions,
+  // quarantined files or jobs), precondition (a storage the tenant does not have; a
+  // sender in forward_to the tenant does not have; a storage, a sender or a
+  // profile version a route names that the tenant does not have, or a
+  // profile version that cannot de-identify a receiver's files; a route
+  // that names a profile version on a receiver that archives as received;
+  // a port outside the
+  // tenant's allotted ports; a bind address the installation does not list;
+  // another receiver of the tenant on the same port and an overlapping
+  // address; a root import.roots does not name, or one import.allowed-roots
+  // does not allot to the tenant; a map key part the layout does not give,
+  // or a map_gives part the layout already gives),
+  // unavailable (the tenant's database
+  // does not answer, or the tenant is not ready).
+  rpc AddReceiver(AddReceiverRequest) returns (AddReceiverResponse);
+
+  // GetReceiver answers one receiver of a tenant, with its health now.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver's name as its
+  // object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no receiver with that name; a tenant that does
+  // not exist, for a caller who may list every tenant), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc GetReceiver(GetReceiverRequest) returns (GetReceiverResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListReceivers answers the receivers of a tenant, ordered by name, each
+  // with its health now. A removed receiver is not listed.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc ListReceivers(ListReceiversRequest) returns (ListReceiversResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // SetReceiver changes some fields of a receiver: those its update_mask
+  // names, and no other. The change and its audit entry are written
+  // together or not at all. A change of anything in the receiver's type
+  // (for a DIMSE receiver: port, bind address, AE title, TLS, callers, SOP
+  // classes, transfer syntaxes) restarts the listener; a change of the
+  // storage, the naming rule, the quiet period, the longest open time or
+  // the size bound applies to what arrives from then on, and the quiet
+  // period and longest open time also to receptions still receiving. The
+  // fields of an import receiver (root, layout, pattern, unit depth, map
+  // file) cannot change while one of its jobs is queued or running, since
+  // the job's cursor and counts are read by them (precondition).
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver's name as its
+  // object and the mask's paths in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also an empty mask, a path that names no field, a read-only field or a
+  // type's whole message, a path into another type's configuration, and
+  // every rule AddReceiver checks on a field), not found (the tenant has no
+  // receiver with that name; a tenant that does not exist, for a caller who
+  // may list every tenant), precondition (every precondition AddReceiver
+  // checks; expected_update_time is not the receiver's update_time, as a
+  // stale expected version is everywhere in this API; a field of an import
+  // receiver while one of its jobs is queued or running), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc SetReceiver(SetReceiverRequest) returns (SetReceiverResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // RemoveReceiver stops a receiver and removes its configuration. The
+  // stores in flight are finished, within a bound, before it stops. Its
+  // receptions stay, and those in progress go on to their end: files
+  // already received are archived as if the receiver were still there. Its
+  // name stays held, and cannot be given to a new receiver, while any
+  // reception or quarantined file names it, so a name in a record always
+  // means one receiver. A repeated call finds no receiver and is answered
+  // NOT_FOUND; it removes nothing more. An import receiver is not removed
+  // while one of its jobs is queued or running: the job is canceled first
+  // (JobService.CancelJob), so no job is left handing files to a receiver
+  // that is gone.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver's name as its
+  // object, and its type, port and AE title in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no receiver with that name; a tenant that does
+  // not exist, for a caller who may list every tenant), precondition (an
+  // import receiver one of whose jobs is queued or running), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc RemoveReceiver(RemoveReceiverRequest) returns (RemoveReceiverResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}
+
+// Receiver is a way for data to arrive at a tenant, and how what arrives is
+// handled.
+message Receiver {
+  // The receiver's name, unique in its tenant, and its id in this API. It
+  // does not change. 1 to 63 characters, lowercase ASCII letters, digits and
+  // hyphens, starting with a letter, and none of the device names Windows
+  // reserves (con, prn, aux, nul, com0 to com9, lpt0 to lpt9): the rule of a
+  // tenant's name. A removed receiver's name is not given to another while
+  // a reception, a quarantined file or a job names it: an import job, ended
+  // or not, holds the name of its receiver, and AddReceiver of that name is
+  // a conflict.
+  string name = 1;
+
+  // The receiver's type and the configuration of its protocol. Exactly one
+  // is set; a receiver with none is refused as invalid. A type added in a
+  // later version is a new field of this oneof: a client that finds none of
+  // the fields it knows set is reading a receiver of a type it does not
+  // know, and shows it as such.
+  oneof type {
+    // A DICOM listener that receives by C-STORE.
+    DimseReceiver dimse = 2;
+
+    // The tenant's STOW-RS service, for the keys it lists.
+    StowReceiver stow = 12;
+
+    // The files import jobs read from a directory under a root the
+    // installation names. Named importer, not import, since import is a
+    // keyword of Python, whose generated client could not name the field.
+    ImportReceiver importer = 17;
+  }
+
+  // Whether the receiver accepts data. False, the default, keeps it
+  // stopped, so a receiver receives only once it is enabled in so many
+  // words.
+  bool enabled = 3;
+
+  // The name of the tenant's storage that what it receives is archived to.
+  // Required; a storage the tenant does not have, a replica
+  // (Storage.replica_of) or a storage of the archive tier is a
+  // precondition failure, since a primary is read at once and nothing is
+  // archived to a replica first.
+  // A file of a session that already has files on another storage is
+  // archived where that session is, whatever the receiver names now, so a
+  // later arrival always lands beside the first.
+  string storage = 4;
+
+  // How the labels of a new subject, session and scan are made from what is
+  // received. Absent means the default rule (NamingRule), which carries no
+  // value the sender gave. A session or scan that already has a
+  // label keeps it: a file is matched to its session by its Study Instance
+  // UID and to its scan by its Series Instance UID first, and the rule runs
+  // only for one that is new.
+  NamingRule naming = 5;
+
+  // How long without a file for a study before its reception is complete:
+  // complete means quiet, not whole, and the end of an association means
+  // nothing. A whole number of seconds from 5 seconds to 1 hour. Absent in
+  // AddReceiver means the default, 60 seconds, which is stored as the
+  // receiver's value.
+  google.protobuf.Duration quiet_period = 6;
+
+  // The longest a reception stays receiving, from its first file, before it
+  // is complete even if files keep coming; what comes after belongs to the
+  // next arrival. A whole number of seconds from 1 minute to 24 hours, and
+  // not less than quiet_period. Absent in AddReceiver means the default,
+  // 1 hour, which is stored as the receiver's value.
+  google.protobuf.Duration max_open_time = 7;
+
+  // The largest file it accepts, in bytes, as written to the server: the
+  // DICOM file header and the data set. From 1024 to 2^38 (256 GiB). Zero in
+  // AddReceiver means the default, 2^32 (4 GiB), which is stored as the
+  // receiver's value. A larger file is not kept: a DIMSE receiver answers
+  // its C-STORE with status A700, "Refused: Out of Resources" (PS3.4 B.2.3,
+  // Table B.2-1), so the sender keeps its copy, and its record is
+  // quarantined with QUARANTINE_REASON_TOO_LARGE.
+  int64 max_file_bytes = 8;
+
+  // Whether the receiver accepts data now, and why not. Answered by the
+  // server; ignored in a request.
+  ReceiverHealth health = 9;
+
+  // When the receiver was added. Answered by the server; ignored in a
+  // request.
+  google.protobuf.Timestamp create_time = 10;
+
+  // When its configuration last changed: its create_time until the first
+  // SetReceiver. Answered by the server; ignored in a request.
+  google.protobuf.Timestamp update_time = 11;
+
+  // The names of the tenant's senders (SenderService) that each reception
+  // of this receiver is forwarded to: when a reception reaches done, the
+  // server makes one send job per sender named (JobService), in the same
+  // transaction, for exactly the instances that reception archived, and
+  // never two for the same reception and sender. So a later arrival of a
+  // session is forwarded on its own, and the peer's session grows as the
+  // archive's did. A reception that ends quarantined or failed is not
+  // forwarded; one that RetryReception makes, or that a release from
+  // quarantine joins, is forwarded when it reaches done. Forwarding never
+  // delays a reception or changes how it ends: a sender that is down or
+  // disabled holds its jobs, not the reception. Empty, the default, for
+  // none. At most 16, each once; a sender the tenant does not have is a
+  // precondition failure, and a sender named here cannot be removed
+  // (SenderService.RemoveSender). A change applies to receptions that reach
+  // done from then on. Setting it needs what any change of a receiver
+  // needs, admin on the tenant, since it decides where the tenant's data
+  // goes.
+  repeated string forward_to = 13;
+
+  // What happens to what the receiver receives before any byte of it
+  // reaches a storage. Exactly one is answered. Absent in AddReceiver means
+  // as_received, what every receiver did before this choice existed. A
+  // change applies to the files of receptions archived from then on; files
+  // already archived are never changed. Setting it needs what any change of
+  // a receiver needs, admin on the tenant.
+  oneof deidentification {
+    // Archive each file as it was received: the archive holds the
+    // original, every name and identifier in it. For test and public
+    // data. Allowed only where the tenant's setting
+    // receiver.allow-as-received is "true", else a precondition failure.
+    AsReceived as_received = 14;
+
+    // De-identify each file with this version of one of the tenant's
+    // profiles (ProfileService): the storage, the catalog, the metadata and
+    // every list of the tenant hold only what the profile leaves, and each
+    // instance records the version that made it. The file is
+    // de-identified, checked again for every value the profile removed by a
+    // separate read, written to the storage and read back before its
+    // catalog row is committed; one that cannot be is quarantined with
+    // QUARANTINE_REASON_DEID_FAILED, QUARANTINE_REASON_RESIDUAL_VALUE or
+    // QUARANTINE_REASON_PROFILE_REFUSED, and never archived as it was. A
+    // version the tenant does not have is a precondition failure. The
+    // UIDs a file is placed by, received, quarantined and catalogued, are
+    // the keyed remapping of the originals (2.25 UIDs made by the tenant's
+    // UID key, PS3.5 B.2), and its received checksum is keyed too, so no
+    // list of the tenant holds what the original file could be matched
+    // by; the original exists only in the server's incoming area, until
+    // its reception is verified or, for a file quarantined, until a person
+    // decides about it.
+    ProfileVersionRef profile = 15;
+  }
+
+  // How each study is routed: the storage, the profile version and the
+  // senders chosen for it in place of storage, the profile and forward_to.
+  // Absent, or with no route and the default storage, every study goes as
+  // those fields say, which is what every receiver did before routing
+  // existed. A change applies to receptions identified from then on; one
+  // identified keeps what was chosen for it. Setting it needs what any
+  // change of a receiver needs, admin on the tenant, since it decides
+  // where the tenant's data goes and how it is de-identified; reading it,
+  // what reading a receiver needs, reader.
+  ReceiverRouting routing = 16;
+}
+
+// ReceiverRouting is a receiver's routes, in order, and what happens to a
+// study none of them chooses. A study is routed once, for its session: the
+// routes are evaluated for the first reception of a new session (the files
+// of one study arriving at the receiver), when it is complete, over the
+// first file its naming rule reads (the first, by SOP Instance UID, of its
+// first series, by Series Instance UID), as received, before any byte of
+// it is de-identified; the first route whose conditions all hold chooses.
+// What it chose (the storage, the profile version and the senders) is kept
+// with the reception and, when its first scan is archived, with the
+// session, so the reception's later steps, a step run again after a
+// restart, and every later arrival of the session go by it, whatever the
+// routes say by then and whichever AE title the later arrival comes from.
+// A reception of a study whose first reception is still being archived
+// goes by what was chosen for that one; one that arrives while the first is
+// being identified waits for it. Should two receptions of a study be
+// routed apart all the same (they arrived at two receivers at the same
+// moment), the second to archive finds the session on another storage and
+// its files are held as QUARANTINE_REASON_UNROUTED (cause
+// "session_elsewhere") before any is stored.
+//
+// A route that cannot be evaluated (one stored by a later version of the
+// server with a condition this one does not know, or a condition whose
+// value in the file is longer than 1024 bytes) holds the study as
+// QUARANTINE_REASON_UNROUTED, whatever routes come after it, so a study is
+// never sent where a later route would send it only because an earlier
+// one is broken.
+//
+// A release naming a storage (ReleaseQuarantinedFileRequest.storage)
+// chooses the storage only: the profile version and the senders are still
+// the route's, or the receiver's when no route holds, and
+// quarantine_unmatched does not hold the study again.
+message ReceiverRouting {
+  // The routes, in order; the first that holds chooses. At most 64, each
+  // name once.
+  repeated Route routes = 1;
+
+  // What happens to a new session no route chooses. False, the default:
+  // it goes as the receiver says, to its storage, with its profile and its
+  // forward_to. True: every file of the study is held as
+  // QUARANTINE_REASON_UNROUTED, and a person decides where it goes, by
+  // releasing its files naming a storage.
+  bool quarantine_unmatched = 2;
+}
+
+// Route is one rule of a receiver's routing.
+message Route {
+  // The route's name, unique in the receiver, under the rule of a tenant's
+  // name. Required. It names the route in a quarantine record that names
+  // it.
+  string name = 1;
+
+  // The conditions, all of which must hold; none holds for every study.
+  // At most 16. Each reads one of the subjects of ProfileCondition other
+  // than CONDITION_SUBJECT_RECEIVER (a route belongs to one receiver), by
+  // the same rule: a value read from the top level of the data set as
+  // received, without its padding (PS3.5 6.2), its case kept, an absent or
+  // empty value absent; an AE title as the association gave it, absent
+  // for a file not received by DIMSE. A value longer than 1024 bytes
+  // is not tested: the route cannot be evaluated (ReceiverRouting), as
+  // no value of these subjects is that long (PS3.5 6.2). An equals or prefix text is at most
+  // 1024 bytes; a pattern (RE2, matched against the whole value) at most
+  // 256 bytes, with no repetition counted above 100, and compiling to at
+  // most 10000 instructions and ranges; the patterns of a receiver's
+  // routes together to at most 200000.
+  repeated ProfileCondition conditions = 2;
+
+  // The name of the tenant's storage a new session this route chooses is
+  // archived to. Required; a storage the tenant does not have, a replica
+  // or a storage of the archive tier is a precondition failure, and a
+  // storage a route names cannot be removed.
+  string storage = 3;
+
+  // The profile version the files of a study this route chooses are
+  // de-identified with, in place of the receiver's. Optional; absent keeps
+  // the receiver's. Only a receiver that de-identifies (Receiver.profile)
+  // may have a route that names one, since the receiver's choice decides
+  // how each file lands (its UIDs remapped and its checksum keyed, or not)
+  // before any route is chosen: a route can replace the profile, never
+  // turn de-identification off or on. A route that names one on a
+  // receiver that archives as received, and a change of a receiver to
+  // as_received while a route names one, are precondition failures. The
+  // version must be the tenant's and pass every check a receiver's profile
+  // version passes, else a precondition failure.
+  ProfileVersionRef profile = 4;
+
+  // The senders a reception this route chooses is forwarded to when it
+  // reaches done, in place of the receiver's forward_to. Optional; absent
+  // keeps the receiver's; present with no sender forwards to none. At
+  // most 16, each once; a sender the tenant does not have is a
+  // precondition failure, and a sender a route names cannot be removed.
+  RouteForwardTo forward_to = 5;
+}
+
+// RouteForwardTo names the senders a route forwards to.
+message RouteForwardTo {
+  // The senders' names.
+  repeated string senders = 1;
+}
+
+// AsReceived is a receiver's choice to archive what it receives as it was
+// received. It has no fields.
+message AsReceived {}
+
+// ProfileVersionRef names one version of one of the tenant's profiles.
+message ProfileVersionRef {
+  // The profile's name, under the rule of a tenant's name. Required.
+  string name = 1;
+
+  // The version, from 1 to 10000. Required: a receiver names the exact
+  // version it runs, so a new version runs nowhere until a receiver is
+  // changed to it.
+  int32 version = 2;
+}
+
+// DimseReceiver is a DICOM listener on one port of the server.
+message DimseReceiver {
+  // The TCP port it listens on; it must lie in the ports the installation
+  // allotted to the tenant (the tenant's setting receiver.ports), or it is a
+  // precondition failure. Zero in AddReceiver: the server gives the lowest
+  // allotted port that no receiver of the tenant holds and that it can bind
+  // now, answered in the receiver it returns; none such is a precondition
+  // failure. Two receivers of the
+  // tenant may share a port only on addresses that do not overlap; an empty
+  // bind address overlaps every address. A port the operating system does
+  // not give (taken by another program, or below 1024 without the right to
+  // bind it) is not refused here: the receiver is down, with
+  // RECEIVER_DOWN_REASON_ADDRESS_IN_USE or
+  // RECEIVER_DOWN_REASON_PERMISSION_DENIED.
+  int32 port = 1;
+
+  // The address of the server it listens on: an IPv4 address in dotted form
+  // or an IPv6 address in the form of RFC 5952, without a zone, which must
+  // be one of the addresses the installation's setting
+  // receiver.bind-addresses lists. Empty means the installation's default:
+  // the first address that setting lists, or every address of the server
+  // when it lists none.
+  string bind_address = 2;
+
+  // The receiver's own AE title: the Called AE Title a caller must give
+  // (PS3.8 9.3.2). Required; 1 to 16 characters of printable ASCII other
+  // than backslash, not only spaces (PS3.5 6.2, value representation AE).
+  // Leading and trailing spaces are not significant and are removed. An
+  // association that calls another title is rejected (PS3.8 9.3.4,
+  // "called-AE-title-not-recognized").
+  string ae_title = 3;
+
+  // Who may open an association with the receiver. When neither field is
+  // set, nobody may: a new receiver is closed until its callers are listed.
+  // "Any caller" is its own field, never what an empty list means, so a
+  // receiver is open to everyone only when that is asked for in so many
+  // words.
+  oneof callers {
+    // The callers admitted, each by its calling AE title, its network
+    // address, or both. A caller is admitted when it matches at least one
+    // rule. An empty list admits nobody.
+    AllowedCallers allowed_callers = 4;
+
+    // Every caller that reaches the port is admitted, whatever its AE title
+    // and address. Must be true when set; false is refused as invalid.
+    bool any_caller = 5;
+  }
+
+  // TLS for the receiver's associations (PS3.15 B.9, BCP 195). Absent for
+  // none: associations are then in plain TCP, which crosses the network
+  // unencrypted and is fit only for a network the site trusts.
+  ReceiverTls tls = 6;
+
+  // The SOP classes whose instances it accepts, by SOP Class UID (PS3.4
+  // Annex B; each UID 1 to 64 characters of digits and dots, PS3.5 9.1).
+  // Empty means the server's default set: every Storage SOP Class of PS3.4
+  // Table B.5-1 that the server's version knows. At most 512. A presentation
+  // context proposed for another class is rejected in the association's
+  // answer (PS3.8 9.3.3.2, "abstract-syntax-not-supported"). The
+  // Verification SOP Class (PS3.4 Annex A) is answered whatever this list
+  // holds.
+  repeated string sop_classes = 7;
+
+  // The transfer syntaxes it accepts, by Transfer Syntax UID (PS3.5 Section
+  // 10 and Annex A; each 1 to 64 characters of digits and dots). Empty means
+  // the server's default set: every transfer syntax of PS3.5 Annex A that
+  // the server's version knows. At most 64. A file is archived in the
+  // transfer syntax it was sent in; nothing is decoded or re-encoded.
+  // Implicit VR Little Endian (1.2.840.10008.1.2), which every DICOM
+  // application must accept (PS3.5 10.1), is accepted whatever this list
+  // holds.
+  repeated string transfer_syntaxes = 8;
+}
+
+// StowReceiver takes the instances stored over HTTP into the tenant's
+// DICOMweb service: POST /tenants/<tenant>/dicom-web/studies, or
+// .../studies/<Study Instance UID> to store into one study (STOW-RS, PS3.18
+// 10.5), each request read part by part.
+//
+// It is closed by default. A request is taken only when it is made with a
+// key the receiver lists, or a key made by rotating one it lists
+// (AccessService.RotateKey, followed back at most 16 rotations), and that
+// key holds writer or more on the tenant; a key with the role but listed
+// by no enabled stow receiver of the tenant is refused with
+// PERMISSION_DENIED (HTTP 403), and so is the local operator, which holds
+// no key. A rotation therefore needs no change of the receiver: the
+// successor stores from its first request, during the overlap and after. A key is listed by at most one stow
+// receiver of a tenant (a precondition failure otherwise), so which
+// receiver takes a request, and so its storage, naming rule and quiet
+// period, is never a choice.
+//
+// The request is multipart/related; type="application/dicom" (PS3.18
+// 10.5.1.1.1), each part one DICOM file (PS3.10 7.1). The form that sends
+// metadata as application/dicom+json with its bulk data in other parts
+// (PS3.18 10.5.1.1.2) is not taken in this version: it is refused with 415
+// Unsupported Media Type, as is any other type. Each part is written to the
+// server's incoming area as it arrives and synced to its disk before the
+// answer is written, so an instance the answer lists as stored survives a
+// crash of the server; nothing of a part is held whole in memory. A request
+// holds at most 10,000 parts, and each part's header (its header fields
+// and the boundary line before them) at most 16 KiB. A part is
+// refused, and listed in the answer's Failed SOP Sequence (0008,1198) with
+// its Failure Reason (0008,1197, PS3.18 Table I.2-2), when:
+//
+//   - it is not a DICOM file whose SOP Class, SOP Instance, Study Instance
+//     and Series Instance UIDs are read, well formed, from its first MiB:
+//     C000H, "cannot understand", and nothing of it is kept; a part whose
+//     SOP Class and Instance UIDs cannot be read, or whose Content-Type is
+//     not application/dicom, is not listed, having nothing to list it by,
+//     and counts as refused for the answer's status;
+//   - it is of another study than the path names: A900H, the data set
+//     does not match what the request stores it into;
+//   - it is larger than max_file_bytes, or the archive cannot take files
+//     now (the incoming area or the storage below its reserve, the tenant
+//     at its incoming.limit or not ready): A700H, "out of resources", and
+//     a part too large is quarantined without its bytes with
+//     QUARANTINE_REASON_TOO_LARGE, as for a DIMSE receiver;
+//   - it could not be kept for another reason: 0110H, "processing failure".
+//
+// The answer is application/dicom+json (PS3.18 10.5.3): the Referenced SOP
+// Sequence (0008,1199) lists each instance stored with its Retrieve URL
+// (0008,1190), the instance's WADO-RS URL in the tenant's DICOMweb service.
+// A stow receiver that de-identifies gives no Retrieve URL, neither an
+// instance's nor the study's: it archives each instance under remapped
+// UIDs, and a URL by them would hand the sender the mapping from the UIDs
+// it sent to the archive's, which no answer of the API gives; each instance
+// is listed by its class and the SOP Instance UID it was sent with. The
+// status is 200 when every part was stored, 202 when some were, 409
+// when none was. A request refused as a whole is answered in plain text:
+// 400 for a body that is not well-formed multipart, holds no part, ends
+// inside a part or has a part's header past 16 KiB; 413 for a request
+// larger than max_request_bytes or of more than 10,000 parts; 408 when the
+// body stops arriving for 5 minutes; 406 when the request accepts no JSON
+// answer; and 503, with Retry-After, while the receiver cannot take files
+// at all or is stopping (a stop lets a request in flight run 30 seconds,
+// then cuts it at once). When such a refusal comes part way through the
+// body, the parts it held whole before are kept and archived, and a part
+// cut short is not kept; the plain answer does not list them (PS3.18
+// 10.5.3 gives the Store Instances Response Module to an answer part by
+// part), and a search of the study (QIDO-RS) shows which arrived.
+//
+// A request may take as long as its client sends, so its key is checked
+// again every 15 seconds while it is open, as for a long read
+// (DataService). Once the key has been revoked, has expired or has lost its
+// role on the tenant, the request ends at its next read of the body: it is
+// answered as a new request with that key would be (401 or 403, in the
+// API's JSON error form), the parts held whole before are kept and
+// archived, the rest are not kept, and the installation's audit log
+// records the request as refused with the cause.
+//
+// After the answer, each stored instance goes through the same reception
+// pipeline as one a DIMSE receiver took: grouped into receptions by study,
+// archived after the quiet period, quarantined for what the pipeline
+// finds, with the same events. The answer cannot know what the pipeline
+// will find: an instance listed as stored may still be quarantined, as a
+// C-STORE answered success may be. In particular, a different file under a
+// SOP Instance UID the tenant already holds is answered stored and then
+// quarantined (QUARANTINE_REASON_DIFFERENT_FILE, or
+// QUARANTINE_REASON_UID_ELSEWHERE for one under another study or series),
+// never refused in the answer; and a file whose placing UIDs read whole
+// differ from those read from its first bytes, by which the part was
+// checked against the request's study, is quarantined as
+// QUARANTINE_REASON_UID_MISMATCH.
+message StowReceiver {
+  // The ids of the keys (AccessService) whose requests it takes, each 1 to
+  // 64 of A-Z, a-z, 0-9, _ and -, each once; at most 256. Empty takes
+  // none: a new receiver is closed until a key is listed. A key that does
+  // not exist, or no longer does, is kept and matches nothing. A key
+  // rotated from one listed is taken too (StowReceiver).
+  repeated string key_ids = 1;
+
+  // The largest request body it reads, in bytes, from 1024 to 2^40 (1 TiB);
+  // each part is also bounded by the receiver's max_file_bytes. Zero in
+  // AddReceiver means the default, 2^34 (16 GiB), which is stored as the
+  // receiver's value.
+  int64 max_request_bytes = 2;
+}
+
+// ImportLayout is how an import receiver reads a file's path for labels.
+// A layout added in a later version is a new value; a client shows a value
+// it does not know as a layout it cannot name.
+enum ImportLayout {
+  // Never answered by the server; refused in AddReceiver.
+  IMPORT_LAYOUT_UNSPECIFIED = 0;
+
+  // The path is not read for labels: every file under the job's path is
+  // handed in, and its labels come from the receiver's naming rule over its
+  // headers alone (by default keyed hashes). A unit is one folder at the
+  // first level under the root.
+  IMPORT_LAYOUT_PLAIN = 1;
+
+  // Number 2 was a fixed layout for one other system's archive tree. It is
+  // removed: a tree of any shape is read by the pattern layout, with that
+  // system's pattern given as configuration. The number is not used again.
+  reserved 2;
+
+  // The receiver's own pattern (path_pattern) and unit depth (unit_depth).
+  IMPORT_LAYOUT_PATTERN = 3;
+}
+
+// ImportReceiver is a receiver that never listens: import jobs
+// (JobService, ImportJob) read the files of a directory under one of the
+// installation's roots and hand each DICOM file to it, and from there each
+// goes through the reception pipeline as a file a DIMSE receiver took:
+// grouped into receptions by study, named by the receiver's naming rule,
+// de-identified or archived as received as the receiver chooses, routed,
+// quarantined for what the pipeline finds, with the same events. The
+// receiver's quiet period completes each reception; its max_file_bytes
+// bounds each file read, and a larger file is skipped, not copied. A
+// route condition on an AE title (CONDITION_SUBJECT_CALLING_AE_TITLE,
+// CONDITION_SUBJECT_CALLED_AE_TITLE) never holds for a file an import hands in, since none
+// came by an association.
+//
+// Labels from a path. The layout reads each file's path, relative to the
+// root, for named parts, which the naming rule's templates use as they use
+// a NamingPattern's parts ({project}, {#session}); a receiver may have both,
+// with no part name in both. The path and the map file only name: which
+// session and scan a file belongs to is its Study and Series Instance
+// UIDs, as for any reception, and a session already labelled keeps its
+// label whatever a path says (counted as label_differs in the job's
+// counts). Every label made still passes the label rule or the file is
+// quarantined with QUARANTINE_REASON_BAD_LABEL, never cleaned. A file whose
+// path the layout does not match is skipped as IMPORT_SKIP_CODE_OUTSIDE_LAYOUT.
+//
+// The map. A tree often names its sessions but not their subjects, which
+// the system that wrote it kept elsewhere. A map is a CSV file (RFC 4180),
+// in UTF-8, whose first row names its columns, that fills one part
+// (map_gives, such as "subject") for each file from the values of other
+// parts: the file's values of the parts map_key_parts names, in order,
+// are looked up in the columns map_key_columns names, in the same order,
+// and the row found gives the value of map_value_column. For example, a
+// tree <project>/<session>/<file> read by
+// "^(?P<project>[^/]+)/(?P<session>[^/]+)/[^/]+$" and a map with the
+// columns proj, visit and participant, configured as map_key_columns
+// ["proj", "visit"], map_key_parts ["project", "session"],
+// map_value_column "participant" and map_gives "subject", gives each file
+// the {subject} of the row whose proj and visit are the file's project
+// and session. A map is read when a job is made and kept with the job as
+// read then, so it is at most 3 MiB, whether read from a file or given
+// inline (ImportJob.map_csv); a larger map file is refused by its size
+// before it is read. A map in which one key names two values, or that lacks a
+// configured column, is refused whole, and so is the job; a refusal names
+// the line at fault by its number only, never a cell, the header or the
+// file's path. A file whose key is not a row of the map is skipped as
+// IMPORT_SKIP_CODE_UNMAPPED_SESSION, so a folder its source system had
+// deleted from its records is not brought back.
+//
+// A label from a file's header (Patient Name, say) needs nothing here: it
+// is the naming rule's, a template such as "{project}_{PatientName}".
+//
+// Labels unique only within a part of the tree (a session label unique
+// within a project, say) collide when two such parts land in one tenant;
+// a naming rule that puts that part first, such as "{project}_{subject}"
+// and "{project}_{session}", keeps them apart.
+message ImportReceiver {
+  // The name of the root, among those of the installation's setting
+  // import.roots, whose directory its jobs read. Required; a root
+  // import.roots does not name, or one import.allowed-roots does not allot
+  // to the tenant, is a precondition failure; and neither can be taken
+  // away while this receiver names the root. A root that now resolves to
+  // another directory than when it was set refuses a new job, and fails a
+  // running unit with the reason "root unavailable".
+  string root = 1;
+
+  // How a file's path is read. Required.
+  ImportLayout layout = 2;
+
+  // For IMPORT_LAYOUT_PATTERN, a regular expression in RE2 syntax over the
+  // file's path relative to the root, its segments joined by "/", with at
+  // least one named part, such as
+  // "^(?P<study>[^/]+)/(?P<subject>[^/]+)/(?P<session>[^/]+)/.+$". It must
+  // match the whole path: the server anchors it at both ends. Required for
+  // that layout and empty for plain, which takes no pattern; at most 1024
+  // bytes; a part's name is a lowercase ASCII letter followed by lowercase
+  // letters, digits and "_", and is used once.
+  string path_pattern = 3;
+
+  // For IMPORT_LAYOUT_PATTERN, how many segments from the root make a
+  // unit's folder: each folder at that depth is one unit of work, walked
+  // and resumed on its own. From 1 to 16; required for that layout. Plain's
+  // depth is fixed at 1: 0 or 1 is taken for it, and 1 is answered.
+  int32 unit_depth = 4;
+
+  // The map file its jobs read, by its path relative to the root, which
+  // it must be inside, under the same rules as ImportJob.path: segments of
+  // 1 to 255 bytes of UTF-8, none "." or "..", none holding "\", ":" or
+  // NUL; no empty segment, no leading or trailing "/"; at most 2048 bytes.
+  // A map needs the map configuration below. The file is at most 3 MiB,
+  // since its map is kept with each job. Optional; a
+  // job may name another or give one inline (ImportJob.map_file,
+  // map_csv). Each segment is opened under the root without following a
+  // link. A path can hold what identifies
+  // a person, so it is answered only to an operator or more on the tenant,
+  // and empty to a reader, and never written to a log, an event or an
+  // audit entry.
+  string map_file = 5 [debug_redact = true];
+
+  // The map's key columns: names of columns of its first row, matched byte
+  // for byte, each once, 1 to 8 of them. Empty for no map; the four map
+  // fields are given together or not at all. A job may give its own four
+  // (ImportJob), which replace these whole.
+  repeated string map_key_columns = 6;
+
+  // The map's column whose value fills the part map_gives. Required with
+  // map_key_columns; not one of them.
+  string map_value_column = 7;
+
+  // The layout's parts whose values form a file's key, as path_pattern
+  // names them: as many as map_key_columns, in the same order, each once.
+  // A part the layout does not give is a precondition failure.
+  repeated string map_key_parts = 8;
+
+  // The part the map fills, such as "subject", which the naming rule's
+  // templates use as {subject} or {#subject}; under the rule of a part's
+  // name. Refused (precondition) when the layout already gives it, and
+  // (invalid) when the naming pattern does, so no part has two sources.
+  string map_gives = 9;
+}
+
+// AllowedCallers is the list of callers a DIMSE receiver admits.
+message AllowedCallers {
+  // The rules, at most 256. A caller is admitted when it matches at least
+  // one.
+  repeated CallerRule rules = 1;
+}
+
+// CallerRule admits callers by their calling AE title, their network
+// address, or both. At least one of the two is required: a rule with
+// neither is refused as invalid, since it would admit everyone.
+message CallerRule {
+  // The Calling AE Title the caller must give (PS3.8 9.3.2): 1 to 16
+  // characters of printable ASCII other than backslash, not only spaces
+  // (PS3.5 6.2); leading and trailing spaces are not significant and are
+  // removed. Compared exactly, case included. Empty for any AE title. An AE
+  // title is what the caller says it is: alone, it identifies a caller only
+  // on a network the site trusts.
+  string calling_ae_title = 1;
+
+  // The addresses the caller's connection must come from, as a range in
+  // CIDR form (RFC 4632 for IPv4, RFC 4291 for IPv6), such as
+  // "10.20.0.0/24", "192.0.2.7/32" or "2001:db8::/48"; the host bits must be
+  // zero. Empty for any address.
+  string address_range = 2;
+}
+
+// ReceiverTls is where a DIMSE receiver's TLS certificate and private key
+// are. Both are files the server reads; neither file's content ever crosses
+// the API. Each is named by a file name in the tenant's TLS directory on the
+// server, <data directory>/tls/<tenant>/, which a person with access to the
+// server fills: 1 to 255 bytes of ASCII letters, digits, ".", "_" and "-",
+// not starting with a dot. A file that cannot be read or does not hold what
+// it should leaves the receiver down with RECEIVER_DOWN_REASON_TLS.
+message ReceiverTls {
+  // The file of the receiver's certificate chain, in PEM form, its own
+  // certificate first. Required.
+  string certificate_file = 1;
+
+  // The file of the certificate's private key, in PEM form. Required.
+  string private_key_file = 2;
+}
+
+// NamingRule is how a receiver makes the labels of a new subject, session
+// and scan: three templates, one per label, and optionally a pattern that
+// takes named parts out of one attribute for the templates to use. A
+// receiver with no rule uses the default: subject "sub-{#PatientID}",
+// session "ses-{#StudyInstanceUID}", scan "scan-{#SeriesInstanceUID}".
+//
+// A label is what the rule makes from the data sent, and it is exactly as
+// identifying as the rule: a rule that uses {PatientID} puts the patient's
+// identifier into labels, and so into the storage's keys, into every list
+// and status, and into every event. The default rule uses only keyed
+// hashes, which carry no value the sender gave.
+//
+// A template is literal text and references in braces. The literal text may
+// hold only the characters a label may hold, so braces need no escape.
+//
+//   - {Keyword} or {(gggg,eeee)} is the value of an attribute at the top
+//     level of the data set: by keyword (PS3.6 Section 6) from the short
+//     list of attributes a naming rule plausibly uses that the server
+//     knows, such as PatientID, StudyDate, SeriesNumber or PatientComments,
+//     or by its tag in hexadecimal for any other attribute. The value has
+//     its padding removed (PS3.5 6.2: the trailing space or NUL that makes a
+//     value's length even, and the leading and trailing spaces of a number)
+//     and nothing else: it is not trimmed further, cleaned or shortened. A
+//     keyword always starts with an uppercase letter.
+//   - {name}, with a name in lowercase, is a part the pattern took out.
+//   - {#Keyword}, {#(gggg,eeee)} or {#name} is the keyed hash of that value
+//     or part: HMAC-SHA-256 (RFC 2104) of its bytes under the tenant's
+//     naming secret, its first 80 bits written as 16 characters of
+//     lowercase base32 (RFC 4648 alphabet, no padding). The same value
+//     always gives the same label in one tenant and a different one in
+//     another tenant. The naming secret is made by the server for the
+//     tenant, sealed with the installation key, and never leaves the
+//     server; it cannot be changed, since a new secret would give a known
+//     value a new label.
+//
+// When a rule is set, a template that is empty or longer than 256 bytes, a
+// keyword the server does not know, a tag that cannot hold text (groups 0000
+// to 0007, FFFE and 7FE0, and group lengths), a part the pattern does not
+// have, or a reference that is not one of these forms is refused as
+// invalid.
+//
+// When a file arrives, a label is never cleaned up: two different values
+// cleaned into one label would mix their data. The file is quarantined with
+// QUARANTINE_REASON_BAD_LABEL, naming the label, the attribute and the
+// fault, never the value, when an attribute it needs is missing or empty
+// (also one that is only hashed), a value is too long, holds a character a
+// label may not hold, or is not a well-formed UID for a UID attribute, the
+// pattern does not match, or the label made is not a valid label: 1 to 128
+// characters of ASCII letters, digits, ".", "_" and "-", not starting or
+// ending with a dot, and not a device name Windows reserves.
+message NamingRule {
+  // The template of a new subject's label. Required.
+  string subject = 1;
+
+  // The template of a new session's label. Required.
+  string session = 2;
+
+  // The template of a new scan's label. Required.
+  string scan = 3;
+
+  // The pattern whose named parts the templates may use. Absent for none.
+  NamingPattern pattern = 4;
+}
+
+// NamingPattern takes named parts out of one attribute, such as Patient
+// Comments, where a site tells its scanner where the data goes.
+message NamingPattern {
+  // The keyword or tag of the attribute the pattern reads, as in a
+  // template: "PatientComments" or "(0010,4000)". Required.
+  string attribute = 1;
+
+  // A regular expression in RE2 syntax, with at least one named part, such
+  // as "(?P<project>[^^]+)\^(?P<subject>[^^]+)". It must match the
+  // attribute's whole value, with its padding removed: the server anchors
+  // it at both ends. Required; at most 1024 bytes; the value it reads is at
+  // most 64 KiB. A part's name is a lowercase ASCII letter followed by
+  // lowercase letters, digits and "_", and is used once.
+  string expression = 2;
+}
+
+// ReceiverState is whether a receiver accepts data now.
+enum ReceiverState {
+  // Never answered by the server. A client that reads it was built against
+  // an older contract than the server's.
+  RECEIVER_STATE_UNSPECIFIED = 0;
+
+  // The server is starting the receiver, or restarting it after a change.
+  RECEIVER_STATE_STARTING = 1;
+
+  // It accepts data from the callers it admits.
+  RECEIVER_STATE_UP = 2;
+
+  // It does not accept data; the down reason says why.
+  RECEIVER_STATE_DOWN = 3;
+
+  // It holds no listener and takes only what its jobs hand it: an import
+  // receiver that is enabled, whether a job of it runs now or not. A client
+  // that does not know this value shows it as up.
+  RECEIVER_STATE_IDLE = 4;
+}
+
+// ReceiverDownReason is why a receiver is down. A reason added in a later
+// version is a new value; a client shows a value it does not know as down
+// for a reason it cannot name, with the health's detail.
+enum ReceiverDownReason {
+  // Not down, or never answered for a down receiver.
+  RECEIVER_DOWN_REASON_UNSPECIFIED = 0;
+
+  // Its enabled field is false.
+  RECEIVER_DOWN_REASON_DISABLED = 1;
+
+  // Its port and address are taken by another program on the server.
+  RECEIVER_DOWN_REASON_ADDRESS_IN_USE = 2;
+
+  // The operating system does not let the server bind its port, as for a
+  // port below 1024.
+  RECEIVER_DOWN_REASON_PERMISSION_DENIED = 3;
+
+  // Its bind address is not an address of the server now.
+  RECEIVER_DOWN_REASON_ADDRESS_NOT_AVAILABLE = 4;
+
+  // Its TLS certificate or key cannot be read, or they do not form a valid
+  // pair.
+  RECEIVER_DOWN_REASON_TLS = 5;
+
+  // The server's incoming area or the receiver's storage has less free space
+  // than its reserve (the setting storage.reserve). The port is held and new
+  // associations are rejected as a temporary failure (PS3.8 9.3.4,
+  // "rejected-transient"), so a sender keeps its copy and tries again; it
+  // is up again when space returns.
+  RECEIVER_DOWN_REASON_NEARLY_FULL = 6;
+
+  // The tenant is not ready (its database does not answer, or it is being
+  // upgraded), so nothing it received could be recorded. It is up again
+  // when the tenant is ready.
+  RECEIVER_DOWN_REASON_TENANT_NOT_READY = 7;
+
+  // The server is stopping.
+  RECEIVER_DOWN_REASON_STOPPING = 8;
+
+  // A cause none of the others names; the detail says what.
+  RECEIVER_DOWN_REASON_OTHER = 9;
+
+  // The tenant's files in the incoming area (received, not yet archived,
+  // or quarantined) reach the tenant's setting incoming.limit. New
+  // associations are rejected as a temporary failure; it is up again when
+  // the tenant is under its limit.
+  RECEIVER_DOWN_REASON_INCOMING_LIMIT = 10;
+}
+
+// ReceiverHealth is whether a receiver accepts data now, and why not.
+message ReceiverHealth {
+  // Its state.
+  ReceiverState state = 1;
+
+  // Why it is down. RECEIVER_DOWN_REASON_UNSPECIFIED unless state is down.
+  ReceiverDownReason down_reason = 2;
+
+  // More about the state, in words for a person, from a fixed set of
+  // phrases the server has for each reason, such as "certificate expired";
+  // at most 256 bytes. Empty when it is up. It is never the operating
+  // system's or a library's own text, and never holds a secret, a path, or
+  // anything about another program or tenant.
+  string detail = 3;
+
+  // When it entered this state with this reason.
+  google.protobuf.Timestamp since = 4;
+}
+
+// AddReceiverRequest is the receiver to add.
+message AddReceiverRequest {
+  // The tenant to add it to, by name. Required.
+  string tenant = 1;
+
+  // The receiver. Its name, type and storage are required, with what its
+  // type's message requires; health, create_time and update_time are
+  // ignored.
+  Receiver receiver = 2;
+}
+
+// AddReceiverResponse is the receiver added.
+message AddReceiverResponse {
+  // The receiver, as stored, with every default filled in, and its health
+  // now.
+  Receiver receiver = 1;
+}
+
+// GetReceiverRequest names a receiver.
+message GetReceiverRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver's name. Required.
+  string name = 2;
+}
+
+// GetReceiverResponse is the receiver named.
+message GetReceiverResponse {
+  // The receiver, with its health now.
+  Receiver receiver = 1;
+}
+
+// ListReceiversRequest asks for a page of a tenant's receivers.
+message ListReceiversRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The most receivers to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 2;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+  // one it was made with.
+  string page_token = 3;
+}
+
+// ListReceiversResponse is a page of receivers.
+message ListReceiversResponse {
+  // The receivers of this page, each with its health now.
+  repeated Receiver receivers = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// SetReceiverRequest is the change to a receiver.
+message SetReceiverRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver with the new values of the fields update_mask names. Its
+  // name is required and names the receiver to change; it is not itself
+  // changed. Fields the mask does not name are ignored.
+  Receiver receiver = 2;
+
+  // The fields to change, as paths of Receiver, such as "quiet_period",
+  // "forward_to" or "naming" ("naming" with naming absent returns to the
+  // default rule), "deidentification" (the oneof: as_received or a profile
+  // version; with neither set, as received), "routing" (replaced whole;
+  // absent, no routing; its fields cannot be named one by one), or
+  // a field of the receiver's type joined to it by a dot, such as
+  // "dimse.port", "dimse.tls.certificate_file", "stow.key_ids" or
+  // "importer.map_file". A path
+  // that names a type's whole message ("dimse", "stow", "importer") is refused: its
+  // fields are named one by one; so is a field of another type than the
+  // receiver's, since a receiver's type does not change. Required and not empty; "*" is refused, so every field a call
+  // changes is named. A named field is set to the value given, its zero
+  // value included: "dimse.tls" with tls absent turns TLS off,
+  // "dimse.allowed_callers" with an empty list admits nobody, and a
+  // repeated field is replaced whole. Naming "dimse.allowed_callers" or
+  // "dimse.any_caller" sets that member of the callers and clears the
+  // other. A duration or size named with no value is refused as invalid; it
+  // is not reset to the default.
+  google.protobuf.FieldMask update_mask = 3;
+
+  // When set, the change is made only while the receiver's update_time is
+  // this one, the update_time of the receiver as the caller read it, and
+  // is otherwise refused as a precondition failure: a caller that reads a
+  // receiver, changes a part of it (one route of its routing) and writes it
+  // back loses no change another made meanwhile. Absent changes whatever is
+  // stored.
+  google.protobuf.Timestamp expected_update_time = 4;
+}
+
+// SetReceiverResponse is the receiver as changed.
+message SetReceiverResponse {
+  // The receiver, as stored, and its health now.
+  Receiver receiver = 1;
+}
+
+// RemoveReceiverRequest names the receiver to remove.
+message RemoveReceiverRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver's name. Required.
+  string name = 2;
+}
+
+// RemoveReceiverResponse is the configuration that was removed.
+message RemoveReceiverResponse {
+  // The receiver as it was, stopped.
+  Receiver receiver = 1;
+}

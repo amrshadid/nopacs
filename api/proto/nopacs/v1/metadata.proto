@@ -1,0 +1,235 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "nopacs/v1/profile.proto";
+
+// MetadataService answers the DICOM headers of what a tenant holds: every
+// attribute of an instance but its bulk data, in the DICOM JSON model
+// (PS3.18 Annex F), the form DICOMweb's metadata answers take, so a client
+// that reads one reads the other.
+//
+// What a reader reads. A reader of a tenant may read its headers, as it
+// may download its files (DataService), which hold the same headers. Until
+// a later version de-identifies files at reception, the archive holds what
+// the senders sent, and a reader reads it as it was received, identifying
+// data included: names, dates, identifiers and free text, whatever the
+// sender wrote.
+//
+// Where the headers come from. A scan's headers are read from its metadata
+// file, written beside its manifest on the storage when the scan is
+// archived and rewritten when files are added to it: one read answers
+// every instance of the scan, without opening a DICOM file. The metadata
+// file holds at most 1 MiB of each instance's data set, without bulk data,
+// and the place of its Pixel Data element, and of no other value. What it
+// does not hold (the place of any other value answered as bulk data, or an
+// instance whose data set passed its bound) is read from the instance
+// file's header, a read bounded by the setting receiver.header-limit as
+// it is when the request is answered, never a read of the whole file; the
+// value of Pixel Data is passed over by its length (item by item when it
+// is encapsulated) and not read, and does not count against the bound.
+//
+// Which elements. Every element of the data set is answered, those after
+// Pixel Data included, each by the rule below like any other, except Data
+// Set Trailing Padding (FFFC,FFFC), which is left out: it is padding with
+// no meaning (PS3.5 7.1.3 and PS3.10 7.2).
+//
+// Which instances. Only an instance the tenant holds is answered: one a
+// reception has archived and confirmed. An instance claimed by a
+// reception and not yet archived is not found, as one that does not exist,
+// here as in DataService.
+//
+// Bulk data. A value is not inlined, and the attribute holds a BulkDataURI
+// in its place (PS3.18 F.2.2), when it is Pixel Data (7FE0,0010), Float
+// Pixel Data (7FE0,0008) or Double Float Pixel Data (7FE0,0009), whatever
+// its length; a value of the VR OB, OD, OF, OL, OV, OW or UN longer than
+// 1 KiB; or any value longer than 64 KiB. Every other value is inlined. A
+// BulkDataURI is a relative reference (RFC 3986 4.2), resolved against the
+// API's address (RFC 3986 5.2), of the form
+//
+//   /tenants/<tenant>/instances/<subject>/<session>/<scan>/<instance id>?offset=<offset>&length=<length>
+//
+// which names the length bytes from offset of the instance's file: the
+// value field of the element, as encoded in the file in its transfer
+// syntax, without the element's tag, VR and length. The place of Pixel
+// Data is kept from where its tag starts; the server adds the length of
+// the element's header (PS3.5 7.1) to make offset. DataService says how
+// such a URI is answered (application/octet-stream). For encapsulated
+// Pixel Data (PS3.5 A.4) the bytes are the encoded value with its items
+// and its Sequence Delimitation Item, as the file holds them: they are not
+// the bulk data DICOMweb answers for encapsulated pixels (PS3.18 8.7),
+// which is split by frame and typed by its transfer syntax. Frames are not
+// part of this version.
+//
+// The deflated transfer syntax. In a file of Deflated Explicit VR Little
+// Endian (1.2.840.10008.1.2.1.99, PS3.5 A.5) the data set is compressed, so
+// no offset in the file names a value. An instance in it is answered with
+// every value that would be bulk data left out, attribute and all, and
+// bulk_data_omitted set: they are never inlined, since Pixel Data inlined
+// could pass any bound of an answer. Its file is downloaded whole.
+//
+// Size. What decides is the length of the DICOM JSON answered for an
+// instance, with a BulkDataURI in place of every value the rule above
+// makes bulk data: at most 1 MiB. An instance whose JSON would be longer,
+// or whose header could not be read within receiver.header-limit when a
+// value had to be read from the file, is answered without its JSON, with
+// json_too_large set; it is never cut. A page holds at most 3 MiB of DICOM
+// JSON in all, so that with the rest of the message it stays under the
+// 4 MB a stock gRPC client accepts.
+//
+// Every method acts inside one tenant, named by the request's tenant field,
+// so a request into a tenant that is not ready is answered UNAVAILABLE.
+service MetadataService {
+  // GetScanMetadata answers the headers of a scan's instances, a page at a
+  // time, by instance id in byte order (DataService's order, within one
+  // scan).
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the scan's path,
+  // "<subject>/<session>/<scan>", as its object (a label that is not valid
+  // is written "invalid" in it), and the count of instances answered in
+  // details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a page token made for another scan), not found (the tenant has
+  // no such subject, the subject no such session, or the session no scan
+  // with that label; a tenant that does not exist, for a caller who may
+  // list every tenant), unavailable (the tenant's database or the scan's
+  // storage does not answer, or the tenant is not ready), data loss (the
+  // scan's metadata file, or an instance's file the server had to read, is
+  // missing from the storage or is not what was archived; or the page
+  // holds an instance a scrub marked missing or damaged (ScrubJob)).
+  rpc GetScanMetadata(GetScanMetadataRequest) returns (GetScanMetadataResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // GetInstanceMetadata answers the header of one instance of a scan.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the scan's path as its
+  // object; the instance id is recorded only as present, since in this
+  // version it is a SOP Instance UID as received, which no log holds.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no such subject, session or scan, or the scan
+  // no instance with that id; a tenant that does not exist, for a caller
+  // who may list every tenant), unavailable (the tenant's database or the
+  // scan's storage does not answer, or the tenant is not ready), data loss
+  // (the scan's metadata file, or the instance's file when the server had
+  // to read it, is missing from the storage or is not what was archived;
+  // or a scrub marked the instance missing or damaged (ScrubJob)).
+  rpc GetInstanceMetadata(GetInstanceMetadataRequest) returns (GetInstanceMetadataResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// InstanceMetadata is the header of one archived instance.
+message InstanceMetadata {
+  // The instance's id in the tenant, as ArchivedFile.instance_id.
+  string instance_id = 1;
+
+  // Its SOP Instance UID (0008,0018), as received.
+  string sop_instance_uid = 2;
+
+  // Its data set in the DICOM JSON model: one JSON object, keyed by tag
+  // (PS3.18 F.2), the form of one element of the array a DICOMweb metadata
+  // answer holds, so the instances of a page joined in an array, in order,
+  // are such an answer. Bulk data is referred to by BulkDataURI, as the
+  // service says. The file meta information (group 0002) is not part of
+  // it, as in DICOMweb; its Transfer Syntax UID is transfer_syntax_uid.
+  // Empty when json_too_large is set.
+  string dicom_json = 3;
+
+  // Whether dicom_json was left out: it would be longer than 1 MiB, or the
+  // file's header, when it had to be read, is longer than
+  // receiver.header-limit (the service's Size).
+  bool json_too_large = 4;
+
+  // The Transfer Syntax UID (0002,0010) its file is encoded in (PS3.5
+  // Section 10), which the bytes of each BulkDataURI are in.
+  string transfer_syntax_uid = 5;
+
+  // Whether the values that would be bulk data were left out of
+  // dicom_json, attribute and all, because its file is in the deflated
+  // transfer syntax, where no offset names them.
+  bool bulk_data_omitted = 6;
+
+  // The profile version that de-identified the instance, as its catalog
+  // row recorded it when it was archived; absent for an instance archived
+  // as received.
+  ProfileVersionName profile = 7;
+
+  // The instance's revision these metadata describe: 1 as first archived,
+  // one more each time a correction replaced it, as ArchivedFile.revision.
+  int32 revision = 8;
+}
+
+// GetScanMetadataRequest names a scan and the page of its instances.
+message GetScanMetadataRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The label of the scan's subject. Required.
+  string subject_label = 2;
+
+  // The label of the scan's session. Required.
+  string session_label = 3;
+
+  // The scan's label. Required.
+  string scan_label = 4;
+
+  // The most instances to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid. A page also ends before its DICOM JSON
+  // passes 3 MiB, so it may hold fewer, with a next_page_token.
+  int32 page_size = 5;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant or a scan other
+  // than those it was made with.
+  string page_token = 6;
+}
+
+// GetScanMetadataResponse is a page of a scan's headers.
+message GetScanMetadataResponse {
+  // The headers of this page's instances, by instance id.
+  repeated InstanceMetadata instances = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+
+  // The SHA-256 of the scan's manifest when this page was read, in
+  // lowercase hexadecimal, as Scan.manifest_sha256. A page token resumes
+  // after the instance id last answered, so instances archived into the
+  // scan while it is paged appear on a later page only when they sort
+  // after it: a client that sees this change from one page to the next
+  // knows the scan changed, and reads it again from the first page to have
+  // every instance.
+  string manifest_sha256 = 3;
+}
+
+// GetInstanceMetadataRequest names one instance of a scan.
+message GetInstanceMetadataRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The label of the scan's subject. Required.
+  string subject_label = 2;
+
+  // The label of the scan's session. Required.
+  string session_label = 3;
+
+  // The scan's label. Required.
+  string scan_label = 4;
+
+  // The instance's id, as ArchivedFile.instance_id. Required.
+  string instance_id = 5;
+}
+
+// GetInstanceMetadataResponse is the header of the instance named.
+message GetInstanceMetadataResponse {
+  // The instance's header.
+  InstanceMetadata instance = 1;
+}

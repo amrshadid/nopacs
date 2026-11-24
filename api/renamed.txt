@@ -1,0 +1,7 @@
+# Packages of the contract that were renamed, one per line: the old name and
+# the new, separated by a space. make proto-breaking reads the base commit's
+# files under the new name (each file moved from the old package's directory
+# to the new one's, and the old name replaced by the new in its text) before
+# it compares, so a rename is not taken for every message deleted, and any
+# other change that breaks a client is still found. A line is removed once
+# no base commit a change could be compared with holds the old name.

@@ -1,0 +1,1423 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// CorrectionService changes archived data on purpose, and keeps the record
+// of each change: delete a subject, a session, a scan or an instance;
+// relabel a subject, a session or a scan; replace an archived instance with
+// the corrected file that was quarantined as a different file under its
+// UID. It also lists what a scrub found (ListScrubFindings), the other way
+// archived data comes to differ from what was archived.
+//
+// Every correction has a reason a person gives, 1 to 1024 bytes of UTF-8
+// with no control characters, in their own words, such as "consent
+// withdrawn" or "wrong subject id at the scanner". The reason is kept on
+// the correction, in its audit entry and in its correction record on the
+// storage (which holds patient data already), and is shown to whoever
+// reads the correction; it must never hold a value read from a file (a
+// name, a birth date, a UID), since a log and the correction keep it for
+// as long as they are kept.
+//
+// One state machine, two authorities. Every correction moves through
+// CorrectionState: prepared, committed, purging, purged; or undone (a
+// delete, from committed) or abandoned (from prepared, never committed).
+// Its row in the tenant's database is committed first, prepared, with its
+// operation id (Correction.id), target, reason and audit entry, before
+// anything is written to a storage. Then a correction record,
+// "meta/.corrections/<operation id>.json", is put on each storage the
+// target touches, naming the operation, its kind and state, its reason,
+// the key that made it, the senders its data was sent to, and the target's
+// scans (labels never start with a dot, so this is never a subject's
+// tree). Then one publishing transaction makes the change visible, the row
+// committed, with an EVENT_TYPE_CATALOG_CHANGED event; then each record is
+// rewritten with the new state, as at every later step. The database is
+// the authority while it lives; the records are what a rebuild or a
+// restore reads without it.
+//
+// When a correction stops short. A request that fails before its
+// publishing transaction abandons its correction at once: anything it
+// wrote is removed, the answer is the error, and the correction stays
+// listed as abandoned with its reason. At start, a delete or a replace
+// left prepared by a stop is abandoned likewise (its request was never
+// answered: it did not happen), and a relabel left prepared goes on with
+// its copy from where it was, since it runs in the background by design.
+// A prepared relabel is stopped by UndoCorrection, which abandons it and
+// removes its copies. A rebuild or a restore that finds a record with no
+// row applies it fail-closed, a prepared delete as committed, since showing
+// withdrawn data is the worse error, and makes it a row marked unresolved,
+// with the record's reason, key and senders, the state_reason "found on
+// storage without its row", and no purge_time: it is never purged until an
+// admin confirms it (PurgeCorrection) or undoes it (UndoCorrection).
+// Records, like deleted_targets, are kept for as long as the tenant is: a
+// restore from a backup older than a delete applies them before the tenant
+// serves.
+//
+// A delete. It first hides its data and only later removes its bytes, so a
+// mistyped label can be undone. (1) Preview: a Delete with validate_only
+// answers what would go, counts and bytes, the storages that hold it and
+// what each will do with a removed object (DeletePreview.storage_purges),
+// the senders it was sent to and the jobs that would meet it, and a
+// confirm token: a digest of the target, the counts and bytes, the
+// storages, the senders, the jobs, the purge expectations, the holds and
+// what retention keeps (holds, sessions_under_minimum, keep_until) and the
+// time it was issued (not purge_time, which moves with the clock). (2) Act: a
+// Delete with the same target and that token, within an hour of its issue.
+// When the answer would differ (data archived under the target since the
+// preview, a job made), the token no longer matches and the delete is
+// refused, so a delete acts on what a person saw. A token is used once: a
+// Delete that carries a token already used, with the same target, answers
+// the correction that token made, whatever its state, so a client that
+// lost the answer can send the same request again; with another target it
+// is refused (precondition). The server remembers a used token while it
+// runs, for at most about the last 1024 deletes: after a restart, or once
+// forgotten, the repeat is answered not found, since its target is hidden.
+// Its
+// publishing transaction hides the catalog's rows from every read (the
+// catalog, DICOMweb, reads and downloads answer as if they did not exist)
+// and moves the totals. Queued and running jobs that target the data meet
+// it as deleted (JOB_FAILURE_CODE_DELETED_IN_ARCHIVE) and go on. An
+// instance delete hides that instance alone; the scan and its other
+// instances stay as they are, and at purge a new manifest without it is
+// published in one transaction, so the others never leave the catalog. A
+// scan whose last instance is deleted is deleted as a scan.
+//
+// The grace period and the purge. The bytes stay on the storage, unserved,
+// for the tenant's setting delete.grace (a period such as "7d", from "0d"
+// to "90d"; built-in default "7d"), measured from commit_time by the
+// server's clock and fixed then as purge_time: a later change of the
+// setting moves no purge already set, and no DICOM date is read for it.
+// UndoCorrection during that time shows a delete's data again as it was.
+// Then the server purges: each object is read for its size and SHA-256,
+// compared with the manifest's, and removed through its storage, which
+// says what became of it (ObjectDisposition): removed, hidden behind a
+// newer version, retained by the storage's object lock, or not known.
+// Each object is recorded with its size, checksum and disposition; then
+// the manifest and metadata; then the catalog's rows, the correction
+// purged. The correction says, per storage, what the storage did
+// (Correction.dispositions), and never claims more than it reported (see
+// "What purged means" below). A purge that stops midway (a crash,
+// a storage that does not answer) goes on from the row and the records.
+// PurgeCorrection purges at once, before the grace ends. Once a purge has
+// started, nothing is undone. A purge that starts because its purge_time
+// came, rather than by PurgeCorrection, waits with the state reason
+// "clock jumped" while the tenant's retention is paused for a clock jump
+// (RetentionService): a clock that leapt forward must not make a grace
+// period end early. The server compares its clock with the last time it
+// trusted before it starts any purge by purge_time, and at least every
+// hour, and pauses as the daily pass does when the clock has jumped.
+//
+// Arriving again. What names the deleted data is kept after the purge: a
+// subject's label, a session's Study Instance UID, a scan's Series
+// Instance UID, an instance's SOP Instance UID. A file that matches one
+// later is quarantined as QUARANTINE_REASON_WAS_DELETED rather than
+// archived, until an admin allows that target to arrive again
+// (AllowArrivals), one value at a time, once the delete is purged. The
+// preview says which subject labels stay held (held_after_purge); the
+// correction lists every value it holds (Correction.holds). Undone and
+// abandoned deletes keep nothing.
+//
+// What the archive cannot reach. Copies already sent to a peer by a send
+// job or a receiver's forward are the peer's; the preview and the record
+// list each sender and how many instances it was sent, so a person can ask
+// the peer to delete them. A file a client downloaded before is the
+// client's: an instance deleted answers not found, and a replaced instance
+// has a new SHA-256 and so a new ETag, so a download resumed with If-Range
+// (RFC 9110 13.1.5) gets the new file whole, never the two joined. Events
+// already in the feed keep the labels they carried until events.retention.
+//
+// A key is written once. Relabel and replace never overwrite a stored
+// object: new bytes, or the same bytes under new labels, go to new keys,
+// the publishing transaction switches readers to them, and the old objects
+// stay, unserved, until the correction's purge after delete.grace. So a
+// read that began before the publish finishes on the old object, whole
+// and matching the checksum it was given, and no reader ever gets one
+// revision's checksum with another's bytes.
+//
+// Relabel. The labels are part of every stored object's key, so a relabel
+// copies each object of the target to its key under the new label, reads
+// the copy back and compares its SHA-256, and writes new manifests and
+// metadata; this is the long part, and it runs in the background and goes
+// on after a restart, readers seeing only the old labels throughout. Then
+// one publishing transaction switches the whole target: no reader ever
+// sees part of a subject under one label and part under the other. The
+// old tree is purged after the grace period. A lookup by an old label
+// answers not found with the reason RELABELED, naming the new label. An
+// object of the target that cannot be read whole stops the copy: the
+// relabel is abandoned, its copies removed, and nothing changed for any
+// reader.
+//
+// Replace. Only from a held quarantined file whose SOP Instance UID the
+// tenant holds in the same study and series: one of reason
+// QUARANTINE_REASON_DIFFERENT_FILE (the corrected file a sender sent
+// again), or of reason QUARANTINE_REASON_REPAIRS_DAMAGED (the same file
+// sent again for an instance a scrub marked damaged). The file is first
+// de-identified by the profile version of the receiver it arrived at, as a
+// release would (QuarantineService), and is never archived as received
+// when that receiver de-identifies. Its new bytes are put at the
+// instance's next revision key, never at the key it has, read back and
+// compared; a new manifest and metadata naming the new revision are
+// written; then the publishing transaction gives the instance its new
+// revision and checksum, keeps the old revision's checksum as superseded
+// (ResolveInstances answers it), and clears the instance's damage mark, so
+// it reads again. A replace is not undone: the way back is another replace
+// from the old file. A Replace of a quarantined file already used by a
+// replace answers that correction, so a lost answer is safe to ask again.
+//
+// Every copy. A correction reaches every storage that holds its target: the
+// primary and each of its replicas (StorageService). It puts its record on
+// the primary before its publishing transaction, itself, never left to the
+// copy, and on each replica too; a replica that does not answer is owed
+// the record (ReplicaService), written in the publishing transaction, and
+// gets it as soon as it answers, so a replica down never stops a
+// correction. A delete's publish also drops what the copy still owes the
+// replicas of its target's scans. Its purge takes the set of copies when
+// it starts: the primary and each replica attached then, so a replica
+// attached after the commit, which holds the record and was never sent
+// the hidden data, is checked too; a replica attached while the purge
+// runs joins the set, and the copy never takes an object of a correction
+// whose purge has started. It removes each object from every copy and
+// records what each storage did, one disposition per storage and
+// switch_generation (each naming the storage, whether it is a replica,
+// and the place it acted at), so a purge that spans a switch says what
+// each place did. A replica that does not answer, or that is still
+// owed the record, keeps the correction purging, with the state reason
+// "storage does not answer", never skipped; only DetachReplica with
+// abandon_purges ends that wait, and the replica is then named in
+// copies_abandoned. A replace's publish queues the scan for each replica,
+// and its old revision is purged from every copy after the grace period.
+// A relabel copies to the new keys on the primary and on each replica in
+// step for the target that answers, and rewrites the hold records of what
+// it moves (RetentionService), before its publishing transaction, so a
+// read can turn to a replica the moment the labels switch; a replica not
+// in step or not answering is not waited for: it is copied afterwards,
+// under the new labels, as any pending scan. The preview lists every copy
+// (storage_purges). A withdrawal is not true while any copy the server
+// wrote still holds the bytes.
+//
+// What purged means. Purged is the end of a purge, every object of every
+// copy handled and its disposition recorded; it never claims more than the
+// storages reported. The bytes are gone from a storage only where its
+// disposition counts every object removed; a copy whose objects are
+// hidden behind newer versions, retained by object lock, unknown, or
+// abandoned with a detached replica (copies_abandoned) still holds them,
+// and the correction says so per storage. So a person reads, for each
+// copy, whether a withdrawal is complete there.
+//
+// Retention and holds. A delete may come from a person (origin person) or
+// from a retention rule (origin retention, RetentionService): the latter
+// is made by a dispose job (DisposeJob), which the server's daily pass or
+// an admin's Dispose queues from a rule's due sessions, and is then an
+// ordinary delete in every way above
+// (records, publish, grace, undo, purge on every copy, dispositions,
+// arriving again). A hold (RetentionService) on what a delete would cover
+// refuses the delete (precondition, reason HELD); a hold placed on data a
+// delete already committed keeps the delete committed, still undone by
+// UndoCorrection, and its purge waits, purging, with the state reason
+// "held" before its next object, until every hold on it is released. A
+// replace or a relabel under a hold is allowed, since nothing is lost, and
+// the purge of the objects it superseded waits likewise. Data a rule keeps
+// at least until a time to come (keep_at_least) is refused to a person's
+// delete (precondition, reason RETENTION_MINIMUM) unless the request sets
+// override_retention with its own reason, which the correction and its
+// audit entry keep: a consent withdrawn must stay possible, and visible.
+//
+// References. The identities that never change are the archived UIDs; a
+// label is a name and can change, and an instance's revision with its
+// SHA-256 names exact bytes. ResolveInstances answers, for (instance,
+// revision) pairs a platform kept, whether each is current, superseded,
+// deleted or unknown.
+//
+// Every method acts inside one tenant, named by the request's tenant field,
+// so a request into a tenant that is not ready is answered UNAVAILABLE.
+service CorrectionService {
+  // Delete hides a subject, a session, a scan or one instance from every
+  // read, and removes its bytes after the grace period; or, with
+  // validate_only, answers what it would delete and the confirm token a
+  // delete must carry.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the new correction's id as
+  // its object (none for validate_only), and the target's path of labels
+  // (an instance as its scan's path, never its id, which holds a UID as
+  // received), validate_only, the counts and the reason in details; with
+  // override_retention, that and its reason too.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason; a label that does not pass the
+  // label rule; a level named without the one above it; a confirm token
+  // with validate_only, or none without it; override_retention without an
+  // override_reason, or an override_reason without it), not found (the tenant holds no
+  // such subject, session, scan or instance; a tenant that does not exist,
+  // for a caller who may list every tenant), precondition (the confirm
+  // token does not match what the delete would now remove, or is more than
+  // an hour old; a hold covers any of the target, with the reason HELD and
+  // the metadata "hold" (a hold's id); a retention rule keeps any of it at
+  // least until a time to come and override_retention is not set, with the
+  // reason RETENTION_MINIMUM and the metadata "keep_until" (RFC 3339, UTC);
+  // the target is already deleted, or a correction on it is
+  // prepared or not yet purged and conflicts with this one; a rebuild of
+  // the tenant is running; the tenant is moved or fenced, with the reason
+  // TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database does
+  // not answer, or a storage holding the target does not answer, so its
+  // correction record cannot be written and the correction is abandoned;
+  // or the tenant is not ready; or the tenant's corrections are still
+  // taking up what the server's last stop left), unimplemented
+  // (override_retention, while the server keeps no retention rules).
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // Relabel gives a subject, a session or a scan a new label, moving its
+  // stored objects to keys under that label. A Relabel with the same
+  // target and new label as a correction not abandoned answers that
+  // correction, so a lost answer is safe to ask again.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the new correction's id as
+  // its object, and the target's path of labels, the new label and the
+  // reason in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason; a label or a new label that does
+  // not pass the label rule; an instance named), not found (the tenant
+  // holds no such subject, session or scan; a tenant that does not exist,
+  // for a caller who may list every tenant), conflict (the new label is
+  // held at that level, or differs from one held there only in the case of
+  // its letters), precondition (the target is deleted, or a correction on
+  // it is prepared or not yet purged and conflicts with this one; a
+  // reception of it is in progress; a rebuild of the tenant is running;
+  // the tenant is moved or fenced, with the reason TENANT_MOVED or
+  // TENANT_FENCED), unavailable (the tenant's database does not answer, or
+  // a storage holding the target does not answer before the copy starts;
+  // or the tenant is not ready). A storage that stops answering during the
+  // copy does not fail the request, which has been answered: the copy waits
+  // and goes on.
+  rpc Relabel(RelabelRequest) returns (RelabelResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // Replace puts the corrected file held in quarantine in place of the
+  // archived instance with its SOP Instance UID. It is answered in one of
+  // three ways: the correction committed; an error, with nothing recorded,
+  // for what is known before anything is written (every invalid, not found
+  // and precondition below); or the correction abandoned, with its
+  // state_reason, for what fails once it was recorded (the new revision
+  // could not be put or read back whole, the storage stopped answering
+  // midway), anything it wrote removed.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the new correction's id as
+  // its object, and the quarantined file's id, the scan's path of labels,
+  // the old and new SHA-256 and the reason in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason), not found (the tenant has no
+  // quarantined file with that id; a tenant that does not exist, for a
+  // caller who may list every tenant), precondition (the file is not held,
+  // is not of reason different file or repairs damaged, or its content was
+  // never kept; the tenant no longer holds the instance, or holds it in
+  // another study or series; the receiver it arrived at has been removed;
+  // its de-identification fails, and the file stays held; the instance is
+  // deleted, or a correction on it is prepared or not yet purged and
+  // conflicts with this one; a rebuild of the tenant is running; the
+  // tenant is moved or fenced, with the reason TENANT_MOVED or
+  // TENANT_FENCED), unavailable (the tenant's database or the instance's
+  // storage does not answer before anything is written, or the tenant is
+  // not ready).
+  rpc Replace(ReplaceRequest) returns (ReplaceResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListCorrections answers a tenant's corrections, newest first, filtered
+  // by kind and state.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the filters in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc ListCorrections(ListCorrectionsRequest) returns (ListCorrectionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // GetCorrection answers one correction, with how far it got.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the correction's id as its
+  // object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no correction with that id; a tenant that
+  // does not exist, for a caller who may list every tenant), unavailable
+  // (the tenant's database does not answer, or the tenant is not ready).
+  rpc GetCorrection(GetCorrectionRequest) returns (GetCorrectionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // UndoCorrection shows a committed delete's target again, as it was,
+  // during the grace period: its rows visible, its totals back, its
+  // records rewritten undone, an EVENT_TYPE_CATALOG_CHANGED event. It is
+  // also how an admin settles an unresolved delete a rebuild or a restore
+  // applied fail-closed, and how a prepared relabel is stopped: it is
+  // abandoned and its copies removed, nothing having changed for any
+  // reader. A correction already undone, or a relabel already abandoned,
+  // is answered as it stands, so a repeated call changes nothing more.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the correction's id as its
+  // object and the reason in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason), not found (the tenant has no
+  // correction with that id; a tenant that does not exist, for a caller
+  // who may list every tenant), precondition (the correction is neither a
+  // committed delete nor a prepared relabel; a rebuild of the tenant is
+  // running; the tenant is moved or fenced), unavailable (the tenant's
+  // database or a storage holding its record does not answer, or the
+  // tenant is not ready).
+  rpc UndoCorrection(UndoCorrectionRequest) returns (UndoCorrectionResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // PurgeCorrection starts the purge of a committed correction now, before
+  // its grace period ends: a delete's hidden data, or the objects a relabel
+  // or a replace superseded (the old tree, the old revision). It also
+  // confirms an unresolved delete. The purge runs in the background; the
+  // correction says how far it got. A purge of data a hold covers starts
+  // and waits, purging, with the state reason "held", removing nothing
+  // until every hold on it is released. A correction whose purge has started
+  // or ended is answered as it stands, so a repeated call starts nothing
+  // more.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the correction's id as its
+  // object; the purge's end writes another, made by the server.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no correction with that id; a tenant that
+  // does not exist, for a caller who may list every tenant), precondition
+  // (the correction is prepared, undone or abandoned; a rebuild of the
+  // tenant is running; the tenant is moved or fenced), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc PurgeCorrection(PurgeCorrectionRequest) returns (PurgeCorrectionResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // AllowArrivals lets data a delete named arrive again, one held value at
+  // a time (Correction.holds): a file whose subject label or Study, Series
+  // or SOP Instance UID is that value is archived from then on instead of
+  // quarantined as was deleted, as when a consent withdrawn is given
+  // again, unless another value a delete holds still matches it. A file
+  // quarantined as was deleted kept none of its bytes (a withdrawal keeps
+  // nothing of what arrives again), so the sender sends it again once its
+  // values are allowed. Only a purged delete lets data arrive again: until its purge has
+  // removed every object it owns, data arriving at its labels would sit
+  // where the purge works. A correction whose arrivals are already all
+  // allowed is answered as it stands.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the correction's id as its
+  // object and the reason and the value's kind in details; never the value,
+  // which may be a UID.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason; no value, or one whose kind is
+  // unspecified or whose value is not a label or a UID), not found (the
+  // tenant has no correction with that id; a tenant that does not exist,
+  // for a caller who may list every tenant), precondition (the correction
+  // is not a delete, or was undone or abandoned; it is not yet purged; it
+  // does not hold that value; a rebuild of the tenant is running; the
+  // tenant is moved or fenced), unavailable (the tenant's database does not
+  // answer, or the tenant is not ready).
+  rpc AllowArrivals(AllowArrivalsRequest) returns (AllowArrivalsResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListScrubFindings answers what scrubs found in a tenant (ScrubJob):
+  // the stored objects that are missing, damaged, not named by any scan,
+  // or that disagree with the catalog, ordered by storage, then key, each
+  // compared byte by byte.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the filters in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc ListScrubFindings(ListScrubFindingsRequest) returns (ListScrubFindingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ResolveInstances answers, for each (instance, revision) pair given,
+  // what became of those exact bytes: current, superseded by a later
+  // revision, deleted, or unknown to the tenant. A platform that captured a
+  // dataset as (instance id, revision, SHA-256) checks it later with one
+  // call per thousand members, through relabels and replaces. Each member
+  // is answered once, in the order given; a pair given twice is answered
+  // twice. An instance id the tenant never held, or a revision above any
+  // it reached, is answered unknown, never an error, so one stale member
+  // does not fail the others. Reading a superseded revision's bytes is not
+  // offered: they are kept only until their correction's purge.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with how many pairs were asked
+  // and how many of each disposition were answered in details; never an
+  // instance id, which holds a UID as received.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also no pair, more than 1000, an instance id that does not pass its
+  // rule, or a revision below 1), not found (a tenant that does not exist,
+  // for a caller who may list every tenant), unavailable (the tenant's
+  // database does not answer, or the tenant is not ready).
+  rpc ResolveInstances(ResolveInstancesRequest) returns (ResolveInstancesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// CorrectionTarget names what a correction acts on: a subject, a session of
+// it, a scan of that, or one instance of the scan, by labels and instance
+// id, as the catalog names them.
+message CorrectionTarget {
+  // The subject's label. Required.
+  string subject_label = 1;
+
+  // The label of the session of the subject. Empty for the whole subject.
+  string session_label = 2;
+
+  // The label of the scan of the session. Empty for the whole session;
+  // needs session_label.
+  string scan_label = 3;
+
+  // The id of one instance of the scan, as DataService names it. Empty for
+  // the whole scan; needs scan_label. Never written to a log or an event:
+  // in this version it holds a SOP Instance UID as received.
+  string instance_id = 4;
+}
+
+// CorrectionKind is what a correction does. A kind added later is a new
+// value; a client shows one it does not know by its state and counts alone.
+enum CorrectionKind {
+  // Never answered by the server. As a filter, it is refused as invalid.
+  CORRECTION_KIND_UNSPECIFIED = 0;
+
+  // Data hidden at once and its bytes removed after the grace period.
+  CORRECTION_KIND_DELETE = 1;
+
+  // A subject, a session or a scan given a new label, its objects moved.
+  CORRECTION_KIND_RELABEL = 2;
+
+  // An archived instance replaced by its corrected file.
+  CORRECTION_KIND_REPLACE = 3;
+}
+
+// CorrectionOrigin is who asked for a correction. An origin added later is
+// a new value; a client shows one it does not know as made by the server.
+enum CorrectionOrigin {
+  // Not said. Never answered by the server; as a filter, refused as
+  // invalid.
+  CORRECTION_ORIGIN_UNSPECIFIED = 0;
+
+  // A person, by Delete, Relabel or Replace, with their own reason.
+  CORRECTION_ORIGIN_PERSON = 1;
+
+  // A retention rule: a delete of a due session, made by the server's
+  // daily pass for a rule whose action is delete, or by an admin's
+  // RetentionService.Dispose. retention_rule names the rule.
+  CORRECTION_ORIGIN_RETENTION = 2;
+}
+
+// CorrectionState is where a correction is. It goes forward only: prepared,
+// committed, purging, purged; or undone (a delete, from committed) or
+// abandoned (from prepared). Purged, undone and abandoned are ends. A state
+// added later is a new value, and a client shows one it does not know as
+// one in progress.
+enum CorrectionState {
+  // Never answered by the server. As a filter, it is refused as invalid.
+  CORRECTION_STATE_UNSPECIFIED = 0;
+
+  // Recorded, and its records being written or its new objects copied and
+  // read back (a relabel's new tree, a replace's new revision); nothing is
+  // visible yet: every reader sees the archive as it was.
+  CORRECTION_STATE_PREPARED = 1;
+
+  // Published, in one transaction: a delete's data hidden from every read,
+  // a relabel's target under its new label, a replace's new revision in
+  // use. What it superseded or hid is kept, unserved, until purge_time; a
+  // delete can still be undone.
+  CORRECTION_STATE_COMMITTED = 2;
+
+  // Its hidden or superseded objects are being removed. Nothing is undone
+  // from here.
+  CORRECTION_STATE_PURGING = 3;
+
+  // Ended: every object of every copy is handled and recorded with its
+  // size, SHA-256 and what its storage did with it (dispositions). The
+  // bytes are gone only from the storages whose dispositions count every
+  // object removed; a copy hidden, retained, unknown or abandoned
+  // (copies_abandoned) is named as such.
+  CORRECTION_STATE_PURGED = 4;
+
+  // A delete undone during its grace period; its data is shown again as
+  // it was.
+  CORRECTION_STATE_UNDONE = 5;
+
+  // A prepared correction rolled back, never published: nothing changed
+  // for any reader, and anything it wrote was removed. The state_reason
+  // says why (the server stopped before it committed, an object could not
+  // be read whole).
+  CORRECTION_STATE_ABANDONED = 6;
+}
+
+// ObjectDisposition is what a storage did with an object a purge removed,
+// as the storage itself reported it; never a stronger word than it gave.
+enum ObjectDisposition {
+  // Never answered by the server.
+  OBJECT_DISPOSITION_UNSPECIFIED = 0;
+
+  // The bytes are gone from this storage: a file removed from a
+  // directory, an object deleted from an unversioned bucket, or every
+  // version of it deleted by its version id.
+  OBJECT_DISPOSITION_REMOVED = 1;
+
+  // The key answers not found, but older versions of the bytes remain: a
+  // versioned bucket whose versions the server was not set, or not
+  // allowed, to delete (S3Storage.purge_versions).
+  OBJECT_DISPOSITION_HIDDEN = 2;
+
+  // The storage refused to remove a version under its object lock, until
+  // the retention it states ends.
+  OBJECT_DISPOSITION_RETAINED = 3;
+
+  // The server could not learn what the storage did, as when it may not
+  // read the bucket's versioning.
+  OBJECT_DISPOSITION_UNKNOWN = 4;
+}
+
+// StorageDisposition sums what one storage did with the objects a
+// correction purged, so a person sees which claim holds there: the bytes
+// are gone from it only when every object is removed.
+message StorageDisposition {
+  // The storage's name.
+  string storage = 1;
+
+  // The objects whose bytes are gone from it.
+  int64 objects_removed = 2;
+
+  // The objects hidden, older versions kept.
+  int64 objects_hidden = 3;
+
+  // The objects retained by object lock.
+  int64 objects_retained = 4;
+
+  // The objects whose fate it could not report.
+  int64 objects_unknown = 5;
+
+  // The object versions deleted by version id, delete markers included.
+  int64 versions_removed = 6;
+
+  // The latest retain-until time the storage stated for a retained
+  // version. Absent when none is retained, or the storage gave no time.
+  google.protobuf.Timestamp retain_until = 7;
+
+  // For a replica, the name of its primary; empty for a primary. A purge
+  // counts every copy, replicas included, each with its own disposition.
+  string replica_of = 8;
+
+  // The storage's switch_generation (Storage) when the purge acted on it,
+  // so the disposition is tied to the place it was made at even after a
+  // switch has given the name another place. A purge that spans a switch
+  // has one disposition per storage and generation.
+  int64 switch_generation = 9;
+}
+
+// StoragePurge is what a storage is expected to do with the objects a
+// delete would remove, said before acting, from what the storage reported
+// when it was opened.
+message StoragePurge {
+  // The storage's name.
+  string storage = 1;
+
+  // What it is expected to do: REMOVED for a directory or an unversioned
+  // bucket, or a versioned one with purge_versions on and the permission
+  // to delete versions; HIDDEN for a versioned bucket without them;
+  // RETAINED when the bucket has object lock; UNKNOWN when its versioning
+  // could not be read.
+  ObjectDisposition expected = 2;
+
+  // Why, in words for a person, from a fixed set of phrases the server
+  // has, such as "versioned bucket, purge_versions off"; at most 256
+  // bytes.
+  string why = 3;
+
+  // For a replica, the name of its primary; empty for a primary. The
+  // preview lists each replica holding any of the data, since the purge
+  // removes it there too.
+  string replica_of = 4;
+}
+
+// CorrectionCounts are what a correction covers and how far it got.
+message CorrectionCounts {
+  // The subjects it covers.
+  int64 subjects = 1;
+
+  // The sessions it covers.
+  int64 sessions = 2;
+
+  // The scans it covers.
+  int64 scans = 3;
+
+  // The instances it covers.
+  int64 instances = 4;
+
+  // The bytes of those instances, as archived.
+  int64 bytes = 5;
+
+  // The stored objects it has removed so far (data, manifests, metadata),
+  // each recorded with its size, SHA-256 and disposition.
+  int64 objects_removed = 6;
+
+  // The bytes of the objects removed so far.
+  int64 bytes_removed = 7;
+
+  // For a relabel, the objects copied to their new keys and read back so
+  // far.
+  int64 objects_copied = 8;
+
+  // The objects it superseded and keeps, unserved, until its purge: a
+  // relabel's old tree, a replace's old revision.
+  int64 objects_superseded = 9;
+
+  // The objects its purge left where they are, so far: those a live row of
+  // the catalog resolves to, and a manifest or metadata whose bytes are no
+  // longer the ones read before the publish (a reception wrote the scan
+  // since). Kept on purpose, never counted removed.
+  int64 objects_kept = 10;
+
+  // Every object it owns and its purge settles, fixed by its publishing
+  // transaction (each instance's object of its target, and each scan's
+  // manifest and metadata it hides or relabels), settled or not. The purge
+  // is done with its objects when objects_removed and objects_kept together
+  // reach it. 0 before the publish.
+  int64 objects_owned = 11;
+}
+
+// HeldValueKind is what a value a delete holds arrivals by names. A kind
+// added later is a new value; a client shows one it does not know by its
+// value alone.
+enum HeldValueKind {
+  // Never answered by the server; refused as invalid.
+  HELD_VALUE_KIND_UNSPECIFIED = 0;
+
+  // A subject's label.
+  HELD_VALUE_KIND_SUBJECT = 1;
+
+  // A session's Study Instance UID.
+  HELD_VALUE_KIND_STUDY = 2;
+
+  // A scan's Series Instance UID.
+  HELD_VALUE_KIND_SERIES = 3;
+
+  // An instance's SOP Instance UID.
+  HELD_VALUE_KIND_INSTANCE = 4;
+}
+
+// HeldValue is one value a delete holds arrivals by: a file that names it
+// is quarantined as QUARANTINE_REASON_WAS_DELETED rather than archived,
+// until an admin allows that value (AllowArrivals).
+message HeldValue {
+  // What it names. Required.
+  HeldValueKind kind = 1;
+
+  // The label, or the UID, as the tenant holds it: 1 to 64 bytes, a label
+  // under the label rule or a UID under PS3.5 9.1. Required. A UID here is
+  // one the tenant archived under (remapped by de-identification when the
+  // receiver de-identifies), so it is answered only to a caller who may
+  // read the correction, and never written to a log.
+  string value = 2;
+}
+
+// PeerCopy is one sender a correction's data was sent to, so a person
+// knows which peers to ask to delete their copies: the archive cannot
+// reach them.
+message PeerCopy {
+  // The sender's name. A sender removed later keeps its name here.
+  string sender = 1;
+
+  // The instances of the data that its send jobs and forwards answered
+  // sent.
+  int64 instances = 2;
+
+  // When the last of them was sent.
+  google.protobuf.Timestamp last_send_time = 3;
+}
+
+// DeletePreview is what a delete removes, as the catalog holds it now.
+message DeletePreview {
+  // What it covers.
+  CorrectionCounts counts = 1;
+
+  // The names of the tenant's storages that hold any of it, ordered by
+  // name.
+  repeated string storages = 2;
+
+  // The senders any of it was sent to, ordered by name.
+  repeated PeerCopy sent_to = 3;
+
+  // The ids of the queued and running jobs whose target holds any of it:
+  // each will count what it meets as deleted and go on. At most 100,
+  // newest first; jobs_not_listed counts the others.
+  repeated string jobs = 4;
+
+  // The jobs past the 100 listed.
+  int64 jobs_not_listed = 5;
+
+  // The token the delete must carry: opaque, at most 128 bytes, a digest of
+  // the target, counts, storages, sent_to, jobs, storage_purges, holds,
+  // sessions_under_minimum, keep_until, quarantined, receptions,
+  // held_after_purge and the
+  // time it was issued (purge_time is left out, since it moves with the
+  // clock). It matches only while a preview made now would answer the same
+  // for those, for at most one hour after its issue, and once: a Delete
+  // carrying it again answers the correction it made.
+  string confirm = 6;
+
+  // When the data's bytes would be purged if the delete were made now: now
+  // plus the tenant's delete.grace.
+  google.protobuf.Timestamp purge_time = 7;
+
+  // What each storage holding any of it is expected to do with a removed
+  // object, ordered by storage name, so the claim a purge can make is seen
+  // before acting. Replicas included.
+  repeated StoragePurge storage_purges = 8;
+
+  // The ids of the active holds (RetentionService) that cover any of it,
+  // ordered by id. The delete itself is refused while any is listed
+  // (precondition, reason HELD); the preview answers them so a person sees
+  // why.
+  repeated string holds = 9;
+
+  // The sessions of it that a retention rule keeps at least until a time
+  // to come. A delete of them needs override_retention with its reason.
+  int64 sessions_under_minimum = 10;
+
+  // The latest time any retention rule keeps any of it until. Absent when
+  // sessions_under_minimum is 0.
+  google.protobuf.Timestamp keep_until = 11;
+
+  // The quarantined files of its target, held or decided, whose records
+  // and kept bytes its purge removes too: what a sender sent of the data
+  // and the archive held back. Part of the digest the confirm token is.
+  int64 quarantined = 12;
+
+  // For a session or a subject, the receptions of its sessions whose
+  // received files its purge removes and whose labels and study it blanks,
+  // naming the delete instead; 0 for a scan or an instance. Part of the
+  // digest the confirm token is.
+  int64 receptions = 13;
+
+  // The subject labels arrivals stay held under after the purge (Arriving
+  // again): for a subject's delete, its label and each label it had before
+  // a relabel, ordered by label; empty for a session, a scan or an
+  // instance, which are held by their UIDs. Part of the digest the confirm
+  // token is.
+  repeated string held_after_purge = 14;
+
+  // The jobs not ended over the whole tenant (JobService), which may meet
+  // the data though their target does not name it (a job of the whole
+  // tenant, a scrub). They start and end without changing the confirm
+  // token; jobs and jobs_not_listed name those whose target holds it.
+  int64 tenant_jobs = 15;
+}
+
+// Correction is one recorded change to archived data, and how far it got.
+message Correction {
+  // The correction's operation id, made by the server and committed with
+  // the correction's first row before anything is written to a storage, so
+  // every object and record it writes can be traced to it; its correction
+  // record on each storage is named by it. A ULID in lowercase: 26
+  // characters of 0-9 and a-z (Crockford's base 32, without i, l, o and
+  // u), which any storage takes in a key, whose first ten characters are
+  // its creation time, so ids sort in the order corrections were made (a
+  // restore applies the records that sort after its backup's last).
+  // Unique in the tenant, never reused.
+  string id = 1;
+
+  // What it does.
+  CorrectionKind kind = 2;
+
+  // Where it is.
+  CorrectionState state = 3;
+
+  // What it acts on. For a replace, the instance replaced.
+  CorrectionTarget target = 4;
+
+  // For a relabel, the new label of the target's level.
+  string to_label = 5;
+
+  // For a replace, the id of the quarantined file that took the
+  // instance's place.
+  string quarantined_file = 6;
+
+  // The reason the person gave.
+  string reason = 7;
+
+  // The id of the key that made it; empty for the local operator. For a
+  // delete of origin retention: the key of the admin whose Dispose queued
+  // its dispose job, with that admin's reason; or empty for one the
+  // server's daily pass made, whose reason the server writes as "retention
+  // rule <rule>, due <date>", such as "retention rule trial7, due
+  // 2041-03-01".
+  string created_by_key_id = 8;
+
+  // When it was made.
+  google.protobuf.Timestamp create_time = 9;
+
+  // When its purge starts, or started: commit_time plus the tenant's
+  // delete.grace as it was at commit, fixed then; a later change of the
+  // setting does not move it. Absent while prepared, for a correction
+  // undone or abandoned, and for one unresolved, which is never purged
+  // until an admin confirms it.
+  google.protobuf.Timestamp purge_time = 10;
+
+  // When it ended: purged, undone or abandoned. Absent before.
+  google.protobuf.Timestamp end_time = 11;
+
+  // What it covers and how far it got.
+  CorrectionCounts counts = 12;
+
+  // The senders its data was sent to, as the preview listed them.
+  repeated PeerCopy sent_to = 13;
+
+  // Why it is not moving, or why it was abandoned, from a fixed set of
+  // phrases the server has, such as "storage does not answer" (a primary
+  // or a replica, or one still owed the record), "held" (its purge waits
+  // for a hold's release), "clock jumped" (its purge waits for an admin to
+  // confirm the server's time) or "copies abandoned"; at most 256
+  // bytes. Empty while nothing holds it
+  // back, and once purged.
+  string state_reason = 14;
+
+  // For a replace, the SHA-256 of the archived file it replaced, in
+  // lowercase hexadecimal.
+  string old_sha256 = 15;
+
+  // For a replace, the SHA-256 of the file now archived, in lowercase
+  // hexadecimal.
+  string new_sha256 = 16;
+
+  // For a delete, whether files matching its target are archived again
+  // when they arrive (AllowArrivals) rather than quarantined.
+  bool arrivals_allowed = 17;
+
+  // For a delete undone, the reason given to undo it.
+  string undo_reason = 18;
+
+  // For a replace, the revision of the instance it superseded.
+  int32 old_revision = 19;
+
+  // For a replace, the revision it made current.
+  int32 new_revision = 20;
+
+  // When its publishing transaction committed, by the server's clock: the
+  // start of its grace period. Absent while prepared, and for one
+  // abandoned.
+  google.protobuf.Timestamp commit_time = 21;
+
+  // What each storage did with the objects purged so far, ordered by
+  // storage name.
+  repeated StorageDisposition dispositions = 22;
+
+  // Whether a rebuild or a restore found it as a record on a storage with
+  // no row in the tenant's database, and applied it fail-closed (a delete
+  // as committed). Its reason, created_by_key_id and sent_to are those
+  // its record kept; its state_reason is "found on storage without its
+  // row"; it has no purge_time. It waits for an admin to undo it
+  // (UndoCorrection) or confirm it (PurgeCorrection), and is never purged
+  // before.
+  bool unresolved = 23;
+
+  // Who asked for it: a person, or a retention rule.
+  CorrectionOrigin origin = 24;
+
+  // For origin retention, the name of the rule whose due session it
+  // deletes. A rule removed later keeps its name here.
+  string retention_rule = 25;
+
+  // For origin retention, the due time the tenant held for the session
+  // when it was disposed of: the latest of its start time plus the
+  // earliest dispose_after of its rules, its start time plus every
+  // matching keep_at_least, and any notice a rule change set
+  // (RetentionService), by the server's clock, never a DICOM date.
+  google.protobuf.Timestamp retention_due_time = 26;
+
+  // Whether the delete was made over a retention rule's keep_at_least
+  // (DeleteRequest.override_retention).
+  bool override_retention = 27;
+
+  // The reason given for the override, kept as given; empty without one.
+  string override_reason = 28;
+
+  // For origin retention, the id of the dispose job (JobService) that made
+  // it; empty otherwise.
+  string job = 29;
+
+  // The replicas detached (ReplicaService.DetachReplica with
+  // abandon_purges) before this correction's purge reached them, ordered
+  // by name: their objects are recorded OBJECT_DISPOSITION_UNKNOWN, and the
+  // bytes may still be there. Empty when no copy was abandoned.
+  repeated string copies_abandoned = 30;
+
+  // For a delete not undone or abandoned, the values it holds arrivals by
+  // now (Arriving again), ordered by kind, then value: those AllowArrivals
+  // has let arrive again are gone from it, and arrivals_allowed is set once
+  // none is left. Answered by GetCorrection and by the methods that answer
+  // one correction; empty in ListCorrections, which a person reads for the
+  // corrections, not the values.
+  repeated HeldValue holds = 31;
+
+  // For a relabel abandoned (stopped while it copied, or an object it could
+  // not read whole), whether the copies it wrote under the new labels have
+  // been removed. False while they are still being removed, which the
+  // server finishes by itself, at its next start at the latest.
+  bool swept = 32;
+}
+
+// DeleteRequest names what to delete, why, and, unless only a preview is
+// asked for, the confirm token of the preview.
+message DeleteRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // What to delete. Required.
+  CorrectionTarget target = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required, also
+  // with validate_only.
+  string reason = 3;
+
+  // Answer the preview only, deleting nothing.
+  bool validate_only = 4;
+
+  // The confirm token of a preview of the same target. Required unless
+  // validate_only; must be empty with it.
+  string confirm = 5;
+
+  // Delete data a retention rule keeps at least until a time to come, as
+  // for a consent withdrawn. Needs override_reason. The override is
+  // recorded in the correction and its audit entry.
+  bool override_retention = 6;
+
+  // Why the override, in the person's own words: 1 to 1024 bytes of UTF-8
+  // with no control characters, never a value read from a file. Required
+  // with override_retention; must be empty without it.
+  string override_reason = 7;
+}
+
+// DeleteResponse is the preview, or the delete made.
+message DeleteResponse {
+  // What the delete removes; with validate_only, what it would remove, and
+  // the token to confirm it.
+  DeletePreview preview = 1;
+
+  // The correction made, committed: its data hidden until purge_time.
+  // Absent with validate_only.
+  Correction correction = 2;
+}
+
+// RelabelRequest names what to relabel, its new label, and why.
+message RelabelRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The subject, session or scan to relabel; its instance_id must be
+  // empty. Required.
+  CorrectionTarget target = 2;
+
+  // The new label of the target's level, under the label rule
+  // (CatalogService). Required.
+  string to_label = 3;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required.
+  string reason = 4;
+}
+
+// RelabelResponse is the relabel started.
+message RelabelResponse {
+  // The correction, prepared: its objects being copied in the background.
+  // It becomes committed when the whole target is switched.
+  Correction correction = 1;
+}
+
+// ReplaceRequest names the quarantined file that replaces an archived
+// instance, and why.
+message ReplaceRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The id of the held quarantined file, of reason different file or
+  // repairs damaged. Required.
+  string quarantined_file = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required.
+  string reason = 3;
+}
+
+// ReplaceResponse is the replace made.
+message ReplaceResponse {
+  // The correction, committed (the new revision in use, the old kept until
+  // purge_time), or abandoned with its reason (nothing changed).
+  Correction correction = 1;
+}
+
+// ListCorrectionsRequest asks for a page of a tenant's corrections. Every
+// filter given must hold for a correction to be listed.
+message ListCorrectionsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // Only the corrections of these kinds. Empty for every kind; at most 16
+  // values, none of them CORRECTION_KIND_UNSPECIFIED.
+  repeated CorrectionKind kinds = 2;
+
+  // Only the corrections in these states. Empty for every state; at most
+  // 16 values, none of them CORRECTION_STATE_UNSPECIFIED.
+  repeated CorrectionState states = 3;
+
+  // The most corrections to answer: zero means 100; at most 1000. A larger
+  // or negative value is invalid.
+  int32 page_size = 4;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant or filters other
+  // than those it was made with.
+  string page_token = 5;
+
+  // Only the corrections of these origins. Empty for every origin; at most
+  // 16 values, none of them CORRECTION_ORIGIN_UNSPECIFIED.
+  repeated CorrectionOrigin origins = 6;
+}
+
+// ListCorrectionsResponse is a page of corrections.
+message ListCorrectionsResponse {
+  // The corrections of this page, newest first.
+  repeated Correction corrections = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// GetCorrectionRequest names a correction.
+message GetCorrectionRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The correction's id. Required; at most 64 bytes.
+  string id = 2;
+}
+
+// GetCorrectionResponse is the correction named.
+message GetCorrectionResponse {
+  // The correction, with its counts now.
+  Correction correction = 1;
+}
+
+// UndoCorrectionRequest names the delete to undo, and why.
+message UndoCorrectionRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The correction's id. Required; at most 64 bytes.
+  string id = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required.
+  string reason = 3;
+}
+
+// UndoCorrectionResponse is the delete undone.
+message UndoCorrectionResponse {
+  // The correction, undone.
+  Correction correction = 1;
+}
+
+// PurgeCorrectionRequest names the delete to purge now.
+message PurgeCorrectionRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The correction's id. Required; at most 64 bytes.
+  string id = 2;
+}
+
+// PurgeCorrectionResponse is the purge started.
+message PurgeCorrectionResponse {
+  // The correction, purging or purged.
+  Correction correction = 1;
+}
+
+// AllowArrivalsRequest names the delete whose target may arrive again, and
+// why.
+message AllowArrivalsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The correction's id. Required; at most 64 bytes.
+  string id = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required.
+  string reason = 3;
+
+  // The one value of the delete's holds (Correction.holds) to let arrive
+  // again, as GetCorrection answers it. Required: a person allows a
+  // subject's label, or a study, a series or an instance, one at a time,
+  // so a withdrawal is never lifted wider than meant.
+  HeldValue value = 4;
+}
+
+// AllowArrivalsResponse is the delete whose target may arrive again.
+message AllowArrivalsResponse {
+  // The correction, without the value allowed in its holds, and with
+  // arrivals_allowed set once none is left.
+  Correction correction = 1;
+}
+
+// ScrubFindingKind is what a scrub found wrong with a stored object. A kind
+// added later is a new value; a client shows one it does not know as a
+// difference it cannot name.
+enum ScrubFindingKind {
+  // Never answered by the server. As a filter, it is refused as invalid.
+  SCRUB_FINDING_KIND_UNSPECIFIED = 0;
+
+  // An object the catalog and the manifest name is not on the storage.
+  // Its instance is marked: a read of it answers data loss.
+  SCRUB_FINDING_KIND_MISSING = 1;
+
+  // An object is on the storage under the tenant's keys, and no scan, no
+  // manifest and no pending correction names it.
+  SCRUB_FINDING_KIND_ORPHAN = 2;
+
+  // An object's length or SHA-256 is not what was archived, read twice.
+  // Its instance is marked: a read of it answers data loss.
+  SCRUB_FINDING_KIND_DAMAGED = 3;
+
+  // A scan's manifest is whole (its SHA-256 is the catalog's), but a line
+  // of it disagrees with the catalog's row for that instance (another key,
+  // place, size or SHA-256), or one names an instance the other does not.
+  SCRUB_FINDING_KIND_DISAGREEING = 4;
+
+  // A scan's manifest is missing, cannot be read, or its SHA-256 is not
+  // the one the catalog holds.
+  SCRUB_FINDING_KIND_MANIFEST_DAMAGED = 5;
+}
+
+// ScrubFinding is one difference a scrub found and believed, after reading
+// it twice.
+message ScrubFinding {
+  // The finding's id, made by the server, unique in the tenant. Opaque, at
+  // most 64 bytes.
+  string id = 1;
+
+  // What was found.
+  ScrubFindingKind kind = 2;
+
+  // The name of the storage it is on.
+  string storage = 3;
+
+  // The object's key on that storage, as the catalog, the manifest or the
+  // listing names it: at most 1024 bytes. Opaque to a client, as
+  // DataService says. Never written to a log or an event: it holds a SOP
+  // Instance UID as received.
+  string key = 4;
+
+  // The label of the subject of the scan it belongs to. Empty for an
+  // orphan whose key names no scan the catalog holds.
+  string subject_label = 5;
+
+  // The label of that scan's session. Empty as subject_label.
+  string session_label = 6;
+
+  // The label of that scan. Empty as subject_label.
+  string scan_label = 7;
+
+  // The id of the instance, as DataService names it, for an instance's
+  // object. Empty for a manifest, and for an orphan.
+  string instance_id = 8;
+
+  // The size in bytes the catalog or the manifest holds. Absent for an
+  // orphan.
+  optional int64 expected_size = 9;
+
+  // The size in bytes found on the storage. Absent for an object missing.
+  optional int64 found_size = 10;
+
+  // The SHA-256 the catalog or the manifest holds, in lowercase
+  // hexadecimal. Empty for an orphan.
+  string expected_sha256 = 11;
+
+  // The SHA-256 of the bytes found, in lowercase hexadecimal. Empty for an
+  // object missing.
+  string found_sha256 = 12;
+
+  // The id of the scrub job that found it.
+  string job = 13;
+
+  // When it was found.
+  google.protobuf.Timestamp find_time = 14;
+
+  // When a later scrub read the object good again, and cleared the
+  // finding and its instance's mark. Absent while it holds.
+  google.protobuf.Timestamp clear_time = 15;
+
+  // The id of the scrub job that cleared it. Empty while it holds.
+  string clear_job = 16;
+
+  // For an instance's object, the revision the catalog or the manifest
+  // says the object holds (ArchivedFile.revision); 0 otherwise.
+  int32 revision = 17;
+
+  // When storage is a replica, the name of its primary; empty for a
+  // primary. A finding on a replica marks the replica's copy, never the
+  // instance: reads keep going to the primary, and the server copies the
+  // object again from the primary unasked, clearing the finding once the
+  // copy is verified.
+  string replica_of = 18;
+
+  // The id of the repair job (ReplicaService.Repair) that put good bytes
+  // back at the key, read from a replica, and cleared the finding; empty
+  // otherwise. found_size and found_sha256 keep what the damaged object
+  // was, as the repair recorded it before writing.
+  string repair_job = 19;
+
+  // The storage's switch_generation (Storage) when the finding was made,
+  // naming the place it was found at. A switch moves a name's open
+  // findings with its place, to the other name, keeping this generation,
+  // so a finding always names the place whose bytes were found wrong.
+  int64 switch_generation = 20;
+}
+
+// ListScrubFindingsRequest asks for a page of a tenant's scrub findings.
+// Every filter given must hold for a finding to be listed.
+message ListScrubFindingsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // Only the findings of these kinds. Empty for every kind; at most 16
+  // values, none of them SCRUB_FINDING_KIND_UNSPECIFIED.
+  repeated ScrubFindingKind kinds = 2;
+
+  // Only the findings on the storage of this name. Empty for every storage.
+  string storage = 3;
+
+  // Whether to list the findings cleared too. False lists only those that
+  // hold.
+  bool include_cleared = 4;
+
+  // The most findings to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 5;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant or filters other
+  // than those it was made with.
+  string page_token = 6;
+}
+
+// ListScrubFindingsResponse is a page of scrub findings.
+message ListScrubFindingsResponse {
+  // The findings of this page, by storage, then key.
+  repeated ScrubFinding findings = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// InstanceRef names exact archived bytes: an instance and one of its
+// revisions.
+message InstanceRef {
+  // The instance's id, as DataService names it. Required.
+  string instance_id = 1;
+
+  // The revision (ArchivedFile.revision), from 1. Required.
+  int32 revision = 2;
+}
+
+// InstanceDisposition is what became of an instance's revision.
+enum InstanceDisposition {
+  // Never answered by the server.
+  INSTANCE_DISPOSITION_UNSPECIFIED = 0;
+
+  // It is the revision the tenant serves now.
+  INSTANCE_DISPOSITION_CURRENT = 1;
+
+  // A replace made a later revision current; current_revision and sha256
+  // name it, and correction the replace.
+  INSTANCE_DISPOSITION_SUPERSEDED = 2;
+
+  // The instance was deleted; correction names the delete.
+  INSTANCE_DISPOSITION_DELETED = 3;
+
+  // The tenant holds no record of that instance and revision.
+  INSTANCE_DISPOSITION_UNKNOWN = 4;
+}
+
+// ResolvedInstance is what became of one pair asked for.
+message ResolvedInstance {
+  // The pair asked for, as given.
+  InstanceRef member = 1;
+
+  // What became of it.
+  InstanceDisposition disposition = 2;
+
+  // For current and superseded, the revision served now; 0 otherwise.
+  int32 current_revision = 3;
+
+  // For current and superseded, the SHA-256 of the revision served now,
+  // in lowercase hexadecimal; empty otherwise.
+  string sha256 = 4;
+
+  // For superseded and deleted, the id of the correction that did it;
+  // empty otherwise.
+  string correction = 5;
+
+  // For superseded and deleted, whether the asked revision's bytes are
+  // still on the storage, unserved, because that correction is not yet
+  // purged.
+  bool bytes_kept = 6;
+
+  // For current and superseded, the instance's subject label now (after
+  // any relabel); empty otherwise.
+  string subject_label = 7;
+
+  // For current and superseded, its session label now; empty otherwise.
+  string session_label = 8;
+
+  // For current and superseded, its scan label now; empty otherwise.
+  string scan_label = 9;
+}
+
+// ResolveInstancesRequest asks what became of exact archived bytes.
+message ResolveInstancesRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The pairs to resolve: 1 to 1000.
+  repeated InstanceRef members = 2;
+}
+
+// ResolveInstancesResponse answers each pair asked for.
+message ResolveInstancesResponse {
+  // One per member, in the order asked.
+  repeated ResolvedInstance instances = 1;
+}

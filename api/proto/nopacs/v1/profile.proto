@@ -1,0 +1,2287 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ProfileService keeps a tenant's de-identification profiles: versioned
+// documents of rules that say, for every element of a DICOM file, what is
+// kept, removed, emptied, replaced or changed before the file is archived.
+//
+// A profile is a ProfileDocument. Its file form, for people and for the
+// command line, is that message's JSON (the protobuf JSON mapping), so the
+// file a person writes, the request a client sends and the document the
+// server answers are one thing. A document names its bases in order, each a
+// profile the server ships (ListProfileBases), and then its own rules.
+//
+// A version never changes. Creating a profile makes its version 1; each
+// later document given under the same name makes the next version, and
+// every earlier version stays as it was, so a file archived under a version
+// can always be traced to exactly the rules that made it. A version is kept
+// expanded: its bases' rules copied in, every keyword resolved to its tag,
+// every default made explicit, with a SHA-256 of that expanded form, so a
+// later server that ships a new edition of a base never changes what a
+// stored version does. A new edition of a base is a new base name.
+//
+// A profile acts nowhere until a receiver names one of its versions; a new
+// version does not move any receiver to it. Changing a profile never
+// touches a file already archived.
+//
+// A profile is configuration, not patient data: no field of this service
+// carries a value read from a file but those of a trial run
+// (TryProfileRequest's files, TrialElement's before and after), which hold
+// the caller's own data: files it sent, or held files it may read. Each is
+// marked debug_redact, and no log line, audit entry or event carries one. A
+// rule's constant is text a person wrote, and is kept and answered as
+// written.
+//
+// Every method but ListProfileBases acts inside one tenant, named by the
+// request's tenant field, so a request into a tenant that is not ready is
+// answered UNAVAILABLE.
+service ProfileService {
+  // CreateProfileVersion checks a document, expands it and stores it as the
+  // next version of the profile named, version 1 for a name the tenant has
+  // not used. A document whose every rule, selector, condition, action and
+  // base is valid is stored; any problem refuses the whole document: the
+  // message names the first problem's rule and field, and every problem is
+  // attached to the error as one ProfileProblems detail (ValidateProfile
+  // answers them the same way without an error). A stored version is
+  // answered with the warnings ValidateProfile would give.
+  //
+  // A document equal to the profile's latest version (the same document,
+  // field by field, compared in its canonical form) makes no new version:
+  // the latest is answered with created false, before
+  // expected_latest_version is checked, since the state the call asks for
+  // already holds. A note given with it is not stored (note_differs says
+  // when it differs from the stored one). This is what makes the call
+  // idempotent, and only this: the comparison is with the latest version
+  // alone, so a call repeated after another document was stored as a newer
+  // version stores its document again as the version after that. A client
+  // that must not do so sends expected_latest_version.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the profile's name as its
+  // object, and the version answered, whether it was created and its
+  // checksum in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid (a
+  // malformed name, a missing document, a document with a problem, a note
+  // too long, an unknown view, a negative expected_latest_version), not
+  // found (a tenant that does not exist, for a caller who may list every
+  // tenant), precondition (the profile's latest version is not
+  // expected_latest_version; the profile already has the most versions a
+  // profile may have, 10000), unavailable (the tenant's database does not
+  // answer, or the tenant is not ready).
+  //
+  // A version is stored as the exact bytes of the canonical texts its
+  // checksum covers, and answered from them, so its checksum can be checked
+  // on every read.
+  rpc CreateProfileVersion(CreateProfileVersionRequest) returns (CreateProfileVersionResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // GetProfileVersion answers one version of a profile: its document as it
+  // was given, and its expanded form when view is PROFILE_VIEW_FULL. Its
+  // document is the profile's export: given back to CreateProfileVersion
+  // under any name, on a server of the same language edition, it expands
+  // to the same checksum.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the profile's name as its
+  // object and the version asked for in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also an unknown view), not found (the tenant has no profile of that
+  // name, or it has no such version; a tenant that does not exist, for a
+  // caller who may list every tenant), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc GetProfileVersion(GetProfileVersionRequest) returns (GetProfileVersionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListProfiles answers a tenant's profiles, by name in byte order, each
+  // with its latest version.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc ListProfiles(ListProfilesRequest) returns (ListProfilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListProfileVersions answers the versions of one profile, newest first,
+  // without their documents and expanded forms (GetProfileVersion answers
+  // those).
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the profile's name as its
+  // object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no profile of that name; a tenant that does
+  // not exist, for a caller who may list every tenant), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc ListProfileVersions(ListProfileVersionsRequest) returns (ListProfileVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ValidateProfile checks a document as CreateProfileVersion would and
+  // stores nothing. A document with problems is answered with every
+  // problem, not refused: the call is valid, the document is not. A
+  // document with none is answered with its checksum and its warnings, and
+  // with its expanded form when view is PROFILE_VIEW_FULL.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the number of problems in
+  // details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid (a
+  // missing document, an unknown view), not found (a tenant that does not exist, for a caller
+  // who may list every tenant), unavailable (the tenant's database does not
+  // answer, or the tenant is not ready).
+  rpc ValidateProfile(ValidateProfileRequest) returns (ValidateProfileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListProfileBases answers every base this server knows, by name in byte
+  // order: the profiles a document may name in its bases. A base the server
+  // knows but cannot expand is answered with available false and the
+  // reason; a document that names it is refused.
+  //
+  // Role: none; any caller the server authenticates.
+  // Audit: one entry in the installation's log.
+  // Errors: unauthenticated, invalid.
+  rpc ListProfileBases(ListProfileBasesRequest) returns (ListProfileBasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // TryProfile runs a profile over sample files as a receiver would, and
+  // stores nothing: each file is de-identified by the engine, written in
+  // memory, checked after by the separate read that searches it for every
+  // value the profile removed, and answered element by element with its
+  // value before and after, the action, and the rule (or base) that
+  // decided it and why, with the verdict a receiver would reach: passed,
+  // or held with the quarantine reason and its fixed cause. The profile is
+  // a stored version or an unsaved document, checked as ValidateProfile
+  // checks one (a document with a problem is refused with every problem as
+  // a ProfileProblems detail). The files are given in the request, or
+  // named by quarantine record ids of the tenant, whose held bytes (as the
+  // sender sent them) are read where the server keeps them.
+  //
+  // Nothing is stored and nothing is changed, and nothing of the tenant's
+  // secrets is used: each request runs under keys made for it alone (for
+  // UIDs, dates and hashes) and thrown away after, and reads no lookup
+  // table. So a trial's keyed values (remapped UIDs, hashes, shifted
+  // dates, lookup codes) are never those the archive holds, and cannot be
+  // matched with it; only their form and the verdict carry over. Every
+  // lookup is answered with the code UNASSIGNED, and counted; a lookup
+  // whose missing value a receiver would hold the file for makes the
+  // verdict TRIAL_VERDICT_UNDECIDED. No file is written to a storage and
+  // no record is made. The before values are the caller's own data, and
+  // are answered; no log line, audit entry or event carries one.
+  //
+  // A sent file tried with a receiver named (TrialReception.receiver), and
+  // a held file (with the receiver that held it, while it exists), runs
+  // that receiver's receiving checks too, as the receiver runs them: the
+  // header read within receiver.header-limit, the placing UIDs present,
+  // well formed and not under the standard's root, its SOP classes, its
+  // naming rule and the search of its labels for removed values, and the
+  // check after within its file bound; "passed" then means that receiver
+  // would archive the file. With no receiver the verdict is
+  // de-identification's alone (TrialResult.deidentification_only): the
+  // receiving checks, the receiver's labels and an association's own
+  // checks (its AE titles, a file's size against the receiver's bound, the
+  // UIDs a C-STORE announced) are left out.
+  //
+  // Reading a held file needs what reading its header needs: operator.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the profile version tried
+  // (or the unsaved document's checksum) as its object and, in details,
+  // the number of files, how many passed and were held, and the counts
+  // per rule and per reason: the evidence that the version was tried,
+  // never a value.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant
+  // that does not exist, for a caller who may not list every tenant),
+  // invalid (no profile, or both kinds; a document with a problem; no file
+  // and no record, or more than 32 of them together; a file empty or
+  // larger than 3 MiB, or files together larger than 3.5 MiB; a malformed
+  // record id), not found (a profile or version the tenant does not have;
+  // a quarantine record it does not have; a receiver named that it does
+  // not have; a tenant that does not exist, for a caller who may list
+  // every tenant), precondition (a stored version this server cannot run;
+  // a record whose bytes are not kept, or are larger than 64 MiB; held
+  // files together larger than 128 MiB), exhausted (as many trial runs and
+  // explanations as the server runs at once, 2, are running; try again),
+  // unavailable (the tenant's database does not answer, the tenant is not
+  // ready, or a held file cannot be read now).
+  rpc TryProfile(TryProfileRequest) returns (TryProfileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ExplainProfile answers, for one file, which rule or base decides each
+  // element and why, without answering any value: for each element its
+  // path, VR and the action, the deciding rule with its origin and reason
+  // (or the default, or the engine's floor), and every other rule whose
+  // selector matches it, each with why it does not decide (a more specific
+  // or a later rule decides, or its conditions do not hold). The file is
+  // processed as TryProfile processes it, in memory, and nothing is
+  // stored, under keys made for the request as TryProfile's.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the profile version (or the
+  // unsaved document's checksum) as its object.
+  // Errors: as TryProfile, for one file or one record.
+  rpc ExplainProfile(ExplainProfileRequest) returns (ExplainProfileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // DiffProfileVersions answers what changes between two versions: their
+  // bases, their defaults, their rules one by one (a rule is the same rule
+  // in both when it comes from the same origin and has the same name, or,
+  // unnamed, the same selector and conditions), and the effect on the
+  // expanded form: for each selector and set of conditions, the action
+  // that wins between the rules that have exactly that selector, before
+  // and after. The rules of a base present in only one version are not
+  // listed one by one: the base is. Equal checksums mean equal effect on
+  // every file, and then no effect is listed. The effect is judged rule
+  // against rule, not element against element: a rule whose selector is
+  // more specific than another's takes elements from it in both versions
+  // alike, and TryProfile over sample files shows the effect on them.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the profile's name as its
+  // object and both versions in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant
+  // that does not exist, for a caller who may not list every tenant),
+  // invalid (a malformed name, a negative version), not found (a profile
+  // or version the tenant does not have; a tenant that does not exist, for
+  // a caller who may list every tenant), unavailable (the tenant's
+  // database does not answer, or the tenant is not ready).
+  rpc DiffProfileVersions(DiffProfileVersionsRequest) returns (DiffProfileVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // DescribeProfile says what a stored version (or an unsaved document)
+  // does, for a person and for the method section of a DICOM Conformance
+  // Statement (PS3.15 E.3.5, E.3.6, E.3.10): for each class of element
+  // (names, identifiers, dates and times, UIDs, private elements, pixels,
+  // the rest), which elements each action is given to, from the expanded
+  // rules; the sentences that hold for the whole profile (the default for
+  // an element no rule names, the largest date shift, what the engine
+  // never keeps whatever the rules say); and the record every file it
+  // makes carries: the PS3.16 CID 7050 codes the version claims in
+  // De-identification Method Code Sequence (0012,0064) with their
+  // meanings, the values of De-identification Method (0012,0063) this
+  // server writes for a file no pixel rule changed, Patient Identity
+  // Removed (0012,0062), and Longitudinal Temporal Information Modified
+  // (0028,0303) as the dates option sets it. The classes are judged from
+  // each rule's selector and VRs, not from a file: a rule over a group, a
+  // VR or a value pattern is listed by what it selects, and which rule
+  // decides one element of a file is ExplainProfile's answer.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the profile version (or the
+  // unsaved document's checksum) as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant
+  // that does not exist, for a caller who may not list every tenant),
+  // invalid (no profile; a document with a problem, with every problem as
+  // a ProfileProblems detail; a malformed name, a negative version), not
+  // found (a profile or version the tenant does not have; a tenant that
+  // does not exist, for a caller who may list every tenant), precondition
+  // (a stored version this server cannot run), unavailable (the tenant's
+  // database does not answer, or the tenant is not ready).
+  rpc DescribeProfile(DescribeProfileRequest) returns (DescribeProfileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ProfileDocument is a de-identification profile as a person writes it: its
+// bases, its own rules and its defaults. Its JSON is the profile's file
+// form; a field the message does not have is refused, so a misspelled field
+// is an error and never silently ignored.
+//
+// What happens to an element. Every element of a file, at any depth of
+// sequences, is matched against the rules of the expanded profile (the
+// bases' rules, then the document's own). Among the rules whose selector
+// matches the element and whose conditions all hold, one decides, by two
+// steps:
+//
+//  1. The most specific selector wins, in this order: a path or a content
+//     item; a tag or a keyword; a private element; a private creator's
+//     block; a group; a value pattern; a VR. A group, a value pattern or a
+//     VR selector selects a private element only when it says
+//     include_private, so the default below holds for private elements
+//     unless a rule opts in. A value pattern names no element, so any rule
+//     that names one by where it is wins over it; it chooses among the
+//     values of a few VRs, so it wins over a rule of a whole VR.
+//  2. Between selectors equally specific, the later rule wins: the
+//     document's own rules over its bases', a later base over an earlier,
+//     and within one list a later rule over an earlier. (So an option of
+//     PS3.15 Annex E, named after the basic profile, overrides it, as
+//     PS3.15 E.3 says an option does.)
+//
+// An element no rule decides takes the default: a private element (an odd
+// group, PS3.5 7.8) is removed; any other follows unnamed.
+//
+// Some elements are never decided by a profile, and no selector names or
+// selects them: the pipeline handles them the same way in every file, and
+// the engine acts by the same list the language refuses. Removed: the file
+// meta information (group 0002, Media Storage SOP Instance UID (0002,0003)
+// among it), written anew for every de-identified file with the remapped
+// UID (PS3.10 7.1); every group length (element 0000), written with the
+// file; command elements (group 0000, Affected SOP Instance UID
+// (0000,1000) among them), which no stored data set holds; the directory
+// elements of group 0004 (Referenced File ID (0004,1500) and Referenced SOP
+// Instance UID in File (0004,1511) among them), which an archived file does
+// not keep; items and delimiters (group FFFE); the Digital Signatures
+// Sequence (group FFFA) and Data Set Trailing Padding (group FFFC); the
+// Original Attributes Sequence (0400,0561), the Encrypted Attributes
+// Sequence (0400,0500) and the MAC Parameters Sequence (4FFE,0001), since
+// they hold values as received or cannot hold over a changed data set
+// (PS3.15 E.1.1); the Icon Image Sequence (0088,0200), a thumbnail no
+// pixel rule fills; and every element of group 7FE0 but those kept. Kept
+// at the top level, changed only by pixel rules: Pixel Data (7FE0,0010),
+// Float and Double Float Pixel Data (7FE0,0008), (7FE0,0009), the Extended
+// Offset Table (7FE0,0001) and its lengths (7FE0,0002); inside a sequence
+// item they are removed, being an image no pixel rule fills. An image
+// with only Float or Double Float Pixel Data is not judged by the
+// burned-in gate. Written: Specific Character Set
+// (0008,0005), removed at every depth and written once for the text the
+// file holds after every rule has acted (ISO_IR 192 when any is outside the
+// default repertoire, PS3.5 6.1.2.3).
+message ProfileDocument {
+  // The bases, in order: names answered by ListProfileBases, such as
+  // "annex-e/basic:2026d". Each base's own bases come before its rules, and
+  // a base that appears again, directly or inside another, is used once,
+  // where it first appears. At most 16 names.
+  repeated string bases = 1;
+
+  // The document's own rules, in order. At most 1000.
+  repeated ProfileRule rules = 2;
+
+  // What happens to an element no rule decides, other than a private one.
+  // Unspecified takes it from the last base that says, and keeps the
+  // element when none does (PS3.15 Annex E keeps what Table E.1-1 does not
+  // list).
+  UnnamedElements unnamed = 3;
+
+  // The largest date shift, in days: each subject's dates move back by a
+  // whole number of days from 1 to this number, the same for every file of
+  // that subject. Zero takes it from the last base that says, and 365 when
+  // none does. At most 3650.
+  int32 date_shift_days = 4;
+
+  // The rules for images whose pixels may carry burned-in text, in order.
+  // At most 200.
+  repeated PixelRule pixel_rules = 5;
+
+  // What the profile is for, in a person's words. At most 4096 bytes. It
+  // does not change what the profile does, and is not part of the expanded
+  // form.
+  string description = 6;
+
+  // What happens to an image whose pixel data stays compressed in a
+  // transfer syntax whose segments are not searched (JPEG 2000 Part 2,
+  // MPEG-2, H.264, HEVC, JPEG XL, Deflated Image Frame Compression, and any
+  // other that is neither the JPEG family, JPEG 2000, HTJ2K nor RLE): text
+  // there travels with the file, unseen by the check after. Unspecified
+  // takes it from the last base that says, and holds such an image when
+  // none does. The comment and application segments of the JPEG family
+  // (Baseline, Extended, Lossless, JPEG-LS), and the comment segments of
+  // JPEG 2000 and HTJ2K (in the main header and every tile-part header,
+  // the tile-part's length and TLM entry lowered to match) with their main
+  // header's CPF and CRG segments, are always
+  // removed, the image data copied byte for byte (PS3.5 A.4); a frame then
+  // holding any segment beyond those a decoder needs at their defined
+  // length (JFIF without a thumbnail, Adobe's 12 bytes, the JPEG-LS color
+  // transform, table, header, coding and quantization segments at the
+  // length their contents need, TLM and packet lengths that match the
+  // data), a marker the walk does not know, a JP2 file instead of a bare
+  // codestream, or anything but padding after its end, is held as
+  // pixel_text_unsearched whatever this says. An image a pixel rule fills
+  // is written native and has no segments.
+  UnsearchedSegments unsearched_segments = 7;
+}
+
+// UnsearchedSegments is what happens to an image whose compressed pixel
+// data may carry text in segments that are not searched.
+enum UnsearchedSegments {
+  // Taken from the bases; hold when none says.
+  UNSEARCHED_SEGMENTS_UNSPECIFIED = 0;
+
+  // The image is held: deid_failed, cause "pixel_text_unsearched".
+  UNSEARCHED_SEGMENTS_HOLD = 1;
+
+  // The image is archived with its segments as received.
+  UNSEARCHED_SEGMENTS_KEEP = 2;
+}
+
+// UnnamedElements is what happens to an element no rule decides.
+enum UnnamedElements {
+  // Taken from the bases; keep when none says.
+  UNNAMED_ELEMENTS_UNSPECIFIED = 0;
+
+  // The element stays as it is.
+  UNNAMED_ELEMENTS_KEEP = 1;
+
+  // The element is removed.
+  UNNAMED_ELEMENTS_REMOVE = 2;
+}
+
+// ProfileRule is one rule: what it selects, when it applies, and what it
+// does.
+message ProfileRule {
+  // The rule's name: 1 to 64 of a-z, 0-9, ".", "_" and "-", starting with a
+  // letter or a digit; unique among the document's rules. Optional, except
+  // for a rule whose action is quarantine, whose name is the reason a file
+  // is quarantined. A problem in a rule names the rule by its position and
+  // by this name.
+  string name = 1;
+
+  // What the rule selects. Required.
+  ProfileSelector selector = 2;
+
+  // Conditions on the file and its reception, all of which must hold for
+  // the rule to apply; none means always. A rule that does not apply leaves
+  // the element to the next rule by precedence. At most 16.
+  repeated ProfileCondition when = 3;
+
+  // What the rule does to each element it selects. Required.
+  ProfileAction action = 4;
+
+  // Why the rule exists, in a person's words, shown wherever its effect is
+  // shown. At most 1024 bytes.
+  string reason = 5;
+}
+
+// ProfileSelector is what a rule selects. Exactly one kind is set.
+//
+// A selector never selects a private creator element (gggg,0010-00FF):
+// one follows the elements of its block, kept while any of them is kept
+// and removed otherwise (PS3.5 7.8.1). A private element's creator is the
+// one that reserves its block in the data set the element is in (the top
+// level or an item), compared exactly once its surrounding spaces are
+// removed. No selector selects an element the pipeline handles
+// (ProfileDocument says which).
+message ProfileSelector {
+  // The kind of selector.
+  oneof kind {
+    // One standard element, wherever it is, by its tag: eight hexadecimal
+    // digits, group then element, as DICOM JSON writes a tag (PS3.18 F.2),
+    // such as "00100010". Not a private element (an odd group: use
+    // private_element), not the file meta information (group 0002), not a
+    // command element (group 0000), not an item or delimiter (group FFFE),
+    // not a group length (element 0000), not an element of groups 0004,
+    // 7FE0, FFFA or FFFC, not Specific Character Set (00080005), and not
+    // an element the pipeline removes from every file (04000561, 04000500,
+    // 4FFE0001): none of the elements ProfileDocument lists as the
+    // pipeline's. The digits may be in either case; the expanded form
+    // writes them in upper case.
+    string tag = 1;
+
+    // One standard element, wherever it is, by its keyword in PS3.6, such
+    // as "PatientName". The expanded form holds its tag. The same limits as
+    // tag.
+    string keyword = 2;
+
+    // Every standard element of a group, or of a family of groups: four
+    // hexadecimal digits, where "x" stands for any digit, such as "0010",
+    // or "60xx" for the overlay groups (PS3.5 7.6: the even groups 6000 to
+    // 601E; the other even groups it covers hold no standard element). Not
+    // "xxxx", which is what unnamed says; nothing that could stand for
+    // group 0000, 0002, 0004 or FFFE; and not 7FE0, FFFA or FFFC, which
+    // hold only elements the pipeline handles. A group rule never selects
+    // those elements in a family that covers their group. With
+    // include_private it selects the private elements of the groups too,
+    // whatever their creator; without it, a group with an odd last digit
+    // would select nothing and is refused. Since a group holds elements of
+    // many VRs, a group rule may only use the actions that fit any VR
+    // (ProfileAction says which).
+    string group = 3;
+
+    // Every standard element of a value representation (PS3.5 6.2), such
+    // as "PN" or "DA", and with include_private every private element the
+    // file gives that VR too (an implicit VR file gives a private element
+    // VR UN, PS3.5 6.2.2). Never an element of group 7FE0 or one the
+    // pipeline handles.
+    string vr = 4;
+
+    // A private element, or every element of a private creator's block,
+    // matched by its creator, never by the block number the file happened
+    // to use (PS3.5 7.8.1). The data dictionary does not give a private
+    // element's VR, so a private rule may only keep, remove, empty or
+    // quarantine. A private creator element itself is not selected: it
+    // follows the elements of its block.
+    PrivateElement private_element = 5;
+
+    // An element at one place in sequences: steps separated by "/", each a
+    // tag or a keyword, every step but the last a sequence followed by
+    // "[*]" (any item), and "**" as a step for any number of sequence
+    // levels, none included. "ReferencedStudySequence[*]/ReferencedSOPInstanceUID"
+    // selects that element only inside items of that sequence at the top
+    // level; "**/ContentSequence[*]/TextValue" inside any content sequence;
+    // "PatientName" only at the top level. A path that is only "**" and one
+    // element is what tag says, and is refused. No private element, file
+    // meta or Pixel Data in a path. At most 16 steps. The expanded form
+    // holds tags.
+    string path = 6;
+
+    // The value element of every structured report content item (PS3.3
+    // C.17.3) whose concept name is this code, such as the name of a person
+    // observed (DCM 121008); ContentItemSelector says which element that
+    // is for each value type.
+    ContentItemSelector content_item = 7;
+
+    // Every element whose value matches a regular expression, at any
+    // depth, among the values of VR SH, LO, UC, ST, LT, UT and PN: the
+    // VRs whose text the file's character set governs (PS3.5 6.1.2.3),
+    // where a name or an identifier is written as text.
+    // ValuePatternSelector says how a value is matched. A rule with a
+    // value pattern makes a profile of language edition 2.
+    ValuePatternSelector value_pattern = 9;
+  }
+
+  // With a group, a vr or a value_pattern selector, private elements are
+  // selected too (an odd group, PS3.5 7.8), such as every UI element for a
+  // uid action, private ones included; a private element is matched by
+  // the VR the file wrote it with, so a value pattern reads one only in a
+  // file of explicit VR. Refused with any other kind of selector:
+  // private_element names private elements by their creator, and tag,
+  // keyword, path and content_item name standard elements only.
+  bool include_private = 8;
+}
+
+// ValuePatternSelector selects elements by their value. The value is the
+// element's text as the DICOM library decoded it from the file's character
+// set (Specific Character Set, PS3.5 6.1), in UTF-8. A value of several
+// parts (VM above 1, which SH, LO, UC and PN may have) is matched part by
+// part, each with its padding removed as for a condition
+// (ProfileCondition: leading spaces too for SH and LO), and the element is
+// selected when any part matches; an ST, LT or UT value is one part, its
+// backslashes text (PS3.5 6.2). A PN part is matched as written, with its
+// "^" and "=". An absent or empty value is never selected. Matching is
+// exact: case counts unless the pattern says (?i), and a character written
+// composed (NFC, "é" as one code point) differs from the same written
+// decomposed (NFD, "e" and a combining accent); no normalization is done.
+// A search finds the longest match at the leftmost place (POSIX
+// leftmost-longest), so MRN|MRN\d+ finds "MRN123456" whole.
+//
+// A value such a rule would read and cannot is never passed unread: one
+// longer than 65,536 bytes refuses the file (cause "too_large"), and one
+// not in memory or holding an escape of ISO 2022 no decoder turned into
+// UTF-8 (cause "bad_value"); so does a value in which the deciding rule's
+// pattern finds more than 256 distinct texts (cause "too_many_matches"),
+// since each is a needle and none may be dropped.
+//
+// What a file's value patterns and redacts may run is bounded: the bytes
+// each reads times its compiled size, summed over the file, at most 2^27
+// (about a second of matching). A file past it is refused, cause
+// "too_large", before the work is done.
+//
+// Every match of a selected element whose rule then removes or changes the
+// value (any action but keep and clean, a constant equal to the value, and
+// redact, whose own cuts are its needles) is searched for by the check
+// after as an identifier: the whole part for a whole match, the text found
+// for a search, each searched for whole and, when it begins or ends with a
+// letter, only as a whole word ("Smith" is not found in "Smithson"). A
+// copy of it kept elsewhere in the file holds the file.
+message ValuePatternSelector {
+  // The regular expression, in the RE2 syntax
+  // (github.com/google/re2/wiki/Syntax), which always runs in time linear
+  // in the value's length. 1 to 256 bytes, a repetition counting at most
+  // 100, and a compiled size of at most 10,000 instructions and ranges,
+  // counted with the conditions' patterns against the profile's budget.
+  string pattern = 1;
+
+  // False, the default: the pattern must match a whole part of the value,
+  // as a condition's pattern does. True: the pattern is searched for
+  // anywhere in each part, and any match selects the element.
+  bool search = 2;
+
+  // One of SH, LO, UC, ST, LT, UT and PN, to read only values of that VR;
+  // empty for all seven. The rule's actions are checked against these
+  // VRs, as for a vr selector.
+  string vr = 3;
+}
+
+// PrivateElement names private elements by their creator.
+message PrivateElement {
+  // The private creator, as the file writes it in its creator element
+  // (PS3.5 7.8.1), without leading or trailing spaces, such as "SIEMENS
+  // CSA HEADER". 1 to 64 bytes, no backslash and no control character.
+  string creator = 1;
+
+  // The private group: four hexadecimal digits, odd, from 0009 to FFFD,
+  // such as "0029".
+  string group = 2;
+
+  // The element within the creator's block: two hexadecimal digits, such
+  // as "10" for (0029,xx10); or "xx" for every element of the block.
+  string element = 3;
+}
+
+// ContentItemSelector selects the value element of structured report
+// content items (PS3.3 C.17.3) by their concept name, a code (PS3.3 8.8),
+// and optionally their value type. A content item is an item of a Content
+// Sequence (0040,A730), and its concept name is the first item of its
+// Concept Name Code Sequence (0040,A043). The rule selects only the
+// item's value element, the one its Value Type (0040,A040) holds its value
+// in (PS3.3 Table C.17-5 and the macros of C.18):
+//
+//   TEXT       Text Value (0040,A160), UT
+//   NUM        Measured Value Sequence (0040,A300), and Numeric Value
+//              Qualifier Code Sequence (0040,A301), SQ
+//   CODE       Concept Code Sequence (0040,A168), SQ
+//   DATE       Date (0040,A121), DA
+//   TIME       Time (0040,A122), TM
+//   DATETIME   DateTime (0040,A120), DT
+//   PNAME      Person Name (0040,A123), PN
+//   UIDREF     UID (0040,A124), UI
+//   COMPOSITE, IMAGE, WAVEFORM
+//              Referenced SOP Sequence (0008,1199), SQ
+//   SCOORD, SCOORD3D
+//              Graphic Data (0070,0022), FL
+//   TCOORD     Referenced Sample Positions (0040,A132), UL; Referenced
+//              Time Offsets (0040,A138), DS; Referenced DateTime
+//              (0040,A13A), DT
+//   TABLE      Tabulated Values Sequence (0040,A801), SQ
+//   CONTAINER  none: its children are content items of their own.
+//
+// The item's other elements (its concept name, relationship, observation
+// date and time, and the rest) follow the other rules, as any element
+// does. An item of a value type not in this list has no value element a
+// content item rule selects.
+message ContentItemSelector {
+  // The Coding Scheme Designator (0008,0102), such as "DCM". 1 to 16 bytes,
+  // no backslash, no control character, no surrounding space.
+  string scheme = 1;
+
+  // The Code Value (0008,0100), such as "121008". 1 to 64 bytes, as for
+  // scheme.
+  string value = 2;
+
+  // The value type, one of the list above, such as "PNAME"; empty for any.
+  // With a value type, the rule's action is checked against the VRs of
+  // that type's value elements, as for a tag; without one, the selector
+  // says nothing of the VR, and the rule may only use the actions that fit
+  // any VR.
+  string value_type = 3;
+}
+
+// ProfileCondition is one condition on the file or its reception. A file's
+// value is read once for each file, as received, before any rule changes
+// it, from the top level of the data set, even for an element inside a
+// sequence. Its padding is removed as PS3.5 6.2 allows: trailing spaces
+// and NULs from every value, and leading spaces too from an AE, CS, DS,
+// IS, LO, SH, DA, DT, TM or UI value; its case is kept. A value with
+// several parts (VM above 1) is matched as written, the parts joined by
+// "\". A value absent or empty is absent, so equals "" never holds. A
+// reception's value (receiver, AE titles) is read with its surrounding
+// spaces removed, and an empty one is absent.
+message ProfileCondition {
+  // What the condition reads. Required.
+  ConditionSubject subject = 1;
+
+  // The test. Exactly one is set.
+  oneof test {
+    // The value equals this text, compared whole and with case. At most
+    // 1024 bytes.
+    string equals = 2;
+
+    // The value starts with this text, compared with case. Not empty; at
+    // most 1024 bytes.
+    string prefix = 3;
+
+    // The whole value matches this regular expression, in the RE2 syntax
+    // (github.com/google/re2/wiki/Syntax), which always runs in time linear
+    // in the value's length. At most 256 bytes.
+    string pattern = 4;
+
+    // True: the value is present and not empty. False: it is absent or
+    // empty.
+    bool present = 5;
+  }
+
+  // The condition holds when the test fails, and fails when it holds.
+  bool negate = 6;
+}
+
+// ConditionSubject is what a condition reads. The list is closed on
+// purpose: a condition reads what tells files of one kind or source from
+// another, never what identifies a patient, so no profile has to name a
+// patient to treat files differently.
+enum ConditionSubject {
+  // Never valid.
+  CONDITION_SUBJECT_UNSPECIFIED = 0;
+
+  // Modality (0008,0060).
+  CONDITION_SUBJECT_MODALITY = 1;
+
+  // SOP Class UID (0008,0016).
+  CONDITION_SUBJECT_SOP_CLASS_UID = 2;
+
+  // Manufacturer (0008,0070).
+  CONDITION_SUBJECT_MANUFACTURER = 3;
+
+  // Manufacturer's Model Name (0008,1090).
+  CONDITION_SUBJECT_MODEL_NAME = 4;
+
+  // Software Versions (0018,1020).
+  CONDITION_SUBJECT_SOFTWARE_VERSIONS = 5;
+
+  // The name of the receiver the file came to.
+  CONDITION_SUBJECT_RECEIVER = 6;
+
+  // The calling AE title of the association the file came in; empty for a
+  // file not received by DIMSE.
+  CONDITION_SUBJECT_CALLING_AE_TITLE = 7;
+
+  // The called AE title of the association the file came in; empty for a
+  // file not received by DIMSE.
+  CONDITION_SUBJECT_CALLED_AE_TITLE = 8;
+}
+
+// ProfileAction is what a rule does to an element it selects. Exactly one
+// kind is set. Which kinds a rule may use depends on what its selector
+// says of the element's VR, and a rule whose action does not fit is
+// refused: a tag, keyword or path has the VR the data dictionary gives it
+// (an action must fit each, where PS3.6 gives two, such as "US or SS"); a
+// vr selector, that VR; a content item with a value type, the VRs of its
+// value elements. A group, a private element, a tag the dictionary does
+// not know and a content item without a value type say nothing of it, and
+// allow only the actions that fit any VR: keep, remove, empty, dummy,
+// remove_unless_required with EMPTY or DUMMY, and quarantine. The VRs
+// validation decided are stored with each rule of the expanded form
+// (ExpandedRule.vrs), so a later data dictionary never changes them.
+//
+// A text a rule writes (a constant, a template's output, a hash code, a
+// lookup code) is checked, when the rule is validated, against every VR
+// it may be written into: its characters and its maximum length (PS3.5
+// 6.2), a template with each placeholder at a code's full length. A
+// constant and a template's own text are printable ASCII (0x20 to 0x7E,
+// the default repertoire every character set of PS3.5 6.1 holds, so the
+// value fits every file) without a backslash, so a written value is one
+// value, never several.
+//
+// In the file, an element's VR is the one it is written with, and a
+// standard element written as UN (PS3.5 6.2.2) is read as the VR the data
+// dictionary gives it and written back with that VR. An action that reads
+// or writes a value (all but keep, remove, empty, dummy, quarantine and
+// remove_unless_required, which fit any VR) on an element whose VR in the
+// file is not among the rule's VRs refuses the file, closed: it is
+// quarantined. So does any action on a sequence other than keep, remove,
+// empty, dummy, clean, quarantine and remove_unless_required. Every value
+// written is checked again in the file against its VR, each value of
+// several apart. A server that meets an action kind it does not know
+// quarantines the file rather than guess.
+//
+// The value a hash, a template's placeholder or a lookup's key is made of
+// is the element's value as received, as UTF-8 text, with its padding
+// removed as for a condition (ProfileCondition), and whole: a PN keeps its
+// "^" and "=", a value of several parts its "\".
+//
+// There is no action that runs outside code or calls an address: each would
+// be a way out for the values a profile removes.
+message ProfileAction {
+  // The kind of action.
+  oneof kind {
+    // The element stays as it is. Fits any VR. A sequence kept stays, and
+    // the elements of its items are each decided by the rules.
+    KeepAction keep = 1;
+
+    // The element is removed. Fits any VR. A content item rule removes only
+    // the item's value element.
+    RemoveAction remove = 2;
+
+    // The element stays with an empty value (zero length); a sequence, with
+    // no items. Fits any VR.
+    EmptyAction empty = 3;
+
+    // The element's value is replaced; an element that is absent stays
+    // absent.
+    ReplaceAction replace = 4;
+
+    // The element is given a value, and made when it is absent. Only with
+    // a tag or keyword selector, at the top level.
+    SetAction set = 5;
+
+    // The value is replaced by its keyed hash: the same value always gives
+    // the same code under one tenant, and nobody without the tenant's
+    // secret can compute or reverse it. Text VRs only (AE, CS, LO, LT, PN,
+    // SH, ST, UC, UT). HashAction says the code's form.
+    HashAction hash = 6;
+
+    // A UID is replaced by a new one derived from it under the tenant's
+    // secret, the same every time, so references between files still
+    // match. VR UI only. A UID the standard registers (a SOP class, a
+    // transfer syntax) is kept.
+    UidAction uid = 7;
+
+    // A date is moved back by the subject's date shift
+    // (ProfileDocument.date_shift_days); the time of day is kept. VR DA or
+    // DT only.
+    ShiftAction shift = 8;
+
+    // A value is made less precise: an age over 89 years becomes 090Y, and
+    // a date becomes the first of January of its year. VR AS, DA or DT
+    // only.
+    GeneralizeAction generalize = 9;
+
+    // A value is replaced by the code a table of the tenant assigns to it.
+    // Text VRs only, as for hash; LookupAction says the code's form.
+    LookupAction lookup = 10;
+
+    // The value is cleaned: CleanAction says what that is for each VR.
+    // VR LO, LT, SH, ST, UC, UT, SQ, OB or OW only.
+    CleanAction clean = 11;
+
+    // The whole file is quarantined, with the rule's name as the reason,
+    // whenever the rule applies to an element present in it. Fits any VR.
+    QuarantineAction quarantine = 12;
+
+    // The value is replaced by a dummy of its VR (PS3.15 E.1.1, action D).
+    // Fits any VR; DummyAction says the values.
+    DummyAction dummy = 13;
+
+    // The element is removed unless the IOD of the file's SOP class needs
+    // it (PS3.15 E.1.1, the combined actions X/Z, X/D, Z/D, X/Z/D and
+    // X/Z/U*). RemoveUnlessRequiredAction says how the IOD decides.
+    RemoveUnlessRequiredAction remove_unless_required = 14;
+
+    // Only the parts of a text value that match a regular expression are
+    // cut out, the rest kept. VR SH, LO, UC, ST, LT, UT or PN only.
+    // RedactAction says how. A rule with redact makes a profile of
+    // language edition 2.
+    RedactAction redact = 15;
+  }
+}
+
+// KeepAction keeps an element as it is. It has no fields.
+message KeepAction {}
+
+// RemoveAction removes an element. It has no fields.
+message RemoveAction {}
+
+// EmptyAction empties an element. It has no fields.
+message EmptyAction {}
+
+// ReplaceAction replaces an element's value.
+message ReplaceAction {
+  // The new value. Exactly one is set.
+  oneof value {
+    // A constant, written as the element's VR requires (PS3.5 6.2), and
+    // checked against each VR the selector gives. Only for an element whose
+    // VR holds text (AE, AS, CS, DA, DS, DT, IS, LO, LT, PN, SH, ST, TM, UC,
+    // UI, UR, UT). Printable ASCII without a backslash; at most 1024 bytes
+    // and the VR's maximum length.
+    string constant = 1;
+
+    // Text with placeholders, for an element of a text VR (as for hash):
+    // "{#Keyword}" or "{#GGGGEEEE}" is the keyed hash of that top-level
+    // element's value as received, written as hash writes it for the
+    // target's VR, and the element must be of a text VR; "{{" and "}}" are
+    // a brace; nothing else is read from the file. Such as
+    // "SUBJ-{#PatientID}". A placeholder whose element is absent or empty
+    // in the file refuses the file, closed (the reason names the rule),
+    // rather than write a code of nothing. At most 1024 bytes and 8
+    // placeholders; its text
+    // printable ASCII without a backslash, and its longest output (each
+    // placeholder 16 characters) a valid value of each VR the selector
+    // gives. The expanded form writes each placeholder's tag.
+    string template = 2;
+  }
+}
+
+// SetAction gives an element a value, making it when absent.
+message SetAction {
+  // The value. Exactly one is set.
+  oneof value {
+    // A constant, as for ReplaceAction.
+    string constant = 1;
+
+    // A template, as for ReplaceAction.
+    string template = 2;
+  }
+}
+
+// HashAction replaces a value by its keyed hash. It has no fields.
+//
+// The code is the first 80 bits of the HMAC-SHA-256 (RFC 2104) of the
+// value (ProfileAction says which text), under the tenant's naming key,
+// the key of a label's "{#X}" code, in base32 (RFC 4648) without padding:
+// 16 characters of a-z and 2-7. In a CS element the code is written in upper case
+// (A-Z and 2-7), since CS holds no lower-case letter (PS3.5 6.2); in every
+// other text VR, as it is. 16 characters fit every text VR, AE, CS and SH
+// the shortest. A PN value is written as one component, its family name.
+message HashAction {}
+
+// UidAction replaces a UID by its keyed remapping. It has no fields.
+message UidAction {}
+
+// ShiftAction moves a date back by the subject's shift. It has no fields.
+message ShiftAction {}
+
+// GeneralizeAction makes a value less precise. It has no fields.
+message GeneralizeAction {}
+
+// LookupAction replaces a value by the code a table of the tenant assigns.
+// The table is keyed by the keyed hash of the value, never the value.
+//
+// A code is 1 to 16 characters of A-Z, 0-9 and "_", which fits every text
+// VR (CS's repertoire is the narrowest, PS3.5 6.2); a table refuses a code
+// outside that form when it is filled. A code the table assigns on first
+// sight is the next number of the table, in decimal from 1. A PN value is
+// written as one component, its family name.
+message LookupAction {
+  // The table's name, under the rule of a tenant's name. Required.
+  string table = 1;
+
+  // What happens when the table has no code for the value. The expanded
+  // form never holds unspecified: it writes quarantine for it.
+  LookupMissing on_missing = 2;
+}
+
+// LookupMissing is what a lookup does when its table has no code for a
+// value.
+enum LookupMissing {
+  // As quarantine, in a document; never in an expanded form.
+  LOOKUP_MISSING_UNSPECIFIED = 0;
+
+  // The file is quarantined.
+  LOOKUP_MISSING_QUARANTINE = 1;
+
+  // The table assigns the value the next code, in order, and keeps it.
+  LOOKUP_MISSING_ASSIGN = 2;
+}
+
+// CleanAction cleans a value, keeping what does not identify (PS3.15
+// E.1.1, action C). It has no fields. What it does depends on the VR:
+//
+//   LO, LT, SH, ST, UC, UT  the file's known names and identifiers (the
+//                           values the profile removes or replaces) are
+//                           removed from the text.
+//   SQ                      the sequence is kept, and the elements of its
+//                           items are each decided by the rules, as keep
+//                           does: a sequence is cleaned by cleaning what it
+//                           holds (the content item rules among them, for
+//                           PS3.15 E.3.4).
+//   OB, OW                  the element is removed: the bits of an overlay
+//                           (60xx,3000) or a curve (50xx,3000) are not read
+//                           for text, and removing them takes out no less
+//                           than cleaning them would. The other elements of
+//                           its group follow their own rules.
+message CleanAction {}
+
+// QuarantineAction quarantines the whole file. It has no fields.
+message QuarantineAction {}
+
+// DummyAction replaces a value by a dummy: a fixed value that says nothing
+// of the original and is a valid value of its VR (PS3.5 6.2), so an
+// element the IOD requires with a value (Type 1) stays valid. It has no
+// fields. The dummies, the same in every file:
+//
+//   AE, CS, LO, LT, PN, SH, ST, UC, UR, UT  "DUMMY" (for UR a relative
+//       reference, RFC 3986 4.2)
+//   AS  "000D"
+//   DA  "19000101"
+//   DT  "19000101000000"
+//   TM  "000000"
+//   DS, IS  "0"
+//   UI  "2.25.0" (the UUID-derived root of PS3.5 B.2 with the nil UUID;
+//       uid, not dummy, keeps references between files)
+//   AT, FL, FD, SL, SS, SV, UL, US, UV  one value of zero
+//   OD, OF, OL, OV  one value of zero
+//   OB, OW, UN  two zero bytes (an even length, PS3.5 7.1.1)
+//   SQ  no items. PS3.15 asks D for a value of non-zero length, but an
+//       item's dummy would need the attributes its macro requires, which
+//       are known only per IOD; a sequence emptied keeps nothing of the
+//       file, and a Type 1 sequence is better served by remove_unless_
+//       required or by keep with rules for what its items hold.
+message DummyAction {}
+
+// RedactAction cuts the matches of a regular expression out of a text
+// value and keeps the rest, such as an MRN typed into a Study Description:
+// with the pattern MRN\d{6} and no replacement, "Head CT MRN123456
+// follow-up" becomes "Head CT  follow-up".
+//
+// The value is read as ValuePatternSelector reads it (decoded, trailing
+// padding removed, leftmost-longest, exact case and form), and cut part by
+// part as written, so a match never spans the "\" between two values. A
+// PN value is cut component by component, each between its "^" and "="
+// (PS3.5 6.2.1), so a match never removes a delimiter and the value keeps
+// its structure; an emptied component stays, empty. The pattern is applied
+// again to what is left until it no longer matches, so cutting cannot join
+// two halves into a new match. Every distinct text cut is searched for by
+// the check after as an identifier, as for a value pattern's matches, so a
+// copy of a cut MRN kept anywhere else in the file holds the file.
+//
+// An element the engine never keeps (a person's name, any PN, and the
+// other attributes that name or identify the person) is not redacted: as
+// for keep and clean, which leave what they do not recognize, the engine
+// removes it unless its IOD requires it, and then gives it a dummy.
+//
+// The file is refused, never written with a partial cut, when: the value
+// is longer than 65,536 bytes (cause "too_large"); it is not in memory or
+// holds an undecoded ISO 2022 escape (cause "bad_value"); more than 256
+// distinct texts are cut from one value (cause "too_many_matches"); or
+// the value left is not a value of its VR (PS3.5 6.2), such as a
+// replacement making an SH longer than 16 characters, or is longer than
+// its element's length field holds (65,534 bytes but for UC and UT, PS3.5
+// 7.1.2) (cause "redact_invalid"). A refusal is seen
+// and fixed; removing the element instead would change the file in a way
+// no rule said.
+message RedactAction {
+  // The regular expression, in the RE2 syntax, searched for anywhere in
+  // each part of the value; the bounds of ValuePatternSelector.pattern. A
+  // pattern that matches the empty string, such as \d*, is refused: it
+  // would cut nothing and match everywhere.
+  string pattern = 1;
+
+  // The text each match becomes: empty, the default, or at most 64 bytes
+  // of printable ASCII (0x20 to 0x7E) without a backslash, and for a PN
+  // without "^" or "=", so the value keeps one part and its structure. A
+  // fixed text: it never holds a capture of the value, and a replacement
+  // the pattern matches is refused, since it would be cut again.
+  string replacement = 2;
+}
+
+// RemoveUnlessRequiredAction removes an element unless the IOD of the
+// file's SOP class (PS3.3) needs it, by the element's Type there, at its
+// place in sequences (PS3.15 E.1.1, "X unless Z is required to maintain
+// IOD conformance (Type 3 versus Type 2)", and so for each combined code):
+//
+//   Type 3, or an element the IOD does not list      removed
+//   Type 2 or 2C                                     emptied, as empty
+//   Type 1 or 1C                                     the fallback
+//
+// A SOP class the server does not know, or an element whose Type it cannot
+// find, is taken as Type 1: the file stays valid whatever its IOD needs,
+// and no value of the file stays. A conditional Type counts as its
+// unconditional one, since its condition may read anything in the file.
+// The combined codes of PS3.15 Table E.1-1 are written with it as X/Z:
+// EMPTY; X/D and X/Z/D: DUMMY; X/Z/U*: UID. Z/D is written as DUMMY too:
+// its Type 3 elements are removed rather than emptied, which takes out no
+// less.
+message RemoveUnlessRequiredAction {
+  // What a Type 1 element becomes. Required.
+  RequiredFallback fallback = 1;
+}
+
+// RequiredFallback is what remove_unless_required does to an element its
+// IOD requires with a value.
+enum RequiredFallback {
+  // Never valid.
+  REQUIRED_FALLBACK_UNSPECIFIED = 0;
+
+  // The element is emptied, as empty does. Fits any VR.
+  REQUIRED_FALLBACK_EMPTY = 1;
+
+  // The value is replaced by a dummy, as dummy does. Fits any VR.
+  REQUIRED_FALLBACK_DUMMY = 2;
+
+  // A UID is replaced as uid does; a sequence is kept, and the elements of
+  // its items are each decided by the rules, whose rules for the UIDs it
+  // holds replace them (PS3.15 Table E.1-1 lists each with U). VR UI or SQ
+  // only.
+  REQUIRED_FALLBACK_UID = 3;
+}
+
+// PixelRule says what happens to the pixels of an image it matches: any
+// image with Pixel Data (7FE0,0010) whose size and conditions it matches,
+// so a rule also reaches a device known to draw text while writing Burned
+// In Annotation (0028,0301) NO. An image whose pixels may carry burned-in
+// text that no pixel rule matches is quarantined, burned_in_risk: its
+// Burned In Annotation is YES; or it is not NO and the image is a
+// secondary capture, of a SOP class commonly drawn on (ultrasound, the
+// visible light family of endoscopy, microscopy and photography, still
+// and video, ophthalmic photography and tomography) or of a modality
+// commonly drawn on (US, IVUS, ES, GM, XC, SC, OT, XA, RF, OP, SM, PX,
+// IO); or it is a whole slide's label or overview image (Image Type LABEL
+// or OVERVIEW), whatever Burned In Annotation says. DX and CR are not at
+// risk by kind: a radiograph's markers are rarely the person. The facts are
+// read from the image as received, so no rule of the profile changes
+// whether it is at risk. Of the pixel rules that match an image, the last
+// in the expanded order decides.
+//
+// Work on pixels is bounded by the setting deid.pixel-limit, the bytes of
+// the image decoded: an image a redact or detect rule matches, or whose
+// JPEG segments are removed, past it is held (deid_failed, cause
+// "pixels_too_large"), its bytes kept, and released once the setting is
+// raised.
+message PixelRule {
+  // The rule's name, under the rule of ProfileRule.name; unique among the
+  // document's pixel rules. Required.
+  string name = 1;
+
+  // Conditions, all of which must hold, as for ProfileRule.when. At most
+  // 16.
+  repeated ProfileCondition when = 2;
+
+  // The image's Rows (0028,0010); zero matches any.
+  int32 rows = 3;
+
+  // The image's Columns (0028,0011); zero matches any.
+  int32 columns = 4;
+
+  // What happens to a matching image. Exactly one is set.
+  oneof action {
+    // Rectangles of the image are filled with black (the lowest sample,
+    // the highest under MONOCHROME1), in every frame, decoded a frame at a
+    // time. A compressed image is written native (Explicit VR Little
+    // Endian), so nothing is encoded again; Lossy Image Compression
+    // (0028,2110) stays as received, and is written 01 with its method
+    // when the image was JPEG Baseline or Extended and did not say
+    // (PS3.3 C.7.6.1.1.5). Burned In Annotation (0028,0301) is written NO
+    // and the Clean Pixel Data Option's code (113101) recorded in
+    // De-identification Method Code Sequence (0012,0064) (PS3.15 E.3.1).
+    // Not recorded while the file holds Float or Double Float Pixel Data
+    // beside the image filled. A rectangle wholly outside the image holds
+    // it (deid_failed, cause "pixel_region_outside"), and so does an image
+    // whose layout cannot be filled ("pixels_unsupported"), whose frames
+    // do not decode ("pixels_undecodable"), or whose native pixels hold
+    // more bytes than its stated frames ("frames_mismatch").
+    RedactPixels redact = 5;
+
+    // Text found in the pixels by the DICOM library's detector is filled,
+    // as redact fills, and De-identification Method (0012,0063) records
+    // "Burned-in text redacted where detected, unverified"; Burned In
+    // Annotation is left as received and no code is recorded, since a
+    // detector can miss. Opt-in, and costly: every frame is decoded and
+    // searched at several scales. Found regions covering more of the
+    // picture than text does hold the image ("detect_implausible"). A
+    // detector that finds nothing changes nothing and records "Burned-in
+    // text detector found none, unverified".
+    DetectText detect = 6;
+
+    // The image is archived as it is. The rule's reason is required.
+    AcceptPixels accept = 7;
+  }
+
+  // Why the rule exists. At most 1024 bytes; required with accept.
+  string reason = 8;
+}
+
+// RedactPixels fills rectangles of an image.
+message RedactPixels {
+  // The rectangles. 1 to 64.
+  repeated PixelRectangle rectangles = 1;
+}
+
+// PixelRectangle is a rectangle of an image, in pixels, measured from the
+// edges the fields name.
+message PixelRectangle {
+  // The distance of the rectangle's left side from the image's left edge,
+  // or of its right side from the right edge with from_right. At least 0.
+  int32 x = 1;
+
+  // The distance of the rectangle's top from the image's top edge, or of
+  // its bottom from the bottom edge with from_bottom. At least 0.
+  int32 y = 2;
+
+  // The width. At least 1, at most 65535. With the rule's columns given,
+  // the rectangle must lie inside them, and inside its rows likewise.
+  int32 width = 3;
+
+  // The height. At least 1, at most 65535.
+  int32 height = 4;
+
+  // x is measured from the right edge.
+  bool from_right = 5;
+
+  // y is measured from the bottom edge.
+  bool from_bottom = 6;
+}
+
+// DetectText fills text found by detection. It has no fields.
+message DetectText {}
+
+// AcceptPixels archives an image as it is. It has no fields.
+message AcceptPixels {}
+
+// ExpandedProfile is a document with its bases copied in: what a version
+// does, whole, without reference to anything that could change. Its
+// SHA-256 is the version's checksum: two versions with one checksum do the
+// same thing to every file.
+message ExpandedProfile {
+  // Every rule, in order: each base's rules (its own bases' first), then
+  // the document's own. A keyword is written as its tag, in a selector, a
+  // path and a template, and hexadecimal digits in upper case (an "x" of a
+  // group in lower case); nothing else is changed.
+  repeated ExpandedRule rules = 1;
+
+  // What happens to an element no rule decides, other than a private one.
+  // Never unspecified.
+  UnnamedElements unnamed = 2;
+
+  // The largest date shift, in days. Never zero.
+  int32 date_shift_days = 3;
+
+  // Every pixel rule, in the order of rules.
+  repeated ExpandedPixelRule pixel_rules = 4;
+
+  // Every base used, in the order its rules come, each once.
+  repeated string bases = 5;
+
+  // The edition of the profile language whose meaning the version has:
+  // what each selector selects and each action does, as this file
+  // describes them. A server runs only a version of an edition it knows,
+  // and keeps the meaning of every edition it has shipped, so a stored
+  // version never changes what it does when the language grows. This
+  // edition is 1.
+  int32 language_edition = 6;
+
+  // What happens to an image whose compressed pixel data has segments
+  // that are not searched: keep, or unspecified, which holds such an
+  // image. Hold is written as unspecified, so a document that says hold
+  // and one that says nothing have one expanded form and one checksum.
+  UnsearchedSegments unsearched_segments = 7;
+}
+
+// ExpandedRule is a rule of an expanded profile, where it came from, and
+// what validation decided of it.
+message ExpandedRule {
+  // The rule, as validation normalized it: a keyword written as its tag,
+  // and every default written out.
+  ProfileRule rule = 1;
+
+  // The base the rule came from; empty for the document's own rule.
+  string origin = 2;
+
+  // The VRs of what the selector selects, as validation decided them: the
+  // data dictionary's for a tag or a path (two where PS3.6 gives two), the
+  // VR of a vr selector, those of a content item's value elements for its
+  // value type; empty when the selector says nothing of it. A set rule has
+  // exactly one, the VR the element is made with. A stored version runs
+  // with these, never with a later dictionary's.
+  repeated string vrs = 3;
+}
+
+// ExpandedPixelRule is a pixel rule of an expanded profile and where it came
+// from.
+message ExpandedPixelRule {
+  // The pixel rule.
+  PixelRule rule = 1;
+
+  // The base the rule came from; empty for the document's own rule.
+  string origin = 2;
+}
+
+// ProfileVersion is one version of a profile, as stored.
+message ProfileVersion {
+  // The profile's name, under the rule of a tenant's name.
+  string name = 1;
+
+  // The version: 1 for the first, one more for each after.
+  int32 version = 2;
+
+  // The SHA-256 of the expanded form as the server stores it, in lowercase
+  // hexadecimal.
+  string checksum = 3;
+
+  // When the version was made.
+  google.protobuf.Timestamp create_time = 4;
+
+  // The id of the key that made it; empty when the local operator did.
+  string created_by_key_id = 5;
+
+  // The note given when it was made.
+  string note = 6;
+
+  // The document as it was given. Absent in a list.
+  ProfileDocument document = 7;
+
+  // The expanded form. Answered only with the view PROFILE_VIEW_FULL.
+  ExpandedProfile expanded = 8;
+}
+
+// ProfileView is how much of a version an answer carries. A version's
+// document and expanded form together always fit one answer: validation
+// refuses a document whose canonical text and expanded text together pass
+// 3.75 MiB (a JSON answer is at most that and one space for each comma),
+// leaving the rest of the 4 MiB message for the other fields.
+enum ProfileView {
+  // As PROFILE_VIEW_DOCUMENT.
+  PROFILE_VIEW_UNSPECIFIED = 0;
+
+  // The document and the checksum, without the expanded form.
+  PROFILE_VIEW_DOCUMENT = 1;
+
+  // The document, the checksum and the expanded form.
+  PROFILE_VIEW_FULL = 2;
+}
+
+// ProfileSummary is a profile in a list.
+message ProfileSummary {
+  // The profile's name.
+  string name = 1;
+
+  // Its latest version.
+  int32 latest_version = 2;
+
+  // When its latest version was made.
+  google.protobuf.Timestamp latest_create_time = 3;
+}
+
+// ProfileProblem is one thing wrong with a document, or one warning about
+// it.
+message ProfileProblem {
+  // The rule's position among the document's rules, from 1; zero when the
+  // problem is not in a rule.
+  int32 rule = 1;
+
+  // The pixel rule's position among the document's pixel rules, from 1;
+  // zero when the problem is not in a pixel rule.
+  int32 pixel_rule = 2;
+
+  // The rule's name, when it has one.
+  string rule_name = 3;
+
+  // The field, as a path into the rule or the document in the JSON names,
+  // such as "selector.keyword", "when[2].pattern" or "bases[1]"; a
+  // position in it counts from 1. Empty when the problem is the rule as a
+  // whole.
+  string field = 4;
+
+  // What is wrong, as a fixed word a program can test, such as
+  // "unknown_keyword" or "action_vr"; for a warning, such as
+  // "shadowed_by_base" or "keeps_base_change". A later version may add
+  // words; a client shows one it does not know with the message.
+  string code = 5;
+
+  // What is wrong, in a sentence for a person.
+  string message = 6;
+}
+
+// ProfileProblems is every problem of a document, in the order of the
+// document: the detail of the error that refuses it.
+message ProfileProblems {
+  // The problems.
+  repeated ProfileProblem problems = 1;
+}
+
+// ProfileBase is a profile the server ships, which a document may name.
+message ProfileBase {
+  // The base's name: family, name and edition, such as
+  // "annex-e/basic:2026d".
+  string name = 1;
+
+  // Whether a document may name it. False for a base this server knows of
+  // but cannot expand.
+  bool available = 2;
+
+  // Why it is not available; empty when it is.
+  string unavailable_reason = 3;
+
+  // What the base does, in a person's words.
+  string description = 4;
+
+  // The base as a document. Absent when it is not available.
+  ProfileDocument document = 5;
+}
+
+// CreateProfileVersionRequest is a document to store as the next version
+// of a profile.
+message CreateProfileVersionRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The profile's name, under the rule of a tenant's name. Required.
+  string name = 2;
+
+  // The document. Required.
+  ProfileDocument document = 3;
+
+  // A note on why this version was made. At most 1024 bytes.
+  string note = 4;
+
+  // The version the caller expects to be the profile's latest: 0 when it
+  // expects the profile not to exist yet. When given and the latest is
+  // another, the call is refused as a failed precondition and stores
+  // nothing, so two people who each read version 3 do not both store a
+  // version 4 unaware of each other. Absent: no expectation.
+  optional int32 expected_latest_version = 5;
+
+  // What the answer carries; the document by default.
+  ProfileView view = 6;
+}
+
+// CreateProfileVersionResponse is the version stored, or the latest when
+// the document was equal to it.
+message CreateProfileVersionResponse {
+  // The version, with its document, and its expanded form with the view
+  // PROFILE_VIEW_FULL.
+  ProfileVersion version = 1;
+
+  // True when this call made the version; false when the document was
+  // equal to the latest version, which is answered.
+  bool created = 2;
+
+  // The warnings about the document, as ValidateProfile gives them.
+  repeated ProfileProblem warnings = 3;
+
+  // True when created is false and the request's note differs from the
+  // note stored with the version answered: the note given was not stored.
+  bool note_differs = 4;
+}
+
+// GetProfileVersionRequest names a version of a profile.
+message GetProfileVersionRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The profile's name. Required.
+  string name = 2;
+
+  // The version; zero for the latest. Negative is invalid.
+  int32 version = 3;
+
+  // What the answer carries; the document by default.
+  ProfileView view = 4;
+}
+
+// GetProfileVersionResponse is the version named.
+message GetProfileVersionResponse {
+  // The version, with its document, and its expanded form with the view
+  // PROFILE_VIEW_FULL.
+  ProfileVersion version = 1;
+}
+
+// ListProfilesRequest asks for a page of a tenant's profiles.
+message ListProfilesRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The most profiles to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 2;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+  // one it was made with.
+  string page_token = 3;
+}
+
+// ListProfilesResponse is a page of profiles.
+message ListProfilesResponse {
+  // The profiles of this page.
+  repeated ProfileSummary profiles = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// ListProfileVersionsRequest asks for a page of a profile's versions.
+message ListProfileVersionsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The profile's name. Required.
+  string name = 2;
+
+  // The most versions to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 3;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant or a name other
+  // than the one it was made with.
+  string page_token = 4;
+}
+
+// ListProfileVersionsResponse is a page of versions.
+message ListProfileVersionsResponse {
+  // The versions of this page, newest first, without document or expanded
+  // form.
+  repeated ProfileVersion versions = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// ValidateProfileRequest is a document to check.
+message ValidateProfileRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The document. Required.
+  ProfileDocument document = 2;
+
+  // What the answer carries: the expanded form only with
+  // PROFILE_VIEW_FULL.
+  ProfileView view = 3;
+}
+
+// ValidateProfileResponse is what the check found.
+message ValidateProfileResponse {
+  // Every problem, in the order of the document; empty when it is valid.
+  repeated ProfileProblem problems = 1;
+
+  // The expanded form; absent when there are problems, and unless the view
+  // is PROFILE_VIEW_FULL.
+  ExpandedProfile expanded = 2;
+
+  // The checksum the version would have; empty when there are problems.
+  string checksum = 3;
+
+  // What the document does that its author may not mean, though it is
+  // valid; empty when there are problems. A rule of the document's that a
+  // more specific rule of a base overrides for some elements
+  // ("shadowed_by_base"), and a rule that keeps what a base changes or
+  // removes ("keeps_base_change"), each named by the rule's position and
+  // name, the elements and the base's rule; at most 100, the last saying
+  // how many more there are ("more_warnings").
+  repeated ProfileProblem warnings = 4;
+}
+
+// ListProfileBasesRequest asks for the bases the server knows. It has no
+// fields: the list is short and the same for every tenant.
+message ListProfileBasesRequest {}
+
+// ListProfileBasesResponse is every base the server knows.
+message ListProfileBasesResponse {
+  // The bases, by name in byte order.
+  repeated ProfileBase bases = 1;
+}
+
+// TrialProfile is the profile a trial run, an explanation or a check runs:
+// a stored version, or a document not stored. Exactly one kind is set.
+message TrialProfile {
+  // The kind of profile.
+  oneof kind {
+    // A stored version of one of the tenant's profiles.
+    ProfileVersionName version = 1;
+
+    // A document, checked and expanded as ValidateProfile does and run as
+    // a version of it would be; nothing of it is stored.
+    ProfileDocument document = 2;
+  }
+}
+
+// ProfileVersionName names a stored version of a profile.
+message ProfileVersionName {
+  // The profile's name. Required.
+  string name = 1;
+
+  // The version; zero for the latest. Negative is invalid.
+  int32 version = 2;
+}
+
+// TrialFile is a file a caller sends to be tried.
+message TrialFile {
+  // A name the caller gives the file, answered back with its result so a
+  // caller can tell its files apart, such as the file's path on the
+  // caller's side; at most 1024 bytes of UTF-8. It is the caller's text and
+  // may say anything, so it is redacted wherever the server logs.
+  string name = 1 [debug_redact = true];
+
+  // The file's bytes: a DICOM file (PS3.10), at most 3 MiB.
+  bytes content = 2 [debug_redact = true];
+}
+
+// TrialReception is what the reception of the tried files would say of
+// them, which a profile's conditions on the receiver and the AE titles
+// read. Each field is optional; one not given is absent, as for a file
+// with no such fact. A held file is tried with its own reception's facts,
+// and these are not used for it.
+message TrialReception {
+  // The name of one of the tenant's receivers. Given, the receiver must
+  // exist, and its receiving checks run too (TryProfile); absent, the
+  // verdict is de-identification's alone.
+  string receiver = 1;
+
+  // The sender's AE title (PS3.8 9.3.2), at most 16 characters.
+  string calling_ae_title = 2;
+
+  // The AE title the sender called, at most 16 characters.
+  string called_ae_title = 3;
+}
+
+// TryProfileRequest names a profile and the files to try it on.
+message TryProfileRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The profile to try. Required.
+  TrialProfile profile = 2;
+
+  // Files sent with the request. With quarantine_records, 1 to 32 in all.
+  repeated TrialFile files = 3;
+
+  // Ids of the tenant's quarantine records whose held files to try. Each
+  // at most 64 bytes.
+  repeated string quarantine_records = 4;
+
+  // The reception the sent files are tried as coming from.
+  TrialReception reception = 5;
+}
+
+// TryProfileResponse is the result of each file, in the order of the
+// request (its files, then its records), and a summary.
+message TryProfileResponse {
+  // The version tried, without its document; absent for a document.
+  ProfileVersion version = 1;
+
+  // The checksum of the expanded form tried.
+  string checksum = 2;
+
+  // Why a receiver could not name the profile as it is, in plain words
+  // (for example, it does not remap the UIDs a file is placed by); empty
+  // when one can.
+  string reception_refusal = 3;
+
+  // Each file's result.
+  repeated TrialResult results = 4;
+
+  // The counts over every file.
+  TrialSummary summary = 5;
+}
+
+// TrialVerdict is what a receiver would do with a file.
+enum TrialVerdict {
+  // Never answered.
+  TRIAL_VERDICT_UNSPECIFIED = 0;
+
+  // The file would be archived, de-identified as the elements say.
+  TRIAL_VERDICT_PASSED = 1;
+
+  // The file would be held, with the reason and cause given.
+  TRIAL_VERDICT_HELD = 2;
+
+  // Whether the file would be held depends on a lookup table the trial
+  // does not read: a lookup rule holds a file whose value has no code
+  // (cause "lookup_table").
+  TRIAL_VERDICT_UNDECIDED = 3;
+}
+
+// TrialResult is what the profile does to one file.
+message TrialResult {
+  // The name the caller gave a sent file; empty for a held file.
+  string name = 1 [debug_redact = true];
+
+  // The quarantine record a held file was read from; empty for a sent
+  // file.
+  string quarantine_record = 2;
+
+  // What a receiver would do with it.
+  TrialVerdict verdict = 3;
+
+  // For a held file, the quarantine reason it would be held with, as
+  // Quarantine's reasons are written: "deid_failed", "residual_value",
+  // "profile_refused", "burned_in_risk", and with a receiver "not_dicom",
+  // "header_too_large", "bad_uid", "sop_class_not_accepted", "bad_label"
+  // and "unrouted".
+  string reason = 4;
+
+  // For a held file, the fixed cause: the engine's (such as "bad_value",
+  // "lookup_missing", "too_large", "no_subject", "uid_not_remapped",
+  // "redact_invalid", "too_many_matches",
+  // "unreadable", "after_unreadable": the file the check passed could not
+  // be read back to answer its values, "pixels_too_large" and the other
+  // causes of the work on pixels), for burned_in_risk why the image is at
+  // risk ("burned_in_annotation", "secondary_capture", "modality"), the
+  // check's ("check_unreadable", "check_too_large"), for residual_value the kind
+  // of value found ("name", "identifier", "date", "uid"), for bad_uid and
+  // bad_label the fault ("missing", "empty", "bad_uid", ...), and
+  // "lookup_table" for an undecided verdict. Never a value.
+  string cause = 5;
+
+  // The element the cause names, as a path; empty when none does.
+  string path = 6;
+
+  // The name of the rule that refused the file (a quarantine action), or
+  // whose action could not be applied; empty when none.
+  string rule = 7;
+
+  // Each element, in the order the engine visits them (the top level and
+  // every item, then each element a set rule made); empty when the engine
+  // refused the file before it changed it.
+  repeated TrialElement elements = 8;
+
+  // Elements left out to keep the answer within its bound (2,000 per file
+  // and about 3 MiB of values in all), counted.
+  int32 elements_omitted = 9;
+
+  // The number of values the profile removed or changed that the check
+  // after searched for, and of those it skipped as too short.
+  int32 values_searched = 10;
+
+  // See values_searched.
+  int32 values_skipped = 11;
+
+  // The number of lookups answered UNASSIGNED: a value its table has no
+  // code for, which a receiver would assign the table's next code.
+  int32 lookups_unassigned = 12;
+
+  // The receiver whose receiving checks ran; empty when none did.
+  string receiver = 13;
+
+  // True when no receiver's checks ran: the verdict is
+  // de-identification's alone.
+  bool deidentification_only = 14;
+
+  // What was done, or would be, to the file's pixels; absent when the
+  // file has no Pixel Data or was held before the pixels were judged.
+  TrialPixels pixels = 15;
+
+  // With a receiver that routes (Receiver.routing), the route its routing
+  // would choose for the file, tried as the first file of a new session;
+  // empty when none would, or with no receiver. A file the routing would
+  // not route is held, reason "unrouted", cause "no_match" or
+  // "route_unusable".
+  string route = 16;
+
+  // The profile version the file was tried with when the route chosen
+  // names one other than the profile tried: the receiver would
+  // de-identify the file with it, so the trial does too. Absent when the
+  // profile tried was used.
+  ProfileVersionName routed_profile = 17;
+
+}
+
+// TrialPixels is the work on one file's pixels: where it was decided, what
+// was filled and how much, never a value of the file.
+message TrialPixels {
+  // Whether the image may carry burned-in text, as its header says.
+  bool at_risk = 1;
+
+  // Why it may: "burned_in_annotation" (Burned In Annotation (0028,0301)
+  // is YES), "secondary_capture", "sop_class", "modality" or
+  // "slide_label"; empty when not at risk.
+  string risk_cause = 2;
+
+  // The pixel rule that decided, by name; empty when none matched.
+  string rule = 3;
+
+  // The base the rule came from; empty for the profile's own rule.
+  string origin = 4;
+
+  // What the rule does: "redact", "detect" or "accept"; empty when none
+  // matched.
+  string action = 5;
+
+  // The rectangles filled in every frame, in the image's own pixels from
+  // its top left corner, a rule's measured from the edges it names; for
+  // detect, those the detector found.
+  repeated PixelRectangle regions = 6;
+
+  // The image's frames.
+  int32 frames = 7;
+
+  // The bytes of the image decoded, which deid.pixel-limit bounds.
+  int64 decoded_bytes = 8;
+
+  // Whether compressed pixels are written native, decoded.
+  bool decoded = 9;
+
+  // The JPEG comment and application segments removed, by marker name
+  // ("COM", "APP1", ..., "trailing data"), and the JPEG 2000 segments
+  // removed ("COM", "CPF", "CRG"), each with the frame it was in counted once per
+  // name; what they held is never answered.
+  repeated string segments_removed = 10;
+}
+
+// TrialElement is what happened to one element of a tried file, and why.
+message TrialElement {
+  // Where the element is: its tag as eight hexadecimal digits after the
+  // sequences and item numbers it is inside, such as
+  // "00081115[0]/0020000E".
+  string path = 1;
+
+  // The element's keyword in the data dictionary; empty for a private or
+  // unknown element.
+  string keyword = 2;
+
+  // The VR the engine read it as.
+  string vr = 3;
+
+  // What was done: keep, remove, empty, replace, set, hash, uid, shift,
+  // generalize, lookup, clean, dummy, remove_unless_required, redact, or
+  // create for an element a set rule made.
+  string action = 4;
+
+  // The position of the deciding rule among the expanded form's rules,
+  // from 1; zero when no rule decided (a default, a fixed rule of the
+  // pipeline, or the floor).
+  int32 rule = 5;
+
+  // The deciding rule's name, when it has one.
+  string rule_name = 6;
+
+  // The base the deciding rule came from; empty for the profile's own
+  // rule and for no rule.
+  string origin = 7;
+
+  // The rule's reason, or why the default, the floor or a fixed rule
+  // applied.
+  string reason = 8;
+
+  // Whether the element's value or presence changed.
+  bool changed = 9;
+
+  // The value before, as text, its padding removed; empty for a value
+  // that is not text (a sequence, binary data) and for an element the
+  // received data set does not hold at this path.
+  string before = 10 [debug_redact = true];
+
+  // The value after, read back from the de-identified file as written;
+  // empty when it is not text or the element is not in that file, and for
+  // every element of a file that was held before it was written.
+  string after = 11 [debug_redact = true];
+
+  // Whether the de-identified file holds the element.
+  bool present_after = 12;
+
+  // The matches a redact action cut out of the value, every one counted;
+  // zero for any other action. What they were is before less after.
+  int32 redactions = 13;
+
+  // The distinct texts the deciding rule's value pattern found in the
+  // value: each part it matched whole, each text a search found; zero when
+  // the deciding rule has no value pattern.
+  int32 pattern_matches = 14;
+}
+
+// TrialSummary is the counts of a trial run, with no value.
+message TrialSummary {
+  // The files tried.
+  int32 files = 1;
+
+  // Of them, those that would be archived.
+  int32 passed = 2;
+
+  // Of them, those that would be held.
+  int32 held = 3;
+
+  // How many elements each rule decided, over every file, by the rule's
+  // name or "rule N" (its position, from 1), with "default" for elements
+  // no rule decided; by count, most first.
+  repeated TrialCount by_rule = 4;
+
+  // How many files were held for each reason, by
+  // "<reason>/<cause>"; by count, most first.
+  repeated TrialCount by_reason = 5;
+
+  // Of them, those whose verdict depends on a lookup table.
+  int32 undecided = 6;
+}
+
+// TrialCount is one count of a summary.
+message TrialCount {
+  // What is counted.
+  string key = 1;
+
+  // How many.
+  int32 count = 2;
+}
+
+// ExplainProfileRequest names a profile and one file.
+message ExplainProfileRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The profile. Required.
+  TrialProfile profile = 2;
+
+  // The file, sent; or quarantine_record. Exactly one.
+  TrialFile file = 3;
+
+  // The id of a quarantine record whose held file to explain.
+  string quarantine_record = 4;
+
+  // The reception a sent file is explained as coming from.
+  TrialReception reception = 5;
+}
+
+// ExplainProfileResponse is the decision for each element of the file.
+message ExplainProfileResponse {
+  // The version explained, without its document; absent for a document.
+  ProfileVersion version = 1;
+
+  // The checksum of the expanded form.
+  string checksum = 2;
+
+  // Each element, in the order the engine visits them; empty when the
+  // engine refused the file before it decided every element, and then
+  // refusal says why.
+  repeated ExplainedElement elements = 3;
+
+  // Elements left out past 5,000, counted.
+  int32 elements_omitted = 4;
+
+  // When the engine refused the file: the fixed cause, as
+  // TrialResult.cause. Empty otherwise.
+  string refusal = 5;
+
+  // The element the refusal names; empty when none.
+  string refusal_path = 6;
+}
+
+// ExplainedElement is why one element is treated as it is. It holds no
+// value.
+message ExplainedElement {
+  // Where the element is, as TrialElement.path.
+  string path = 1;
+
+  // The element's keyword; empty for a private or unknown element.
+  string keyword = 2;
+
+  // The VR the engine read it as.
+  string vr = 3;
+
+  // What is done to it, as TrialElement.action.
+  string action = 4;
+
+  // The deciding rule's position among the expanded form's rules, from 1;
+  // zero when no rule decides.
+  int32 rule = 5;
+
+  // The deciding rule's name.
+  string rule_name = 6;
+
+  // The base the deciding rule came from; empty for the profile's own.
+  string origin = 7;
+
+  // Why: the rule's reason, or why the default, the floor or a fixed rule
+  // applies.
+  string reason = 8;
+
+  // How the deciding rule selects the element: "place", "tag",
+  // "private_element", "private_block", "group", "value_pattern" or "vr"
+  // (from the most specific); empty when no rule decides.
+  string selected_by = 9;
+
+  // The other rules whose selector matches the element, by precedence:
+  // each does not decide, and says why. At most 16.
+  repeated ExplainedCandidate others = 10;
+
+  // Other rules past 16, counted.
+  int32 others_omitted = 11;
+}
+
+// ExplainedCandidate is a rule whose selector matches an element and that
+// does not decide it.
+message ExplainedCandidate {
+  // The rule's position among the expanded form's rules, from 1.
+  int32 rule = 1;
+
+  // The rule's name.
+  string rule_name = 2;
+
+  // The base it came from; empty for the profile's own.
+  string origin = 3;
+
+  // How it selects the element, as ExplainedElement.selected_by.
+  string selected_by = 4;
+
+  // Why it does not decide: "conditions" (its conditions do not hold for
+  // this file), "less_specific" (a rule of a more specific selector
+  // decides), "earlier" (a later rule of an equally specific selector
+  // decides), or "floor" (the engine's floor overrides every rule here).
+  string why_not = 5;
+}
+
+// DiffProfileVersionsRequest names two versions to compare.
+message DiffProfileVersionsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The profile's name. Required.
+  string name = 2;
+
+  // The version compared from; zero for the latest.
+  int32 from_version = 3;
+
+  // The version compared to; zero for the latest.
+  int32 to_version = 4;
+
+  // The profile of to_version, when it is another profile than name;
+  // empty for the same.
+  string to_name = 5;
+}
+
+// DiffProfileVersionsResponse is what changes from one version to the
+// other.
+message DiffProfileVersionsResponse {
+  // The version compared from, without its document.
+  ProfileVersion from = 1;
+
+  // The version compared to, without its document.
+  ProfileVersion to = 2;
+
+  // True when the checksums are equal: every file is treated alike.
+  bool same_effect = 3;
+
+  // The bases of to that from does not have, in to's order.
+  repeated string bases_added = 4;
+
+  // The bases of from that to does not have, in from's order.
+  repeated string bases_removed = 5;
+
+  // What happens to an element no rule decides, in each.
+  UnnamedElements unnamed_from = 6;
+
+  // See unnamed_from.
+  UnnamedElements unnamed_to = 7;
+
+  // The largest date shift in days, in each.
+  int32 date_shift_days_from = 8;
+
+  // See date_shift_days_from.
+  int32 date_shift_days_to = 9;
+
+  // Each rule added, removed or changed, in to's order and then the
+  // removed in from's; at most 1,000.
+  repeated ProfileRuleChange rules = 10;
+
+  // Rules past 1,000, counted.
+  int32 rules_omitted = 11;
+
+  // Each change of effect, in to's order and then those only in from;
+  // at most 1,000.
+  repeated ProfileEffectChange effects = 12;
+
+  // Changes of effect past 1,000, counted.
+  int32 effects_omitted = 13;
+
+  // The pixel rules one version has and the other does not, each
+  // compared whole with its origin, counted (a rule changed counts once in
+  // each).
+  int32 pixel_rules_changed = 14;
+
+  // True when both have the same bases in another order: a later base's
+  // rule wins over an earlier's between equals.
+  bool bases_reordered = 15;
+
+  // True when same_effect is false and none of the lists above, nor the
+  // defaults, shows why: the expanded forms differ in what this
+  // comparison does not itemize (TryProfile over files shows the effect).
+  bool unlisted_change = 16;
+
+  // What each version does with an image whose compressed pixel data has
+  // segments that are not searched, as its expanded form says it:
+  // unspecified holds.
+  UnsearchedSegments unsearched_segments_from = 17;
+
+  // See unsearched_segments_from.
+  UnsearchedSegments unsearched_segments_to = 18;
+}
+
+// ProfileChange is how a rule differs between two versions.
+enum ProfileChange {
+  // Never answered.
+  PROFILE_CHANGE_UNSPECIFIED = 0;
+
+  // Only in the version compared to.
+  PROFILE_CHANGE_ADDED = 1;
+
+  // Only in the version compared from.
+  PROFILE_CHANGE_REMOVED = 2;
+
+  // In both, with a difference.
+  PROFILE_CHANGE_CHANGED = 3;
+
+  // In both, the same, but in another order among the rules with its
+  // selector, so which of them wins can differ.
+  PROFILE_CHANGE_MOVED = 4;
+}
+
+// ProfileRuleChange is one rule that differs.
+message ProfileRuleChange {
+  // How.
+  ProfileChange change = 1;
+
+  // The base it comes from; empty for the profile's own rule.
+  string origin = 2;
+
+  // Its position among from's expanded rules, from 1; zero when added.
+  int32 from_position = 3;
+
+  // Its position among to's expanded rules, from 1; zero when removed.
+  int32 to_position = 4;
+
+  // The rule in from; absent when added.
+  ProfileRule from = 5;
+
+  // The rule in to; absent when removed.
+  ProfileRule to = 6;
+}
+
+// ProfileEffectChange is a selector, with its conditions, whose winning
+// action differs; or a selector whose rules of different conditions are
+// in another order (order_changed).
+message ProfileEffectChange {
+  // The selector.
+  ProfileSelector selector = 1;
+
+  // The conditions.
+  repeated ProfileCondition when = 2;
+
+  // The action that wins in from; absent when no rule there has this
+  // selector and these conditions.
+  ProfileAction from = 3;
+
+  // The action that wins in to; absent likewise.
+  ProfileAction to = 4;
+
+  // The winning rule's position in from, from 1; zero when absent.
+  int32 from_position = 5;
+
+  // The winning rule's position in to, from 1; zero when absent.
+  int32 to_position = 6;
+
+  // True when the change is of the order among the rules with this
+  // selector and different conditions, not of an action: for a file that
+  // meets more than one rule's conditions, another rule wins. when, from
+  // and to are then empty.
+  bool order_changed = 7;
+}
+
+// DescribeProfileRequest names the profile to describe.
+message DescribeProfileRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The profile: a stored version or an unsaved document. Required.
+  TrialProfile profile = 2;
+}
+
+// DescribeProfileResponse is what a profile does, in plain terms, and the
+// record of it each file carries.
+message DescribeProfileResponse {
+  // The stored version described, without its document and expanded
+  // form; absent for a document.
+  ProfileVersion version = 1;
+
+  // The checksum of the expanded form described.
+  string checksum = 2;
+
+  // For each class that any rule acts on, in the order of
+  // ProfileElementClass, what is done to its elements.
+  repeated ProfileClassEffects classes = 3;
+
+  // Sentences that hold for the whole profile, in plain words.
+  repeated string notes = 4;
+
+  // The record of the de-identification each file carries.
+  ProfileMethod method = 5;
+}
+
+// ProfileElementClass is a class of element a description groups the
+// rules by.
+enum ProfileElementClass {
+  // Never answered.
+  PROFILE_ELEMENT_CLASS_UNSPECIFIED = 0;
+
+  // Names of persons: elements of VR PN.
+  PROFILE_ELEMENT_CLASS_NAMES = 1;
+
+  // Identifiers, addresses and telephone numbers: the standard elements
+  // whose keyword names an ID, an identifier, a number given to a
+  // patient, study or request, an address or a telephone (such as
+  // PatientID, AccessionNumber, InstitutionAddress), other than PN and UI.
+  PROFILE_ELEMENT_CLASS_IDENTIFIERS = 2;
+
+  // Dates and times: elements of VR DA, DT and TM, and ages (AS).
+  PROFILE_ELEMENT_CLASS_DATES = 3;
+
+  // UIDs: elements of VR UI.
+  PROFILE_ELEMENT_CLASS_UIDS = 4;
+
+  // Private elements (an odd group, PS3.5 7.8).
+  PROFILE_ELEMENT_CLASS_PRIVATE = 5;
+
+  // The pixels: the pixel rules.
+  PROFILE_ELEMENT_CLASS_PIXELS = 6;
+
+  // Every other element a rule names or selects: descriptions, comments,
+  // device and protocol attributes, sequences.
+  PROFILE_ELEMENT_CLASS_OTHER = 7;
+}
+
+// ProfileClassEffects is what a profile does to one class of element.
+message ProfileClassEffects {
+  // The class.
+  ProfileElementClass class = 1;
+
+  // One entry for each action given to the class, in the order of
+  // ProfileAction's fields (pixel rules: redact, detect, accept).
+  repeated ProfileClassEffect effects = 2;
+}
+
+// ProfileClassEffect is one action and the elements of a class it is
+// given to.
+message ProfileClassEffect {
+  // The action, as ProfileAction's field names it ("remove", "keep",
+  // "uid", "shift", ...), or a pixel rule's ("redact", "detect",
+  // "accept").
+  string action = 1;
+
+  // What the action is given to, in the order of the rules: an element's
+  // keyword (its tag where it has none), or what a wider selector selects
+  // ("every DA element", "group 0010", "private 'SIEMENS CSA HEADER'
+  // 0010", "a value matching a pattern among PN, LO"), or a pixel rule's
+  // name (its position where it has none). At most 64; elements_omitted
+  // counts the rest.
+  repeated string elements = 2;
+
+  // How many more there are than elements holds.
+  int32 elements_omitted = 3;
+
+  // Whether a rule among these holds only under its conditions (a
+  // modality, a manufacturer, a receiver, ...), so the action is not given
+  // in every file.
+  bool conditional = 4;
+}
+
+// ProfileMethod is the record of the de-identification a profile's files
+// carry (PS3.15 E.1.1, E.3.6).
+message ProfileMethod {
+  // The PS3.16 CID 7050 codes the version claims, written in
+  // De-identification Method Code Sequence (0012,0064) of every file: one
+  // for each PS3.15 Annex E profile and option it is built on. Empty when
+  // it is built on none, or when withheld says why none is claimed. The
+  // Clean Pixel Data Option's code is added in a file a pixel rule filled,
+  // and only there.
+  repeated MethodCode codes = 1;
+
+  // Why no code is claimed though the version is built on an Annex E
+  // base: its own rules keep what a base changes or removes, so the codes
+  // would claim what its files are not. Empty otherwise.
+  string withheld = 2;
+
+  // The values of De-identification Method (0012,0063) this server writes
+  // in a file no pixel rule changed: the codes' meanings, then the profile
+  // version, then this server's version and its DICOM library's. A file a
+  // detect rule looked at carries one more value, after the meanings,
+  // saying the redaction was automatic and unverified.
+  repeated string method_values = 3;
+
+  // The value of Patient Identity Removed (0012,0062): YES.
+  string identity_removed = 4;
+
+  // The value of Longitudinal Temporal Information Modified (0028,0303)
+  // the dates option writes in every file (UNMODIFIED or MODIFIED); empty
+  // when the profile names no dates option, in which case MODIFIED is
+  // written only in a file where a date was shifted.
+  string temporal_modified = 5;
+}
+
+// MethodCode is one code of a coding scheme (PS3.3 8.8).
+message MethodCode {
+  // Code Value (0008,0100).
+  string value = 1;
+
+  // Coding Scheme Designator (0008,0102).
+  string scheme = 2;
+
+  // Code Meaning (0008,0104).
+  string meaning = 3;
+}

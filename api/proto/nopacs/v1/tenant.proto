@@ -1,0 +1,288 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets) is said on the package in access.proto.
+package nopacs.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// TenantService creates, reads, lists and removes tenants: the independent
+// archives of an installation, each with its own database. A tenant's
+// registration (its name, database type and creation time) is kept in the
+// master database, and GetTenant and ListTenants answer it from there,
+// whatever the tenant's state and without touching the tenant's database: a
+// tenant whose database is down is still answered. Its state, the state's
+// reason and the time the state was reached are the server's current view,
+// from its last check of the tenant's database; the master's row is the
+// record of that view, written at most once a minute. For these two methods,
+// UNAVAILABLE means only that the master database does not answer.
+service TenantService {
+  // CreateTenant registers a tenant and makes its tables in its database.
+  // NoPACs is given a database, never asked to make one: for Postgres the
+  // database and its login exist before this call. A tenant is created
+  // whole or not at all; when its database does not answer or its tables
+  // cannot be made, nothing is registered and the answer is UNAVAILABLE.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the tenant's name and
+  // its database type in details; never its database address.
+  // Errors: unauthenticated, permission denied, invalid, conflict (a tenant
+  // with that name exists), unavailable (the master database or the tenant's
+  // database does not answer).
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse);
+
+  // GetTenant answers one tenant, whatever its state: its registration from
+  // the master, its state from the server's current view.
+  //
+  // Role: reader on that tenant, or reader on the installation.
+  // Audit: one entry in the installation's log, with the tenant's name.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the master database does not answer).
+  rpc GetTenant(GetTenantRequest) returns (GetTenantResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListTenants answers the tenants the caller may see (registrations from
+  // the master, states from the server's current view), ordered by name: every tenant for a reader or more on the installation
+  // and for the local operator, otherwise only the tenants on which the
+  // caller's key holds a grant. A key with no grant gets an empty list, not
+  // an error.
+  //
+  // Role: none beyond an authenticated caller; the caller's grants decide
+  // what is listed.
+  // Audit: one entry in the installation's log.
+  // Errors: unauthenticated, invalid, unavailable (the master database does
+  // not answer).
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // RemoveTenant unregisters a tenant. It touches nothing in the tenant's
+  // database: the SQLite file or the Postgres tables stay where they are,
+  // and the answer says where. It works whatever the tenant's state, also
+  // when its database is gone. The tenant's name is sent twice, and the
+  // request is refused as invalid when the two differ, so a mistyped or
+  // misbound name cannot remove the wrong tenant. A repeated call finds no
+  // tenant and is answered NOT_FOUND; it removes nothing more.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the tenant's name, and
+  // its database type and data location in details; kept after the tenant is
+  // gone.
+  // Errors: unauthenticated, permission denied, invalid, not found (no tenant
+  // has that name: a caller who passes the role check may list every tenant,
+  // so it is told), unavailable (the master database does not answer).
+  rpc RemoveTenant(RemoveTenantRequest) returns (RemoveTenantResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ReclaimTenant undoes a hand-off whose import never happened
+  // (BackupService.ExportTenant): a moved tenant becomes ready again here,
+  // and writes again. It is allowed only while the owner record on each of
+  // the tenant's storages still names this installation and the
+  // generation this tenant holds, so a tenant another installation has
+  // taken over is never reclaimed. Only the local operator may call it: a
+  // key is answered permission denied whatever its grants, since taking a
+  // tenant back is a decision for whoever runs the installation's host,
+  // who knows whether the import went ahead. A tenant already ready is
+  // answered as it stands.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the tenant's name as
+  // its object and the generation in details.
+  // Errors: unauthenticated, permission denied (also any caller but the
+  // local operator), invalid, not found (no tenant has that name),
+  // precondition (the tenant is not moved; an owner record names another
+  // installation or a later generation), unavailable (the tenant's
+  // database or a storage does not answer, or an owner record cannot be
+  // read).
+  rpc ReclaimTenant(ReclaimTenantRequest) returns (ReclaimTenantResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}
+
+// TenantState is whether a tenant can serve requests. The server checks each
+// tenant when it starts and again on a timer. A request into a tenant that is
+// not ready is answered UNAVAILABLE, with two exceptions: a moved or fenced
+// tenant serves reads, and answers every change FAILED_PRECONDITION with the
+// reason TENANT_MOVED or TENANT_FENCED. The other tenants keep working.
+enum TenantState {
+  // Never answered by the server. A client that reads it was built against an
+  // older contract than the server's.
+  TENANT_STATE_UNSPECIFIED = 0;
+
+  // The tenant's database answers and its tables are current.
+  TENANT_STATE_READY = 1;
+
+  // The tenant's database does not answer. The server tries again on its
+  // timer, and the tenant returns to ready when the database does.
+  TENANT_STATE_UNREACHABLE = 2;
+
+  // The server is upgrading the tenant's tables to the binary's version.
+  TENANT_STATE_UPGRADING = 3;
+
+  // An upgrade or a check failed in a way a retry does not mend; a person
+  // must act. The tenant's state_reason says why.
+  TENANT_STATE_FAILED = 4;
+
+  // A restore is reconciling the tenant with its storages (their owner
+  // records taken, corrections newer than the backup applied, the catalog
+  // rebuilt, a new event history begun). Every request into it is answered
+  // unavailable (TENANT_RESTORING), its receivers refuse and its jobs wait,
+  // until it is ready.
+  TENANT_STATE_RESTORING = 5;
+
+  // An export handed the tenant to another installation
+  // (BackupService.ExportTenant): read only, so nothing is written after
+  // the export's snapshot. Reads are served; a change is refused as
+  // FAILED_PRECONDITION with the reason TENANT_MOVED, its receivers refuse
+  // and its jobs stop with their place kept. ReclaimTenant undoes it while
+  // the import has not happened.
+  TENANT_STATE_MOVED = 6;
+
+  // The owner record on one of the tenant's storages names another
+  // installation, or a later generation than this tenant's database holds:
+  // another installation has taken the storage over, by an import or a
+  // restore. Read only as moved: reads served, a change refused as
+  // FAILED_PRECONDITION with the reason TENANT_FENCED, so two installations
+  // never write one storage. The tenant's state_reason names the storage.
+  TENANT_STATE_FENCED = 7;
+}
+
+// DatabaseType is the kind of database a tenant's data lives in.
+enum DatabaseType {
+  // No type. Refused as invalid by CreateTenant.
+  DATABASE_TYPE_UNSPECIFIED = 0;
+
+  // A SQLite file that the server makes in its data directory.
+  DATABASE_TYPE_SQLITE = 1;
+
+  // A Postgres database that exists before the tenant is created, reached by
+  // the address given to CreateTenant.
+  DATABASE_TYPE_POSTGRES = 2;
+}
+
+// Tenant is an independent archive of the installation. It never carries its
+// database's address: that is a secret, sent in once by CreateTenant and kept
+// sealed by the server.
+message Tenant {
+  // The tenant's name, unique in the installation, and its id in this API.
+  // It does not change.
+  string name = 1;
+
+  // The kind of database the tenant's data lives in.
+  DatabaseType database_type = 2;
+
+  // Whether the tenant can serve requests now.
+  TenantState state = 3;
+
+  // Why the tenant is in its state, in words for a person, when the state is
+  // not ready. Empty when it is ready. It never holds the database's address
+  // or password.
+  string state_reason = 4;
+
+  // When the tenant was created.
+  google.protobuf.Timestamp create_time = 5;
+
+  // When the server's current view of the tenant's state, with its reason,
+  // began: the check that first found the tenant in this state. Absent when
+  // the server holds no view of the tenant yet (for a moment while it starts
+  // or creates the tenant), and then state is the master's record.
+  google.protobuf.Timestamp state_time = 6;
+}
+
+// CreateTenantRequest is the tenant to create.
+message CreateTenantRequest {
+  // The tenant's name. Required: 1 to 63 characters, lowercase ASCII letters,
+  // digits and hyphens, starting with a letter, and none of the device names
+  // Windows reserves (con, prn, aux, nul, com0 to com9, lpt0 to lpt9). The
+  // name is used in paths on the server, so nothing else is accepted.
+  string name = 1;
+
+  // The kind of database the tenant's data will live in. Required.
+  DatabaseType database_type = 2;
+
+  // SECRET. The address of the tenant's Postgres database, with its login and
+  // password, as a Postgres connection URI or keyword/value string; at most
+  // 4 KiB. This is one of the fields through which a secret crosses the API
+  // (access.proto), and it only comes in: the server seals it with the installation key
+  // and no answer, log or audit entry ever holds it. Required for
+  // DATABASE_TYPE_POSTGRES; must be empty for DATABASE_TYPE_SQLITE. The
+  // debug_redact mark is read by the server's redactor; the protobuf library
+  // itself still prints the field.
+  string database_address = 3 [debug_redact = true];
+}
+
+// CreateTenantResponse is the tenant created.
+message CreateTenantResponse {
+  // The tenant, in its state after creation.
+  Tenant tenant = 1;
+}
+
+// GetTenantRequest names a tenant.
+message GetTenantRequest {
+  // The tenant's name. Required.
+  string name = 1;
+}
+
+// GetTenantResponse is the tenant named.
+message GetTenantResponse {
+  // The tenant.
+  Tenant tenant = 1;
+}
+
+// ListTenantsRequest asks for a page of tenants.
+message ListTenantsRequest {
+  // The most tenants to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 1;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB.
+  string page_token = 2;
+}
+
+// ListTenantsResponse is a page of tenants.
+message ListTenantsResponse {
+  // The tenants of this page.
+  repeated Tenant tenants = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// RemoveTenantRequest names the tenant to remove, twice.
+message RemoveTenantRequest {
+  // The tenant's name. Required.
+  string name = 1;
+
+  // The tenant's name again. Required; the request is refused as invalid
+  // unless it equals name exactly.
+  string confirm_name = 2;
+}
+
+// RemoveTenantResponse says where the removed tenant's data was left, so a
+// person can keep it, move it or delete it by hand.
+message RemoveTenantResponse {
+  // The kind of database the data is in.
+  DatabaseType database_type = 1;
+
+  // Where the data is. For SQLite, the path of the file on the server. For
+  // Postgres, host:port/database, with no user and no password. Not a secret.
+  string data_location = 2;
+}
+
+// ReclaimTenantRequest names the moved tenant to take back.
+message ReclaimTenantRequest {
+  // The tenant's name, as the other methods of this service name it.
+  // Required.
+  string name = 1;
+}
+
+// ReclaimTenantResponse is the tenant taken back.
+message ReclaimTenantResponse {
+  // The tenant, ready.
+  Tenant tenant = 1;
+}

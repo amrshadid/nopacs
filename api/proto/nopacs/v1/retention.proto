@@ -1,0 +1,940 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "nopacs/v1/correction.proto";
+import "nopacs/v1/job.proto";
+import "nopacs/v1/scope.proto";
+
+// RetentionService keeps a tenant's rules of how long its data must be kept
+// and when it is due to go, lists what is due, disposes of it, and keeps
+// holds that stop any of it from going. A rule does what it says; whether it
+// meets a law or a consent form is the institution's to judge, and the
+// server makes no claim of it.
+//
+// Rules. A rule has a name, a selector (the whole tenant, or the receiver,
+// a route of it, or the primary storage a session's scans were archived
+// through), a keep_at_least period and a dispose_after period, either or
+// both, and an action: review (list the due sessions for a person) or
+// delete. A receiver, route or storage removed later keeps matching the
+// scans archived through it; a replica is never a selector's storage,
+// since nothing is archived to it first. There is no grouping above the
+// subject: a platform with its own collections places holds and deletes by
+// subject through the API.
+//
+// Which sessions a rule matches. A session's scans may have arrived
+// through different receivers, routes or storages. The gentler reading
+// wins: a session matches a rule's keep_at_least when any of its scans
+// arrived through the rule's selector, and a rule's dispose_after only
+// when all of them did. A whole-tenant rule matches every session.
+//
+// Start time. A period counts from a session's start time: when the session
+// was first archived, by the server's clock, never a DICOM date, shifted or
+// not; or the retention_start an admin gave the import job that archived
+// it (ImportJob), audited, and then the session is never due before the
+// time it was archived plus the notice below. A file's header never sets
+// it. A scan that arrives later joins its session's start time, and the
+// session's due and keep times are stored again with it.
+//
+// When a session is due. Of the rules that match a session, the latest
+// keep_at_least and the earliest dispose_after apply: the session is due
+// once its start time plus that dispose_after has passed and no matching
+// rule still keeps it. A session no rule's dispose_after matches is never
+// due. Its rule is the one with the earliest dispose_after (by name on a
+// tie), and its action is delete only when every rule whose dispose_after
+// matches it says delete. Due and keep times are stored per session when
+// it is archived, when a scan joins it and when a rule changes, so a
+// listing reads them and computes nothing.
+//
+// Changes, and the notice. Every change of a rule (adding, changing,
+// removing) applies at once, and the due and keep times it stores are
+// clamped: a change that would make a session due sooner, or keep it for
+// less, makes it due no sooner, and keeps it at least until, the change's
+// time plus the tenant's setting retention.shorten-notice (a period such as
+// "30d", from "1d" to "365d"; set on a tenant by the installation's admin
+// only, with an installation value, the default for every tenant; built-in
+// default "30d"), and never later than the times before the change. So a
+// mistyped rule cannot make a year's data due tonight, and a change that
+// keeps data longer takes effect at once. A removal is not undone during
+// the notice: the clamp keeps what it would have dropped until the notice
+// ends, and adding the rule again keeps it at once.
+//
+// The clock. A daily pass per tenant computes what has become due and, for
+// delete rules, queues the disposal. It keeps the time of its last pass.
+// When the server's clock has moved forward by more than the installation's
+// setting retention.max-clock-step since then (a period such as "2d", from
+// "1h" to "30d"; installation-only, since the clock is the server's;
+// built-in default "2d"), the tenant's retention is paused with the reason
+// "clock jumped", an EVENT_TYPE_RETENTION_CLOCK event is made, and, until
+// an admin confirms the time (ConfirmClock), nothing becomes due, no
+// dispose job of the pass runs, and no purge starts because its
+// purge_time came (CorrectionService): only a purge a person asks for
+// (PurgeCorrection) goes on. The same check runs before any purge starts
+// by its purge_time, and at least every hour, not only at the pass. A
+// clock moved back only delays, the safe direction. No time source outside
+// the server is asked: that would send data out.
+//
+// Disposal. The due sessions of a rule are deleted by a dispose job
+// (DisposeJob): the daily pass queues one for each delete rule with due
+// sessions and no dispose job queued or running, and an admin's Dispose
+// queues one from the list the admin saw. Each session is deleted through
+// CorrectionService's ordinary delete with origin retention and the rule's
+// name; a delete an admin's Dispose made carries that admin's key and
+// reason, and one the daily pass made carries no key and the reason the
+// server writes, "retention rule <rule>, due <date>". It is then a delete
+// in every way (records, publish, grace, undo, purge on every copy,
+// arriving again). A person who undoes a retention delete exempts its
+// session from that rule's daily pass (DueSession.undone) until a person
+// disposes of it with Dispose or the rule changes: the pass never deletes
+// again what a person brought back. A hold is the other way to keep it,
+// with a reason, against every rule. At most the tenant's setting
+// retention.max-per-pass sessions go per job (a whole number from 1 to
+// 100000; set on a tenant by the installation's admin only, with an
+// installation value; built-in default "1000"), the oldest due first. A
+// held session is never disposed of, and no DICOM date changes when
+// anything goes.
+//
+// Holds. A hold is a mark, with a reason, on a subject, a session, a scan
+// or the whole tenant, placed and released by an admin. It has no expiry:
+// it lasts until a person releases it. It covers what it names now and
+// what arrives under it later, and follows a relabel. While it holds, a
+// delete of what it covers is refused (precondition, reason HELD), a purge
+// of it waits with the state reason "held" before its next object, and
+// disposal skips it; a delete committed before it stays committed and may
+// still be undone. A replace or a relabel under a hold is allowed, since
+// nothing is lost, and the purge of what it superseded waits; a relabel
+// rewrites the hold records of what it moves before its publish.
+//
+// Hold records. Before a hold's row commits as active, a hold record,
+// meta/.holds/<hold id>.json, is put on the primary of everything the
+// target touches; each replica that answers gets it too, and one that does
+// not is owed it (ReplicaService: no purge removes anything from it, and
+// no switch to it swaps, until it has the record; Hold.storages_pending
+// names it). A release rewrites the records likewise. A record found
+// active with no row, by a rebuild, a restore, or the server's own start,
+// is made an active hold (Hold.found_on_storage), since keeping data
+// longer is the lesser error: a restore from a backup older than a hold
+// still keeps what the hold protects. A storage's object lock is reported
+// as a purge's retained disposition (CorrectionService), never as a hold.
+//
+// Who sees a hold. That a hold exists, its id and what it covers are
+// shown wherever it stops something: a delete's refusal and preview, a due
+// session marked held, the EVENT_TYPE_HOLD_CHANGED event. Its reason, a
+// person's words about a subject, is answered only to an operator or more
+// (GetHold, ListHolds).
+//
+// Every method acts inside one tenant, named by the request's tenant field
+// (ConfirmClock by its scope, which may be the installation), so a request
+// into a tenant that is not ready is answered UNAVAILABLE. No answer of
+// this service speaks of another tenant.
+service RetentionService {
+  // AddRetentionRule adds a rule to a tenant. What it keeps applies at
+  // once; what it makes due is clamped by the notice (the service says
+  // how).
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the rule's name as its
+  // object, and its selector, periods and action in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a name that breaks the rule of a tenant's name; a selector with
+  // both a receiver and a storage, or a route without a receiver; neither
+  // period, a period outside its bounds, or a dispose_after shorter than
+  // the keep_at_least), not found (a tenant that does not exist, for a
+  // caller who may list every tenant), conflict (the tenant has a rule with
+  // that name), precondition (a receiver, a route of it or a storage the
+  // tenant does not have; a storage that is a replica; the tenant moved or
+  // fenced, with the reason TENANT_MOVED or TENANT_FENCED), unavailable
+  // (the tenant's database does not answer, or the tenant is not ready).
+  rpc AddRetentionRule(AddRetentionRuleRequest) returns (AddRetentionRuleResponse);
+
+  // GetRetentionRule answers one rule of a tenant.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the rule's name as its
+  // object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no rule with that name; a tenant that does
+  // not exist, for a caller who may list every tenant), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc GetRetentionRule(GetRetentionRuleRequest) returns (GetRetentionRuleResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListRetentionRules answers the rules of a tenant, ordered by name.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc ListRetentionRules(ListRetentionRulesRequest) returns (ListRetentionRulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // SetRetentionRule changes some fields of a rule: those its update_mask
+  // names, and no other. The change applies at once, its due and keep
+  // times clamped by the notice (the service says how); the change, the
+  // times it stores again and its audit entry are written together or not
+  // at all. The same change made again changes nothing more.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the rule's name as its
+  // object, and the mask's paths and the new values in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also an empty mask, "*", a path that names no field or a read-only
+  // field, and every rule AddRetentionRule checks of the rule as it would
+  // stand), not found (the tenant has no rule with that name; a tenant that
+  // does not exist, for a caller who may list every tenant), precondition
+  // (every precondition AddRetentionRule checks; the tenant moved or
+  // fenced), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc SetRetentionRule(SetRetentionRuleRequest) returns (SetRetentionRuleResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // RemoveRetentionRule removes a rule at once; what it kept is kept until
+  // the notice ends, by the clamp (the service says how). Corrections and
+  // jobs it made keep its name. A repeated call finds no rule and is
+  // answered NOT_FOUND; it removes nothing more.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the rule's name as its
+  // object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no rule with that name; a tenant that does
+  // not exist, for a caller who may list every tenant), precondition (the
+  // tenant moved or fenced), unavailable (the tenant's database does not
+  // answer, or the tenant is not ready).
+  rpc RemoveRetentionRule(RemoveRetentionRuleRequest) returns (RemoveRetentionRuleResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListDueSessions answers the sessions due now, by rule, oldest due
+  // first; it changes nothing. Held sessions are left out unless asked
+  // for, and then marked.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the filters in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no rule with that name; a tenant that does
+  // not exist, for a caller who may list every tenant), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc ListDueSessions(ListDueSessionsRequest) returns (ListDueSessionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // Dispose queues a dispose job (DisposeJob) that deletes due sessions of
+  // a rule as a preview listed them; or, with validate_only, answers which
+  // sessions it would delete, at most max_sessions of them, the oldest due
+  // first, none held, and the confirm token a disposal must carry: a digest
+  // of the rule, the sessions listed and their counts, and the time it was
+  // issued. With the token, within an hour of its issue, it queues a job
+  // that deletes exactly the sessions listed, and is refused when a preview
+  // made now would list others (data due since, a hold placed, a rule
+  // changed), so a disposal acts on what a person saw. The token is
+  // recorded in the transaction that makes the job: a Dispose that carries
+  // a token already used answers the job it made, whatever its state, so a
+  // client that lost the answer may send the same request again.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the rule's name as its
+  // object, and validate_only, the sessions, the job's id and the reason
+  // in details; and each delete's own entry, as CorrectionService writes
+  // it.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason; a confirm token with validate_only,
+  // or none without it; max_sessions outside 0 to 1000), not found (the
+  // tenant has no rule with that name; a tenant that does not exist, for a
+  // caller who may list every tenant), precondition (the confirm token does
+  // not match what the disposal would now delete, or is more than an hour
+  // old; nothing is due under the rule; the tenant's retention is paused
+  // for a clock jump; a rebuild of the tenant is running; the tenant moved
+  // or fenced, with the reason TENANT_MOVED or TENANT_FENCED), unavailable
+  // (the tenant's database does not answer, or the tenant is not ready).
+  // Limits: a preview lists at most max_sessions and never passes 4 MB; a
+  // job deletes at most retention.max-per-pass.
+  rpc Dispose(DisposeRequest) returns (DisposeResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ConfirmClock ends a pause of retention for a clock jump, on one tenant
+  // or, with the installation as its scope, on every tenant paused: an
+  // admin who has read the time from a clock they trust types that time,
+  // and the server takes its own clock as right from then, as the new time
+  // of its last pass. A tenant not paused is answered as it stands. The
+  // time is the person's own reading: a client never fills it from the
+  // server's answer, or the check would confirm nothing.
+  //
+  // Role: admin on the scope.
+  // Audit: one entry in the log of the scope, with the time given, the
+  // server's time, the tenants resumed and the reason in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason; no observed_time), not found (a
+  // tenant that does not exist, for a caller who may list every tenant),
+  // precondition (observed_time differs from the server's clock by more
+  // than 5 minutes: the server's time is wrong, or was misread, and is not
+  // confirmed; a tenant moved or fenced), unavailable (the database of the
+  // scope does not answer, or the tenant is not ready).
+  rpc ConfirmClock(ConfirmClockRequest) returns (ConfirmClockResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // PlaceHold places a hold on a subject, a session of it, a scan of that,
+  // or the whole tenant. Its record is put on the primary of everything the
+  // target touches before its row commits as active; a replica that does
+  // not answer is owed it (the service says how), so only a primary that
+  // does not answer leaves no hold placed. A subject, session or scan
+  // under a committed delete not yet purged can be held, by the labels it
+  // had: its purge then waits. An active hold with the same target and
+  // reason is answered instead, so a repeated call places nothing more.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the new hold's id as its
+  // object, and the target's path of labels (or "whole tenant") and the
+  // reason in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason; a label that does not pass the
+  // label rule; a level named without the one above it; no label and not
+  // whole_tenant, or labels with whole_tenant), not found (the tenant holds
+  // no such subject, session or scan, nor one under a committed delete; a
+  // tenant that does not exist, for a caller who may list every tenant),
+  // precondition (the target's data is purged already; the tenant moved or
+  // fenced), unavailable (the tenant's database or a primary the target
+  // touches does not answer, or the tenant is not ready).
+  rpc PlaceHold(PlaceHoldRequest) returns (PlaceHoldResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ReleaseHold releases a hold: its record on each primary is rewritten
+  // released (each replica's too, or owed), then its row; what it held may
+  // then be purged, deleted and disposed of again, as other holds allow. A
+  // hold already released is answered as it stands, so a repeated call
+  // changes nothing more.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the hold's id as its object
+  // and the reason in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason), not found (the tenant has no hold
+  // with that id; a tenant that does not exist, for a caller who may list
+  // every tenant), precondition (the tenant moved or fenced), unavailable
+  // (the tenant's database or a primary holding its record does not
+  // answer, or the tenant is not ready).
+  rpc ReleaseHold(ReleaseHoldRequest) returns (ReleaseHoldResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // GetHold answers one hold, with its reason.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the hold's id as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no hold with that id; a tenant that does not
+  // exist, for a caller who may list every tenant), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc GetHold(GetHoldRequest) returns (GetHoldResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListHolds answers a tenant's holds, newest first, filtered by state and
+  // subject, with their reasons.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the filters in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc ListHolds(ListHoldsRequest) returns (ListHoldsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// RetentionPeriod is a length of time counted from a session's start time:
+// whole calendar years, then whole days, in UTC. A year added to February
+// 29 ends on March 1, the later day, so a period never ends early. At
+// least 1 day, at most 100 years: years 0 to 100, days 0 to 365, not both
+// 0, and days 0 with 100 years. Two periods are compared by years, then by
+// days: with days at most 365, the one that compares larger ends no
+// earlier from every start time, so "dispose_after not shorter than
+// keep_at_least" holds for every session.
+message RetentionPeriod {
+  // Calendar years, 0 to 100.
+  int32 years = 1;
+
+  // Days after the years, 0 to 365.
+  int32 days = 2;
+}
+
+// RetentionAction is what is done with a rule's due sessions. An action
+// added later is a new value; a client shows one it does not know as a
+// listing only.
+enum RetentionAction {
+  // Not said: read as review in a request, answered RETENTION_ACTION_REVIEW.
+  RETENTION_ACTION_UNSPECIFIED = 0;
+
+  // The due sessions are listed for a person (ListDueSessions), who may
+  // dispose of them (Dispose). Nothing goes by itself.
+  RETENTION_ACTION_REVIEW = 1;
+
+  // The daily pass queues a dispose job for the due sessions, each deleted
+  // with origin retention.
+  RETENTION_ACTION_DELETE = 2;
+}
+
+// RetentionSelector names the scans a rule matches, by what they were
+// archived through. All empty for every session of the tenant; otherwise
+// a receiver, a route of a receiver, or a primary storage.
+message RetentionSelector {
+  // The name of the receiver the scans arrived at. Must be empty with
+  // storage.
+  string receiver = 1;
+
+  // The name of a route of that receiver (Route.name) the scans were
+  // archived by. Needs receiver.
+  string route = 2;
+
+  // The name of the storage the scans were archived to first: a primary,
+  // never a replica (precondition). Must be empty with receiver.
+  string storage = 3;
+}
+
+// RetentionRule is one rule of a tenant: which sessions it matches, how
+// long it keeps them at least, when they are due, and what is done then.
+message RetentionRule {
+  // The rule's name, unique in its tenant, and its id in this API. It does
+  // not change. Under the rule of a tenant's name.
+  string name = 1;
+
+  // The scans it matches. Absent for every session of the tenant.
+  RetentionSelector selector = 2;
+
+  // How long a matched session is kept at least: until then, a person's
+  // delete of it is refused (precondition, reason RETENTION_MINIMUM)
+  // unless it overrides with a reason, and no rule makes it due. Absent
+  // for none.
+  RetentionPeriod keep_at_least = 3;
+
+  // When a matched session is due, counted from its start time. Absent for
+  // never: the rule then only keeps. Not shorter than keep_at_least.
+  RetentionPeriod dispose_after = 4;
+
+  // What is done with its due sessions.
+  RetentionAction action = 5;
+
+  // When it was added. Answered by the server; ignored in a request.
+  google.protobuf.Timestamp create_time = 6;
+
+  // When it last changed: its create_time until the first change.
+  // Answered by the server; ignored in a request.
+  google.protobuf.Timestamp update_time = 7;
+
+  // Until when the clamp of its last change that made anything due sooner
+  // or kept it less holds (the change's time plus
+  // retention.shorten-notice): no session becomes due sooner by that
+  // change before then. Absent once passed, or when no change clamps.
+  // Answered by the server; ignored in a request.
+  google.protobuf.Timestamp notice_until = 8;
+
+  // The sessions due now under it, held ones included. Answered by the
+  // server; ignored in a request.
+  int64 sessions_due = 9;
+}
+
+// DueSession is one session due under a rule.
+message DueSession {
+  // The label of its subject.
+  string subject_label = 1;
+
+  // Its label.
+  string session_label = 2;
+
+  // The name of its rule: the rule with the earliest dispose_after that
+  // matches it.
+  string rule = 3;
+
+  // What is done with it: delete only when every rule whose dispose_after
+  // matches it says delete.
+  RetentionAction action = 4;
+
+  // Its start time: when it was first archived, by the server's clock, or
+  // its import job's retention_start.
+  google.protobuf.Timestamp start_time = 5;
+
+  // The due time stored for it: the latest of its start time plus its
+  // rule's dispose_after, its start time plus every matching keep_at_least,
+  // and any clamp a rule change set.
+  google.protobuf.Timestamp due_time = 6;
+
+  // Whether an active hold covers it, so it is not disposed of. Listed
+  // only with include_held.
+  bool held = 7;
+
+  // The instances it holds.
+  int64 instances = 8;
+
+  // The bytes of those instances, as archived.
+  int64 bytes = 9;
+
+  // Whether a person undid a retention delete of it under this rule, so
+  // the daily pass leaves it alone until a person disposes of it with
+  // Dispose or the rule changes. Listed, and disposed of by Dispose, like
+  // any due session.
+  bool undone = 10;
+}
+
+// RetentionStatus is where a tenant's retention stands, for a status.
+message RetentionStatus {
+  // The tenant's rules.
+  int64 rules = 1;
+
+  // The sessions due now and not held, whatever their action.
+  int64 sessions_due = 2;
+
+  // Of those, the sessions whose action is review: waiting for a person.
+  int64 sessions_due_review = 3;
+
+  // The sessions due now that a hold keeps.
+  int64 sessions_due_held = 4;
+
+  // When the next session not yet due becomes due. Absent when none will.
+  google.protobuf.Timestamp next_due_time = 5;
+
+  // When the daily pass last ran, by the server's clock. Absent before the
+  // first.
+  google.protobuf.Timestamp last_pass_time = 6;
+
+  // Whether retention is paused for a clock jump, until an admin confirms
+  // the time (ConfirmClock): nothing becomes due, no dispose job of the
+  // pass runs, no purge starts by its purge_time.
+  bool paused = 7;
+
+  // Why it is paused, from a fixed set of phrases the server has, such as
+  // "clock jumped"; at most 256 bytes. Empty when not paused.
+  string pause_reason = 8;
+
+  // How far the clock moved forward between the last pass and the pass
+  // that paused. Absent when not paused.
+  google.protobuf.Duration clock_step = 9;
+
+  // The holds active now.
+  int64 active_holds = 10;
+
+  // The hold records owed to replicas that did not answer (Hold
+  // storages_pending), counted once per hold and replica.
+  int64 hold_records_owed = 11;
+}
+
+// HoldTarget names what a hold covers: a subject, a session of it, a scan
+// of that, or the whole tenant, by the labels the catalog has now.
+message HoldTarget {
+  // The subject's label. Required unless whole_tenant.
+  string subject_label = 1;
+
+  // The label of the session of the subject. Empty for the whole subject.
+  string session_label = 2;
+
+  // The label of the scan of the session. Empty for the whole session;
+  // needs session_label.
+  string scan_label = 3;
+
+  // Every subject of the tenant, now and later. The labels must then be
+  // empty; set on purpose, so an empty request never holds a whole tenant
+  // by mistake.
+  bool whole_tenant = 4;
+}
+
+// HoldState is whether a hold holds. It goes from active to released only.
+enum HoldState {
+  // Never answered by the server. As a filter, it is refused as invalid.
+  HOLD_STATE_UNSPECIFIED = 0;
+
+  // It holds: no delete, purge or disposal of what it covers.
+  HOLD_STATE_ACTIVE = 1;
+
+  // A person released it; it holds nothing.
+  HOLD_STATE_RELEASED = 2;
+}
+
+// Hold is a mark that stops every delete, purge and disposal of what it
+// covers until a person releases it.
+message Hold {
+  // The hold's id, made by the server, in the form of a correction's id (a
+  // lowercase ULID, 26 characters, sorting by creation time); its record on
+  // each storage is named by it. Unique in the tenant, never reused.
+  string id = 1;
+
+  // What it covers, by the labels the catalog has now: a relabel since it
+  // was placed shows the new labels, since a hold follows what it named,
+  // not a label.
+  HoldTarget target = 2;
+
+  // Why it was placed, in the person's own words: 1 to 1024 bytes of UTF-8
+  // with no control characters, never a value read from a file, such as
+  // "audit 2026-17". Kept on the hold, in its audit entry and in its record
+  // on the storages; answered only to an operator or more.
+  string reason = 3;
+
+  // Whether it holds.
+  HoldState state = 4;
+
+  // The id of the key that placed it; empty for the local operator.
+  string placed_by_key_id = 5;
+
+  // When it was placed.
+  google.protobuf.Timestamp place_time = 6;
+
+  // Why it was released, as the person gave it. Empty while active.
+  string release_reason = 7;
+
+  // The id of the key that released it; empty for the local operator, and
+  // while active.
+  string released_by_key_id = 8;
+
+  // When it was released. Absent while active.
+  google.protobuf.Timestamp release_time = 9;
+
+  // Whether a rebuild, a restore or the server's own start found its
+  // record active on a storage with no row in the tenant's database, and
+  // made it an active hold; its reason and placed_by_key_id are those the
+  // record kept.
+  bool found_on_storage = 10;
+
+  // The names of the storages its record is on, replicas included, ordered
+  // by name.
+  repeated string storages = 11;
+
+  // The names of the replicas still owed its record, as placed or as
+  // released, because they did not answer, ordered by name. No purge
+  // removes anything from them, and no switch to them swaps, until they
+  // have it. Empty when every copy has it.
+  repeated string storages_pending = 12;
+}
+
+// AddRetentionRuleRequest is the rule to add.
+message AddRetentionRuleRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The rule. Its name and at least one period are required; the fields
+  // the server answers are ignored.
+  RetentionRule rule = 2;
+}
+
+// AddRetentionRuleResponse is the rule added.
+message AddRetentionRuleResponse {
+  // The rule, as stored.
+  RetentionRule rule = 1;
+}
+
+// GetRetentionRuleRequest names a rule.
+message GetRetentionRuleRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The rule's name. Required.
+  string name = 2;
+}
+
+// GetRetentionRuleResponse is the rule named.
+message GetRetentionRuleResponse {
+  // The rule.
+  RetentionRule rule = 1;
+}
+
+// ListRetentionRulesRequest asks for a page of a tenant's rules.
+message ListRetentionRulesRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The most rules to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 2;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+  // one it was made with.
+  string page_token = 3;
+}
+
+// ListRetentionRulesResponse is a page of rules.
+message ListRetentionRulesResponse {
+  // The rules of this page, by name.
+  repeated RetentionRule rules = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// SetRetentionRuleRequest is the change to a rule.
+message SetRetentionRuleRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The rule with the new values of the fields update_mask names. Its name
+  // is required and names the rule to change; it is not itself changed.
+  RetentionRule rule = 2;
+
+  // The fields to change, as paths of RetentionRule, from this list only:
+  // "selector" (the whole selector; its fields are not named one by one),
+  // "keep_at_least", "dispose_after" and "action". A named field is set to
+  // the value given; a period named and absent becomes none. "name" and
+  // the fields the server answers are refused. Required and not empty;
+  // "*" is refused, so every field a call changes is named.
+  google.protobuf.FieldMask update_mask = 3;
+}
+
+// SetRetentionRuleResponse is the rule as changed.
+message SetRetentionRuleResponse {
+  // The rule, as stored.
+  RetentionRule rule = 1;
+}
+
+// RemoveRetentionRuleRequest names the rule to remove.
+message RemoveRetentionRuleRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The rule's name. Required.
+  string name = 2;
+}
+
+// RemoveRetentionRuleResponse is the rule removed.
+message RemoveRetentionRuleResponse {
+  // The rule as it was.
+  RetentionRule rule = 1;
+}
+
+// ListDueSessionsRequest asks for a page of a tenant's due sessions.
+message ListDueSessionsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // Only the sessions whose rule has this name. Empty for every rule.
+  string rule = 2;
+
+  // List the held sessions too, marked held. False leaves them out.
+  bool include_held = 3;
+
+  // The most sessions to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 4;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant or filters other
+  // than those it was made with.
+  string page_token = 5;
+}
+
+// ListDueSessionsResponse is a page of due sessions.
+message ListDueSessionsResponse {
+  // The sessions of this page, oldest due first, then by subject and
+  // session label.
+  repeated DueSession sessions = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// DisposeRequest names the rule whose due sessions to delete, why, and,
+// unless only a preview is asked for, the confirm token of the preview.
+message DisposeRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The rule's name. Required.
+  string rule = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required, also
+  // with validate_only. Each delete keeps it as its reason.
+  string reason = 3;
+
+  // Answer the preview only, deleting nothing.
+  bool validate_only = 4;
+
+  // The confirm token of a preview of the same rule. Required unless
+  // validate_only; must be empty with it.
+  string confirm = 5;
+
+  // With validate_only, the most sessions the preview lists, and so the
+  // job deletes: 1 to 1000, and no more than retention.max-per-pass; 0
+  // means 100. Ignored without validate_only, where the token decides.
+  int32 max_sessions = 6;
+}
+
+// DisposalPreview is what a disposal deletes, as the catalog and the rules
+// hold it now. It never passes 4 MB: at most 1000 sessions of at most a
+// few hundred bytes each.
+message DisposalPreview {
+  // The rule's name.
+  string rule = 1;
+
+  // The sessions it deletes, oldest due first: at most max_sessions, none
+  // held.
+  repeated DueSession sessions = 2;
+
+  // The sessions due under the rule and not held, past those listed: a
+  // later disposal takes them.
+  int64 sessions_not_listed = 3;
+
+  // The sessions due under the rule that a hold keeps, never deleted.
+  int64 sessions_held = 4;
+
+  // What the listed sessions cover.
+  CorrectionCounts counts = 5;
+
+  // The token the disposal must carry: opaque, at most 128 bytes, a digest
+  // of the rule, the sessions listed, their counts and the time it was
+  // issued. It matches only while a preview made now would list the same,
+  // for at most one hour after its issue; once used, it answers the job
+  // it made.
+  string confirm = 6;
+}
+
+// DisposeResponse is the preview, or the dispose job queued.
+message DisposeResponse {
+  // What the disposal deletes; with validate_only, what it would delete,
+  // and the token to confirm it.
+  DisposalPreview preview = 1;
+
+  // The dispose job (JobService), queued, or, for a token already used,
+  // the job it made, as it stands. Its deletes are listed by
+  // CorrectionService.ListCorrections (origin retention), each naming the
+  // job. Absent with validate_only.
+  Job job = 2;
+}
+
+// ConfirmClockRequest confirms the server's time after a clock jump.
+message ConfirmClockRequest {
+  // A tenant, to resume it; or the installation, to resume every tenant
+  // paused. Required.
+  Scope scope = 1;
+
+  // The time the admin read from a clock they trust and typed, in UTC.
+  // Required; within 5 minutes of the server's clock.
+  google.protobuf.Timestamp observed_time = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, such as "clock checked against the site's time
+  // server". Required.
+  string reason = 3;
+}
+
+// ConfirmClockResponse is what the confirmation resumed.
+message ConfirmClockResponse {
+  // The names of the tenants whose retention it resumed, ordered by name;
+  // empty when none was paused.
+  repeated string tenants = 1;
+
+  // With a tenant scope, where its retention stands now; absent with the
+  // installation.
+  RetentionStatus status = 2;
+}
+
+// PlaceHoldRequest names what to hold, and why.
+message PlaceHoldRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // What to hold. Required.
+  HoldTarget target = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required.
+  string reason = 3;
+}
+
+// PlaceHoldResponse is the hold placed, or the active one with the same
+// target and reason.
+message PlaceHoldResponse {
+  // The hold, active.
+  Hold hold = 1;
+}
+
+// ReleaseHoldRequest names the hold to release, and why.
+message ReleaseHoldRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The hold's id. Required; at most 64 bytes.
+  string id = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required.
+  string reason = 3;
+}
+
+// ReleaseHoldResponse is the hold released.
+message ReleaseHoldResponse {
+  // The hold, released.
+  Hold hold = 1;
+}
+
+// GetHoldRequest names a hold.
+message GetHoldRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The hold's id. Required; at most 64 bytes.
+  string id = 2;
+}
+
+// GetHoldResponse is the hold named.
+message GetHoldResponse {
+  // The hold.
+  Hold hold = 1;
+}
+
+// ListHoldsRequest asks for a page of a tenant's holds. Every filter given
+// must hold for a hold to be listed.
+message ListHoldsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // Only the holds in these states. Empty for every state; at most 16
+  // values, none of them HOLD_STATE_UNSPECIFIED.
+  repeated HoldState states = 2;
+
+  // Only the holds whose target is this subject, a session or a scan of
+  // it, and the whole tenant's holds, which cover it too. Empty for every
+  // hold.
+  string subject_label = 3;
+
+  // The most holds to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 4;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant or filters other
+  // than those it was made with.
+  string page_token = 5;
+}
+
+// ListHoldsResponse is a page of holds.
+message ListHoldsResponse {
+  // The holds of this page, newest first.
+  repeated Hold holds = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
