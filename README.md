@@ -34,8 +34,7 @@ NoPACs was formerly named CORIA.
   clients for Python (`clients/python`) and TypeScript (`clients/typescript`).
 
 Not yet built: replication between installations and retention (their API is
-defined and not served), reinstating suspended keys through the API, and a
-backup made through the API (`nopacs-server backup create` makes one on the
+defined and not served), and a backup made through the API (`nopacs-server backup create` makes one on the
 server's machine). Until you have checked a profile on test data with `nopacs
 profile try`, send only synthetic or public test data.
 

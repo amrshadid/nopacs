@@ -22,6 +22,5 @@
 # until it is.
 
 nopacs.v1.BackupService/CreateBackup
-nopacs.v1.AccessService/ReinstateKeys
 nopacs.v1.ReplicaService
 nopacs.v1.RetentionService

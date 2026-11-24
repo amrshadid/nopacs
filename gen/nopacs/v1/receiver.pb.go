@@ -1224,7 +1224,8 @@ func (*DimseReceiver_AnyCaller) isDimseReceiver_Callers() {}
 type StowReceiver struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The ids of the keys (AccessService) whose requests it takes, each 1 to
-	// 64 of A-Z, a-z, 0-9, _ and -, each once; at most 256. Empty takes
+	// 12 of A-Z, a-z, 0-9, _ and -, each once; at most 256. A whole key given
+	// in place of its id is invalid and is never repeated. Empty takes
 	// none: a new receiver is closed until a key is listed. A key that does
 	// not exist, or no longer does, is kept and matches nothing. A key
 	// rotated from one listed is taken too (StowReceiver).

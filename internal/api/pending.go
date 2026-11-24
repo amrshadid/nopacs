@@ -20,8 +20,3 @@ var errNotServed = connect.NewError(connect.CodeUnimplemented, "no such method")
 func (backupService) CreateBackup(context.Context, *v1.CreateBackupRequest, nopacsv1connect.BackupServiceCreateBackupServerStream) error {
 	return errNotServed
 }
-
-// ReinstateKeys is not served yet: AccessService's other methods are.
-func (accessService) ReinstateKeys(context.Context, *v1.ReinstateKeysRequest) (*v1.ReinstateKeysResponse, error) {
-	return nil, errNotServed
-}

@@ -424,7 +424,7 @@ func TestGrammar(t *testing.T) {
 		"context add": true, "context list": true, "context show": true, "context use": true, "context remove": true,
 		"tenant create": true, "tenant list": true, "tenant show": true, "tenant status": true, "tenant remove": true,
 		"tenant export": true, "tenant reclaim": true,
-		"key create": true, "key list": true, "key show": true, "key revoke": true, "key rotate": true, "key set": true,
+		"key create": true, "key list": true, "key show": true, "key revoke": true, "key rotate": true, "key set": true, "key reinstate": true,
 		"grant set": true, "grant list": true, "grant remove": true,
 		"setting get": true, "setting set": true, "setting unset": true, "setting list": true,
 		"audit list": true, "audit verify": true, "audit checkpoints": true, "audit export": true, "audit public-key": true,

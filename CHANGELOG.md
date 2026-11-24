@@ -33,6 +33,14 @@ the code before this release is in github.com/amrshadid/coria.
   network rules and an optional TLS client certificate. Grants give a key
   roles on one tenant or on the installation; a request without a grant for
   its tenant is refused.
+- After a restore every key is suspended, since a key revoked after the
+  backup would otherwise work again; the local operator reinstates the ones
+  that should work (`AccessService/ReinstateKeys`, `nopacs key reinstate
+  (--all | <id>...)`), by id (at most 1000) or all at once, with one audit
+  entry per key reinstated. Any key is refused, and a revoked or expired key
+  stays refused. `nopacs key list` and `key show` mark a suspended key.
+- A whole key given where a key id goes is refused without being repeated:
+  it never reaches an answer, a stored configuration or the audit log.
 - Limits on failed calls per caller and per key, which hold under a flood.
 - An audit log of every request and every change of configuration, in the
   master and in each tenant, written with the change it records. The logs are
@@ -107,7 +115,7 @@ the code before this release is in github.com/amrshadid/coria.
 - The API contract `nopacs.v1` in `api/proto/nopacs/v1`, served over gRPC,
   gRPC-web and Connect, every reply carrying a `Nopacs-Request-Id` header.
   Defined and not yet served: `BackupService/CreateBackup`,
-  `AccessService/ReinstateKeys`, `ReplicaService` and `RetentionService`.
+  `ReplicaService` and `RetentionService`.
 - The command line `nopacs` for every service, with `--json` output and named
   client contexts, and an interactive program (`nopacs` with no arguments).
 - Generated clients for Python (`nopacs`, `clients/python`) and TypeScript

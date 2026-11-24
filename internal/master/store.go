@@ -32,7 +32,10 @@ import (
 // every change that would undo it until the transaction ends, so a
 // revocation, an expiry or a grant removed or lowered is ordered before the
 // change, which is then refused, or after it, never in between. The local
-// operator and the server are never refused. A zero Actor is Invalid.
+// operator and the server hold no key, so this check never refuses them;
+// the one change that asks for a particular caller, ReinstateKeys, which
+// only the local operator may make, refuses every other Actor, the server
+// included, as Denied. A zero Actor is Invalid.
 //
 // A call that returns an error has committed nothing. A context that ends
 // during a call, a call on a closed store, a database that is read-only, and
@@ -210,4 +213,8 @@ type Store interface {
 	// AuditSeals is the seal of the master's audit log (auditseal.go). Its
 	// changes are the server's own and take no Actor.
 	AuditSeals
+
+	// KeyReinstatement lets suspended keys work again (suspend.go). It is
+	// the local operator's alone and refuses every other Actor.
+	KeyReinstatement
 }

@@ -78,6 +78,10 @@ func (a Actor) IsServer() bool { return a.kind == actorServer }
 // whose export failed (ExportGiveBack).
 func (a Actor) IsExportGiveBack() bool { return a.kind == actorGiveBack }
 
+// IsLocalOperator reports whether a is the caller on the machine's local
+// socket (LocalOperator).
+func (a Actor) IsLocalOperator() bool { return a.kind == actorLocal }
+
 // IsKey reports whether a is a key, the one kind of Actor a store checks.
 func (a Actor) IsKey() bool { return a.kind == actorKey }
 

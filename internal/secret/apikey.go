@@ -29,6 +29,16 @@ const (
 	apiKeyLength = len(apiKeyPrefix) + idLength + 1 + secretLength
 )
 
+// APIKeyPrefix starts every whole API key and no key id, so a value that
+// begins with it, given where an id goes, is a secret that must not be
+// repeated anywhere.
+const APIKeyPrefix = apiKeyPrefix
+
+// APIKeyIDLength is the length of every key id MakeAPIKey makes: a value
+// longer than it, given where an id goes, is not an id and may hold a
+// secret.
+const APIKeyIDLength = idLength
+
 // base58 is the alphabet of an API key's id and secret: digits and letters
 // without 0, O, I and l, which are easy to confuse when a key is read out or
 // copied by hand, and without punctuation, so a double-click selects the

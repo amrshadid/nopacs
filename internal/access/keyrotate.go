@@ -58,11 +58,11 @@ func addRuleDetails(details map[string]string, r master.KeyRules) {
 func (a *Access) SetKeyRules(ctx context.Context, d Decision, id string, rules master.KeyRules) (master.Key, error) {
 	details := map[string]string{}
 	addRuleDetails(details, rules)
-	entry, by, err := a.change(ctx, d, auditText(id, master.MaxAuditFieldLength), details)
+	entry, by, err := a.change(ctx, d, master.KeyObject(id), details)
 	if err != nil {
 		return master.Key{}, err
 	}
-	if err := master.ValidateID("key id", id); err != nil {
+	if err := master.ValidateKeyRef("key id", id); err != nil {
 		return master.Key{}, a.failAfter(entry, err)
 	}
 	if err := rules.Validate(); err != nil {
@@ -102,7 +102,7 @@ func (a *Access) RotateKey(ctx context.Context, d Decision, id string, overlap, 
 		return CreatedKey{}, master.Key{}, fault.New(fault.Denied, MessageDenied)
 	}
 	entry := d.Entry(master.OutcomeDone, "", Facts{})
-	entry.Object = auditText(id, master.MaxAuditFieldLength)
+	entry.Object = master.KeyObject(id)
 	entry.Details = map[string]string{detailOverlap: overlap.String()}
 	admin := atLeast(d.principal.Role(master.Installation), master.RoleAdmin)
 	self := d.principal.isKey && d.principal.key.ID == id
@@ -121,7 +121,7 @@ func (a *Access) RotateKey(ctx context.Context, d Decision, id string, overlap, 
 			return CreatedKey{}, master.Key{}, a.failAfter(entry, err)
 		}
 	}
-	if err := master.ValidateID("key id", id); err != nil {
+	if err := master.ValidateKeyRef("key id", id); err != nil {
 		return CreatedKey{}, master.Key{}, a.failAfter(entry, err)
 	}
 	if overlap < 0 || overlap > MaxRotationOverlap {

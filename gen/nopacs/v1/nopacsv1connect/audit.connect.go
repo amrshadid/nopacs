@@ -51,8 +51,10 @@ type AuditServiceClient interface {
 	// Audit: one entry in the log of the scope asked for, with the filters in
 	// details; the listing records itself, so reading the log is in the log.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid,
-	// not found (a tenant that does not exist, for a caller who may list every
+	// does not exist, for a caller who may not list every tenant), invalid
+	// (also a key_id that is not a key id, such as a whole key or more than 12
+	// characters, which is never repeated in the answer or the log), not
+	// found (a tenant that does not exist, for a caller who may list every
 	// tenant), unavailable (the database of the scope does not answer, or the
 	// tenant is not ready).
 	ListAuditEntries(context.Context, *v1.ListAuditEntriesRequest) (*v1.ListAuditEntriesResponse, error)
@@ -73,8 +75,10 @@ type AuditServiceHandler interface {
 	// Audit: one entry in the log of the scope asked for, with the filters in
 	// details; the listing records itself, so reading the log is in the log.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid,
-	// not found (a tenant that does not exist, for a caller who may list every
+	// does not exist, for a caller who may not list every tenant), invalid
+	// (also a key_id that is not a key id, such as a whole key or more than 12
+	// characters, which is never repeated in the answer or the log), not
+	// found (a tenant that does not exist, for a caller who may list every
 	// tenant), unavailable (the database of the scope does not answer, or the
 	// tenant is not ready).
 	ListAuditEntries(context.Context, *v1.ListAuditEntriesRequest) (*v1.ListAuditEntriesResponse, error)

@@ -144,6 +144,98 @@ a new key; with --json the whole answer is written there.`,
 	return cmd
 }
 
+// newKeyReinstate builds "key reinstate".
+func (a *app) newKeyReinstate() *cobra.Command {
+	var all bool
+	cmd := &cobra.Command{
+		Use:   "reinstate (--all | <id>...)",
+		Short: "Let keys a restore suspended work again",
+		Long: `Let suspended keys work again: the keys named by id, or every suspended key
+with --all.
+
+A restore suspends every key it brings back, since a key revoked, or a grant
+removed, after the backup was made would otherwise work again. A suspended key
+is refused off the machine as if it were wrong; "nopacs key list" shows it as
+suspended. Review the keys first, revoke those that should stay ended, and
+reinstate the rest. A key named that is not suspended is left as it is.
+Reinstating does not bring back a revoked or expired key: it stays refused.
+
+Only the local operator may reinstate keys: run this on the machine, over its
+local socket (--data-dir), where commands need no key. Any key is refused,
+whatever its grants. Each key reinstated has its own entry in the audit log.
+At most 1000 ids are named at once.
+
+On standard output each key reinstated is listed, or with --all the count;
+with --json the whole answer is written there.`,
+		Example: `  nopacs key reinstate k8Zp2QvXn5Rt --data-dir /var/lib/nopacs
+  nopacs key reinstate k8Zp2QvXn5Rt k3Hw9TbYm2Qa
+  nopacs key reinstate --all`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case all && len(args) > 0:
+				return fault.New(fault.Invalid, "give key ids or --all, not both; usage: "+cmd.UseLine())
+			case !all && len(args) == 0:
+				return fault.New(fault.Invalid, "name the keys to reinstate, or give --all; usage: "+cmd.UseLine())
+			case len(args) > maxReinstateIDs:
+				return fault.New(fault.Invalid, fmt.Sprintf("at most %d keys are reinstated by id at once (got %d); reinstate them in parts, or give --all", maxReinstateIDs, len(args)))
+			}
+			return nil
+		},
+		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {
+			for _, id := range args {
+				if err := checkKeyID(id); err != nil {
+					return err
+				}
+			}
+			c, closeClient, err := a.open(cmd)
+			if err != nil {
+				return err
+			}
+			defer closeClient()
+			res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.ReinstateKeysResponse, error) {
+				return c.Access.ReinstateKeys(ctx, &v1.ReinstateKeysRequest{KeyIds: args, All: all})
+			})
+			if err != nil {
+				return err
+			}
+			if !a.opts.json && !all {
+				back := map[string]bool{}
+				for _, k := range res.GetKeys() {
+					back[k.GetId()] = true
+				}
+				for _, id := range args {
+					if !back[id] {
+						_, _ = fmt.Fprintf(a.env.Stderr, "nopacs: key %s was not suspended; it is left as it was\n", output.Clean(id))
+						back[id] = true // an id given twice is told once
+					}
+				}
+			}
+			return messageOut(a, res, func(w io.Writer) error {
+				if all {
+					noun := "keys"
+					if res.GetReinstated() == 1 {
+						noun = "key"
+					}
+					_, err := fmt.Fprintf(w, "%d %s reinstated\n", res.GetReinstated(), noun)
+					return err
+				}
+				for _, k := range res.GetKeys() {
+					if _, err := fmt.Fprintf(w, "key %s reinstated (%s)\n", output.Clean(keyLabel(k)), a.keyStatus(k)); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		}),
+	}
+	cmd.Flags().BoolVar(&all, "all", false, "reinstate every suspended key, once they have been reviewed")
+	return cmd
+}
+
+// maxReinstateIDs is the most key ids one reinstatement names, as the API
+// contract allows (ReinstateKeysRequest.key_ids).
+const maxReinstateIDs = 1000
+
 // newKeySet builds "key set".
 func (a *app) newKeySet() *cobra.Command {
 	var rules ruleFlags

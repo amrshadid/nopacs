@@ -54,6 +54,9 @@ type Store interface {
 	// RemoveGrant removes a key's grant on a scope with its audit entry, if
 	// by is still allowed to, and returns the role it had.
 	RemoveGrant(ctx context.Context, keyID string, scope master.Scope, audit master.AuditEntry, by master.Actor) (master.Role, error)
+	// ReinstateKeys clears the suspension of keys, by id or all, with an
+	// audit entry per key reinstated, if by is the local operator.
+	ReinstateKeys(ctx context.Context, ids []string, all bool, audit master.AuditEntry, by master.Actor) ([]master.Key, int64, error)
 }
 
 // The master port must keep satisfying Store; if it changes, the build fails

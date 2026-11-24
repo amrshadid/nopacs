@@ -120,8 +120,10 @@ class AccessServiceServicer:
         Role: admin on the installation.
         Audit: one entry in the installation's log, with the key's id as its
         object.
-        Errors: unauthenticated, permission denied, invalid, not found (no key
-        has that id), unavailable (the master database does not answer).
+        Errors: unauthenticated, permission denied, invalid (also an id that is
+        not a key id, such as a whole key or more than 12 characters, which is
+        never repeated in the answer or the log), not found (no key has that
+        id), unavailable (the master database does not answer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -151,8 +153,10 @@ class AccessServiceServicer:
         Role: admin on the installation.
         Audit: one entry in the installation's log, with the key's id as its
         object.
-        Errors: unauthenticated, permission denied, invalid, not found (no key
-        has that id), unavailable (the master database does not answer).
+        Errors: unauthenticated, permission denied, invalid (also an id that is
+        not a key id, such as a whole key or more than 12 characters, which is
+        never repeated in the answer or the log), not found (no key has that
+        id), unavailable (the master database does not answer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -168,9 +172,11 @@ class AccessServiceServicer:
         Audit: one entry in the installation's log, with the key's id as its
         object, and the scope, the previous role (when there was one) and the new
         role in details.
-        Errors: unauthenticated, permission denied, invalid, not found (no key
-        has that id, or no tenant has the scope's name: a caller who passes the
-        role check may list every tenant, so it is told), conflict (the key is
+        Errors: unauthenticated, permission denied, invalid (also a key_id that
+        is not a key id, such as a whole key or more than 12 characters, which
+        is never repeated in the answer or the log), not found (no key has that
+        id, or no tenant has the scope's name: a caller who passes the role
+        check may list every tenant, so it is told), conflict (the key is
         revoked), unavailable (the master database does not answer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -186,7 +192,9 @@ class AccessServiceServicer:
 
         Role: admin on the installation.
         Audit: one entry in the installation's log, with the filter in details.
-        Errors: unauthenticated, permission denied, invalid, not found (no tenant
+        Errors: unauthenticated, permission denied, invalid (also a key_id that
+        is not a key id, such as a whole key or more than 12 characters, which
+        is never repeated in the answer or the log), not found (no tenant
         has the scope's name: a caller who passes the role check may list every
         tenant, so it is told), unavailable (the master database does not
         answer).
@@ -204,9 +212,11 @@ class AccessServiceServicer:
         Audit: one entry in the installation's log, with the key's id as its
         object, and the scope and the role removed (when there was one) in
         details.
-        Errors: unauthenticated, permission denied, invalid, not found (no key
-        has that id, or no tenant has the scope's name: a caller who passes the
-        role check may list every tenant, so it is told), unavailable (the master
+        Errors: unauthenticated, permission denied, invalid (also a key_id that
+        is not a key id, such as a whole key or more than 12 characters, which
+        is never repeated in the answer or the log), not found (no key has that
+        id, or no tenant has the scope's name: a caller who passes the role
+        check may list every tenant, so it is told), unavailable (the master
         database does not answer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -246,8 +256,10 @@ class AccessServiceServicer:
         Audit: one entry in the installation's log, with the rotated key's id as
         its object, and the successor's id, the rotated key's new end and the
         overlap in details; never the secret.
-        Errors: unauthenticated, permission denied, invalid, not found (no key
-        has that id), conflict (the key is revoked, has expired, or was already
+        Errors: unauthenticated, permission denied, invalid (also an id that is
+        not a key id, such as a whole key or more than 12 characters, which is
+        never repeated in the answer or the log), not found (no key has that
+        id), conflict (the key is revoked, has expired, or was already
         rotated), unavailable (the master database does not answer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -262,9 +274,11 @@ class AccessServiceServicer:
         Role: admin on the installation.
         Audit: one entry in the installation's log, with the key's id as its
         object and the new rules in details.
-        Errors: unauthenticated, permission denied, invalid, not found (no key
-        has that id), conflict (the key is revoked), unavailable (the master
-        database does not answer).
+        Errors: unauthenticated, permission denied, invalid (also an id that is
+        not a key id, such as a whole key or more than 12 characters, which is
+        never repeated in the answer or the log), not found (no key has that
+        id), conflict (the key is revoked), unavailable (the master database
+        does not answer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -284,8 +298,10 @@ class AccessServiceServicer:
         the key's id as its object.
         Errors: unauthenticated, permission denied (also any caller but the
         local operator), invalid (also both key_ids and all, or neither; more
-        than 1000 ids), not found (a key id the installation does not have),
-        unavailable (the master database does not answer).
+        than 1000 ids; an id that is not a key id, such as a whole key or more
+        than 12 characters, which is never repeated in the answer or the log),
+        not found (a key id the installation does not have), unavailable (the
+        master database does not answer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

@@ -3,6 +3,7 @@ package fakeserver
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -58,6 +59,58 @@ func (h accessHandler) RotateKey(_ context.Context, req *v1.RotateKeyRequest) (*
 		}
 	}
 	return &v1.RotateKeyResponse{Key: next, Secret: secret, Rotated: k.key}, nil
+}
+
+// ReinstateKeys clears the suspension of keys, by id or all of them, as the
+// real server does: the local operator alone (a caller with RequireKey set
+// is a key, and is denied); ids and all together or neither, or more than
+// 1000 ids, invalid; an unknown id not found with nothing changed; a key
+// not suspended left alone and not listed; with all, only the count.
+func (h accessHandler) ReinstateKeys(_ context.Context, req *v1.ReinstateKeysRequest) (*v1.ReinstateKeysResponse, error) {
+	s := h.s
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.RequireKey != "" {
+		return nil, fault.New(fault.Denied, "the key may not do this")
+	}
+	ids := req.GetKeyIds()
+	switch {
+	case req.GetAll() && len(ids) > 0:
+		return nil, fault.New(fault.Invalid, "keys are reinstated by id or all of them, not both")
+	case !req.GetAll() && len(ids) == 0:
+		return nil, fault.New(fault.Invalid, "name the keys to reinstate, or ask for all of them")
+	case len(ids) > 1000:
+		return nil, fault.New(fault.Invalid, "at most 1000 keys are reinstated by id at once")
+	}
+	out := &v1.ReinstateKeysResponse{}
+	if req.GetAll() {
+		for _, k := range s.keys {
+			if k.key.GetSuspended() {
+				k.key.Suspended, k.key.SuspendTime = false, nil
+				out.Reinstated++
+			}
+		}
+		return out, nil
+	}
+	sorted := slices.Clone(ids)
+	slices.Sort(sorted)
+	sorted = slices.Compact(sorted)
+	named := make([]*keyRecord, 0, len(sorted))
+	for _, id := range sorted {
+		k, err := s.findKey(id)
+		if err != nil {
+			return nil, err
+		}
+		named = append(named, k)
+	}
+	for _, k := range named {
+		if k.key.GetSuspended() {
+			k.key.Suspended, k.key.SuspendTime = false, nil
+			out.Keys = append(out.Keys, k.key)
+			out.Reinstated++
+		}
+	}
+	return out, nil
 }
 
 // SetKeyRules replaces a key's networks and client certificate.

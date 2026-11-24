@@ -65,7 +65,6 @@ func (t Table) Requirement(procedure string, msg proto.Message) (access.Requirem
 // api/not-served.txt, which a test compares with this list.
 var pendingMethods = []string{
 	nopacsv1connect.BackupServiceCreateBackupProcedure,
-	nopacsv1connect.AccessServiceReinstateKeysProcedure,
 }
 
 // Pending reports whether procedure is one of pendingMethods, so the server
@@ -122,6 +121,9 @@ func Contract() Table {
 		nopacsv1connect.AccessServiceListGrantsProcedure:  admin,
 		nopacsv1connect.AccessServiceRemoveGrantProcedure: admin,
 		nopacsv1connect.AccessServiceSetKeyRulesProcedure: admin,
+		// "Role: admin on the installation." The handler also asks for the
+		// local operator, after the check.
+		nopacsv1connect.AccessServiceReinstateKeysProcedure: admin,
 		// "Role: admin on the installation; or the key being rotated
 		// itself": the handler decides which, after the check.
 		nopacsv1connect.AccessServiceRotateKeyProcedure: fixed(access.Authenticated()),

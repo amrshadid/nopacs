@@ -30,8 +30,8 @@ func (r Report) Print(w io.Writer) error {
 			s.Point.SchemaVersion)
 	}
 	fmt.Fprintf(&b, "\nKeys: all %d suspended. A key revoked, or a grant removed, after the backup would otherwise work\n", r.KeysSuspended)
-	b.WriteString("again. Each stays refused; to give a holder a working key, the local operator, on this machine's socket,\n")
-	b.WriteString("rotates it (nopacs key rotate ID): its successor holds the same grants and is not suspended.\n")
+	b.WriteString("again. Each stays refused until the local operator, on this machine's socket, reviews the keys\n")
+	b.WriteString("(nopacs key list) and reinstates those that should work (nopacs key reinstate ID... or --all).\n")
 	for _, t := range r.Tenants {
 		fmt.Fprintf(&b, "\nTenant %s:\n", c(t.Tenant))
 		for _, o := range t.Owners {

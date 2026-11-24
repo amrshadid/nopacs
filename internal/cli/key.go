@@ -22,12 +22,13 @@ func (a *app) keyStatus(k *v1.Key) string { return output.KeyStatus(k, a.env.Now
 
 // newKey builds the key noun.
 func (a *app) newKey() *cobra.Command {
-	return group("key", "Create, list, show, rotate, restrict and revoke keys",
+	return group("key", "Create, list, show, rotate, restrict, revoke and reinstate keys",
 		`A key is a credential held by a person or a system. A key has no rights of its
 own: grants give it roles (see "nopacs grant"). These commands need the admin
-role on the installation, but a key may rotate itself. A key's secret is shown
+role on the installation, but a key may rotate itself, and only the local
+operator may reinstate the keys a restore suspended. A key's secret is shown
 once, when it is made or rotated, and cannot be shown again.`,
-		a.newKeyCreate(), a.newKeyList(), a.newKeyShow(), a.newKeyRevoke(), a.newKeyRotate(), a.newKeySet())
+		a.newKeyCreate(), a.newKeyList(), a.newKeyShow(), a.newKeyRevoke(), a.newKeyRotate(), a.newKeySet(), a.newKeyReinstate())
 }
 
 // keyDetails writes one key as labeled lines: its rules and its successor
@@ -50,6 +51,9 @@ func (a *app) keyDetails(w io.Writer, k *v1.Key) error {
 	}
 	if s := k.GetSuccessorId(); s != "" {
 		pairs = append(pairs, output.Pair{Label: "Successor", Value: s})
+	}
+	if k.GetSuspended() {
+		pairs = append(pairs, output.Pair{Label: "Suspended", Value: a.whenOr(k.GetSuspendTime(), "yes")})
 	}
 	return output.Details(w, a.style(), pairs)
 }

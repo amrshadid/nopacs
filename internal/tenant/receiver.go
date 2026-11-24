@@ -182,9 +182,11 @@ func (s STOWReceiver) validate() error {
 	return nil
 }
 
-// validateKeyID refuses what cannot be a key's id (master.ValidateID).
+// validateKeyID refuses what cannot be a key's id (master.ValidateKeyRef),
+// a whole key included, so a key pasted in place of its id is never kept
+// in a receiver's configuration and never repeated in the error.
 func validateKeyID(id string) error {
-	if err := master.ValidateID("key id", id); err != nil {
+	if err := master.ValidateKeyRef("key id", id); err != nil {
 		return invalid(fault.Message(err))
 	}
 	return nil

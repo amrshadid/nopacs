@@ -352,11 +352,11 @@ func (a *Access) CreateKey(ctx context.Context, d Decision, holder string, exp E
 // GetKey returns one key, revoked and expired keys included, without its
 // hash. It needs the installation's admin. An unknown id is NotFound.
 func (a *Access) GetKey(ctx context.Context, d Decision, id string) (master.Key, error) {
-	entry, err := a.read(ctx, d, true, auditText(id, master.MaxAuditFieldLength), nil)
+	entry, err := a.read(ctx, d, true, master.KeyObject(id), nil)
 	if err != nil {
 		return master.Key{}, err
 	}
-	if err := master.ValidateID("key id", id); err != nil {
+	if err := master.ValidateKeyRef("key id", id); err != nil {
 		return master.Key{}, a.failAfter(entry, err)
 	}
 	k, err := a.store.Key(ctx, id)
@@ -401,11 +401,11 @@ func (a *Access) ListKeys(ctx context.Context, d Decision, p master.Page) ([]mas
 // read with the revoke time the revocation returned: a revocation that
 // happened is never answered as a failure.
 func (a *Access) RevokeKey(ctx context.Context, d Decision, id string) (master.Key, error) {
-	entry, by, err := a.change(ctx, d, auditText(id, master.MaxAuditFieldLength), nil)
+	entry, by, err := a.change(ctx, d, master.KeyObject(id), nil)
 	if err != nil {
 		return master.Key{}, err
 	}
-	if err := master.ValidateID("key id", id); err != nil {
+	if err := master.ValidateKeyRef("key id", id); err != nil {
 		return master.Key{}, a.failAfter(entry, err)
 	}
 	k, err := a.store.Key(ctx, id)
@@ -449,11 +449,11 @@ func (a *Access) resolve(ctx context.Context, s Scope) (master.Scope, error) {
 // NotFound; a revoked key is Conflict. The audit entry has the scope and,
 // from the master, the old and the new role.
 func (a *Access) SetGrant(ctx context.Context, d Decision, keyID string, scope Scope, role master.Role) (Grant, master.Role, error) {
-	entry, by, err := a.change(ctx, d, auditText(keyID, master.MaxAuditFieldLength), map[string]string{detailScope: scope.String()})
+	entry, by, err := a.change(ctx, d, master.KeyObject(keyID), map[string]string{detailScope: scope.String()})
 	if err != nil {
 		return Grant{}, "", err
 	}
-	if err := master.ValidateID("key id", keyID); err != nil {
+	if err := master.ValidateKeyRef("key id", keyID); err != nil {
 		return Grant{}, "", a.failAfter(entry, err)
 	}
 	if !role.Valid() {
@@ -483,11 +483,11 @@ func (a *Access) SetGrant(ctx context.Context, d Decision, keyID string, scope S
 // and succeeds. It needs the installation's admin. An unknown key or tenant
 // is NotFound.
 func (a *Access) RemoveGrant(ctx context.Context, d Decision, keyID string, scope Scope) (master.Role, error) {
-	entry, by, err := a.change(ctx, d, auditText(keyID, master.MaxAuditFieldLength), map[string]string{detailScope: scope.String()})
+	entry, by, err := a.change(ctx, d, master.KeyObject(keyID), map[string]string{detailScope: scope.String()})
 	if err != nil {
 		return "", err
 	}
-	if err := master.ValidateID("key id", keyID); err != nil {
+	if err := master.ValidateKeyRef("key id", keyID); err != nil {
 		return "", a.failAfter(entry, err)
 	}
 	ms, err := a.resolve(ctx, scope)
@@ -512,7 +512,7 @@ func (a *Access) ListGrants(ctx context.Context, d Decision, filter GrantFilter,
 	desc := "none"
 	switch {
 	case filter.byKey:
-		desc = "key/" + auditText(filter.keyID, master.MaxIDLength)
+		desc = "key/" + master.KeyObject(filter.keyID)
 	case filter.byScope:
 		desc = filter.scope.String()
 	}
@@ -528,7 +528,7 @@ func (a *Access) ListGrants(ctx context.Context, d Decision, filter GrantFilter,
 	var next string
 	switch {
 	case filter.byKey:
-		if err := master.ValidateID("key id", filter.keyID); err != nil {
+		if err := master.ValidateKeyRef("key id", filter.keyID); err != nil {
 			return nil, "", a.failAfter(entry, err)
 		}
 		grants, next, err = a.store.GrantsByKey(ctx, filter.keyID, p)

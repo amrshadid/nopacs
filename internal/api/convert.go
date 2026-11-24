@@ -91,13 +91,15 @@ func settingName(field, name string) error {
 	return nil
 }
 
-// keyID returns an Invalid error naming field unless id could be a key's id.
+// keyID returns an Invalid error naming field unless id could be a key's id
+// (master.ValidateKeyRef), never repeating it: a whole key given as an id
+// is a secret, and is refused here as not a key id.
 func keyID(field, id string) error {
 	if id == "" {
 		return invalid(field, "is required")
 	}
-	if master.ValidateID("key id", id) != nil {
-		return invalid(field, "is not a key id")
+	if master.ValidateKeyRef("key id", id) != nil {
+		return invalid(field, "is not a key id: give the key's id, never the whole key")
 	}
 	return nil
 }

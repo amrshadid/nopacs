@@ -100,15 +100,20 @@ func KeyLabel(k *v1.Key) string {
 	return k.GetId() + " (" + k.GetHolder() + ")"
 }
 
-// KeyStatus says whether a key works at now: revoked, expired, or active. It
-// is worked out from the times the server sent, which are all a client has;
-// the server decides for itself on each request.
+// KeyStatus says whether a key works at now: revoked, expired, suspended
+// (refused off the local socket until it is reinstated, as a restore leaves
+// every key), or active. A revoked or expired key says so first, since
+// reinstating it would not make it work. It is worked out from what the
+// server sent, which is all a client has; the server decides for itself on
+// each request.
 func KeyStatus(k *v1.Key, now time.Time) string {
 	switch {
 	case k.GetRevokeTime() != nil:
 		return "revoked"
 	case k.GetExpireTime() != nil && !k.GetExpireTime().AsTime().After(now):
 		return "expired"
+	case k.GetSuspended():
+		return "suspended"
 	}
 	return "active"
 }

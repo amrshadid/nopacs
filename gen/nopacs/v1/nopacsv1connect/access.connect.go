@@ -371,8 +371,10 @@ type AccessServiceClient interface {
 	// Role: admin on the installation.
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id), unavailable (the master database does not answer).
+	// Errors: unauthenticated, permission denied, invalid (also an id that is
+	// not a key id, such as a whole key or more than 12 characters, which is
+	// never repeated in the answer or the log), not found (no key has that
+	// id), unavailable (the master database does not answer).
 	GetKey(context.Context, *v1.GetKeyRequest) (*v1.GetKeyResponse, error)
 	// ListKeys answers every key of the installation, revoked and expired keys
 	// included, oldest first.
@@ -392,8 +394,10 @@ type AccessServiceClient interface {
 	// Role: admin on the installation.
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id), unavailable (the master database does not answer).
+	// Errors: unauthenticated, permission denied, invalid (also an id that is
+	// not a key id, such as a whole key or more than 12 characters, which is
+	// never repeated in the answer or the log), not found (no key has that
+	// id), unavailable (the master database does not answer).
 	RevokeKey(context.Context, *v1.RevokeKeyRequest) (*v1.RevokeKeyResponse, error)
 	// SetGrant sets the role of a key on a scope. A key holds at most one grant
 	// per scope; when it already holds one there, its role is replaced in the
@@ -404,9 +408,11 @@ type AccessServiceClient interface {
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object, and the scope, the previous role (when there was one) and the new
 	// role in details.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id, or no tenant has the scope's name: a caller who passes the
-	// role check may list every tenant, so it is told), conflict (the key is
+	// Errors: unauthenticated, permission denied, invalid (also a key_id that
+	// is not a key id, such as a whole key or more than 12 characters, which
+	// is never repeated in the answer or the log), not found (no key has that
+	// id, or no tenant has the scope's name: a caller who passes the role
+	// check may list every tenant, so it is told), conflict (the key is
 	// revoked), unavailable (the master database does not answer).
 	SetGrant(context.Context, *v1.SetGrantRequest) (*v1.SetGrantResponse, error)
 	// ListGrants answers the grants of one key, or the grants on one scope.
@@ -417,7 +423,9 @@ type AccessServiceClient interface {
 	//
 	// Role: admin on the installation.
 	// Audit: one entry in the installation's log, with the filter in details.
-	// Errors: unauthenticated, permission denied, invalid, not found (no tenant
+	// Errors: unauthenticated, permission denied, invalid (also a key_id that
+	// is not a key id, such as a whole key or more than 12 characters, which
+	// is never repeated in the answer or the log), not found (no tenant
 	// has the scope's name: a caller who passes the role check may list every
 	// tenant, so it is told), unavailable (the master database does not
 	// answer).
@@ -430,9 +438,11 @@ type AccessServiceClient interface {
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object, and the scope and the role removed (when there was one) in
 	// details.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id, or no tenant has the scope's name: a caller who passes the
-	// role check may list every tenant, so it is told), unavailable (the master
+	// Errors: unauthenticated, permission denied, invalid (also a key_id that
+	// is not a key id, such as a whole key or more than 12 characters, which
+	// is never repeated in the answer or the log), not found (no key has that
+	// id, or no tenant has the scope's name: a caller who passes the role
+	// check may list every tenant, so it is told), unavailable (the master
 	// database does not answer).
 	RemoveGrant(context.Context, *v1.RemoveGrantRequest) (*v1.RemoveGrantResponse, error)
 	// WhoAmI answers the caller: the key the request carried with that key's
@@ -462,8 +472,10 @@ type AccessServiceClient interface {
 	// Audit: one entry in the installation's log, with the rotated key's id as
 	// its object, and the successor's id, the rotated key's new end and the
 	// overlap in details; never the secret.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id), conflict (the key is revoked, has expired, or was already
+	// Errors: unauthenticated, permission denied, invalid (also an id that is
+	// not a key id, such as a whole key or more than 12 characters, which is
+	// never repeated in the answer or the log), not found (no key has that
+	// id), conflict (the key is revoked, has expired, or was already
 	// rotated), unavailable (the master database does not answer).
 	RotateKey(context.Context, *v1.RotateKeyRequest) (*v1.RotateKeyResponse, error)
 	// SetKeyRules replaces where a key may be used from: its networks and the
@@ -473,9 +485,11 @@ type AccessServiceClient interface {
 	// Role: admin on the installation.
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object and the new rules in details.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id), conflict (the key is revoked), unavailable (the master
-	// database does not answer).
+	// Errors: unauthenticated, permission denied, invalid (also an id that is
+	// not a key id, such as a whole key or more than 12 characters, which is
+	// never repeated in the answer or the log), not found (no key has that
+	// id), conflict (the key is revoked), unavailable (the master database
+	// does not answer).
 	SetKeyRules(context.Context, *v1.SetKeyRulesRequest) (*v1.SetKeyRulesResponse, error)
 	// ReinstateKeys lets suspended keys work again off the local socket
 	// (Key.suspended). A restore suspends every key it brings back, since a
@@ -490,8 +504,10 @@ type AccessServiceClient interface {
 	// the key's id as its object.
 	// Errors: unauthenticated, permission denied (also any caller but the
 	// local operator), invalid (also both key_ids and all, or neither; more
-	// than 1000 ids), not found (a key id the installation does not have),
-	// unavailable (the master database does not answer).
+	// than 1000 ids; an id that is not a key id, such as a whole key or more
+	// than 12 characters, which is never repeated in the answer or the log),
+	// not found (a key id the installation does not have), unavailable (the
+	// master database does not answer).
 	ReinstateKeys(context.Context, *v1.ReinstateKeysRequest) (*v1.ReinstateKeysResponse, error)
 }
 
@@ -517,8 +533,10 @@ type AccessServiceHandler interface {
 	// Role: admin on the installation.
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id), unavailable (the master database does not answer).
+	// Errors: unauthenticated, permission denied, invalid (also an id that is
+	// not a key id, such as a whole key or more than 12 characters, which is
+	// never repeated in the answer or the log), not found (no key has that
+	// id), unavailable (the master database does not answer).
 	GetKey(context.Context, *v1.GetKeyRequest) (*v1.GetKeyResponse, error)
 	// ListKeys answers every key of the installation, revoked and expired keys
 	// included, oldest first.
@@ -538,8 +556,10 @@ type AccessServiceHandler interface {
 	// Role: admin on the installation.
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id), unavailable (the master database does not answer).
+	// Errors: unauthenticated, permission denied, invalid (also an id that is
+	// not a key id, such as a whole key or more than 12 characters, which is
+	// never repeated in the answer or the log), not found (no key has that
+	// id), unavailable (the master database does not answer).
 	RevokeKey(context.Context, *v1.RevokeKeyRequest) (*v1.RevokeKeyResponse, error)
 	// SetGrant sets the role of a key on a scope. A key holds at most one grant
 	// per scope; when it already holds one there, its role is replaced in the
@@ -550,9 +570,11 @@ type AccessServiceHandler interface {
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object, and the scope, the previous role (when there was one) and the new
 	// role in details.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id, or no tenant has the scope's name: a caller who passes the
-	// role check may list every tenant, so it is told), conflict (the key is
+	// Errors: unauthenticated, permission denied, invalid (also a key_id that
+	// is not a key id, such as a whole key or more than 12 characters, which
+	// is never repeated in the answer or the log), not found (no key has that
+	// id, or no tenant has the scope's name: a caller who passes the role
+	// check may list every tenant, so it is told), conflict (the key is
 	// revoked), unavailable (the master database does not answer).
 	SetGrant(context.Context, *v1.SetGrantRequest) (*v1.SetGrantResponse, error)
 	// ListGrants answers the grants of one key, or the grants on one scope.
@@ -563,7 +585,9 @@ type AccessServiceHandler interface {
 	//
 	// Role: admin on the installation.
 	// Audit: one entry in the installation's log, with the filter in details.
-	// Errors: unauthenticated, permission denied, invalid, not found (no tenant
+	// Errors: unauthenticated, permission denied, invalid (also a key_id that
+	// is not a key id, such as a whole key or more than 12 characters, which
+	// is never repeated in the answer or the log), not found (no tenant
 	// has the scope's name: a caller who passes the role check may list every
 	// tenant, so it is told), unavailable (the master database does not
 	// answer).
@@ -576,9 +600,11 @@ type AccessServiceHandler interface {
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object, and the scope and the role removed (when there was one) in
 	// details.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id, or no tenant has the scope's name: a caller who passes the
-	// role check may list every tenant, so it is told), unavailable (the master
+	// Errors: unauthenticated, permission denied, invalid (also a key_id that
+	// is not a key id, such as a whole key or more than 12 characters, which
+	// is never repeated in the answer or the log), not found (no key has that
+	// id, or no tenant has the scope's name: a caller who passes the role
+	// check may list every tenant, so it is told), unavailable (the master
 	// database does not answer).
 	RemoveGrant(context.Context, *v1.RemoveGrantRequest) (*v1.RemoveGrantResponse, error)
 	// WhoAmI answers the caller: the key the request carried with that key's
@@ -608,8 +634,10 @@ type AccessServiceHandler interface {
 	// Audit: one entry in the installation's log, with the rotated key's id as
 	// its object, and the successor's id, the rotated key's new end and the
 	// overlap in details; never the secret.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id), conflict (the key is revoked, has expired, or was already
+	// Errors: unauthenticated, permission denied, invalid (also an id that is
+	// not a key id, such as a whole key or more than 12 characters, which is
+	// never repeated in the answer or the log), not found (no key has that
+	// id), conflict (the key is revoked, has expired, or was already
 	// rotated), unavailable (the master database does not answer).
 	RotateKey(context.Context, *v1.RotateKeyRequest) (*v1.RotateKeyResponse, error)
 	// SetKeyRules replaces where a key may be used from: its networks and the
@@ -619,9 +647,11 @@ type AccessServiceHandler interface {
 	// Role: admin on the installation.
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object and the new rules in details.
-	// Errors: unauthenticated, permission denied, invalid, not found (no key
-	// has that id), conflict (the key is revoked), unavailable (the master
-	// database does not answer).
+	// Errors: unauthenticated, permission denied, invalid (also an id that is
+	// not a key id, such as a whole key or more than 12 characters, which is
+	// never repeated in the answer or the log), not found (no key has that
+	// id), conflict (the key is revoked), unavailable (the master database
+	// does not answer).
 	SetKeyRules(context.Context, *v1.SetKeyRulesRequest) (*v1.SetKeyRulesResponse, error)
 	// ReinstateKeys lets suspended keys work again off the local socket
 	// (Key.suspended). A restore suspends every key it brings back, since a
@@ -636,8 +666,10 @@ type AccessServiceHandler interface {
 	// the key's id as its object.
 	// Errors: unauthenticated, permission denied (also any caller but the
 	// local operator), invalid (also both key_ids and all, or neither; more
-	// than 1000 ids), not found (a key id the installation does not have),
-	// unavailable (the master database does not answer).
+	// than 1000 ids; an id that is not a key id, such as a whole key or more
+	// than 12 characters, which is never repeated in the answer or the log),
+	// not found (a key id the installation does not have), unavailable (the
+	// master database does not answer).
 	ReinstateKeys(context.Context, *v1.ReinstateKeysRequest) (*v1.ReinstateKeysResponse, error)
 }
 

@@ -76,7 +76,10 @@
 // statement sees what was committed when it began, and a locking statement
 // that waited re-reads only the row it locked, and only if that row changed,
 // which a change of grants (it locks the key's row and changes another
-// table) does not do. Taken in one order, these
+// table) does not do. ReinstateKeys locks every row it will change, the
+// keys named or every suspended key, with one SELECT ... ORDER BY id FOR NO
+// KEY UPDATE before its UPDATE, never letting an UPDATE take rows in the
+// order it finds them on disk. Taken in one order, these
 // locks cannot wait on each other in a cycle, which Postgres would break by
 // failing one of the changes as a deadlock.
 //

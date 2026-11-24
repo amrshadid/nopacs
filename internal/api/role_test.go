@@ -423,8 +423,8 @@ func TestPendingRules(t *testing.T) {
 	lines := roleLines(t)
 	var p api.Pending
 	procs := p.Procedures()
-	if len(procs) != 22 {
-		t.Errorf("the table of methods not served has %d lines; this test was written for 22, so look at what changed", len(procs))
+	if len(procs) != 21 {
+		t.Errorf("the table of methods not served has %d lines; this test was written for 21, so look at what changed", len(procs))
 	}
 	for _, proc := range procs {
 		if !inServices(notServed, proc) {

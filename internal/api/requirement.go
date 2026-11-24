@@ -178,6 +178,9 @@ var rules = map[string]rule{
 	nopacsv1connect.AccessServiceListGrantsProcedure:  fixed(installationAdmin),
 	nopacsv1connect.AccessServiceRemoveGrantProcedure: fixed(installationAdmin),
 	nopacsv1connect.AccessServiceSetKeyRulesProcedure: fixed(installationAdmin),
+	// ReinstateKeys: admin on the installation, further kept to the local
+	// operator by package access, which refuses every key.
+	nopacsv1connect.AccessServiceReinstateKeysProcedure: fixed(installationAdmin),
 	// RotateKey: any authenticated caller reaches the handler, and package
 	// access lets through only the installation's admin or the key being
 	// rotated, deciding before it reads or validates anything else.
@@ -537,8 +540,6 @@ var rules = map[string]rule{
 // list, and the tests fail until both are done.
 //
 // BackupService's CreateBackup: admin on the installation.
-// AccessService's ReinstateKeys: admin on the installation, further kept
-// to the local operator by its handler.
 // ReplicaService: admin to attach,
 // detach, repair and switch, since each decides where the archive's bytes
 // are or writes to a primary; operator to backfill, recall (which costs the
@@ -551,8 +552,7 @@ var rules = map[string]rule{
 // of labels; the object of a storage, rule or hold method is its name or
 // id.
 var pendingRules = map[string]rule{
-	nopacsv1connect.BackupServiceCreateBackupProcedure:  fixed(installationAdmin),
-	nopacsv1connect.AccessServiceReinstateKeysProcedure: fixed(installationAdmin),
+	nopacsv1connect.BackupServiceCreateBackupProcedure: fixed(installationAdmin),
 
 	nopacsv1connect.ReplicaServiceListReplicasProcedure: byMessage(func(r *v1.ListReplicasRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{}
@@ -879,7 +879,7 @@ func settingFacts(name string, scope *v1.Scope) access.Request {
 func auditFilterDetails(r *v1.ListAuditEntriesRequest) map[string]string {
 	d := map[string]string{detailScope: scopeDetail(r.GetScope())}
 	if r.GetKeyId() != "" {
-		d[detailKeyID] = r.GetKeyId()
+		d[detailKeyID] = master.KeyObject(r.GetKeyId())
 	}
 	if o, ok := masterOutcome(r.GetOutcome()); ok && o != "" {
 		d[detailOutcome] = string(o)

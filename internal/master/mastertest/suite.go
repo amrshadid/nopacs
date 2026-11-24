@@ -76,6 +76,11 @@ func Run(t *testing.T, open Open) {
 		{"RotateKey", testRotateKey},
 		{"RotateKeyActor", testRotateKeyActor},
 		{"RotatedFrom", testRotatedFrom},
+		{"ReinstateKeys", testReinstateKeys},
+		{"ReinstateAllKeys", testReinstateAllKeys},
+		{"ReinstateRevoked", testReinstateRevoked},
+		{"ReinstateRefused", testReinstateRefused},
+		{"ReinstateDuplicateAudit", testReinstateDuplicateAudit},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

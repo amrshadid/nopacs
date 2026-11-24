@@ -16,8 +16,3 @@ var errNotServed = connect.NewError(connect.CodeUnimplemented, "no such method")
 func (tenantHandler) ReclaimTenant(context.Context, *v1.ReclaimTenantRequest) (*v1.ReclaimTenantResponse, error) {
 	return nil, errNotServed
 }
-
-// ReinstateKeys is not served yet by the real server, so not here either.
-func (accessHandler) ReinstateKeys(context.Context, *v1.ReinstateKeysRequest) (*v1.ReinstateKeysResponse, error) {
-	return nil, errNotServed
-}

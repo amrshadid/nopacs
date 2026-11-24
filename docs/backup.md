@@ -142,21 +142,30 @@ A key revoked, or a grant removed, after the backup would otherwise work again.
 So **every key is suspended** by the restore: it is refused for remote callers
 (the same answer as for a key that is no good), whatever its row said.
 
-The contract names a call that lets suspended keys work again
-(`AccessService.ReinstateKeys`), but **the server does not serve it yet**: it
-answers UNIMPLEMENTED, and there is no command for it. Until it is served, give
-each holder a working key by rotating its key on the machine's local socket,
-where commands need no key:
+Review the keys, then reinstate those that should work, on the machine's local
+socket, where commands need no key:
 
 ```sh
-nopacs key list --data-dir /var/lib/nopacs
-nopacs key rotate <id> --data-dir /var/lib/nopacs
+nopacs key list --data-dir /var/lib/nopacs          # each shows as suspended
+nopacs key revoke <id> --data-dir /var/lib/nopacs   # one that should stay ended
+nopacs key reinstate <id> <id>... --data-dir /var/lib/nopacs
+nopacs key reinstate --all --data-dir /var/lib/nopacs
 ```
 
-The successor is shown once. It holds the same grants, holder, networks and client
-certificate as the old key, and it is not suspended. The old key stays refused;
-rotate each key you want back, and leave the others suspended or revoke them.
-Review which keys deserve it first: that is the point of the suspension.
+`nopacs key reinstate` (`AccessService.ReinstateKeys`) clears the suspension of
+the keys named, at most 1000 at a time, or of every suspended key with `--all`,
+which prints only the count. A key named that is not suspended is left as it is
+and said so. Each key reinstated has its own entry in the installation's audit
+log, with the key's id as its object. Reinstating does not bring back a revoked
+or expired key: it stays refused. Only the local operator may reinstate: a key
+is answered permission denied whatever its grants, since every key may be
+suspended and none may lift a suspension. Review which keys deserve it first:
+that is the point of the suspension.
+
+Rotating a key on the local socket (`nopacs key rotate <id>`) is the other way
+back: the successor is shown once, holds the same grants, holder, networks and
+client certificate, and is not suspended, while the old key stays refused. Use
+it for a key whose secret may have leaked while the installation was down.
 
 ### When `--take-over` is needed
 
@@ -336,8 +345,6 @@ state is `fenced` and the reason names the storage and why. What to do:
 - **The drain can fail.** If the tenant's pipeline does not stop within 90
   seconds the export fails and the tenant is given back; try again when it is
   quieter.
-- **Reinstating keys is not served yet.** After a restore, keys come back only by
-  rotation over the local socket, one by one.
 - **There is no backup call on the API yet.** `CreateBackup` is in the contract
   and answers UNIMPLEMENTED; a backup is made on the machine, with the server
   stopped. Restore and import are local commands by design.

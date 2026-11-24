@@ -90,7 +90,7 @@ func (s accessService) GetKey(ctx context.Context, req *v1.GetKeyRequest) (*v1.G
 	}
 	// The requirement is fixed, so the check's entry has no object; a
 	// request refused here names it in its entry.
-	facts := access.Facts{Object: req.GetId()}
+	facts := access.Facts{Object: master.KeyObject(req.GetId())}
 	if err := keyID("id", req.GetId()); err != nil {
 		return nil, c.failWith(d, nil, facts, err)
 	}
@@ -133,7 +133,7 @@ func (s accessService) RevokeKey(ctx context.Context, req *v1.RevokeKeyRequest) 
 	}
 	// The requirement is fixed, so the check's entry has no object; a
 	// request refused here names it in its entry.
-	facts := access.Facts{Object: req.GetId()}
+	facts := access.Facts{Object: master.KeyObject(req.GetId())}
 	if err := keyID("id", req.GetId()); err != nil {
 		return nil, c.failWith(d, nil, facts, err)
 	}
@@ -154,7 +154,7 @@ func (s accessService) SetGrant(ctx context.Context, req *v1.SetGrantRequest) (*
 	}
 	// The requirement is fixed, so the check's entry has no object; a
 	// request refused here names it in its entry.
-	facts := access.Facts{Object: req.GetKeyId(), Details: map[string]string{detailScope: scopeDetail(req.GetScope())}}
+	facts := access.Facts{Object: master.KeyObject(req.GetKeyId()), Details: map[string]string{detailScope: scopeDetail(req.GetScope())}}
 	if err := keyID("key_id", req.GetKeyId()); err != nil {
 		return nil, c.failWith(d, nil, facts, err)
 	}
@@ -227,7 +227,7 @@ func (s accessService) RemoveGrant(ctx context.Context, req *v1.RemoveGrantReque
 	}
 	// The requirement is fixed, so the check's entry has no object; a
 	// request refused here names it in its entry.
-	facts := access.Facts{Object: req.GetKeyId(), Details: map[string]string{detailScope: scopeDetail(req.GetScope())}}
+	facts := access.Facts{Object: master.KeyObject(req.GetKeyId()), Details: map[string]string{detailScope: scopeDetail(req.GetScope())}}
 	if err := keyID("key_id", req.GetKeyId()); err != nil {
 		return nil, c.failWith(d, nil, facts, err)
 	}
@@ -271,7 +271,7 @@ func (s accessService) WhoAmI(ctx context.Context, _ *v1.WhoAmIRequest) (*v1.Who
 func grantFilterDetail(r *v1.ListGrantsRequest) string {
 	switch f := r.GetFilter().(type) {
 	case *v1.ListGrantsRequest_KeyId:
-		return "key/" + f.KeyId
+		return "key/" + master.KeyObject(f.KeyId)
 	case *v1.ListGrantsRequest_Scope:
 		return scopeDetail(f.Scope)
 	}
@@ -298,7 +298,7 @@ func (s accessService) RotateKey(ctx context.Context, req *v1.RotateKeyRequest) 
 	}
 	maxLifetime, err := c.values().KeyMaxLifetime(ctx)
 	if err != nil {
-		return nil, c.failWith(d, nil, access.Facts{Object: req.GetId()}, err)
+		return nil, c.failWith(d, nil, access.Facts{Object: master.KeyObject(req.GetId())}, err)
 	}
 	made, rotated, err := c.access.RotateKey(ctx, d, req.GetId(), overlap, maxLifetime)
 	if err != nil {
@@ -314,7 +314,7 @@ func (s accessService) SetKeyRules(ctx context.Context, req *v1.SetKeyRulesReque
 	if err != nil {
 		return nil, err
 	}
-	facts := access.Facts{Object: req.GetId()}
+	facts := access.Facts{Object: master.KeyObject(req.GetId())}
 	if err := keyID("id", req.GetId()); err != nil {
 		return nil, c.failWith(d, nil, facts, err)
 	}
@@ -327,6 +327,28 @@ func (s accessService) SetKeyRules(ctx context.Context, req *v1.SetKeyRulesReque
 		return nil, c.toAPI(d, err)
 	}
 	return &v1.SetKeyRulesResponse{Key: keyMessage(k)}, nil
+}
+
+// ReinstateKeys lets suspended keys work again, by id or all of them. Only
+// the local operator may: package access answers any key permission
+// denied, whatever its grants, before the request is read, since after a
+// restore every key is suspended and none may lift a suspension. With
+// all, only the count is answered (access.proto, ReinstateKeysResponse).
+func (s accessService) ReinstateKeys(ctx context.Context, req *v1.ReinstateKeysRequest) (*v1.ReinstateKeysResponse, error) {
+	c := s.c
+	d, err := c.changing(ctx, nopacsv1connect.AccessServiceReinstateKeysProcedure)
+	if err != nil {
+		return nil, err
+	}
+	keys, n, err := c.access.ReinstateKeys(ctx, d, req.GetKeyIds(), req.GetAll())
+	if err != nil {
+		return nil, c.toAPI(d, err)
+	}
+	out := &v1.ReinstateKeysResponse{Keys: make([]*v1.Key, 0, len(keys)), Reinstated: n}
+	for _, k := range keys {
+		out.Keys = append(out.Keys, keyMessage(k))
+	}
+	return out, nil
 }
 
 // keyRulesOf reads a key's rules from the networks and the fingerprint a

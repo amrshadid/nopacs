@@ -36,9 +36,12 @@ func everyMethod(f *fixture) map[string]func(clients) outcome {
 		"RemoveGrant": func(c clients) outcome {
 			return call(c.access.RemoveGrant, &v1.RemoveGrantRequest{KeyId: f.lab1ReaderID, Scope: tenantScope("lab1")})
 		},
-		"WhoAmI":       func(c clients) outcome { return call(c.access.WhoAmI, &v1.WhoAmIRequest{}) },
-		"RotateKey":    func(c clients) outcome { return call(c.access.RotateKey, &v1.RotateKeyRequest{Id: f.noGrantID}) },
-		"SetKeyRules":  func(c clients) outcome { return call(c.access.SetKeyRules, &v1.SetKeyRulesRequest{Id: f.noGrantID}) },
+		"WhoAmI":      func(c clients) outcome { return call(c.access.WhoAmI, &v1.WhoAmIRequest{}) },
+		"RotateKey":   func(c clients) outcome { return call(c.access.RotateKey, &v1.RotateKeyRequest{Id: f.noGrantID}) },
+		"SetKeyRules": func(c clients) outcome { return call(c.access.SetKeyRules, &v1.SetKeyRulesRequest{Id: f.noGrantID}) },
+		"ReinstateKeys": func(c clients) outcome {
+			return call(c.access.ReinstateKeys, &v1.ReinstateKeysRequest{KeyIds: []string{f.noGrantID}})
+		},
 		"CreateTenant": createTenant("lab9", sqliteType, ""),
 		"GetTenant":    func(c clients) outcome { return call(c.tenants.GetTenant, &v1.GetTenantRequest{Name: "lab1"}) },
 		"ListTenants":  func(c clients) outcome { return call(c.tenants.ListTenants, &v1.ListTenantsRequest{}) },

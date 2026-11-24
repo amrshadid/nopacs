@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,6 +107,71 @@ SfpquU+wxbUgHkbyNZY75edD
 // "openssl x509 -noout -fingerprint -sha256" prints it, colons removed and
 // lowered.
 const testCertSHA256 = "57137ea885158fbc7ad9e2b8fc21c2de7d0fd9522fe538812ce310e8b45c2a1d"
+
+// TestKeyReinstateCommand guards key reinstate: a suspended key shows as
+// suspended; reinstating by id lists each key reinstated, says on standard
+// error which named key was not suspended, and sends each id once; --all
+// prints the count; --json writes the whole answer; ids with --all, neither,
+// a whole key given as an id and more than 1000 ids are refused before any
+// request.
+func TestKeyReinstateCommand(t *testing.T) {
+	r := newRig(t)
+	for _, id := range []string{"k00000000001", "k00000000002", "k00000000003"} {
+		r.fake.AddKey(&v1.Key{Id: id, Holder: "ci", CreateTime: timestamppb.New(fixedNow), Suspended: true, SuspendTime: timestamppb.New(fixedNow)})
+	}
+	r.fake.AddKey(&v1.Key{Id: "k00000000004", Holder: "ci", CreateTime: timestamppb.New(fixedNow)})
+	if show := r.run("key", "show", "k00000000001").stdout; !strings.Contains(show, "Status:    suspended") || !strings.Contains(show, "Suspended: ") {
+		t.Errorf("a suspended key:\n%s", show)
+	}
+	res := r.run("key", "reinstate", "k00000000001", "k00000000004", "k00000000001")
+	if res.code != 0 || res.stdout != "key k00000000001 (ci) reinstated (active)\n" ||
+		res.stderr != "nopacs: key k00000000004 was not suspended; it is left as it was\n" {
+		t.Fatalf("reinstate by id: %+v", res)
+	}
+	if show := r.run("key", "show", "k00000000001").stdout; !strings.Contains(show, "Status:    active") || strings.Contains(show, "Suspended:") {
+		t.Errorf("the reinstated key:\n%s", show)
+	}
+	doc := document(t, r.run("key", "reinstate", "k00000000002", "--json"))
+	keys, _ := doc["keys"].([]any)
+	if len(keys) != 1 || keys[0].(map[string]any)["id"] != "k00000000002" || doc["reinstated"] != "1" {
+		t.Errorf("reinstate --json: %v", doc)
+	}
+	if res := r.run("key", "reinstate", "--all"); res.code != 0 || res.stdout != "1 key reinstated\n" {
+		t.Errorf("reinstate --all: %+v", res)
+	}
+	if res := r.run("key", "reinstate", "--all"); res.code != 0 || res.stdout != "0 keys reinstated\n" {
+		t.Errorf("reinstate --all again: %+v", res)
+	}
+	tooMany := []string{"key", "reinstate"}
+	for i := range 1001 {
+		tooMany = append(tooMany, fmt.Sprintf("k%011d", i))
+	}
+	before := r.fake.Requests()
+	for _, args := range [][]string{
+		{"key", "reinstate", "k00000000001", "--all"},
+		{"key", "reinstate"},
+		{"key", "reinstate", "k00000000003", "nopacs_k00000000003_" + strings.Repeat("R", 44)},
+		tooMany,
+	} {
+		if res := r.run(args...); res.code != 2 || res.stdout != "" || !strings.Contains(res.stderr, "nopacs:") {
+			t.Errorf("%v: %+v, want a refusal with exit 2", args[2:min(len(args), 4)], res)
+		}
+	}
+	if r.fake.Requests() != before {
+		t.Error("a refused reinstatement sent a request")
+	}
+}
+
+// TestKeyReinstateRefusedToKeys guards that key reinstate run with a key,
+// even an installation admin's, is answered permission denied: only the
+// local operator reinstates keys.
+func TestKeyReinstateRefusedToKeys(t *testing.T) {
+	r := newNetworkRig(t)
+	res := r.run("key", "reinstate", "--all")
+	if res.code == 0 || res.stdout != "" || !strings.Contains(strings.ToLower(res.stderr), "may not") {
+		t.Fatalf("reinstate with a key: %+v", res)
+	}
+}
 
 // TestKeyRevokeNamesLiveSuccessor guards key revoke after a rotation: the
 // rotated key alone is revoked, and a note on standard error names its
