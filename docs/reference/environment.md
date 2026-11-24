@@ -109,6 +109,7 @@ Nobody sets these by hand.
 
 | Variable | What it does |
 |---|---|
+| `NOPACS_INTERRUPT_AT` | The step a server built with the `interrupt` build tag exits at, to test what a crash leaves. A normal build never reads it. |
 | `NOPACS_PROOF_AUTH` | Carries a key from a proof script to the header of one `curl` call, so it is not in the process list. |
 | `NOPACS_PROOF_CRASH` | Carries a Postgres address from a proof script to the commands it kills, named by `--db-env`. |
 | `NOPACS_PROOF_DSN` | Carries a Postgres address from a proof script to `tenant create --db-env`. |

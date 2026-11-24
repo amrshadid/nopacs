@@ -10,6 +10,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/interrupt"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -158,6 +159,15 @@ func (u *unitRun) stopping() error {
 	return nil
 }
 
+// reached marks the durable step name of the unit's job done: a server
+// built for a harness that kills it there ends at this call
+// (internal/interrupt, named rebuild:<mode>:<name>).
+func (u *unitRun) reached(name string) {
+	if u.job.Rebuild != nil {
+		interrupt.At("rebuild", string(u.job.Rebuild.Mode), name)
+	}
+}
+
 // op returns a context for one call to the database.
 func (u *unitRun) op() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(u.ctx, opTimeout)
@@ -182,6 +192,7 @@ func (u *unitRun) run() error {
 			err = u.build()
 		}
 		if err == nil {
+			u.reached("built")
 			err = u.end()
 		}
 		if errors.Is(err, tenant.ErrRebuildRefused) {
@@ -205,6 +216,7 @@ func (u *unitRun) run() error {
 	if err := u.p.DropShadow(ctx, job.ID); err != nil {
 		return err
 	}
+	u.reached("dropped")
 	return u.p.CompleteWork(ctx, u.fence, u.sup.cfg.Now(), nil)
 }
 
@@ -236,6 +248,7 @@ func (u *unitRun) end() error {
 		defer cancel()
 		j, err := u.p.ActivateCatalog(ctx, u.fence, u.sup.cfg.Now())
 		if err == nil {
+			u.reached("activated")
 			u.log.Info("rebuilds: the shadow is the catalog in use", "instances", j.Counts.InstancesSent, "left_out", j.Counts.InstancesRefused)
 		}
 		return err
@@ -248,6 +261,7 @@ func (u *unitRun) end() error {
 	}
 	j, err := u.p.EndRebuild(ctx, u.fence, cmp, u.sup.cfg.Now())
 	if err == nil {
+		u.reached("compared")
 		u.log.Info("rebuilds: compared", "equal", cmp.Equal(), "tables_differing", len(cmp.Tables), "instances", j.Counts.InstancesSent)
 	}
 	return err
@@ -337,6 +351,9 @@ func (u *unitRun) build() error {
 			}
 			var err error
 			prog, err = u.buildScan(st, name, k, h, prog)
+			if err == nil {
+				u.reached("scan")
+			}
 			if err == nil && u.sup.cfg.seams.afterScan != nil {
 				u.sup.cfg.seams.afterScan(k.key)
 			}

@@ -111,13 +111,13 @@ func (e *Engine) Delete(ctx context.Context, r DeleteRequest) (tenant.Correction
 	}
 	ctx, cancel := detached(ctx)
 	defer cancel()
-	if err := e.seams.at("prepared"); err != nil {
+	if err := e.reached(c, "prepared"); err != nil {
 		return c, err
 	}
 	if err := e.writeRecords(ctx, c); err != nil {
 		return e.abandon(ctx, c, reasonStorage, err)
 	}
-	if err := e.seams.at("records"); err != nil {
+	if err := e.reached(c, "records"); err != nil {
 		return c, err
 	}
 	var snapshots map[string]tenant.ScanSnapshot
@@ -260,7 +260,7 @@ func (e *Engine) publish(ctx context.Context, c tenant.Correction, manifests map
 		}
 		return e.abandon(ctx, c, why, err)
 	}
-	if err := e.seams.at("committed"); err != nil {
+	if err := e.reached(c, "committed"); err != nil {
 		return pc, err
 	}
 	e.settle(ctx, pc)
@@ -338,7 +338,7 @@ func (e *Engine) Undo(ctx context.Context, id, reason string, audit master.Audit
 	if err != nil {
 		return c, err
 	}
-	if err := e.seams.at("undone"); err != nil {
+	if err := e.reached(c, "undone"); err != nil {
 		return c, err
 	}
 	// A relabel whose copy runs here sees the stop before its next write

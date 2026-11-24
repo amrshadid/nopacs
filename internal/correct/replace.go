@@ -87,13 +87,13 @@ func (e *Engine) Replace(ctx context.Context, r ReplaceRequest) (tenant.Correcti
 	if c.Target.Path() != r.Path || c.Target.Instance != r.UID {
 		return e.abandon(ctx, c, reasonChanged, fault.New(fault.Precondition, "the quarantined file names another instance than the request"))
 	}
-	if err := e.seams.at("prepared"); err != nil {
+	if err := e.reached(c, "prepared"); err != nil {
 		return c, err
 	}
 	if err := e.writeRecords(ctx, c); err != nil {
 		return e.abandon(ctx, c, reasonStorage, err)
 	}
-	if err := e.seams.at("records"); err != nil {
+	if err := e.reached(c, "records"); err != nil {
 		return c, err
 	}
 	key, err := layout.RevisionKey(r.Path, r.UID, c.NewRevision)
@@ -118,7 +118,7 @@ func (e *Engine) Replace(ctx context.Context, r ReplaceRequest) (tenant.Correcti
 	if err != nil {
 		return e.abandon(ctx, c, reasonUnreadable, err)
 	}
-	if err := e.seams.at("object"); err != nil {
+	if err := e.reached(c, "object"); err != nil {
 		return c, err
 	}
 	line := r.Line
@@ -143,7 +143,7 @@ func (e *Engine) Replace(ctx context.Context, r ReplaceRequest) (tenant.Correcti
 	if err != nil {
 		return e.abandon(ctx, c, reasonStorage, err)
 	}
-	if err := e.seams.at("meta"); err != nil {
+	if err := e.reached(c, "meta"); err != nil {
 		return c, err
 	}
 	scans, err := e.cfg.Store.CorrectionScans(ctx, c.ID)

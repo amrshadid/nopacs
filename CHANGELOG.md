@@ -171,6 +171,10 @@ the code before this release is in github.com/amrshadid/coria.
   none is purged until an admin undoes or purges it (`nopacs correction undo`
   / `purge`): an undo whose record was not rewritten cannot be told apart,
   and a purge cannot be undone; the report counts them.
+- A test build of the server (build tag `interrupt`) stops at a named durable
+  step of a correction or a rebuild; `make prove-interrupt` kills the real
+  server at every step and checks reads, the catalog, the storage, a restore
+  and a send from outside.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

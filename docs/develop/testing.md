@@ -58,7 +58,7 @@ scripts/
                           binaries, a catalog read by SQLite, SHA-256, pydicom readings, the result
                           lines and server handling every proof shares
       formats/            the audit chain and backup file formats, written from their descriptions
-      deid.py read.py send.py importing.py whole.py
+      deid.py read.py send.py importing.py whole.py interrupt.py
                           what each proof builds its studies, trees and installation from
       checks/             the body of each file under scripts/check
       tools/              the auditor's tools (audit_verify, backup_open, catalog_dump) and their self-tests
@@ -90,6 +90,12 @@ child process, a server or a tool, or that takes longer, calls `t.Skip` under
 nothing installed. The ordinary run (`make test`) does not use it.
 
 ## How a slow test is marked
+
+The build tag `interrupt` adds a kill at each named durable step of a
+correction and a rebuild to the server (`internal/interrupt`); without it,
+`interrupt.At` is empty and the compiler removes it. Only `make
+prove-interrupt` builds with it, and the lint target runs once more with the
+tag.
 
 A test that measures at scale is named `TestScale*` and runs only in its own
 run, `make test-scale`; the ordinary run skips it. A test that needs a service
@@ -220,6 +226,7 @@ nothing when it is run alone.
 | `NOPACS_BLOBTEST_FLAW` | Which promise of the storage interface a deliberately flawed driver breaks | `internal/blob/suitecheck` |
 | `NOPACS_BLOB_CRASH_ROOT`, `NOPACS_BLOB_CRASH_GENERATION`, `NOPACS_BLOB_CRASH_STALL` | The root, the first generation and the stall point of the child that writes until it is killed | `internal/blob/dir` |
 | `NOPACS_E2E_ARGS` | The arguments of a command the end-to-end test runs as one of the two programs | `cmd/nopacs-server` |
+| `NOPACS_INTERRUPT_AT` | The durable step (`scope:kind:step`, listed in `internal/interrupt/on.go`) at which a server built with `-tags interrupt` exits with status 86, as a crash there would; a name it does not know stops it at its start. A normal build never reads it | `internal/interrupt` (`TestStopsAtStep`, `TestRefusesUnknownStep`); set by `scripts/prove/interrupt.py` for the server it starts |
 | `NOPACS_HEADER_QUIET_CHILD` | Makes the child read damaged files so the test can check nothing reaches standard error | `internal/receive/header` |
 | `NOPACS_INCOMING_CRASH_ROOT`, `NOPACS_INCOMING_CRASH_POINT`, `NOPACS_INCOMING_CRASH_HIT` | The area's root, the step to stop at and on which hit | `internal/receive/incoming` |
 | `NOPACS_KILL_CHILD_DB` | The database the child makes changes to until it is killed | `internal/driver/sqlite` |

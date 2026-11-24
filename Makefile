@@ -169,6 +169,7 @@ lint: $(filter $(TOOLS)/%,$(GOLANGCI_LINT))
 	$(GOLANGCI_LINT) run ./...
 	GOOS=windows $(GOLANGCI_LINT) run ./...
 	GOOS=darwin $(GOLANGCI_LINT) run ./...
+	$(GOLANGCI_LINT) run --build-tags interrupt ./internal/interrupt/... ./internal/correct/... ./internal/rebuild/...
 
 vuln: $(filter $(TOOLS)/%,$(GOVULNCHECK))
 	$(GOVULNCHECK) -version
@@ -510,6 +511,20 @@ PROVE_WHOLE_ONLY ?=
 .PHONY: prove-whole
 prove-whole:
 	"$(PYTHON)" scripts/prove/whole.py --go "$(GO)" --dcmtk "$(DCMTK)" --python "$(PYTHON)" --only "$(PROVE_WHOLE_ONLY)" \
+		$(if $(PYDICOM_CORPUS),--pydicom-corpus "$(PYDICOM_CORPUS)")
+
+# The interruption harness: the server built with the build tag "interrupt"
+# killed at each named durable step of a correction (delete, relabel, replace,
+# their purges and an undo) and of a rebuild (replace and compare), with
+# downloads, an If-Range resume, DICOMweb, ReadFiles, catalog reads and a send
+# to a pynetdicom peer running across the kills, judged after each restart by
+# curl, hashlib, sqlite3, pydicom and catalog_dump.py
+# (scripts/prove/interrupt.py). No container. PROVE_INTERRUPT_ONLY (groups:
+# replace relabel rebuild delete) runs a part.
+PROVE_INTERRUPT_ONLY ?=
+.PHONY: prove-interrupt
+prove-interrupt:
+	"$(PYTHON)" scripts/prove/interrupt.py --go "$(GO)" --dcmtk "$(DCMTK)" --python "$(PYTHON)" --only "$(PROVE_INTERRUPT_ONLY)" \
 		$(if $(PYDICOM_CORPUS),--pydicom-corpus "$(PYDICOM_CORPUS)")
 
 # The outside check of an audit export through the real program: a server

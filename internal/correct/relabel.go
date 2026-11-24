@@ -57,13 +57,13 @@ func (e *Engine) Relabel(ctx context.Context, r RelabelRequest) (tenant.Correcti
 	// that hangs up does not leave it prepared with no copy running.
 	ctx, cancel := detached(ctx)
 	defer cancel()
-	if err := e.seams.at("prepared"); err != nil {
+	if err := e.reached(c, "prepared"); err != nil {
 		return c, err
 	}
 	if err := e.writeRecords(ctx, c); err != nil {
 		return e.abandon(ctx, c, reasonStorage, err)
 	}
-	return c, e.seams.at("records")
+	return c, e.reached(c, "records")
 }
 
 // ContinueRelabel copies every object of a prepared relabel to its key
@@ -112,7 +112,7 @@ func (e *Engine) ContinueRelabel(ctx context.Context, id string) (tenant.Correct
 	if err := e.cfg.Store.RecordCopied(ctx, id, copied); err != nil {
 		return c, err
 	}
-	if err := e.seams.at("copied"); err != nil {
+	if err := e.reached(c, "copied"); err != nil {
 		return c, err
 	}
 	return e.publish(ctx, c, manifests, snapshots)
@@ -190,7 +190,7 @@ func (e *Engine) copyScan(ctx context.Context, c tenant.Correction, s tenant.Cor
 		f.Key = to
 		files[i] = f
 		n++
-		if err := e.seams.at("relabel-object"); err != nil {
+		if err := e.reached(c, "relabel-object"); err != nil {
 			return tenant.SHA256{}, snap, n, err
 		}
 	}
@@ -200,7 +200,7 @@ func (e *Engine) copyScan(ctx context.Context, c tenant.Correction, s tenant.Cor
 	if snap.Metadata, snap.MetadataSize, err = copyMetadata(ctx, st, s.Path, s.NewPath); err != nil {
 		return tenant.SHA256{}, snap, n, err
 	}
-	if err := e.seams.at("relabel-metadata"); err != nil {
+	if err := e.reached(c, "relabel-metadata"); err != nil {
 		return tenant.SHA256{}, snap, n, err
 	}
 	b, err := manifest.Encode(manifest.Manifest{Files: files})
@@ -214,7 +214,7 @@ func (e *Engine) copyScan(ctx context.Context, c tenant.Correction, s tenant.Cor
 	if _, err := st.Put(ctx, nk, bytes.NewReader(b)); err != nil {
 		return tenant.SHA256{}, snap, n, err
 	}
-	if err := e.seams.at("relabel-manifest"); err != nil {
+	if err := e.reached(c, "relabel-manifest"); err != nil {
 		return tenant.SHA256{}, snap, n, err
 	}
 	return sha256.Sum256(b), snap, n, nil

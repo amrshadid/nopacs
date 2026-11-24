@@ -15,6 +15,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/interrupt"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/secret"
 	"github.com/amrshadid/nopacs/internal/tenant"
@@ -105,6 +106,14 @@ type seams struct {
 	// it is always false outside a test; the purge asks it before every
 	// object, so they plug in here.
 	held func(ctx context.Context, c tenant.Correction) bool
+}
+
+// reached marks the durable step name of c done: a server built for a
+// harness that kills it there ends at this call (internal/interrupt, named
+// correction:<kind>:<name>), then the test's seam answers whether to stop.
+func (e *Engine) reached(c tenant.Correction, name string) error {
+	interrupt.At("correction", string(c.Kind), name)
+	return e.seams.at(name)
 }
 
 // keyLocks is a set of locks by name, each made when first taken and

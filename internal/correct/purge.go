@@ -112,7 +112,7 @@ func (e *Engine) purge(ctx context.Context, c tenant.Correction) (tenant.Correct
 			return c, err
 		}
 	}
-	if err := e.seams.at("purge-started"); err != nil {
+	if err := e.reached(c, "purge-started"); err != nil {
 		return c, err
 	}
 	scans, err := e.cfg.Store.CorrectionScans(ctx, c.ID)
@@ -161,7 +161,7 @@ func (e *Engine) purgeInstance(ctx context.Context, c tenant.Correction, s tenan
 	if err != nil {
 		return c, err
 	}
-	if err := e.seams.at("purge-meta"); err != nil {
+	if err := e.reached(c, "purge-meta"); err != nil {
 		return c, err
 	}
 	if err := e.purgeOlderMeta(ctx, c, s.Storage, s.Path); err != nil {
@@ -180,7 +180,7 @@ func (e *Engine) purgeInstance(ctx context.Context, c tenant.Correction, s tenan
 // finish clears what else names a delete's data, ends the purge and
 // rewrites its records.
 func (e *Engine) finish(ctx context.Context, c tenant.Correction, manifestSum, before tenant.SHA256) (tenant.Correction, error) {
-	if err := e.seams.at("purge-objects"); err != nil {
+	if err := e.reached(c, "purge-objects"); err != nil {
 		return c, err
 	}
 	if c.Kind == record.KindDelete {
@@ -204,7 +204,7 @@ func (e *Engine) finish(ctx context.Context, c tenant.Correction, manifestSum, b
 	if err != nil {
 		return c, err
 	}
-	if err := e.seams.at("purged"); err != nil {
+	if err := e.reached(c, "purged"); err != nil {
 		return f, err
 	}
 	e.settle(ctx, f)
@@ -295,7 +295,7 @@ func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.
 		out.Removals = append(out.Removals, tenant.PurgedObject{ID: c.ID, Storage: t.Storage, Key: key, Version: r.Version, Size: t.Size,
 			SHA256: t.SHA256, Disposition: tenant.Disposition(r.Disposition), RetainUntil: r.RetainUntil, Now: now})
 	}
-	if err := e.seams.at("purge-object"); err != nil {
+	if err := e.reached(c, "purge-object"); err != nil {
 		return out, errors.Join(errStopHere, err)
 	}
 	return out, nil
