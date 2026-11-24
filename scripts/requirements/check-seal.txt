@@ -1,0 +1,23 @@
+# What scripts/check/seal.py needs: Python's cryptography package and what it
+# pulls in, each at an exact version, with the SHA-256 of every file pip may
+# choose for it on Linux x86_64 (CPython 3.12 to 3.14) and on macOS (arm64).
+# CI installs it with:
+#
+#   pip install --require-hashes -r scripts/requirements/check-seal.txt
+#
+# so a file that differs from the one hashed here is refused. The hashes were
+# made by scripts/requirements/hash.sh check-seal with "pip download" and
+# "pip hash"; to change a version, edit that script and run it again.
+cryptography==46.0.3 \
+    --hash=sha256:10b01676fc208c3e6feeb25a8b83d81767e8059e1fe86e1dc62d10a3018fa926 \
+    --hash=sha256:109d4ddfadf17e8e7779c39f9b18111a09efb969a301a31e987416a0191ed93a
+cffi==2.1.1 \
+    --hash=sha256:c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf \
+    --hash=sha256:a931079504ecc49efed7744c476a5c343a92fabf66dec2db95edb1b2fdc770e2 \
+    --hash=sha256:b0431303acaea1089ad4b3e9ce4e6518193def1118d4073ca848635ee4ea2e96 \
+    --hash=sha256:398aff33cee2767e3e781d2554c54bd0dff386bb437581e0d8011fde1a942ec1 \
+    --hash=sha256:f81b3b8f3d4e343550fa4baa0e479bba9f2d29ce9c2e9b51d1ce1718d7442fcf \
+    --hash=sha256:19ee6127ee34de7d83ce3d371ebc5ed91addbdcc39f9ab15ce4eb35a4e534971 \
+    --hash=sha256:661c298b4821edebead0c91edd2b00374d67ad7c5a1f7a91d4442633b79d6a72
+pycparser==3.12 \
+    --hash=sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e

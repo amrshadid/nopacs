@@ -1,0 +1,23 @@
+// A service in the contract's package that the server does not have, for
+// the proof to call by name with grpcurl, which needs a proto file to make a
+// request: once every service of the contract is served, it stands for "a
+// method not served", which the server must answer as it answers any
+// method it does not have. It is not part of the contract (api/proto).
+syntax = "proto3";
+
+package nopacs.v1;
+
+// NotServedService is served by no server.
+service NotServedService {
+  // Nothing is a method no server has.
+  rpc Nothing(NothingRequest) returns (NothingResponse);
+}
+
+// NothingRequest names a tenant, in field 1 as the contract's requests do.
+message NothingRequest {
+  // A tenant's name.
+  string tenant = 1;
+}
+
+// NothingResponse is never sent.
+message NothingResponse {}

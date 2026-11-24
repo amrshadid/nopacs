@@ -1,0 +1,117 @@
+# Changelog
+
+All notable changes to NoPACs are written here. The form is
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Initial release
+
+NoPACs is a research imaging archive in Go, built on the go-dicom library,
+as two static binaries (pure Go, `CGO_ENABLED=0`): `nopacs-server`, which runs
+an installation, and `nopacs`, the command line, an API client that links no
+database or storage driver. It receives DICOM,
+de-identifies it, routes it to a storage, catalogs it as subject / session /
+scan, keeps it whole, and serves it through an API with keys. The history of
+the code before this release is in github.com/amrshadid/coria.
+
+#### Installation, tenants and databases
+
+- `nopacs-server init` makes an installation (its key file and master
+  database) and `nopacs-server serve` serves it over TLS and on a local socket (`nopacs.sock`),
+  where the user running the server is its operator without a key.
+- Tenants, each with its own database. The master and every tenant database
+  live in SQLite or in Postgres; both drivers pass the same contract suites.
+- Settings with defaults, bounds and per-tenant overrides where a setting
+  allows one (`nopacs setting`), read again while the server runs.
+
+#### Keys, grants and audit
+
+- API keys `nopacs_<id>_<secret>`, stored hashed and shown once, with an
+  expiry, a holder, rotation with an overlap, revocation with successors,
+  network rules and an optional TLS client certificate. Grants give a key
+  roles on one tenant or on the installation; a request without a grant for
+  its tenant is refused.
+- Limits on failed calls per caller and per key, which hold under a flood.
+- An audit log of every request and every change of configuration, in the
+  master and in each tenant, written with the change it records. The logs are
+  sealed: a SHA-256 hash chain over a canonical entry encoding, signed at
+  intervals with Ed25519 under a key derived from the installation key
+  (`AuditSealService`, `nopacs audit export`, verified outside by
+  `scripts/prove/audit_verify.py`).
+- Secrets (storage credentials, database passwords, naming and date-shift
+  secrets) sealed at rest with AES-256-GCM under the installation key file
+  (`nopacs-key-v1`); keys for each purpose derived with HKDF-SHA-256
+  (RFC 5869) under `nopacs/...` labels.
+
+#### Storage and reception
+
+- Storages per tenant: a directory or an S3 bucket, behind one storage port,
+  with capacity, a probe, owner records and the rules for where a tenant's
+  data may be.
+- DICOM receivers (C-STORE, closed to the callers they do not list, with TLS
+  available), STOW-RS receivers (PS3.18 10.5) for the keys they list, and
+  import of a directory as a job.
+- Each study archived as subject / session / scan with a manifest and
+  SHA-256 checksums, verified against what was sent, and scan metadata
+  sidecars that record each instance's syntax and each frame's place. A
+  crash at any step loses no file a sender was told was received; what
+  cannot be archived is quarantined with its reason, and can be released.
+- Routing of each study per receiver, a status and a live event stream per
+  tenant (`MonitorService`, `nopacs watch`), and metrics (`nopacs_*`).
+
+#### De-identification
+
+- Profiles per tenant, versioned, built on the composite bases
+  `nopacs/longitudinal:1` and `nopacs/strict:1` (PS3.15 Annex E), with rules
+  by tag, path, private element, value pattern and condition; lookup tables;
+  pixel rules that redact regions or detect burned-in text; trial runs and a
+  plain description of a version (`ProfileService`, `nopacs profile`).
+- A receiver de-identifies what it receives with a profile version, or keeps
+  it as received when told so. The check after de-identification searches
+  every written file for each removed value and fails closed: a file the
+  profile cannot process, or in which a removed value is found again, is
+  quarantined.
+- De-identification jobs check archived instances against a profile, and the
+  forward lookup of a value's codes serves a withdrawal of consent.
+
+#### Reading and sending
+
+- The catalog of subjects, sessions and scans (`CatalogService`), each
+  instance's header as DICOM JSON (`MetadataService`), the files streamed and
+  checked against their manifest (`DataService`), a plain HTTP download, and
+  DICOMweb (QIDO-RS, WADO-RS, STOW-RS) under `/tenants/<name>/dicom-web`,
+  with CORS origins by setting.
+- Senders (DIMSE C-STORE and DICOMweb STOW-RS) and send jobs, with
+  destinations limited by setting (`SenderService`, `JobService`,
+  `nopacs sender`, `nopacs job`).
+
+#### Keeping the archive whole
+
+- Corrections: delete a subject, session, scan or instance after a preview
+  with a grace period (`delete.grace`), relabel, replace, undo and purge, each
+  kept as a signed record on the storage (`CorrectionService`,
+  `nopacs correction`).
+- Scrub jobs read every stored object back against its checksum; rebuild jobs
+  compare or rebuild a tenant's catalog from its storages.
+- Backup and restore of an installation (`nopacs-server backup
+  create|restore|verify`, `.nopacs` files in a chunked AES-256-GCM format),
+  and the hand-off of a tenant to another installation (`nopacs tenant
+  export|reclaim`, `nopacs-server tenant import`,
+  `.nopacs-tenant` files), with storages fenced when another installation
+  owns them.
+
+#### API, command line and clients
+
+- The API contract `nopacs.v1` in `api/proto/nopacs/v1`, served over gRPC,
+  gRPC-web and Connect, every reply carrying a `Nopacs-Request-Id` header.
+  Defined and not yet served: `BackupService/CreateBackup`,
+  `AccessService/ReinstateKeys`, `ReplicaService` and `RetentionService`.
+- The command line `nopacs` for every service, with `--json` output and named
+  client contexts, and an interactive program (`nopacs` with no arguments).
+- Generated clients for Python (`nopacs`, `clients/python`) and TypeScript
+  (`nopacs`, `clients/typescript`), tested against a real server.
+- Proofs from outside the binary (`make prove` and its sections) with tools
+  that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
+  dicomweb-client and a viewer.
