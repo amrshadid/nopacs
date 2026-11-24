@@ -110,9 +110,10 @@ func (s *Store) createTemp() (*os.File, string, error) {
 // missing at the rename was removed by someone else. The record of durable
 // directories then no longer holds for it: it is forgotten, the directories
 // made durable again, and the rename tried again, a few times. A temporary
-// file found missing was removed by someone else too, most likely a second
-// process that opened this storage and cleaned its temporary directory; that
-// is said, since only one process may use a storage.
+// file found missing was removed by someone else too: a process removes what
+// a crash left only at its first open of a storage (place.Cleanups), so most
+// likely a second process that opened this storage and cleaned its temporary
+// directory; that is said, since only one process may use a storage.
 func (s *Store) moveIntoPlace(tmp, key, dir string) error {
 	for range 4 {
 		err := s.rename(s.root, tmp, native(key))
@@ -123,7 +124,7 @@ func (s *Store) moveIntoPlace(tmp, key, dir string) error {
 			return s.wrap(fault.Unavailable, err, "the storage's directory spans more than one file system (a volume is mounted below it); a storage's directory must be one file system")
 		case goneMidway(err):
 			if _, lerr := s.root.Lstat(tmp); notFound(lerr) {
-				return s.wrap(fault.Unavailable, err, "the put's temporary file was removed before it was put in place; only one process may use a storage, and another may have opened this one")
+				return s.wrap(fault.Unavailable, err, "the put's temporary file was removed before it was put in place; only one process may use a storage, and another process may have opened this one")
 			}
 			s.durable.forgetPath(dir)
 			if err := s.ensureDirs(dir); err != nil {

@@ -129,6 +129,12 @@ type Config struct {
 	// Handoffs drains a tenant's writers for an export and checks its
 	// owner records for a reclaim. Nil answers both unavailable.
 	Handoffs Handoffs
+	// StorageCleanups is the server's one record of the storages whose
+	// crash leftovers its first open removed (place.Cleanups), shared with
+	// every store the server opens to write, so a storage test opened
+	// after one never removes another's work in progress. Nil gives the
+	// API a record of its own, for a server that opens no other store.
+	StorageCleanups *place.Cleanups
 }
 
 // Handlers is the services of the contract this package serves, each an
@@ -199,7 +205,10 @@ func New(cfg Config) (Handlers, error) {
 		live: cfg.Live, feeds: cfg.Feeds, stowReceivers: cfg.STOW, senders: cfg.SenderHealths, senderTests: cfg.SenderTests,
 		reads: cfg.Reads, heldFiles: cfg.HeldFiles, trials: make(chan struct{}, MaxTrialsAtOnce), deidMemory: cfg.DeidMemory,
 		installation: cfg.Installation, importGuarded: cfg.ImportGuarded, corrections: cfg.Corrections, replaceSources: cfg.ReplaceSources,
-		handoffs: cfg.Handoffs,
+		handoffs: cfg.Handoffs, cleanups: cfg.StorageCleanups,
+	}
+	if c.cleanups == nil {
+		c.cleanups = &place.Cleanups{}
 	}
 	if c.replaceSources == nil {
 		c.replaceSources = noReplaceSources{}
@@ -365,6 +374,8 @@ type core struct {
 	// handoffs drains a tenant's writers and checks its owner records
 	// (Config.Handoffs); nil for none.
 	handoffs Handoffs
+	// cleanups is Config.StorageCleanups, or a record of the API's own.
+	cleanups *place.Cleanups
 	// exports holds a place while an export runs (one backup or export at
 	// a time on a server, as the contract says) and the tenants a reclaim
 	// takes back, so no reclaim runs beside an export of its tenant.

@@ -146,6 +146,13 @@ the code before this release is in github.com/amrshadid/coria.
   commands, errors, events, metrics and environment variables are generated
   from the code (`make docs`) and checked (`make check-docs`), and every
   link and anchor is checked (`make check-doc-links`).
+- A server removes what a crash left in a storage once, at its first open of
+  the storage, whoever opens it; every later store of the same storage (a
+  pipeline reopened, a tenant's corrections, an owner record, a storage test)
+  opens beside it, so it never removes another write's temporary file. A
+  directory is known by its identity, not the spelling of its root; an S3
+  sweep of old uploads that was refused, cut short or left an abort failed
+  runs again at the next open.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

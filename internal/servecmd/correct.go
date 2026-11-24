@@ -108,16 +108,18 @@ var _ api.ReplaceSources = (*runningPipelines)(nil)
 // record anyone else wrote there, its scans locked with the
 // tenant's pipelines' locks, and the incoming bytes a purge clears handed
 // to the tenant's pipeline, which removes them as it removes a rejected
-// file's (and keeps the removal while none runs).
-func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, locks *tenantScanLocks) (*correct.Engines, error) {
+// file's (and keeps the removal while none runs). Its storages are opened
+// to write with cleanups, the server's one, shared with the pipelines.
+func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, locks *tenantScanLocks, cleanups *place.Cleanups) (*correct.Engines, error) {
 	key, err := d.Keys.Derive(secret.ConfirmToken)
 	if err != nil {
 		return nil, err
 	}
 	values := settingvalue.Reader{Master: d.Master}
-	// The pipeline's storages clean up unfinished uploads; the engine's do
-	// not, so the two never remove each other's.
-	opener := place.Opener{Values: values, Keys: d.Keys, StaleUploadAge: -1}
+	// The engine's stores and the pipelines' share the server's cleanups,
+	// so whichever opens a storage first removes what a crash left there
+	// and none removes another's work in progress (writingOpener).
+	opener := writingOpener(values, d.Keys, cleanups)
 	return correct.NewEngines(correct.EnginesConfig{
 		Tenants:  registryTenants{master: d.Master, registry: reg},
 		Interval: CorrectionPassInterval,

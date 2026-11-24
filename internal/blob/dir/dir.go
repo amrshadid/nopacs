@@ -132,9 +132,11 @@ func OpenForReading(dirPath string) (*Store, error) {
 // crash: it makes and checks the temporary directory and probes it as Open
 // does, but removes nothing a crash left there, since every file in it may
 // be a Put in progress of the store already open (Open's removal would
-// fail that Put). A user that writes a few objects while the server's own
-// stores run (an owner record taken one generation further) opens with it;
-// the server's stores keep opening with Open, which does the cleanup.
+// fail that Put). Every store a process opens on a storage after its first
+// opens with it (place.Cleanups), as does a user that writes a few objects
+// while the server's own stores run (an owner record taken one generation
+// further); only the first store of a process opens with Open, which does
+// the cleanup.
 func OpenBeside(dirPath string) (*Store, error) {
 	return openWith(dirPath, realSteps(), false)
 }

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -51,11 +52,23 @@ func (v tenantReceiverValues) BindAddresses(ctx context.Context) (settings.BindA
 	return v.c.values().BindAddresses(ctx)
 }
 
-// opener returns the opener of a storage for a test: it touches nothing but
-// its own object, so it leaves the cleanup of old uploads to the reception
-// pipeline, which opens the storage to use it.
+// opener returns the opener of a storage for a test or a read. A test
+// touches nothing but its own object, so it leaves the cleanup of old S3
+// uploads to the reception pipeline, which opens the storage to use it; it
+// shares the server's record of cleaned storages, so a directory's crash
+// leftovers are removed by the test only when it is the server's first open
+// of the storage, before any Put there, and never under a store already
+// writing (place.Cleanups).
 func (c *core) opener() place.Opener {
-	return place.Opener{Values: installationPlaces{c}, Keys: c.keys, StaleUploadAge: -1}
+	return place.Opener{Values: installationPlaces{c}, Keys: c.keys, StaleUploadAge: -1, Cleanups: c.cleanups}
+}
+
+// openToTest opens the storage s of t for TestStorage, with the server's
+// record of cleaned storages (opener): the open removes nothing under a
+// store already writing there, and the test's own Put starts after any
+// removal it does as the server's first open of the storage.
+func (c *core) openToTest(ctx context.Context, t place.Tenant, s tenant.Storage) (blob.Store, error) {
+	return c.opener().Open(ctx, t, s)
 }
 
 // placeTenant returns the tenant whose pipeline is p as package place opens

@@ -107,6 +107,12 @@ type Opener struct {
 	// value for none, as a test of a storage, which touches nothing but its
 	// own object, asks.
 	StaleUploadAge time.Duration
+	// Cleanups, when set, is the process's record of the storages whose
+	// crash leftovers have been removed: Open removes them only at the
+	// first open of a storage in the process and opens beside it after
+	// that (Cleanups). Nil, every Open removes them, as a process that
+	// opens each storage once (a restore, an import) may.
+	Cleanups *Cleanups
 }
 
 // Open opens the storage s of t: a directory storage at its directory,
@@ -150,12 +156,38 @@ const (
 	openBeside
 )
 
-// open is Open, OpenForReading or OpenBeside, as mode says.
-func (o Opener) open(ctx context.Context, t Tenant, s tenant.Storage, mode openMode) (blob.Store, error) {
+// open is Open, OpenForReading or OpenBeside, as mode says. An Open that
+// would remove what a crash left, with Cleanups set, does so only when it is
+// the first of the process at the storage's place, and opens beside it
+// otherwise.
+func (o Opener) open(ctx context.Context, t Tenant, s tenant.Storage, mode openMode) (bs blob.Store, err error) {
 	at, err := o.resolve(ctx, t, s)
 	if err != nil {
 		return nil, err
 	}
+	cleans := mode == openWrite && (s.Type == tenant.StorageDirectory || o.StaleUploadAge >= 0)
+	if !cleans || o.Cleanups == nil {
+		return o.openAt(ctx, t, s, at, mode)
+	}
+	id, err := placeOf(s, at)
+	if err != nil {
+		return nil, err
+	}
+	claimed, first, err := o.Cleanups.claim(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !first {
+		return o.openAt(ctx, t, s, at, openBeside)
+	}
+	// Deferred, so no way out of the open leaves the place claimed and
+	// every later open of it waiting.
+	defer func() { o.Cleanups.finish(claimed, err == nil && bs != nil && sweptWhole(bs)) }()
+	return o.openAt(ctx, t, s, at, openWrite)
+}
+
+// openAt opens s, resolved at at, as mode says.
+func (o Opener) openAt(ctx context.Context, t Tenant, s tenant.Storage, at resolved, mode openMode) (blob.Store, error) {
 	forReading := mode == openRead
 	if s.Type == tenant.StorageDirectory {
 		switch mode {

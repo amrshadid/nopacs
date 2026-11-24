@@ -37,7 +37,9 @@ type OwnerCheck struct {
 	Installation string
 	// Keys is the installation key file, which checks a record's MAC.
 	Keys *secret.Keys
-	// Opener opens a tenant's storages, for reading only.
+	// Opener opens a tenant's storages: for reading, and to write an owner
+	// record taken one generation further. A server gives it its record of
+	// cleaned storages (place.Opener.Cleanups).
 	Opener place.Opener
 }
 
@@ -284,10 +286,17 @@ func (c OwnerCheck) advance(ctx context.Context, id, name string, st tenant.Stor
 		if err := rs.SetStorageOwner(ctx, f.storage, gen, now); err != nil {
 			return out, err
 		}
-		// Beside, not Open: a store the server opened earlier may still
-		// be open on the storage with a Put in flight, which Open's
-		// cleanup of the temporary directory would remove.
-		bs, err := c.Opener.OpenBeside(ctx, pt, f.row)
+		// A store the server opened earlier may still be open on the
+		// storage with a Put in flight, which a cleanup of the temporary
+		// directory would remove. With the server's record of cleaned
+		// storages, Open removes what a crash left only at the first open
+		// of the process, before any Put there, and opens beside
+		// otherwise; without one, the open is beside.
+		open := c.Opener.OpenBeside
+		if c.Opener.Cleanups != nil {
+			open = c.Opener.Open
+		}
+		bs, err := open(ctx, pt, f.row)
 		if err != nil {
 			return out, fault.Wrap(fault.Unavailable, err, "the storage "+f.storage+" cannot be opened: "+fault.Message(err))
 		}

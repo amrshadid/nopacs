@@ -472,7 +472,7 @@ func (s storageService) TestStorage(ctx context.Context, req *v1.TestStorageRequ
 	ref, _ := d.Tenant()
 	var serverFault error
 	results := probe(ctx, faultOfType(stored.Type), func(ctx context.Context) (blob.Store, error) {
-		bs, err := c.opener().Open(ctx, placeTenant(ref.ID, req.GetTenant(), p), stored)
+		bs, err := c.openToTest(ctx, placeTenant(ref.ID, req.GetTenant(), p), stored)
 		var se *place.ServerError
 		if errors.As(err, &se) {
 			serverFault = se.Err

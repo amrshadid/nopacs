@@ -53,9 +53,10 @@ type Runner interface {
 //
 // Each tenant's pipelines take its scan locks from locks, shared with its
 // corrections engine, and each is published in pipes while it runs, for
-// the replaces made through it.
+// the replaces made through it. Its storages are opened to write with
+// cleanups, the server's one (writingOpener).
 func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantName string), stowReceivers *stow.Directory, memory check.Memory,
-	locks *tenantScanLocks, pipes *runningPipelines) (*supervise.Supervisor, error) {
+	locks *tenantScanLocks, pipes *runningPipelines, cleanups *place.Cleanups) (*supervise.Supervisor, error) {
 	incomingRoot := filepath.Join(d.DataDir, IncomingDirName)
 	if err := os.MkdirAll(incomingRoot, 0o700); err != nil {
 		return nil, fault.Wrap(fault.Unavailable, err, "the incoming area cannot be made in the data directory")
@@ -65,11 +66,11 @@ func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantNam
 		log = slog.New(slog.DiscardHandler)
 	}
 	values := settingvalue.Reader{Master: d.Master}
-	// The pipeline keeps a storage open across steps (tenantStorages), so
-	// the S3 driver's cleanup of unfinished uploads runs once per open; the
-	// supervisor's look at a storage's space opens and closes it each time,
-	// so it asks for none.
-	pipelineOpener := place.Opener{Values: values, Keys: d.Keys}
+	// The pipeline keeps a storage open across steps (tenantStorages); what
+	// a crash left on it is removed by the first store of the process that
+	// opens it (writingOpener). The supervisor's look at a storage's space
+	// opens and closes it each time, for reading.
+	pipelineOpener := writingOpener(values, d.Keys, cleanups)
 	spaceOpener := place.Opener{Values: values, Keys: d.Keys, StaleUploadAge: -1}
 	return supervise.New(supervise.Config{
 		Tenants:      registryTenants{master: d.Master, registry: reg},

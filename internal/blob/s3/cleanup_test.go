@@ -262,6 +262,57 @@ func TestCleanupOnServersSeesPastTheFirstThousand(t *testing.T) {
 	}
 }
 
+// TestCleanupIsWholeOnlyWhenItSawAndAbortedAll guards CleanupReport.Whole,
+// which tells a caller that runs the cleanup once whether to run it again:
+// a sweep that listed every upload and aborted each old one is whole; one
+// whose listing was refused, one cut at its bound with uploads unseen, and
+// one whose abort failed are not.
+func TestCleanupIsWholeOnlyWhenItSawAndAbortedAll(t *testing.T) {
+	old := time.Now().Add(-72 * time.Hour)
+	refuse := func(method, query string) func(w http.ResponseWriter, r *http.Request, _ int) bool {
+		return func(w http.ResponseWriter, r *http.Request, _ int) bool {
+			if r.Method == method && r.URL.Query().Has(query) {
+				xmlError(w, 403, "AccessDenied", "x")
+				return true
+			}
+			return false
+		}
+	}
+	for _, c := range []struct {
+		name  string
+		setup func(f *fakeS3)
+		whole bool
+	}{
+		{"every old upload aborted", func(f *fakeS3) {
+			f.listMode = "honor"
+			f.stale = []fakeUpload{{"old/a", "u1", old}, {"young/b", "u2", time.Now()}}
+		}, true},
+		{"the listing refused", func(f *fakeS3) { f.hook = refuse(http.MethodGet, "uploads") }, false},
+		{"cut at its bound", func(f *fakeS3) {
+			f.listMode = "paging-only"
+			f.stale = uploadsFor("a/", sweepPages*sweepPageSize+500, old)
+		}, false},
+		{"an abort failed", func(f *fakeS3) {
+			f.listMode = "honor"
+			f.stale = []fakeUpload{{"old/a", "u1", old}}
+			f.hook = refuse(http.MethodDelete, "uploadId")
+		}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeS3(t)
+			c.setup(f)
+			s, err := Open(context.Background(), f.config())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			if rep := s.Notes().Cleanup; rep.Whole() != c.whole {
+				t.Errorf("report %+v: Whole = %v, want %v", rep, rep.Whole(), c.whole)
+			}
+		})
+	}
+}
+
 // mustUploads lists the uploads the server returns for a prefix in the
 // request itself.
 func mustUploads(t *testing.T, s *Store, prefix string) []string {

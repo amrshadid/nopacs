@@ -42,6 +42,18 @@ type openStore struct {
 // errStoragesClosed is a use after the pipeline stopped.
 var errStoragesClosed = fault.New(fault.Unavailable, "the tenant's reception pipeline has stopped")
 
+// writingOpener returns the opener of every store the server keeps open to
+// write a tenant's storage: each reception pipeline's, which a pause or a
+// changed row opens again while the server runs, and each corrections
+// engine's. They all share cleanups, the server's one, so only the first
+// open of a storage in the process removes what a crash left there and
+// every later one opens beside it; otherwise the open of one would remove
+// the temporary file of another's Put in progress, or its probe file, and
+// fail it (place.Cleanups).
+func writingOpener(values place.Values, keys place.Keys, cleanups *place.Cleanups) place.Opener {
+	return place.Opener{Values: values, Keys: keys, Cleanups: cleanups}
+}
+
 // newTenantStorages returns the opener of the storages of the tenant named
 // name, whose database is st.
 func newTenantStorages(opener place.Opener, m master.Store, name string, st tenant.Pipeline) *tenantStorages {

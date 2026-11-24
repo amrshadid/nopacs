@@ -48,6 +48,15 @@ type CleanupReport struct {
 	Err error
 }
 
+// Whole reports whether the cleanup saw every upload under the prefix and
+// every old one is gone: no failure to list, no bound reached with uploads
+// unseen, no abort that failed. A caller that runs the cleanup once (at the
+// first open of a storage in a process) runs it again at its next open
+// until it is whole.
+func (r CleanupReport) Whole() bool {
+	return r.Err == nil && !r.More && r.Failed == 0
+}
+
 // Notes is what Open found and did not treat as a failure. It is read with
 // Store.Notes.
 type Notes struct {

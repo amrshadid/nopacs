@@ -2,12 +2,15 @@ package servecmd
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -107,6 +110,81 @@ func TestThePipelinesStorageIsKeptOpenAndCheckedAtEveryUse(t *testing.T) {
 	}
 	if _, err := s.Open(ctx, "main"); err == nil {
 		t.Fatal("a use after Close was answered")
+	}
+}
+
+// TestAStoreOpenedBesideAnotherKeepsItsPutInProgress guards writingOpener,
+// which every store the server opens to write a storage takes: the
+// pipeline's and a corrections engine's stores of one storage, each opened
+// at its own time, never remove each other's work. A server start opened
+// the engine's store while the pipeline's was putting; the engine's open
+// removed every file in the storage's temporary directory, the Put's
+// among them, and the Put failed at its rename ("the put's temporary file
+// was removed before it was put in place"). What a crash left before the
+// start is still removed by the first open.
+func TestAStoreOpenedBesideAnotherKeepsItsPutInProgress(t *testing.T) {
+	ctx := context.Background()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "lab", "main")
+	tmp := filepath.Join(dir, blob.ReservedPrefix+"tmp")
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	crash := filepath.Join(tmp, "left-by-a-crash")
+	if err := os.WriteFile(crash, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	row := tenant.Storage{Name: "main", Type: tenant.StorageDirectory, Directory: tenant.DirectoryStorage{Root: "fast", Path: "main"},
+		Updated: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)}
+	opener := writingOpener(roots{{Name: "fast", Path: root}}, nil, &place.Cleanups{})
+	pipeline := newTenantStorages(opener, oneTenant{}, "lab", &oneStorage{row: row})
+	corrections := newTenantStorages(opener, oneTenant{}, "lab", &oneStorage{row: row})
+	defer func() { _ = pipeline.Close(); _ = corrections.Close() }()
+
+	a, err := pipeline.Open(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(crash); err == nil {
+		t.Fatal("the first open left what a crash left in the temporary directory")
+	}
+	// The Put has made its temporary file once the pipe's first write has
+	// been read.
+	pr, pw := io.Pipe()
+	put := make(chan error, 1)
+	go func() {
+		_, err := a.Put(ctx, "s/scan/1.dcm", pr)
+		_ = pr.CloseWithError(io.ErrClosedPipe) // A Put that ended early does not leave the writes below blocked.
+		put <- err
+	}()
+	if _, err := pw.Write([]byte("first part ")); err != nil {
+		t.Fatal(err)
+	}
+	b, err := corrections.Open(ctx, "main")
+	if err != nil {
+		t.Fatalf("the second store's open: %v", err)
+	}
+	if _, err := pw.Write([]byte("last part")); err != nil {
+		t.Fatal(err)
+	}
+	_ = pw.Close()
+	if err := <-put; err != nil {
+		t.Fatalf("the Put in progress while another store opened failed: %v", err)
+	}
+	rc, err := b.Read(ctx, "s/scan/1.dcm", 0, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(rc)
+	_ = rc.Close()
+	if err != nil || string(got) != "first part last part" {
+		t.Fatalf("the object read through the other store = %q, %v", got, err)
+	}
+	if _, err := b.Put(ctx, "s/scan/2.dcm", strings.NewReader("x")); err != nil {
+		t.Fatalf("a Put through the store opened beside: %v", err)
 	}
 }
 

@@ -94,8 +94,14 @@ func APIServices(d Deps) (Built, error) {
 	// The owner record of each of a tenant's storages is read when the
 	// tenant opens and at each of the registry's checks; one that names
 	// another installation, tenant or a later generation fences the tenant.
+	// One record, for the whole server, of the storages whose crash
+	// leftovers its first open removed, shared by every store it opens to
+	// write (the owner records', the pipelines', the corrections', a
+	// storage test's), so no later store removes the work in progress of
+	// one already writing there.
+	cleanups := &place.Cleanups{}
 	owners := backup.OwnerCheck{Installation: installation, Keys: d.Keys,
-		Opener: place.Opener{Values: settingvalue.Reader{Master: d.Master}, Keys: d.Keys, StaleUploadAge: -1}}
+		Opener: place.Opener{Values: settingvalue.Reader{Master: d.Master}, Keys: d.Keys, StaleUploadAge: -1, Cleanups: cleanups}}
 	reg, err := registry.New(registry.Config{
 		Fence:  owners.Fence,
 		Master: d.Master,
@@ -159,7 +165,7 @@ func APIServices(d Deps) (Built, error) {
 	// engine, and its running pipeline, which a replace makes its file
 	// through.
 	scanLocks, pipes := &tenantScanLocks{}, &runningPipelines{}
-	sup, err := newReception(d, reg, feeds.Wake, pokeSenders, stowReceivers, deidMemory, scanLocks, pipes)
+	sup, err := newReception(d, reg, feeds.Wake, pokeSenders, stowReceivers, deidMemory, scanLocks, pipes, cleanups)
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)
@@ -167,7 +173,7 @@ func APIServices(d Deps) (Built, error) {
 	}
 	// Every tenant's corrections engine, and the pass that takes up what a
 	// stop left and purges what is due.
-	engines, err := newCorrections(d, reg, sup, scanLocks)
+	engines, err := newCorrections(d, reg, sup, scanLocks, cleanups)
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)
@@ -227,7 +233,7 @@ func APIServices(d Deps) (Built, error) {
 		Receivers: receiverHealth{sup}, Live: receiverHealth{sup}, Feeds: feeds, Incoming: pipelineDecisions{sup}, Headers: heldHeaders{sup}, HeldFiles: heldHeaders{sup}, STOW: stowReceivers,
 		Reads: reads, SenderHealths: senderHealths{s: senders, deid: deids, scrub: scrubs, imports: imports, rebuilds: rebuilds}, SenderTests: senderTests{senders}, DeidMemory: deidMemory,
 		Installation: installation, ImportGuarded: importGuarded(d.DataDir), Corrections: engines, ReplaceSources: pipes,
-		Handoffs: handoffs{sup: sup, engines: engines, owners: owners}})
+		Handoffs: handoffs{sup: sup, engines: engines, owners: owners}, StorageCleanups: cleanups})
 	if err != nil {
 		closeRegistry(reg)
 		return Built{}, err
