@@ -106,6 +106,69 @@ func codeValue(field, vr, s string) (string, error) {
 	return v, nil
 }
 
+// issuerOf returns the issuer a request gives of a Patient ID as the
+// subject identity holds it (naming.SubjectIdentity: Issuer and
+// Qualifiers, in naming.QualifierPaths' order), each value with its
+// padding removed for its VR (PS3.5 6.2), as a file's would be; or an
+// Invalid error naming the field under prefix. nil gives no issuer.
+func issuerOf(prefix string, m *v1.PatientIDIssuer) (naming.SubjectIdentity, error) {
+	var id naming.SubjectIdentity
+	if m == nil {
+		return id, nil
+	}
+	fac, jur, agy := m.GetAssigningFacility(), m.GetAssigningJurisdiction(), m.GetAssigningAgency()
+	// The order is naming.QualifierPaths'; the VRs are PS3.6's.
+	fields := []struct {
+		name, vr, value string
+		into            *string
+	}{
+		{"issuer", "LO", m.GetIssuer(), &id.Issuer},
+		{"universal_entity_id", "UT", m.GetUniversalEntityId(), &id.Qualifiers[0]},
+		{"universal_entity_id_type", "CS", m.GetUniversalEntityIdType(), &id.Qualifiers[1]},
+		{"identifier_type_code", "CS", m.GetIdentifierTypeCode(), &id.Qualifiers[2]},
+		{"assigning_facility.local_namespace_entity_id", "UT", fac.GetLocalNamespaceEntityId(), &id.Qualifiers[3]},
+		{"assigning_facility.universal_entity_id", "UT", fac.GetUniversalEntityId(), &id.Qualifiers[4]},
+		{"assigning_facility.universal_entity_id_type", "CS", fac.GetUniversalEntityIdType(), &id.Qualifiers[5]},
+		{"assigning_jurisdiction.code_value", "SH", jur.GetCodeValue(), &id.Qualifiers[6]},
+		{"assigning_jurisdiction.coding_scheme_designator", "SH", jur.GetCodingSchemeDesignator(), &id.Qualifiers[7]},
+		{"assigning_jurisdiction.long_code_value", "UC", jur.GetLongCodeValue(), &id.Qualifiers[8]},
+		{"assigning_jurisdiction.urn_code_value", "UR", jur.GetUrnCodeValue(), &id.Qualifiers[9]},
+		{"assigning_agency.code_value", "SH", agy.GetCodeValue(), &id.Qualifiers[10]},
+		{"assigning_agency.coding_scheme_designator", "SH", agy.GetCodingSchemeDesignator(), &id.Qualifiers[11]},
+		{"assigning_agency.long_code_value", "UC", agy.GetLongCodeValue(), &id.Qualifiers[12]},
+		{"assigning_agency.urn_code_value", "UR", agy.GetUrnCodeValue(), &id.Qualifiers[13]},
+	}
+	for _, f := range fields {
+		if len(f.value) > MaxCodeValueBytes || !utf8.ValidString(f.value) || strings.IndexByte(f.value, 0) >= 0 {
+			return id, invalid(prefix+"."+f.name, "is at most 1024 bytes of UTF-8, with no NUL")
+		}
+		*f.into = naming.TrimValue(f.vr, f.value)
+	}
+	return id, nil
+}
+
+// subjectIdentity returns the subject identity a request gives: the
+// Patient ID value, the issuer, and the namespace when there is no issuer,
+// checked; fields are the request's names of the issuer and the namespace.
+func subjectIdentity(value string, issuer *v1.PatientIDIssuer, namespace, issuerField, namespaceField string) (naming.SubjectIdentity, error) {
+	id, err := issuerOf(issuerField, issuer)
+	if err != nil {
+		return id, err
+	}
+	if namespace != "" {
+		if err := tenant.ValidateName("namespace", namespace); err != nil {
+			return id, fieldOf(namespaceField, err)
+		}
+	}
+	if strings.IndexByte(value, 0) >= 0 {
+		// A Patient ID is LO text, which holds no NUL; one that did
+		// could pose as another identity's encoding.
+		return id, invalid("value", "is a Patient ID, which holds no NUL")
+	}
+	id.PatientID, id.Namespace = value, namespace
+	return id, nil
+}
+
 // keyOf names the caller whose bucket a forward lookup spends: its key, or
 // the local operator.
 func keyOf(d access.Decision) string {
@@ -140,11 +203,22 @@ func (s deidService) Code(ctx context.Context, req *v1.CodeRequest) (*v1.CodeRes
 	if err != nil {
 		return nil, c.failNow(ctx, d, st, facts, err)
 	}
+	if naming.Tag(t) != naming.TagPatientID && (req.GetIssuer() != nil || req.GetNamespace() != "") {
+		return nil, c.failNow(ctx, d, st, facts, invalid("issuer", "and namespace are of a Patient ID: an issuer gives a Patient ID, not another attribute"))
+	}
+	var id *naming.SubjectIdentity
+	if naming.Tag(t) == naming.TagPatientID {
+		s, err := subjectIdentity(value, req.GetIssuer(), req.GetNamespace(), "issuer", "namespace")
+		if err != nil {
+			return nil, c.failNow(ctx, d, st, facts, err)
+		}
+		id = &s
+	}
 	if which := c.bounds.take(c.now(), bucket{codeKeyBucket, keyOf(d)}, bucket{codeTenantBucket, req.GetTenant()}); which != "" {
 		return nil, c.failNow(ctx, d, st, facts, fault.New(fault.Exhausted, which+" has had "+strconv.Itoa(CodesPerMinute)+
 			" forward lookups in the last minute, the most it may; try again in a few seconds"))
 	}
-	out, err := c.code(ctx, req.GetTenant(), pipe, st, t, value)
+	out, err := c.code(ctx, req.GetTenant(), pipe, st, t, value, id)
 	if err != nil {
 		return nil, c.failNow(ctx, d, st, facts, err)
 	}
@@ -181,13 +255,22 @@ func (c *core) failNow(ctx context.Context, d access.Decision, st tenant.Store, 
 	return c.toAPI(d, err)
 }
 
-// code does Code's work once the value is checked.
-func (c *core) code(ctx context.Context, tenantName string, pipe tenant.Pipeline, st tenant.Store, t uint32, value string) (*v1.CodeResponse, error) {
+// code does Code's work once the value is checked. id is the subject
+// identity a Patient ID's request gives, nil for another attribute: the
+// code and the lookups are then of its key (naming.SubjectIdentity.Key),
+// and each receiver's subject label is of the identity under that
+// receiver's own namespace.
+func (c *core) code(ctx context.Context, tenantName string, pipe tenant.Pipeline, st tenant.Store, t uint32, value string, id *naming.SubjectIdentity) (*v1.CodeResponse, error) {
 	h, err := c.reg.NamingHasher(ctx, tenantName)
 	if err != nil {
 		return nil, err
 	}
-	out := &v1.CodeResponse{Attribute: fmt.Sprintf("%08X", t), Code: h.Hash([]byte(value))}
+	key := []byte(value)
+	var issuer naming.SubjectIdentity
+	if id != nil {
+		key, issuer = id.Key(), *id
+	}
+	out := &v1.CodeResponse{Attribute: fmt.Sprintf("%08X", t), Code: h.Hash(key)}
 	catalog, _ := st.(tenant.SubjectReads)
 	token := ""
 	for read := 0; read < maxCodeReceivers; {
@@ -197,13 +280,11 @@ func (c *core) code(ctx context.Context, tenantName string, pipe tenant.Pipeline
 		}
 		read += len(rs)
 		for _, r := range rs {
-			rule := naming.Default()
-			if r.Naming != nil {
-				if rule, err = naming.Parse(*r.Naming); err != nil {
-					continue
-				}
+			rule, err := r.NamingRule()
+			if err != nil {
+				continue
 			}
-			subject, ok, err := rule.HashedSubject(naming.Tag(t), value, h)
+			subject, ok, err := rule.HashedSubject(naming.Tag(t), value, issuer, h)
 			if !ok || err != nil {
 				continue
 			}
@@ -287,10 +368,27 @@ func (s deidService) ImportLookupCodes(ctx context.Context, req *v1.ImportLookup
 		if err != nil {
 			return nil, c.failNow(ctx, d, st, facts, err)
 		}
+		if strings.IndexByte(v, 0) >= 0 {
+			// No text value holds a NUL (PS3.5 6.2); a Patient ID that did
+			// could spell another subject identity's encoding, and its
+			// entry would answer that subject's files.
+			return nil, c.failNow(ctx, d, st, facts, invalid(at+" value", "holds a NUL, which no value of a file holds"))
+		}
 		if !tenant.ValidLookupCode(e.GetCode()) {
 			return nil, c.failNow(ctx, d, st, facts, invalid(at+" code", "is 1 to 16 of A-Z, 0-9 and _"))
 		}
-		entries[i] = tenant.LookupEntry{Key: h.Hash([]byte(v)), Code: e.GetCode()}
+		key := []byte(v)
+		if e.GetIssuer() != nil || e.GetNamespace() != "" {
+			// A Patient ID with its issuer, or its namespace: stored by
+			// the subject identity's keyed hash, which a lookup of the
+			// Patient ID of a file from that issuer meets.
+			id, err := subjectIdentity(v, e.GetIssuer(), e.GetNamespace(), at+" issuer", at+" namespace")
+			if err != nil {
+				return nil, c.failNow(ctx, d, st, facts, err)
+			}
+			key = id.Key()
+		}
+		entries[i] = tenant.LookupEntry{Key: h.Hash(key), Code: e.GetCode()}
 	}
 	got, err := p.ImportLookupCodes(ctx, req.GetTable(), entries, c.now(), changeEntry(d, access.Facts{}), c.adminGuard(d))
 	if err != nil {

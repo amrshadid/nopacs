@@ -133,6 +133,27 @@ log, with the key and the attribute, never the value. `--patient-id -` and
 history and the process list. The call is never served over HTTP GET, so a
 value never travels in a URL.
 
+A Patient ID is unique only within the issuer that gave it, so the archive
+tells subjects apart by their **subject identity**: the Patient ID together with
+its Issuer of Patient ID (0010,0021) and the identifying values of the Issuer of
+Patient ID Qualifiers Sequence (0010,0024). The default subject label, the date
+shift, a `hash` or `lookup` rule on the Patient ID, and the check against
+deleted subjects all key on it. Give the issuer as the files give it:
+
+```
+nopacs deid code lab1 --patient-id - --issuer HOSPITAL_A
+nopacs deid code lab1 --patient-id - --issuer-qualifier UniversalEntityID=2.16.840.1.113883.3.1 \
+  --issuer-qualifier UniversalEntityIDType=ISO
+nopacs deid code lab1 --patient-id - --namespace site-b   # a Patient ID that came with no issuer
+```
+
+A file with no issuer takes its receiver's namespace (`receiver add --namespace`)
+in the issuer's place; each receiver's subject label is answered under its own
+namespace, while `--namespace` chooses the one the keyed hash and lookup codes
+are answered under. A Patient ID with no issuer under the default namespace
+keeps the label, shift and codes of its value alone. A site's own naming rule
+that writes `{#PatientID}` keeps hashing the Patient ID alone.
+
 A `lookup` rule replaces a value by the code its table gives it. Codes are
 assigned in order on first sight (`"onMissing": "LOOKUP_MISSING_ASSIGN"`), or
 chosen by a person beforehand: then a file whose value has no code is held
@@ -146,7 +167,16 @@ nopacs profile lookup list lab1
 ```
 
 Each value is stored as its keyed hash, never as given (its padding removed as
-an LO value's). An import is all or nothing, at most 10000 entries: one value
+an LO value's). For a table a `lookup` rule on the Patient ID reads, a third
+column `issuer` and a fourth `namespace` store each entry by its subject
+identity, which is what the rule meets in a file from that issuer (or with no
+issuer, through a receiver of that namespace); an entry with both empty is
+stored by its value alone:
+
+```
+printf 'value,code,issuer,namespace\n98890234,SUBJ001,HOSPITAL_A,\n98890234,SUBJ002,,site-b\n' > cohort.csv
+```
+ An import is all or nothing, at most 10000 entries: one value
 with two codes in the file, or one code for two values, refuses all of it,
 naming the entry; values the table gives another code, or codes it gives
 another value, refuse all of it too, answered by how many conflict and never

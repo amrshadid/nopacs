@@ -56,6 +56,44 @@ func TestDeidCode(t *testing.T) {
 	}
 }
 
+// TestDeidCodeIssuer guards "deid code --issuer": the Issuer of Patient ID,
+// each --issuer-qualifier in its field, and --namespace are sent with the
+// Patient ID; a qualifier of no known name, or one named twice, is refused
+// before anything is sent.
+func TestDeidCodeIssuer(t *testing.T) {
+	r := newRig(t)
+	r.must("tenant", "create", "lab1")
+	r.fake.SetCodeAnswer(&v1.CodeResponse{Attribute: "00100020", Code: "abcdefghijklmnop"})
+	r.must("deid", "code", "lab1", "--patient-id", "P1", "--issuer", "HOSP_A",
+		"--issuer-qualifier", "UniversalEntityID=2.16.840.1.113883.3.1", "--issuer-qualifier", "UniversalEntityIDType=ISO",
+		"--issuer-qualifier", "AssigningAgencyOrDepartmentCodeSequence.CodeValue=RAD")
+	r.must("deid", "code", "lab1", "--patient-id", "P1", "--namespace", "site-b")
+	sent := r.fake.CodeRequests()
+	if len(sent) != 2 {
+		t.Fatalf("%d requests sent, want 2", len(sent))
+	}
+	is := sent[0].GetIssuer()
+	if is.GetIssuer() != "HOSP_A" || is.GetUniversalEntityId() != "2.16.840.1.113883.3.1" || is.GetUniversalEntityIdType() != "ISO" ||
+		is.GetAssigningAgency().GetCodeValue() != "RAD" || is.GetAssigningJurisdiction().GetCodeValue() != "" || sent[0].GetNamespace() != "" {
+		t.Errorf("the issuer sent: %v", sent[0])
+	}
+	if sent[1].GetIssuer() != nil || sent[1].GetNamespace() != "site-b" {
+		t.Errorf("the namespace sent: %v", sent[1])
+	}
+	for _, q := range []string{"Universal=1", "UniversalEntityID", ""} {
+		if res := r.run("deid", "code", "lab1", "--patient-id", "P1", "--issuer-qualifier", q); res.code != 2 {
+			t.Errorf("--issuer-qualifier %q: %+v", q, res)
+		}
+	}
+	twice := r.run("deid", "code", "lab1", "--patient-id", "P1", "--issuer-qualifier", "UniversalEntityID=1", "--issuer-qualifier", "UniversalEntityID=2")
+	if twice.code != 2 {
+		t.Errorf("a qualifier named twice: %+v", twice)
+	}
+	if n := len(r.fake.CodeRequests()); n != 2 {
+		t.Errorf("a refused command sent a request: %d", n)
+	}
+}
+
 // TestProfileLookupCommands guards "profile lookup import" and "list":
 // a CSV with a header imported, the counts shown; again, every entry
 // unchanged; a file whose value the table codes otherwise refused with
@@ -77,16 +115,29 @@ func TestProfileLookupCommands(t *testing.T) {
 	if res := r.run("profile", "lookup", "import", "lab1", "subjects", other); res.code != 5 {
 		t.Errorf("a value coded otherwise: %+v", res)
 	}
-	bad := writeFile(t, dir, "bad.csv", "PID-0004,P004,extra\n")
+	bad := writeFile(t, dir, "bad.csv", "PID-0004,P004,HOSP_A,site-b,extra\n")
 	if res := r.run("profile", "lookup", "import", "lab1", "subjects", bad); res.code != 2 || !strings.Contains(res.stderr, "line 1") || strings.Contains(res.stderr, "PID-0004") {
 		t.Errorf("a malformed CSV: %+v", res)
 	}
+	ragged := writeFile(t, dir, "ragged.csv", "PID-0004,P004,HOSP_A\nPID-0005,P005\n")
+	if res := r.run("profile", "lookup", "import", "lab1", "subjects", ragged); res.code != 2 || !strings.Contains(res.stderr, "line 2") || strings.Contains(res.stderr, "PID-000") {
+		t.Errorf("a CSV whose lines have two counts of columns: %+v", res)
+	}
+	issued := writeFile(t, dir, "issued.csv", "value,code,issuer,namespace\nPID-0005,P005,HOSP_A,\nPID-0006,P006,,site-b\nPID-0007,P007,,\n")
+	if res := r.run("profile", "lookup", "import", "lab1", "subjects", issued); res.code != 0 {
+		t.Errorf("a CSV with issuer and namespace columns: %+v", res)
+	}
 	imports := r.fake.ImportRequests()
-	if len(imports) != 3 || len(imports[0].GetEntries()) != 2 || imports[0].GetEntries()[0].GetCode() != "P001" {
-		t.Errorf("the imports sent: %v", imports)
+	if len(imports) != 4 || len(imports[0].GetEntries()) != 2 || imports[0].GetEntries()[0].GetCode() != "P001" {
+		t.Fatalf("the imports sent: %v", imports)
+	}
+	e := imports[3].GetEntries()
+	if len(e) != 3 || e[0].GetIssuer().GetIssuer() != "HOSP_A" || e[0].GetNamespace() != "" ||
+		e[1].GetIssuer() != nil || e[1].GetNamespace() != "site-b" || e[2].GetIssuer() != nil || e[2].GetNamespace() != "" {
+		t.Errorf("the issuer and namespace columns were sent as %v", e)
 	}
 	list := r.run("profile", "lookup", "list", "lab1")
-	if list.code != 0 || !strings.Contains(list.stdout, "subjects  2") {
+	if list.code != 0 || !strings.Contains(list.stdout, "subjects  5") {
 		t.Errorf("list:\n%+v", list)
 	}
 	if d := document(t, r.run("profile", "lookup", "list", "lab1", "--json")); len(d["tables"].([]any)) != 1 {

@@ -14,7 +14,6 @@ import (
 	"github.com/amrshadid/go-dicom/tag"
 
 	"github.com/amrshadid/nopacs/internal/blob"
-	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -221,7 +220,7 @@ func TestTheBytesCheckedAreTheBytesPut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, q, err := e.p.prepareOne(e.ctx, tenant.Reception{ID: "r", Receiver: "dimse"}, rcv, label.Path{Subject: "sub-a", Session: "ses-a", Scan: "scan-a"}, wr)
+	_, q, err := e.p.prepareOne(e.ctx, tenant.Reception{ID: "r", Receiver: "dimse"}, rcv, ownPath(t, e, rcv, body, "ses-a", "scan-a"), wr)
 	if q != nil || err == nil || !strings.Contains(err.Error(), "changed while it was checked") {
 		t.Errorf("a copy changed under the check: held %+v, %v", q, err)
 	}

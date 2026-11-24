@@ -82,6 +82,22 @@ type Reception struct {
 	// without a Patient ID has no subject, and a date to shift refuses it
 	// (CauseNoSubject).
 	Subject string
+	// Namespace is the receiver's namespace (naming.SubjectIdentity), the
+	// subject identity's in place of an issuer for a file that names no
+	// issuer of its Patient ID; empty for the tenant's default. It is
+	// read only when IdentityGiven is false.
+	Namespace string
+	// IdentityGiven says Identity is the file's subject identity's key
+	// (naming.SubjectIdentity.Key) as the caller read it from the file's
+	// header, the same read its subject label was made from, so the label
+	// and the date shift, hash and lookup of the Patient ID can never be
+	// of two identities. Identity empty with IdentityGiven says the caller
+	// could read none: every action that needs one is refused
+	// (CauseNoSubject). With IdentityGiven false the engine reads the
+	// identity from the data set itself, under Namespace.
+	IdentityGiven bool
+	// Identity is the key IdentityGiven speaks of.
+	Identity string
 }
 
 // Lookups reaches a tenant's lookup tables. A table is keyed by the keyed
@@ -323,6 +339,7 @@ func (en *Engine) apply(ctx context.Context, ds *dataset.Dataset, rec Reception,
 		}
 	}()
 	r.facts = readFacts(ds, rec)
+	r.readIdentity(rec)
 	r.received = map[uint32]string{}
 	for _, t := range en.received {
 		if v, ok := topText(ds, t); ok {

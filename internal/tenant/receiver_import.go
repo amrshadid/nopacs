@@ -130,10 +130,15 @@ func (r Receiver) GivenParts() []string {
 }
 
 // NamingRule returns the receiver's naming rule, naming.Default when it has
-// none, parsed with the parts its type gives (GivenParts).
+// none, parsed with the parts its type gives (GivenParts), under its
+// namespace (naming.Rule.WithNamespace).
 func (r Receiver) NamingRule() (*naming.Rule, error) {
 	if r.Naming == nil {
-		return naming.Default(), nil
+		return naming.Default().WithNamespace(r.Namespace), nil
 	}
-	return naming.ParseWithParts(*r.Naming, r.GivenParts())
+	rule, err := naming.ParseWithParts(*r.Naming, r.GivenParts())
+	if err != nil {
+		return nil, err
+	}
+	return rule.WithNamespace(r.Namespace), nil
 }

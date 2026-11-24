@@ -103,12 +103,14 @@ const (
 // segments that are not searched under a profile that holds them, a
 // detector finding more than text covers); and those of the check after de-identification,
 // which could not judge the file: too large, too many values to search
-// for, or unreadable to its end (a deflated file among them).
+// for, or unreadable to its end (a deflated file among them); and a file
+// whose own subject label is not its session's subject (subject_mismatch),
+// which would be shifted and hashed by another subject identity.
 var DeidCauses = []string{"no_subject", "lookup_missing", "bad_value", "too_deep", "too_large", "internal",
 	"no_profile", "recorded_as_received", "profile_unusable", "unreadable", "unwritable", "uid_not_remapped",
 	"check_too_large", "check_too_many_needles", "check_unreadable",
 	"pixels_too_large", "pixels_unsupported", "pixels_undecodable", "pixel_region_outside", "pixel_text_unsearched",
-	"detect_implausible", "frames_mismatch"}
+	"detect_implausible", "frames_mismatch", "subject_mismatch"}
 
 // BurnedInCauses are the causes a burned_in_risk record names: Burned In
 // Annotation (0028,0301) is YES; the image is a secondary capture, of a
@@ -118,9 +120,16 @@ var BurnedInCauses = []string{"burned_in_annotation", "secondary_capture", "moda
 
 // UnroutedCauses are the causes an unrouted record names: no route chose
 // the study and the routing holds what none chooses, a route could not be
-// evaluated, or another reception of the study made its session on another
-// storage while this one was in flight.
-var UnroutedCauses = []string{"no_match", "route_unusable", "session_elsewhere"}
+// evaluated, another reception of the study made its session on another
+// storage while this one was in flight, or the receiver was removed
+// (UnroutedReceiverRemoved).
+var UnroutedCauses = []string{"no_match", "route_unusable", "session_elsewhere", UnroutedReceiverRemoved}
+
+// UnroutedReceiverRemoved is the cause of an unrouted record of a
+// reception whose receiver was removed before its study had a session: its
+// subject would be named under the receiver's namespace, gone with it, and
+// is never named under another (fail closed).
+const UnroutedReceiverRemoved = "receiver_removed"
 
 // ResidualKinds are the kinds of value a residual_value record names: a
 // person's name, an identifier or any other text, a date, a UID.

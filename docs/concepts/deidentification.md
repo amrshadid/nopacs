@@ -100,3 +100,75 @@ with and gives no Retrieve URL, neither the instance's nor the study's: the
 archive holds it under remapped UIDs, and a URL by them would hand the sender
 the mapping. How it works, step by step: [the reception pipeline](../../internal/receive/doc.go).
 
+## Who a subject is
+
+A Patient ID is unique only within the issuer that gave it (PS3.3 C.7.1.1): two
+hospitals may give one number to two patients. The archive therefore tells
+subjects apart by a **subject identity**, the Patient ID together with its
+Issuer of Patient ID (0010,0021) and the values of the Issuer of Patient ID
+Qualifiers Sequence (0010,0024) that name an issuer (Universal Entity ID and its
+type, Identifier Type Code, the Assigning Facility's identifiers, and the codes
+of the Assigning Jurisdiction and Agency; never a Code Meaning, which two senders
+may word differently). A file that names no issuer takes the **namespace** of
+the receiver it came through in the issuer's place (`receiver add --namespace`,
+`Receiver.namespace`); empty, the default, is the tenant's one default
+namespace.
+
+The subject identity keys everything that must follow one person: the default
+subject label (`sub-{#SubjectIdentity}`), the date shift (one offset per
+subject, keyed by the tenant's date key over the identity), a profile's `hash`
+or `lookup` of the Patient ID, the forward lookup (`nopacs deid code
+--issuer`), the codes a lookup import stores, and the hold of a re-sent file
+after its subject was deleted (a re-send from the same issuer is held, the same
+Patient ID from another issuer is not). So two issuers of one Patient ID are two
+subjects with two date shifts; one issuer is one subject through every
+receiver; a Patient ID with no issuer through receivers of two namespaces is two
+subjects. A Patient ID with no issuer under the default namespace is keyed by
+its value alone, exactly as before issuers were told apart, so its label, its
+date shift and its codes do not move.
+
+Every other identity is written as a version byte and its fields each with its
+length in front, so no two identities can be read as one whatever bytes their
+values hold, and a later change of what an identity holds is a new version. A
+naming rule a site writes keeps what it names: `{#PatientID}` hashes the
+Patient ID alone. The issuer must arrive as the scanner and the hospital system
+write it: an issuer spelled two ways is two issuers, and so two subjects.
+
+Each file's identity is read once, from the file's header, and its date shift
+and hashed Patient ID are keyed by it; a value inside the qualifiers sequence is
+read under the item's own Specific Character Set when it declares one. A
+session's subject label is made from one file of its first reception (or kept
+from the catalog for a later arrival), so at a receiver that de-identifies every
+file is also checked against its session: the subject label the receiver's rule
+makes from the file itself must be the session's subject (or the subject a
+committed relabel moved that label to). A file whose own subject is another is
+held (`deid_failed`, cause `subject_mismatch`), so one label never holds dates
+moved by two offsets, or two patients' files: a study mixing files that carry
+the Issuer of Patient ID with files that do not holds the files that disagree
+with the one the session was named from, and so does a study whose files carry
+two Patient IDs. A release checks the file again and holds it again unless it
+now agrees, as a file sent again with the issuer its study's other files carry
+does. The same check holds a later arrival of a session through a receiver whose
+naming rule or namespace would name it otherwise (its rule changed since, or a
+second receiver with another rule or namespace), since its files would be
+another subject's.
+
+A file whose identity cannot be read (a Patient ID holding a NUL, an issuer
+too long to read) is never keyed by its Patient ID alone: its label cannot be
+made (`bad_label`), and a date shift, `hash`, `lookup` or template of its
+Patient ID holds it (`deid_failed`, `no_subject`).
+
+What this does not cover:
+
+- A site's rule that writes `{#PatientID}` makes one label of two issuers'
+  patients, while the date shift and a `hash` or `lookup` of the Patient ID
+  still follow the issuer: two shifts can then sit under one label. Use the
+  default subject template, or `{#SubjectIdentity}` in a rule of one's own, to
+  keep the label and the shift together.
+- A deleted subject's patient sent again **without** an issuer through a
+  receiver of another namespace is another subject identity, so the delete
+  does not hold it; a re-send from the same issuer, or with no issuer through
+  a receiver of the same namespace, is held.
+- A lookup table imported by Patient ID alone (no issuer, no namespace) answers
+  only files that name no issuer under the default namespace.
+

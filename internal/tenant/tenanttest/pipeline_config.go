@@ -333,6 +333,7 @@ func testReceivers(e *penv) {
 	r.DIMSE.SOPClasses = []string{"1.2.840.10008.5.1.4.1.1.4", "1.2.840.10008.5.1.4.1.1.2"}
 	r.DIMSE.TransferSyntaxes = []string{"1.2.840.10008.1.2.1"}
 	r.Naming = &naming.Spec{Subject: "sub-{#PatientID}", Session: "ses-{#StudyInstanceUID}", Scan: "scan-{SeriesNumber}"}
+	r.Namespace = "site-b"
 	got, err := e.p.AddReceiver(e.ctx, r, at(1), e.audit(), nil)
 	e.ok("AddReceiver", err)
 	want := r
@@ -381,6 +382,7 @@ func testReceivers(e *penv) {
 		func(x *tenant.Receiver) { x.DIMSE.SOPClasses = []string{"1.2.03"} },
 		func(x *tenant.Receiver) { x.Naming = &naming.Spec{Subject: "{Nope}", Session: "s", Scan: "x"} },
 		func(x *tenant.Receiver) { x.Type = "dicomweb" },
+		func(x *tenant.Receiver) { x.Namespace = "Site B" },
 	} {
 		x := receiverOf("bad", "store", 11120)
 		bad(&x)
@@ -392,8 +394,24 @@ func testReceivers(e *penv) {
 	got, err = e.p.SetReceiver(e.ctx, change, []tenant.ReceiverField{tenant.FieldDIMSEAnyCaller, tenant.FieldDIMSEPort, tenant.FieldNaming, tenant.FieldDIMSETLS}, at(3), e.audit(), nil)
 	e.ok("SetReceiver", err)
 	if !got.DIMSE.AnyCaller || got.DIMSE.Callers != nil || got.DIMSE.Port != 11114 || got.Naming != nil || got.DIMSE.TLS != nil ||
-		got.DIMSE.AETitle != "ARCHIVE" || !slices.Equal(got.DIMSE.SOPClasses, r.DIMSE.SOPClasses) || !got.Updated.Equal(at(3)) {
+		got.DIMSE.AETitle != "ARCHIVE" || !slices.Equal(got.DIMSE.SOPClasses, r.DIMSE.SOPClasses) || !got.Updated.Equal(at(3)) ||
+		got.Namespace != "site-b" {
 		e.Errorf("SetReceiver answered %+v", got)
+	}
+	got, err = e.p.SetReceiver(e.ctx, tenant.Receiver{Name: "full"}, []tenant.ReceiverField{tenant.FieldNamespace}, at(3), e.audit(), nil)
+	e.ok("SetReceiver back to the default namespace", err)
+	if read, _ := e.p.Receiver(e.ctx, "full"); got.Namespace != "" || read.Namespace != "" {
+		e.Errorf("the namespace after returning to the default: answered %q, read %q", got.Namespace, read.Namespace)
+	}
+	// Once a receiver has received data its namespace is fixed: the same
+	// patient's next study must not become a new subject.
+	if _, _, err := e.p.OpenReception(e.ctx, "full", uidOf(1, 77), e.id("rc"), at(3)); err != nil {
+		e.Fatalf("OpenReception: %v", err)
+	}
+	_, err = e.p.SetReceiver(e.ctx, tenant.Receiver{Name: "full", Namespace: "site-c"}, []tenant.ReceiverField{tenant.FieldNamespace}, at(3), e.audit(), nil)
+	e.wantPrecondition("SetReceiver of the namespace of a receiver that has received data", err)
+	if read, _ := e.p.Receiver(e.ctx, "full"); read.Namespace != "" {
+		e.Errorf("a refused namespace change was stored: %q", read.Namespace)
 	}
 	got, err = e.p.SetReceiver(e.ctx, tenant.Receiver{Name: "full", DIMSE: tenant.DIMSEReceiver{Callers: []tenant.CallerRule{{CallingAETitle: "ONLY"}}}},
 		[]tenant.ReceiverField{tenant.FieldDIMSECallers}, at(4), e.audit(), nil)

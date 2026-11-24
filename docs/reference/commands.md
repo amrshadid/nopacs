@@ -350,6 +350,9 @@ Usage: `nopacs deid code <tenant> (--patient-id VALUE|- | --attribute NAME --val
 | Flag | Type | Default | What it does |
 |---|---|---|---|
 | `--attribute` | string |  | the attribute the value is of: a keyword such as PatientID, or a tag such as 00100020 (PatientID when not given) |
+| `--issuer` | string |  | the Patient ID's Issuer of Patient ID (0010,0021), as the files give it |
+| `--issuer-qualifier` | stringArray |  | a value of the Patient ID's Issuer of Patient ID Qualifiers Sequence (0010,0024), written NAME=VALUE, such as UniversalEntityID=2.16.840.1.113883.3.1; repeat for more |
+| `--namespace` | string |  | the receiver namespace of a Patient ID that comes with no issuer (default: the tenant's default namespace) |
 | `--patient-id` | string |  | the Patient ID (0010,0020) to find the codes of, or - to read it from the first line of standard input |
 | `--value` | string |  | the value, or - to read it from the first line of standard input |
 
@@ -744,7 +747,7 @@ Usage: `nopacs profile lookup`
 
 ##### `nopacs profile lookup import`
 
-Import chosen codes into a lookup table from a CSV of value,code
+Import chosen codes into a lookup table from a CSV of value,code[,issuer[,namespace]]
 
 Usage: `nopacs profile lookup import <tenant> <table> FILE`
 
@@ -890,11 +893,12 @@ Usage: `nopacs receiver add <tenant> <name> --storage NAME [--port N] --aet TITL
 | `--max-file-size` | string |  | the largest file it accepts, a size such as 4GiB, from 1KiB to 256GiB (default 4GiB) |
 | `--max-open-time` | string |  | the longest a reception stays receiving: a number and s, m or h, from 1m to 24h, not less than the quiet period (default 1h) |
 | `--max-request-size` | string |  | stow: the largest request it reads, a size such as 16GiB, from 1KiB to 1TiB (default 16GiB) |
+| `--namespace` | string |  | the namespace of a Patient ID that comes with no Issuer of Patient ID: receivers of two namespaces make two subjects of it; empty, the default, is the tenant's one default namespace; fixed once the receiver has received data |
 | `--naming-attribute` | string |  | the attribute whose value the naming pattern reads, such as PatientComments or (0010,4000) |
 | `--naming-expression` | string |  | the RE2 pattern with named parts that the templates may use, such as (?P<project>[^^]+)\^(?P<subject>[^^]+) |
 | `--naming-scan` | string |  | the template of a new scan's label, such as scan-{#SeriesInstanceUID} |
 | `--naming-session` | string |  | the template of a new session's label, such as ses-{#StudyInstanceUID} |
-| `--naming-subject` | string |  | the template of a new subject's label, such as sub-{#PatientID} |
+| `--naming-subject` | string |  | the template of a new subject's label, such as sub-{#SubjectIdentity} (the Patient ID with its issuer, the default) or sub-{#PatientID} |
 | `--pattern` | string |  | import: the RE2 pattern over a file's path under the root with named parts the naming templates use, such as ^(?P<project>[^/]+)/(?P<session>[^/]+)/.+$ |
 | `--port` | int |  | the TCP port to listen on, one of the ports the installation allotted to the tenant; on add, left out, the server gives the lowest of them that is free |
 | `--profile` | string |  | de-identify what it receives by this version of one of the tenant's profiles, written NAME@VERSION, such as research@3 |
@@ -1057,11 +1061,12 @@ Usage: `nopacs receiver set <tenant> <name> [flags of the fields to change] [fla
 | `--max-file-size` | string |  | the largest file it accepts, a size such as 4GiB, from 1KiB to 256GiB (default 4GiB) |
 | `--max-open-time` | string |  | the longest a reception stays receiving: a number and s, m or h, from 1m to 24h, not less than the quiet period (default 1h) |
 | `--max-request-size` | string |  | stow: the largest request it reads, a size such as 16GiB, from 1KiB to 1TiB (default 16GiB) |
+| `--namespace` | string |  | the namespace of a Patient ID that comes with no Issuer of Patient ID: receivers of two namespaces make two subjects of it; empty, the default, is the tenant's one default namespace; fixed once the receiver has received data |
 | `--naming-attribute` | string |  | the attribute whose value the naming pattern reads, such as PatientComments or (0010,4000) |
 | `--naming-expression` | string |  | the RE2 pattern with named parts that the templates may use, such as (?P<project>[^^]+)\^(?P<subject>[^^]+) |
 | `--naming-scan` | string |  | the template of a new scan's label, such as scan-{#SeriesInstanceUID} |
 | `--naming-session` | string |  | the template of a new session's label, such as ses-{#StudyInstanceUID} |
-| `--naming-subject` | string |  | the template of a new subject's label, such as sub-{#PatientID} |
+| `--naming-subject` | string |  | the template of a new subject's label, such as sub-{#SubjectIdentity} (the Patient ID with its issuer, the default) or sub-{#PatientID} |
 | `--no-callers` | bool |  | admit nobody: the receiver stays closed until callers are listed again |
 | `--no-keys` | bool |  | stow: take requests from no key; the receiver stays closed until keys are listed again |
 | `--no-tls` | bool |  | turn TLS off |

@@ -474,7 +474,7 @@ func (c *core) explainProfile(ctx context.Context, req *v1.ExplainProfileRequest
 	if err != nil {
 		return nil, "", err
 	}
-	explained, hold, err := receive.ExplainFile(ctx, en, in.file, in.received, limit)
+	explained, hold, err := receive.ExplainFile(ctx, en, in.file, in.received, in.receiver, limit)
 	if err != nil {
 		return nil, "", err
 	}

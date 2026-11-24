@@ -164,6 +164,15 @@ func (p *Pipeline) deidentify(ctx context.Context, r tenant.Reception, rcv tenan
 	if p.cfg.Check == nil {
 		return wr, nil, errNoCheck
 	}
+	// The file's own subject must be its session's: the engine keys its
+	// date shift and hashed Patient ID by the file's own identity.
+	reason, details, err := p.subjectAgrees(ctx, rcv, path, wr.f, h)
+	if err != nil {
+		return wr, nil, err
+	}
+	if reason != "" {
+		return hold(reason, details)
+	}
 	en, err := p.engineFor(ctx, ref)
 	if errors.Is(err, errProfileUnusable) {
 		return hold(tenant.QuarantineDeidFailed, map[string]string{"cause": "profile_unusable"})
@@ -175,10 +184,10 @@ func (p *Pipeline) deidentify(ctx context.Context, r tenant.Reception, rcv tenan
 	if err != nil {
 		return hold(tenant.QuarantineDeidFailed, map[string]string{"cause": "unreadable"})
 	}
-	rec, err := en.ApplyImage(ctx, ds, engine.Reception{
+	rec, err := en.ApplyImage(ctx, ds, withIdentity(engine.Reception{
 		Receiver: r.Receiver, CallingAETitle: wr.f.Caller.CallingAETitle, CalledAETitle: wr.f.Caller.CalledAETitle,
 		CharacterSet: h.CharacterSet(),
-	}, image(h, in, source, p.pixelLimit(ctx)))
+	}, h, rcv.Namespace), image(h, in, source, p.pixelLimit(ctx)))
 	var failure *engine.Failure
 	if errors.As(err, &failure) {
 		return hold(engineHold(failure))

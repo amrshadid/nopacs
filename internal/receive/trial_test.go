@@ -187,7 +187,7 @@ func TestExplainFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	xs, hold, err := ExplainFile(t.Context(), en, b, engine.Reception{}, header.MaxHeader)
+	xs, hold, err := ExplainFile(t.Context(), en, b, engine.Reception{}, nil, header.MaxHeader)
 	if err != nil || hold != nil || len(xs) == 0 {
 		t.Fatalf("%d explanations, %+v, %v", len(xs), hold, err)
 	}
@@ -200,7 +200,7 @@ func TestExplainFile(t *testing.T) {
 	if !found {
 		t.Error("Patient's Name is not explained as chosen by a tag rule")
 	}
-	if _, hold, err := ExplainFile(t.Context(), en, []byte("nope"), engine.Reception{}, header.MaxHeader); err != nil || hold == nil || hold.Details["cause"] != "unreadable" {
+	if _, hold, err := ExplainFile(t.Context(), en, []byte("nope"), engine.Reception{}, nil, header.MaxHeader); err != nil || hold == nil || hold.Details["cause"] != "unreadable" {
 		t.Errorf("not DICOM: %+v %v", hold, err)
 	}
 }

@@ -126,6 +126,7 @@ func TryFile(ctx context.Context, en *engine.Engine, file []byte, rec engine.Rec
 	var path labelsFor
 	if rcv := o.Receiver; rcv != nil {
 		t.Receiver = rcv.Name
+		rec.Namespace = rcv.Namespace
 		if reason, details := headerHold(h, true); reason != "" {
 			return held(reason, details)
 		}
@@ -149,6 +150,9 @@ func TryFile(ctx context.Context, en *engine.Engine, file []byte, rec engine.Rec
 		t.Before, _, _, _ = h.Dataset(bytes.NewReader(file))
 	}
 	rec.CharacterSet = h.CharacterSet()
+	if !rec.IdentityGiven {
+		rec = withIdentity(rec, h, rec.Namespace)
+	}
 	limit := o.PixelLimit
 	if limit <= 0 {
 		limit = DefaultPixelLimit
@@ -276,8 +280,13 @@ func trialLabels(rcv tenant.Receiver, h *header.Header, keys engine.Keys) (label
 
 // ExplainFile answers for each element of file why en treats it as it does
 // (engine.Explain), with nothing stored, or why the engine refuses the
-// file (a hold, with Explain's cause).
-func ExplainFile(ctx context.Context, en *engine.Engine, file []byte, rec engine.Reception, headerLimit int64) ([]engine.Explanation, *TrialHold, error) {
+// file (a hold, with Explain's cause). rcv, when not nil, is the receiver
+// the file is explained as from: its namespace is the subject identity's
+// for a file that names no issuer, as TryFile takes it.
+func ExplainFile(ctx context.Context, en *engine.Engine, file []byte, rec engine.Reception, rcv *tenant.Receiver, headerLimit int64) ([]engine.Explanation, *TrialHold, error) {
+	if rcv != nil {
+		rec.Namespace = rcv.Namespace
+	}
 	h, err := header.ReadWithin(bytes.NewReader(file), int64(len(file)), headerLimit)
 	if err != nil {
 		return nil, &TrialHold{Reason: tenant.QuarantineNotDICOM, Details: map[string]string{"cause": "unreadable"}}, nil
@@ -287,6 +296,9 @@ func ExplainFile(ctx context.Context, en *engine.Engine, file []byte, rec engine
 		return nil, &TrialHold{Reason: tenant.QuarantineDeidFailed, Details: map[string]string{"cause": "unreadable"}}, nil
 	}
 	rec.CharacterSet = h.CharacterSet()
+	if !rec.IdentityGiven {
+		rec = withIdentity(rec, h, rec.Namespace)
+	}
 	out, err := en.Explain(ctx, ds, rec)
 	var failure *engine.Failure
 	if errors.As(err, &failure) {

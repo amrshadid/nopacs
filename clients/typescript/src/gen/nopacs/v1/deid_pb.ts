@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/deid.proto.
  */
 export const file_nopacs_v1_deid: GenFile = /*@__PURE__*/
-  fileDesc("ChRub3BhY3MvdjEvZGVpZC5wcm90bxIJbm9wYWNzLnYxIkQKC0NvZGVSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIRCglhdHRyaWJ1dGUYAiABKAkSEgoFdmFsdWUYAyABKAlCA4ABASKLAQoMQ29kZVJlc3BvbnNlEhEKCWF0dHJpYnV0ZRgBIAEoCRIMCgRjb2RlGAIgASgJEi0KCHN1YmplY3RzGAMgAygLMhsubm9wYWNzLnYxLlN1YmplY3RMYWJlbENvZGUSKwoHbG9va3VwcxgEIAMoCzIaLm5vcGFjcy52MS5Mb29rdXBUYWJsZUNvZGUiSQoQU3ViamVjdExhYmVsQ29kZRIQCghyZWNlaXZlchgBIAEoCRIVCg1zdWJqZWN0X2xhYmVsGAIgASgJEgwKBGhlbGQYAyABKAgiLgoPTG9va3VwVGFibGVDb2RlEg0KBXRhYmxlGAEgASgJEgwKBGNvZGUYAiABKAkiYgoYSW1wb3J0TG9va3VwQ29kZXNSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRINCgV0YWJsZRgCIAEoCRInCgdlbnRyaWVzGAMgAygLMhYubm9wYWNzLnYxLkxvb2t1cEVudHJ5Ii8KC0xvb2t1cEVudHJ5EhIKBXZhbHVlGAEgASgJQgOAAQESDAoEY29kZRgCIAEoCSJbChlJbXBvcnRMb29rdXBDb2Rlc1Jlc3BvbnNlEg0KBXRhYmxlGAEgASgJEg0KBWFkZGVkGAIgASgFEhEKCXVuY2hhbmdlZBgDIAEoBRINCgVjb2RlcxgEIAEoAyJQChdMaXN0TG9va3VwVGFibGVzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSEQoJcGFnZV9zaXplGAIgASgFEhIKCnBhZ2VfdG9rZW4YAyABKAkiWwoYTGlzdExvb2t1cFRhYmxlc1Jlc3BvbnNlEiYKBnRhYmxlcxgBIAMoCzIWLm5vcGFjcy52MS5Mb29rdXBUYWJsZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiKgoLTG9va3VwVGFibGUSDAoEbmFtZRgBIAEoCRINCgVjb2RlcxgCIAEoAzKNAgoLRGVpZFNlcnZpY2USNwoEQ29kZRIWLm5vcGFjcy52MS5Db2RlUmVxdWVzdBoXLm5vcGFjcy52MS5Db2RlUmVzcG9uc2USYwoRSW1wb3J0TG9va3VwQ29kZXMSIy5ub3BhY3MudjEuSW1wb3J0TG9va3VwQ29kZXNSZXF1ZXN0GiQubm9wYWNzLnYxLkltcG9ydExvb2t1cENvZGVzUmVzcG9uc2UiA5ACAhJgChBMaXN0TG9va3VwVGFibGVzEiIubm9wYWNzLnYxLkxpc3RMb29rdXBUYWJsZXNSZXF1ZXN0GiMubm9wYWNzLnYxLkxpc3RMb29rdXBUYWJsZXNSZXNwb25zZSIDkAIBYgZwcm90bzM");
+  fileDesc("ChRub3BhY3MvdjEvZGVpZC5wcm90bxIJbm9wYWNzLnYxIoMBCgtDb2RlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSEQoJYXR0cmlidXRlGAIgASgJEhIKBXZhbHVlGAMgASgJQgOAAQESKgoGaXNzdWVyGAQgASgLMhoubm9wYWNzLnYxLlBhdGllbnRJRElzc3VlchIRCgluYW1lc3BhY2UYBSABKAkiswIKD1BhdGllbnRJRElzc3VlchITCgZpc3N1ZXIYASABKAlCA4ABARIgChN1bml2ZXJzYWxfZW50aXR5X2lkGAIgASgJQgOAAQESJQoYdW5pdmVyc2FsX2VudGl0eV9pZF90eXBlGAMgASgJQgOAAQESIQoUaWRlbnRpZmllcl90eXBlX2NvZGUYBCABKAlCA4ABARI3ChJhc3NpZ25pbmdfZmFjaWxpdHkYBSABKAsyGy5ub3BhY3MudjEuSXNzdWVyRGVzaWduYXRvchI1ChZhc3NpZ25pbmdfanVyaXNkaWN0aW9uGAYgASgLMhUubm9wYWNzLnYxLklzc3VlckNvZGUSLwoQYXNzaWduaW5nX2FnZW5jeRgHIAEoCzIVLm5vcGFjcy52MS5Jc3N1ZXJDb2RlIoMBChBJc3N1ZXJEZXNpZ25hdG9yEiYKGWxvY2FsX25hbWVzcGFjZV9lbnRpdHlfaWQYASABKAlCA4ABARIgChN1bml2ZXJzYWxfZW50aXR5X2lkGAIgASgJQgOAAQESJQoYdW5pdmVyc2FsX2VudGl0eV9pZF90eXBlGAMgASgJQgOAAQEihwEKCklzc3VlckNvZGUSFwoKY29kZV92YWx1ZRgBIAEoCUIDgAEBEiUKGGNvZGluZ19zY2hlbWVfZGVzaWduYXRvchgCIAEoCUIDgAEBEhwKD2xvbmdfY29kZV92YWx1ZRgDIAEoCUIDgAEBEhsKDnVybl9jb2RlX3ZhbHVlGAQgASgJQgOAAQEiiwEKDENvZGVSZXNwb25zZRIRCglhdHRyaWJ1dGUYASABKAkSDAoEY29kZRgCIAEoCRItCghzdWJqZWN0cxgDIAMoCzIbLm5vcGFjcy52MS5TdWJqZWN0TGFiZWxDb2RlEisKB2xvb2t1cHMYBCADKAsyGi5ub3BhY3MudjEuTG9va3VwVGFibGVDb2RlIkkKEFN1YmplY3RMYWJlbENvZGUSEAoIcmVjZWl2ZXIYASABKAkSFQoNc3ViamVjdF9sYWJlbBgCIAEoCRIMCgRoZWxkGAMgASgIIi4KD0xvb2t1cFRhYmxlQ29kZRINCgV0YWJsZRgBIAEoCRIMCgRjb2RlGAIgASgJImIKGEltcG9ydExvb2t1cENvZGVzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSDQoFdGFibGUYAiABKAkSJwoHZW50cmllcxgDIAMoCzIWLm5vcGFjcy52MS5Mb29rdXBFbnRyeSJuCgtMb29rdXBFbnRyeRISCgV2YWx1ZRgBIAEoCUIDgAEBEgwKBGNvZGUYAiABKAkSKgoGaXNzdWVyGAMgASgLMhoubm9wYWNzLnYxLlBhdGllbnRJRElzc3VlchIRCgluYW1lc3BhY2UYBCABKAkiWwoZSW1wb3J0TG9va3VwQ29kZXNSZXNwb25zZRINCgV0YWJsZRgBIAEoCRINCgVhZGRlZBgCIAEoBRIRCgl1bmNoYW5nZWQYAyABKAUSDQoFY29kZXMYBCABKAMiUAoXTGlzdExvb2t1cFRhYmxlc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIlsKGExpc3RMb29rdXBUYWJsZXNSZXNwb25zZRImCgZ0YWJsZXMYASADKAsyFi5ub3BhY3MudjEuTG9va3VwVGFibGUSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIioKC0xvb2t1cFRhYmxlEgwKBG5hbWUYASABKAkSDQoFY29kZXMYAiABKAMyjQIKC0RlaWRTZXJ2aWNlEjcKBENvZGUSFi5ub3BhY3MudjEuQ29kZVJlcXVlc3QaFy5ub3BhY3MudjEuQ29kZVJlc3BvbnNlEmMKEUltcG9ydExvb2t1cENvZGVzEiMubm9wYWNzLnYxLkltcG9ydExvb2t1cENvZGVzUmVxdWVzdBokLm5vcGFjcy52MS5JbXBvcnRMb29rdXBDb2Rlc1Jlc3BvbnNlIgOQAgISYAoQTGlzdExvb2t1cFRhYmxlcxIiLm5vcGFjcy52MS5MaXN0TG9va3VwVGFibGVzUmVxdWVzdBojLm5vcGFjcy52MS5MaXN0TG9va3VwVGFibGVzUmVzcG9uc2UiA5ACAWIGcHJvdG8z");
 
 /**
  * CodeRequest is one value whose codes are asked for.
@@ -46,6 +46,31 @@ export type CodeRequest = Message<"nopacs.v1.CodeRequest"> & {
    * @generated from field: string value = 3;
    */
   value: string;
+
+  /**
+   * The issuer of the Patient ID, for attribute PatientID only: the
+   * subject identity is the Patient ID with its issuer (PatientIDIssuer),
+   * and two issuers' patients of one Patient ID are two subjects. Absent
+   * for a Patient ID that comes with no issuer. Set with another attribute,
+   * invalid.
+   *
+   * @generated from field: nopacs.v1.PatientIDIssuer issuer = 4;
+   */
+  issuer?: PatientIDIssuer | undefined;
+
+  /**
+   * The namespace of a Patient ID that comes with no issuer
+   * (Receiver.namespace), for code and lookups: empty is the tenant's
+   * default namespace. Each subject label is answered under its receiver's
+   * own namespace, as that receiver names a file with no issuer, so this
+   * does not choose the receivers. Ignored when issuer is set, since an
+   * issuer names the population itself. Set with another attribute than
+   * PatientID, invalid. Otherwise empty or 1 to 63 characters under the
+   * rule of a tenant's name.
+   *
+   * @generated from field: string namespace = 5;
+   */
+  namespace: string;
 };
 
 /**
@@ -54,6 +79,157 @@ export type CodeRequest = Message<"nopacs.v1.CodeRequest"> & {
  */
 export const CodeRequestSchema: GenMessage<CodeRequest> = /*@__PURE__*/
   messageDesc(file_nopacs_v1_deid, 0);
+
+/**
+ * PatientIDIssuer is who gave a Patient ID (PS3.3 C.7.1.1, and its Issuer
+ * of Patient ID Macro, Table 10-18): the Issuer of Patient ID (0010,0021)
+ * and the values of the Issuer of Patient ID Qualifiers Sequence
+ * (0010,0024) that name an issuer, each as a file's element holds it, as
+ * UTF-8 text, its padding removed as for its VR, at most 1024 bytes. A
+ * field left empty is one the file does not have; an issuer with every
+ * field empty is no issuer. Each must be given as the files give it: a
+ * value written differently (another case, another spelling) is another
+ * issuer, and so another subject.
+ *
+ * @generated from message nopacs.v1.PatientIDIssuer
+ */
+export type PatientIDIssuer = Message<"nopacs.v1.PatientIDIssuer"> & {
+  /**
+   * Issuer of Patient ID (0010,0021), LO.
+   *
+   * @generated from field: string issuer = 1;
+   */
+  issuer: string;
+
+  /**
+   * Universal Entity ID (0040,0032), UT.
+   *
+   * @generated from field: string universal_entity_id = 2;
+   */
+  universalEntityId: string;
+
+  /**
+   * Universal Entity ID Type (0040,0033), CS, such as "ISO".
+   *
+   * @generated from field: string universal_entity_id_type = 3;
+   */
+  universalEntityIdType: string;
+
+  /**
+   * Identifier Type Code (0040,0035), CS, such as "MR".
+   *
+   * @generated from field: string identifier_type_code = 4;
+   */
+  identifierTypeCode: string;
+
+  /**
+   * The Assigning Facility Sequence (0040,0036): its Local Namespace
+   * Entity ID (0040,0031), Universal Entity ID and its type.
+   *
+   * @generated from field: nopacs.v1.IssuerDesignator assigning_facility = 5;
+   */
+  assigningFacility?: IssuerDesignator | undefined;
+
+  /**
+   * The Assigning Jurisdiction Code Sequence (0040,0039).
+   *
+   * @generated from field: nopacs.v1.IssuerCode assigning_jurisdiction = 6;
+   */
+  assigningJurisdiction?: IssuerCode | undefined;
+
+  /**
+   * The Assigning Agency or Department Code Sequence (0040,003A).
+   *
+   * @generated from field: nopacs.v1.IssuerCode assigning_agency = 7;
+   */
+  assigningAgency?: IssuerCode | undefined;
+};
+
+/**
+ * Describes the message nopacs.v1.PatientIDIssuer.
+ * Use `create(PatientIDIssuerSchema)` to create a new message.
+ */
+export const PatientIDIssuerSchema: GenMessage<PatientIDIssuer> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 1);
+
+/**
+ * IssuerDesignator is an HL7v2 hierarchic designator (PS3.3 Table 10-17).
+ *
+ * @generated from message nopacs.v1.IssuerDesignator
+ */
+export type IssuerDesignator = Message<"nopacs.v1.IssuerDesignator"> & {
+  /**
+   * Local Namespace Entity ID (0040,0031), UT.
+   *
+   * @generated from field: string local_namespace_entity_id = 1;
+   */
+  localNamespaceEntityId: string;
+
+  /**
+   * Universal Entity ID (0040,0032), UT.
+   *
+   * @generated from field: string universal_entity_id = 2;
+   */
+  universalEntityId: string;
+
+  /**
+   * Universal Entity ID Type (0040,0033), CS.
+   *
+   * @generated from field: string universal_entity_id_type = 3;
+   */
+  universalEntityIdType: string;
+};
+
+/**
+ * Describes the message nopacs.v1.IssuerDesignator.
+ * Use `create(IssuerDesignatorSchema)` to create a new message.
+ */
+export const IssuerDesignatorSchema: GenMessage<IssuerDesignator> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 2);
+
+/**
+ * IssuerCode is a coded entry's identifying values (PS3.3 Table 8.8-1a);
+ * its Code Meaning is not one, since two senders may word one code two
+ * ways.
+ *
+ * @generated from message nopacs.v1.IssuerCode
+ */
+export type IssuerCode = Message<"nopacs.v1.IssuerCode"> & {
+  /**
+   * Code Value (0008,0100), SH.
+   *
+   * @generated from field: string code_value = 1;
+   */
+  codeValue: string;
+
+  /**
+   * Coding Scheme Designator (0008,0102), SH.
+   *
+   * @generated from field: string coding_scheme_designator = 2;
+   */
+  codingSchemeDesignator: string;
+
+  /**
+   * Long Code Value (0008,0119), UC.
+   *
+   * @generated from field: string long_code_value = 3;
+   */
+  longCodeValue: string;
+
+  /**
+   * URN Code Value (0008,0120), UR.
+   *
+   * @generated from field: string urn_code_value = 4;
+   */
+  urnCodeValue: string;
+};
+
+/**
+ * Describes the message nopacs.v1.IssuerCode.
+ * Use `create(IssuerCodeSchema)` to create a new message.
+ */
+export const IssuerCodeSchema: GenMessage<IssuerCode> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 3);
 
 /**
  * CodeResponse is what the archive gives the value.
@@ -71,7 +247,10 @@ export type CodeResponse = Message<"nopacs.v1.CodeResponse"> & {
   /**
    * The keyed hash of the value under the tenant's naming key: 16
    * characters of lower case base32, as a {#X} placeholder writes it (a
-   * hash action writes it in upper case in a CS element).
+   * hash action writes it in upper case in a CS element). For attribute
+   * PatientID, the keyed hash of the subject identity (the request's
+   * issuer, or its namespace), as a lookup table keys it and as a profile's
+   * hash action writes a file's Patient ID.
    *
    * @generated from field: string code = 2;
    */
@@ -101,7 +280,7 @@ export type CodeResponse = Message<"nopacs.v1.CodeResponse"> & {
  * Use `create(CodeResponseSchema)` to create a new message.
  */
 export const CodeResponseSchema: GenMessage<CodeResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 1);
+  messageDesc(file_nopacs_v1_deid, 4);
 
 /**
  * SubjectLabelCode is the subject label one receiver gives a value.
@@ -136,7 +315,7 @@ export type SubjectLabelCode = Message<"nopacs.v1.SubjectLabelCode"> & {
  * Use `create(SubjectLabelCodeSchema)` to create a new message.
  */
 export const SubjectLabelCodeSchema: GenMessage<SubjectLabelCode> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 2);
+  messageDesc(file_nopacs_v1_deid, 5);
 
 /**
  * LookupTableCode is the code one lookup table holds for a value.
@@ -164,7 +343,7 @@ export type LookupTableCode = Message<"nopacs.v1.LookupTableCode"> & {
  * Use `create(LookupTableCodeSchema)` to create a new message.
  */
 export const LookupTableCodeSchema: GenMessage<LookupTableCode> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 3);
+  messageDesc(file_nopacs_v1_deid, 6);
 
 /**
  * ImportLookupCodesRequest is the codes to put in one table.
@@ -199,7 +378,7 @@ export type ImportLookupCodesRequest = Message<"nopacs.v1.ImportLookupCodesReque
  * Use `create(ImportLookupCodesRequestSchema)` to create a new message.
  */
 export const ImportLookupCodesRequestSchema: GenMessage<ImportLookupCodesRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 4);
+  messageDesc(file_nopacs_v1_deid, 7);
 
 /**
  * LookupEntry is one value and the code that replaces it.
@@ -221,6 +400,30 @@ export type LookupEntry = Message<"nopacs.v1.LookupEntry"> & {
    * @generated from field: string code = 2;
    */
   code: string;
+
+  /**
+   * The issuer of the value, when it is a Patient ID that comes with one:
+   * the entry is then stored by the keyed hash of the subject identity
+   * (CodeRequest.issuer), which a lookup action on the Patient ID of a file
+   * from that issuer meets. Absent for a value with no issuer, stored by
+   * its own keyed hash, as every value of any other attribute.
+   *
+   * @generated from field: nopacs.v1.PatientIDIssuer issuer = 3;
+   */
+  issuer?: PatientIDIssuer | undefined;
+
+  /**
+   * The namespace of a Patient ID that comes with no issuer
+   * (Receiver.namespace): set, the entry is stored by the keyed hash of
+   * the subject identity under that namespace, which a lookup action on
+   * the Patient ID of a file with no issuer through a receiver of that
+   * namespace meets. Empty, the default namespace: stored by the value's
+   * own keyed hash. Ignored when issuer is set. Otherwise 1 to 63
+   * characters under the rule of a tenant's name.
+   *
+   * @generated from field: string namespace = 4;
+   */
+  namespace: string;
 };
 
 /**
@@ -228,7 +431,7 @@ export type LookupEntry = Message<"nopacs.v1.LookupEntry"> & {
  * Use `create(LookupEntrySchema)` to create a new message.
  */
 export const LookupEntrySchema: GenMessage<LookupEntry> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 5);
+  messageDesc(file_nopacs_v1_deid, 8);
 
 /**
  * ImportLookupCodesResponse says what the import stored.
@@ -271,7 +474,7 @@ export type ImportLookupCodesResponse = Message<"nopacs.v1.ImportLookupCodesResp
  * Use `create(ImportLookupCodesResponseSchema)` to create a new message.
  */
 export const ImportLookupCodesResponseSchema: GenMessage<ImportLookupCodesResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 6);
+  messageDesc(file_nopacs_v1_deid, 9);
 
 /**
  * ListLookupTablesRequest asks for a page of a tenant's lookup tables.
@@ -309,7 +512,7 @@ export type ListLookupTablesRequest = Message<"nopacs.v1.ListLookupTablesRequest
  * Use `create(ListLookupTablesRequestSchema)` to create a new message.
  */
 export const ListLookupTablesRequestSchema: GenMessage<ListLookupTablesRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 7);
+  messageDesc(file_nopacs_v1_deid, 10);
 
 /**
  * ListLookupTablesResponse is a page of lookup tables.
@@ -337,7 +540,7 @@ export type ListLookupTablesResponse = Message<"nopacs.v1.ListLookupTablesRespon
  * Use `create(ListLookupTablesResponseSchema)` to create a new message.
  */
 export const ListLookupTablesResponseSchema: GenMessage<ListLookupTablesResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 8);
+  messageDesc(file_nopacs_v1_deid, 11);
 
 /**
  * LookupTable is a lookup table in a list.
@@ -365,7 +568,7 @@ export type LookupTable = Message<"nopacs.v1.LookupTable"> & {
  * Use `create(LookupTableSchema)` to create a new message.
  */
 export const LookupTableSchema: GenMessage<LookupTable> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 9);
+  messageDesc(file_nopacs_v1_deid, 12);
 
 /**
  * DeidService reaches what a tenant's de-identification keeps that is
@@ -405,6 +608,16 @@ export const DeidService: GenService<{
    * each lookup table of the tenant that holds a code for the value, that
    * code. It is how a person finds a subject's data from its Patient ID,
    * for a withdrawal of consent, without the archive keeping a way back.
+   *
+   * A Patient ID is unique only within its issuer (PS3.3 C.7.1.1), so for
+   * attribute PatientID what is hashed is the subject identity: the
+   * Patient ID with the issuer the request gives, or, with none, with a
+   * namespace (Receiver.namespace). A Patient ID with no issuer under the
+   * default namespace hashes as its value alone. A receiver whose subject
+   * label is the default {#SubjectIdentity} is answered with the label it
+   * gives that identity, under its own namespace when no issuer is given;
+   * one whose rule a site wrote with {#PatientID} with the keyed hash of
+   * the Patient ID alone.
    *
    * The value is read as a file's element would be: its padding removed
    * as PS3.5 6.2 says for the attribute's VR (trailing spaces and NULs,

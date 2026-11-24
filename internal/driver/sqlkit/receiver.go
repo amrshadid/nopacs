@@ -45,6 +45,9 @@ type dimseConfig struct {
 	// Import is an import receiver's configuration; absent for every
 	// other type, so their rows read and write back as before.
 	Import *importConfig `json:"import,omitempty"`
+	// Namespace is the namespace of the subject identity of a file that
+	// names no issuer; absent for the tenant's default.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // importConfig is an import receiver's configuration: its root, layout and
@@ -225,7 +228,7 @@ func ReceiverConfigText(r tenant.Receiver) (config, namingText string, err error
 		SOPClasses: r.DIMSE.SOPClasses, TransferSyntaxes: r.DIMSE.TransferSyntaxes,
 		STOWKeys: r.STOW.Keys, MaxRequestBytes: r.STOW.MaxRequestBytes, ForwardTo: r.ForwardTo,
 		DeidProfile: r.Profile.Name, DeidVersion: r.Profile.Version,
-		RoutesQuarantineUnmatched: r.Routing.QuarantineUnmatched}
+		RoutesQuarantineUnmatched: r.Routing.QuarantineUnmatched, Namespace: r.Namespace}
 	for _, rt := range r.Routing.Routes {
 		rc := routeConfig{Name: rt.Name, Storage: rt.Storage, Profile: rt.Profile.Name, Version: rt.Profile.Version,
 			ReplacesForwardTo: rt.ReplacesForwardTo, ForwardTo: rt.ForwardTo}
@@ -267,6 +270,7 @@ func ReadReceiverConfig(r *tenant.Receiver, config, namingText string) error {
 	r.DIMSE.SOPClasses, r.DIMSE.TransferSyntaxes = c.SOPClasses, c.TransferSyntaxes
 	r.STOW = tenant.STOWReceiver{Keys: c.STOWKeys, MaxRequestBytes: c.MaxRequestBytes}
 	r.ForwardTo = c.ForwardTo
+	r.Namespace = c.Namespace
 	r.Profile = tenant.ProfileRef{Name: c.DeidProfile, Version: c.DeidVersion}
 	r.Routing = routingOf(c)
 	r.DIMSE.Callers = nil

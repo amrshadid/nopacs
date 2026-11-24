@@ -7,6 +7,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/naming"
+	"github.com/amrshadid/nopacs/internal/deid/engine"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/receive/header"
@@ -117,6 +118,72 @@ func ruleOf(rcv tenant.Receiver) (*naming.Rule, error) {
 		return nil, fault.Wrap(fault.Internal, err, "the receiver's naming rule does not parse")
 	}
 	return rule, nil
+}
+
+// withIdentity returns rec carrying the file's subject identity read from
+// its header h under the namespace ns (naming.ReadSubjectIdentity), the
+// same read the naming rule makes the subject label from, so the engine
+// shifts and hashes by the identity the label is of
+// (engine.Reception.IdentityGiven). A header with no identity it can read
+// gives an empty key, and the engine refuses every action that needs one.
+func withIdentity(rec engine.Reception, h *header.Header, ns string) engine.Reception {
+	rec.IdentityGiven, rec.Identity, rec.Namespace = true, "", ns
+	if id, err := naming.ReadSubjectIdentity(h, ns); err == nil {
+		rec.Identity = string(id.Key())
+	}
+	return rec
+}
+
+// subjectMismatch is the deid_failed cause of a file whose own subject
+// label is not its session's subject (subjectAgrees).
+const subjectMismatch = "subject_mismatch"
+
+// subjectAgrees holds a file a receiver de-identifies unless the subject
+// label the receiver's rule makes from the file itself is the subject its
+// session is filed under (path.Subject), or the subject a chain of
+// committed relabels moved that label to. The session's subject was named
+// from one file of the study, or by an earlier arrival, and the engine
+// shifts and hashes each file by its own subject identity: a file whose
+// identity is another (an issuer one file has and another lacks, another
+// Patient ID) would put dates moved by two offsets, and two patients'
+// files, under one subject. It fails closed: such a file is held,
+// deid_failed with cause subject_mismatch; a file whose own label cannot
+// be made is held bad_label with its fault. A release runs the check again.
+// It returns the reason and details of the hold, or "" when the file
+// agrees.
+func (p *Pipeline) subjectAgrees(ctx context.Context, rcv tenant.Receiver, path label.Path, f tenant.ReceivedFile, h *header.Header) (tenant.QuarantineReason, map[string]string, error) {
+	rule, err := ruleOf(rcv)
+	if err != nil {
+		return "", nil, err
+	}
+	var parts map[string]string
+	if len(rule.GivenParts()) > 0 {
+		if parts, _, err = p.store.ArrivalParts(ctx, f.ReceptionID, f.SOPInstanceUID, f.SHA256); err != nil {
+			return "", nil, err
+		}
+	}
+	own, err := rule.SubjectWithParts(h, parts, p.cfg.Hasher)
+	if err != nil {
+		lf, err := labelFaultOf(err)
+		if err != nil {
+			return "", nil, err
+		}
+		return tenant.QuarantineBadLabel, lf.details(), nil
+	}
+	if own == path.Subject {
+		return "", nil, nil
+	}
+	// A subject a committed relabel renamed keeps its patient's files:
+	// their own label is the one it had (tenant.RelabelPointers, which
+	// follows only subject relabels for a subject's labels).
+	moved, ok, err := p.store.RelabeledTo(ctx, label.Path{Subject: own})
+	if err != nil {
+		return "", nil, err
+	}
+	if ok && moved.To.Subject == path.Subject {
+		return "", nil, nil
+	}
+	return tenant.QuarantineDeidFailed, map[string]string{"cause": subjectMismatch}, nil
 }
 
 // labelFault is why a file's labels could not be made: the level, the

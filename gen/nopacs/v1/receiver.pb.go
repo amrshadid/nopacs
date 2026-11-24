@@ -293,6 +293,28 @@ type Receiver struct {
 	// UID and to its scan by its Series Instance UID first, and the rule runs
 	// only for one that is new.
 	Naming *NamingRule `protobuf:"bytes,5,opt,name=naming,proto3" json:"naming,omitempty"`
+	// The namespace of the subject identity of a file that names no issuer
+	// of its Patient ID. A Patient ID is unique only within the issuer that
+	// gave it (PS3.3 C.7.1.1), so the default naming rule's subject label is
+	// the keyed hash of the Patient ID together with its Issuer of Patient ID
+	// (0010,0021) and the Issuer of Patient ID Qualifiers Sequence
+	// (0010,0024); a file with neither takes this namespace in the issuer's
+	// place. Two receivers of two namespaces give one Patient ID that comes
+	// with no issuer two subjects; one issuer's files are one subject through
+	// every receiver, whatever their namespaces. The same identity keys the
+	// date shift and the lookup codes of the Patient ID. Empty, the default,
+	// is the tenant's one default namespace, under which a file with no
+	// issuer has the label, date shift and codes of its Patient ID alone.
+	// Otherwise 1 to 63 characters under the rule of a tenant's name. It is
+	// fixed once the receiver has received anything (a reception or a
+	// quarantined file names it): a change is then a precondition failure,
+	// since the same patient's next study would become a new subject and a
+	// deleted subject's re-sent files would no longer be held; a receiver
+	// for another population is a new receiver. A reception whose receiver
+	// was removed before its study had a session is held as
+	// QUARANTINE_REASON_UNROUTED, cause "receiver_removed", never named
+	// under another namespace.
+	Namespace string `protobuf:"bytes,18,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// How long without a file for a study before its reception is complete:
 	// complete means quiet, not whole, and the end of an association means
 	// nothing. A whole number of seconds from 5 seconds to 1 hour. Absent in
@@ -456,6 +478,13 @@ func (x *Receiver) GetNaming() *NamingRule {
 		return x.Naming
 	}
 	return nil
+}
+
+func (x *Receiver) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 func (x *Receiver) GetQuietPeriod() *durationpb.Duration {
@@ -1667,7 +1696,7 @@ func (x *ReceiverTls) GetPrivateKeyFile() string {
 // NamingRule is how a receiver makes the labels of a new subject, session
 // and scan: three templates, one per label, and optionally a pattern that
 // takes named parts out of one attribute for the templates to use. A
-// receiver with no rule uses the default: subject "sub-{#PatientID}",
+// receiver with no rule uses the default: subject "sub-{#SubjectIdentity}",
 // session "ses-{#StudyInstanceUID}", scan "scan-{#SeriesInstanceUID}".
 //
 // A label is what the rule makes from the data sent, and it is exactly as
@@ -1698,6 +1727,17 @@ func (x *ReceiverTls) GetPrivateKeyFile() string {
 //     tenant, sealed with the installation key, and never leaves the
 //     server; it cannot be changed, since a new secret would give a known
 //     value a new label.
+//   - {#SubjectIdentity} is the keyed hash of the file's subject identity:
+//     its Patient ID with its Issuer of Patient ID (0010,0021) and the
+//     values of the Issuer of Patient ID Qualifiers Sequence (0010,0024)
+//     that name an issuer (Universal Entity ID and its type, Identifier
+//     Type Code, the Assigning Facility's identifiers, and the codes of the
+//     Assigning Jurisdiction and Agency, never a Code Meaning), or, when
+//     the file names no issuer, with the receiver's namespace
+//     (Receiver.namespace). A file with no issuer under the default
+//     namespace hashes as {#PatientID} does. It is only hashed; written as
+//     {SubjectIdentity} it is refused. {#PatientID} in a rule a site writes
+//     still hashes the Patient ID alone.
 //
 // When a rule is set, a template that is empty or longer than 256 bytes, a
 // keyword the server does not know, a tag that cannot hold text (groups 0000
@@ -2262,7 +2302,8 @@ type SetReceiverRequest struct {
 	// changed. Fields the mask does not name are ignored.
 	Receiver *Receiver `protobuf:"bytes,2,opt,name=receiver,proto3" json:"receiver,omitempty"`
 	// The fields to change, as paths of Receiver, such as "quiet_period",
-	// "forward_to" or "naming" ("naming" with naming absent returns to the
+	// "forward_to", "namespace" (empty returns to the tenant's default
+	// namespace) or "naming" ("naming" with naming absent returns to the
 	// default rule), "deidentification" (the oneof: as_received or a profile
 	// version; with neither set, as received), "routing" (replaced whole;
 	// absent, no routing; its fields cannot be named one by one), or
@@ -2500,7 +2541,7 @@ var File_nopacs_v1_receiver_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"\n" +
-	"\x18nopacs/v1/receiver.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17nopacs/v1/profile.proto\"\xd0\x06\n" +
+	"\x18nopacs/v1/receiver.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17nopacs/v1/profile.proto\"\xee\x06\n" +
 	"\bReceiver\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x120\n" +
 	"\x05dimse\x18\x02 \x01(\v2\x18.nopacs.v1.DimseReceiverH\x00R\x05dimse\x12-\n" +
@@ -2508,7 +2549,8 @@ const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"\bimporter\x18\x11 \x01(\v2\x19.nopacs.v1.ImportReceiverH\x00R\bimporter\x12\x18\n" +
 	"\aenabled\x18\x03 \x01(\bR\aenabled\x12\x18\n" +
 	"\astorage\x18\x04 \x01(\tR\astorage\x12-\n" +
-	"\x06naming\x18\x05 \x01(\v2\x15.nopacs.v1.NamingRuleR\x06naming\x12<\n" +
+	"\x06naming\x18\x05 \x01(\v2\x15.nopacs.v1.NamingRuleR\x06naming\x12\x1c\n" +
+	"\tnamespace\x18\x12 \x01(\tR\tnamespace\x12<\n" +
 	"\fquiet_period\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\vquietPeriod\x12=\n" +
 	"\rmax_open_time\x18\a \x01(\v2\x19.google.protobuf.DurationR\vmaxOpenTime\x12$\n" +
 	"\x0emax_file_bytes\x18\b \x01(\x03R\fmaxFileBytes\x121\n" +

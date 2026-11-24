@@ -32,6 +32,12 @@ type run struct {
 	// gives, keying the shift in place of the Patient ID; empty for a
 	// reception.
 	subject string
+	// identity is the file's subject identity's key
+	// (naming.SubjectIdentity.Key), read as received, when hasIdentity:
+	// what the date shift and the keyed hash of the Patient ID are taken
+	// over.
+	identity    string
+	hasIdentity bool
 	// assigns are the lookups whose code the table assigns on first sight,
 	// asked for only once the whole plan has succeeded, so a file refused
 	// for another reason takes no code from a table.
@@ -569,7 +575,7 @@ func (r *run) shiftDays(path, rule string) (int, error) {
 	}
 	id, ok := r.subject, r.subject != ""
 	if !ok {
-		id, ok = topText(r.top, tagPatientID)
+		id, ok = r.identity, r.hasIdentity
 	}
 	if !ok || id == "" {
 		return 0, &Failure{Cause: CauseNoSubject, Path: path, Rule: rule}
@@ -582,6 +588,11 @@ func (r *run) shiftDays(path, rule string) (int, error) {
 // template's placeholder.
 func (r *run) receivedValue(t uint32) (string, bool) {
 	v, ok := r.received[t]
+	if ok && v != "" {
+		// A Patient ID whose identity could not be read answers absent,
+		// so the template fails (CauseBadValue) rather than hash it alone.
+		v, ok = r.hashInput(r.top, tag.Tag(t), v)
+	}
 	return v, ok
 }
 

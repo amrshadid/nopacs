@@ -152,8 +152,15 @@ const (
 	// its stated frames), "pixel_region_outside" (a pixel rule's rectangle lies
 	// wholly outside the image), "pixel_text_unsearched" (its compressed
 	// pixel data has segments that are not searched, such as JPEG 2000's,
-	// and the profile holds such images) or "detect_implausible" (the
-	// detector found regions covering more of the picture than text does);
+	// and the profile holds such images), "detect_implausible" (the
+	// detector found regions covering more of the picture than text does)
+	// or "subject_mismatch" (the subject label the receiver's naming rule
+	// makes from the file itself is not the subject its session is filed
+	// under, nor one a committed relabel moved to it: one file of a study
+	// carries an Issuer of Patient ID another lacks, or another Patient ID,
+	// and its dates would be shifted by another subject's offset; a release
+	// checks it again and holds it again unless it now agrees, as a file sent
+	// again with the issuer its study's files carry does);
 	// "path", the element where it
 	// failed, as tags of eight hexadecimal digits with item numbers, such as
 	// "00081115[0]/0020000E", when there is one; and "rule", the rule's name
@@ -178,10 +185,16 @@ const (
 	// not routed: no route chose it and the routing holds what none chooses
 	// (Receiver.routing), a route could not be evaluated, or another
 	// reception of the study made its session on another storage while this
-	// one was in flight. Every file of the reception is held, its bytes
-	// kept. Details: "cause", "no_match", "route_unusable" or
-	// "session_elsewhere", and "route", the route's name, for
-	// "route_unusable". A release may name the storage the study goes to
+	// one was in flight, or the reception's receiver was removed before its
+	// study had a session: a new subject is named under the receiver's
+	// namespace (Receiver.namespace), which is gone with it, and naming it
+	// under another would make the same patient two subjects. Every file of
+	// the reception is held, its bytes kept. Details: "cause", "no_match",
+	// "route_unusable", "session_elsewhere" or "receiver_removed", and
+	// "route", the route's name, for "route_unusable". A file held as
+	// "receiver_removed" is held again by every release (no receiver can
+	// name it); it is rejected, or sent again through a receiver that
+	// exists. A release may name the storage the study goes to
 	// (ReleaseQuarantinedFileRequest.storage); without one the routes run
 	// again.
 	QuarantineReason_QUARANTINE_REASON_UNROUTED QuarantineReason = 17

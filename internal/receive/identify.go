@@ -23,7 +23,9 @@ import (
 //     storage, so a later arrival lands beside the first. The rest are named
 //     by the receiver's rule over the header of a file of each, the same
 //     file every run (the first of its series by UID whose bytes are here),
-//     so a run again makes the same labels.
+//     so a run again makes the same labels. A study with no session whose
+//     receiver was removed is held as unrouted (receiver_removed): its
+//     subject would be named under the receiver's namespace, gone with it.
 //  4. Hold, with the label reason, every file of a series whose scan label
 //     cannot be made, or every file when the subject or session label cannot
 //     be. A record's id is made from the reception and the file, so a run
@@ -88,6 +90,13 @@ func (p *Pipeline) identify(ctx context.Context, w tenant.Work) error {
 	if err != nil && !removed {
 		return err
 	}
+	if removed && catalog.Session == nil {
+		// A new subject is named under the receiver's namespace, which
+		// is gone with the receiver; named under the default one, the
+		// same patient would become a second subject, and a delete of the
+		// first would not hold its files. Fail closed: hold the study.
+		return p.holdUnrouted(ctx, w, r, groups, map[string]string{"cause": tenant.UnroutedReceiverRemoved})
+	}
 	var subject, session, storage string
 	if s := catalog.Session; s != nil {
 		subject, session, storage = s.SubjectLabel, s.SessionLabel, s.Storage
@@ -143,8 +152,6 @@ func (p *Pipeline) identify(ctx context.Context, w tenant.Work) error {
 			return err
 		case found:
 			way = routed{choice: sibling.Route, storage: sibling.Storage}
-		case removed && r.Route.ReleasedStorage == "":
-			return fault.New(fault.Conflict, "the reception's receiver was removed, and its study has no session to name a storage")
 		default:
 			if way, err = p.route(ctx, r, rcv, groups); err != nil {
 				return err

@@ -526,6 +526,16 @@ func (t *Tenant) SetReceiver(ctx context.Context, r tenant.Receiver, fields []te
 		if err != nil {
 			return err
 		}
+		if tenant.NamespaceChanges(stored, next) {
+			var used bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM receptions WHERE receiver = $1)
+				OR EXISTS (SELECT 1 FROM quarantine WHERE receiver = $1)`, r.Name).Scan(&used); err != nil {
+				return err
+			}
+			if used {
+				return tenant.NamespaceFixed(r.Name)
+			}
+		}
 		next.Updated = now
 		if err := checkReceiver(ctx, tx, next); err != nil {
 			return err

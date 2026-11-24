@@ -356,7 +356,11 @@ func (r *run) actHash(c *target) error {
 	if orig == "" {
 		return nil
 	}
-	out := hashValue(r.en.keys.Hash, c.vr, orig)
+	in, ok := r.hashInput(c.ds, c.tag, orig)
+	if !ok {
+		return c.fail(CauseNoSubject)
+	}
+	out := hashValue(r.en.keys.Hash, c.vr, in)
 	if !validText(c.vr, out) {
 		return c.fail(CauseBadValue)
 	}
@@ -455,7 +459,11 @@ func (r *run) actLookup(c *target, a Action) error {
 	if r.en.lookups == nil {
 		return errNoLookups
 	}
-	key := hashValue(r.en.keys.Hash, "", orig)
+	in, ok := r.hashInput(c.ds, c.tag, orig)
+	if !ok {
+		return c.fail(CauseNoSubject)
+	}
+	key := hashValue(r.en.keys.Hash, "", in)
 	code, found, err := r.en.lookups.Code(r.ctx, a.Table, key)
 	if err != nil {
 		return err

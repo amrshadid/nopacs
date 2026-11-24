@@ -40,6 +40,7 @@ type receiverFlags struct {
 	namingAttribute  string
 	namingExpression string
 	defaultNaming    bool
+	namespace        string
 	quietPeriod      string
 	maxOpenTime      string
 	maxFileSize      string
@@ -74,7 +75,8 @@ func (f *receiverFlags) add(cmd *cobra.Command, forSet bool) {
 	fl.StringVar(&f.tlsPrivateKey, "tls-private-key-file", "", "the name of the private key file, PEM, in the tenant's TLS directory on the server; it is a file name, not the key")
 	fl.StringArrayVar(&f.sopClasses, "sop-class", nil, "accept this SOP Class UID; repeat for more (default: every storage class the server knows)")
 	fl.StringArrayVar(&f.transferSyntaxes, "transfer-syntax", nil, "accept this Transfer Syntax UID; repeat for more (default: every transfer syntax the server knows)")
-	fl.StringVar(&f.namingSubject, "naming-subject", "", "the template of a new subject's label, such as sub-{#PatientID}")
+	fl.StringVar(&f.namingSubject, "naming-subject", "", "the template of a new subject's label, such as sub-{#SubjectIdentity} (the Patient ID with its issuer, the default) or sub-{#PatientID}")
+	fl.StringVar(&f.namespace, "namespace", "", "the namespace of a Patient ID that comes with no Issuer of Patient ID: receivers of two namespaces make two subjects of it; empty, the default, is the tenant's one default namespace; fixed once the receiver has received data")
 	fl.StringVar(&f.namingSession, "naming-session", "", "the template of a new session's label, such as ses-{#StudyInstanceUID}")
 	fl.StringVar(&f.namingScan, "naming-scan", "", "the template of a new scan's label, such as scan-{#SeriesInstanceUID}")
 	fl.StringVar(&f.namingAttribute, "naming-attribute", "", "the attribute whose value the naming pattern reads, such as PatientComments or (0010,4000)")
@@ -267,6 +269,9 @@ func (f *receiverFlags) receiver(cmd *cobra.Command, name string) (*v1.Receiver,
 		paths = append(paths, "naming")
 	case f.defaultNaming:
 		paths = append(paths, "naming")
+	}
+	if touch("namespace", "namespace") {
+		r.Namespace = f.namespace
 	}
 	if touch("quiet-period", "quiet_period") {
 		if r.QuietPeriod, err = parseDuration("quiet-period", f.quietPeriod); err != nil {

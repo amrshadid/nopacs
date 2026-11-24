@@ -29,7 +29,7 @@ func TestHashedSubject(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", c.subject, err)
 		}
-		got, ok, err := r.HashedSubject(pid, a[pid], h)
+		got, ok, err := r.HashedSubject(pid, a[pid], SubjectIdentity{}, h)
 		if err != nil || ok != c.ok {
 			t.Errorf("%s: ok %v, %v; want ok %v", c.subject, ok, err, c.ok)
 			continue
@@ -45,7 +45,7 @@ func TestHashedSubject(t *testing.T) {
 			t.Errorf("%s: HashedSubject %q, Labels %q", c.subject, got, want.Subject)
 		}
 	}
-	if _, ok, err := Default().HashedSubject(pid, "", h); !ok || err == nil {
+	if _, ok, err := Default().HashedSubject(pid, "", SubjectIdentity{}, h); !ok || err == nil {
 		t.Errorf("an empty value: ok %v, %v; want refused", ok, err)
 	}
 }

@@ -7,14 +7,58 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class CodeRequest(_message.Message):
-    __slots__ = ("tenant", "attribute", "value")
+    __slots__ = ("tenant", "attribute", "value", "issuer", "namespace")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     ATTRIBUTE_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
+    ISSUER_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     attribute: str
     value: str
-    def __init__(self, tenant: _Optional[str] = ..., attribute: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    issuer: PatientIDIssuer
+    namespace: str
+    def __init__(self, tenant: _Optional[str] = ..., attribute: _Optional[str] = ..., value: _Optional[str] = ..., issuer: _Optional[_Union[PatientIDIssuer, _Mapping]] = ..., namespace: _Optional[str] = ...) -> None: ...
+
+class PatientIDIssuer(_message.Message):
+    __slots__ = ("issuer", "universal_entity_id", "universal_entity_id_type", "identifier_type_code", "assigning_facility", "assigning_jurisdiction", "assigning_agency")
+    ISSUER_FIELD_NUMBER: _ClassVar[int]
+    UNIVERSAL_ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
+    UNIVERSAL_ENTITY_ID_TYPE_FIELD_NUMBER: _ClassVar[int]
+    IDENTIFIER_TYPE_CODE_FIELD_NUMBER: _ClassVar[int]
+    ASSIGNING_FACILITY_FIELD_NUMBER: _ClassVar[int]
+    ASSIGNING_JURISDICTION_FIELD_NUMBER: _ClassVar[int]
+    ASSIGNING_AGENCY_FIELD_NUMBER: _ClassVar[int]
+    issuer: str
+    universal_entity_id: str
+    universal_entity_id_type: str
+    identifier_type_code: str
+    assigning_facility: IssuerDesignator
+    assigning_jurisdiction: IssuerCode
+    assigning_agency: IssuerCode
+    def __init__(self, issuer: _Optional[str] = ..., universal_entity_id: _Optional[str] = ..., universal_entity_id_type: _Optional[str] = ..., identifier_type_code: _Optional[str] = ..., assigning_facility: _Optional[_Union[IssuerDesignator, _Mapping]] = ..., assigning_jurisdiction: _Optional[_Union[IssuerCode, _Mapping]] = ..., assigning_agency: _Optional[_Union[IssuerCode, _Mapping]] = ...) -> None: ...
+
+class IssuerDesignator(_message.Message):
+    __slots__ = ("local_namespace_entity_id", "universal_entity_id", "universal_entity_id_type")
+    LOCAL_NAMESPACE_ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
+    UNIVERSAL_ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
+    UNIVERSAL_ENTITY_ID_TYPE_FIELD_NUMBER: _ClassVar[int]
+    local_namespace_entity_id: str
+    universal_entity_id: str
+    universal_entity_id_type: str
+    def __init__(self, local_namespace_entity_id: _Optional[str] = ..., universal_entity_id: _Optional[str] = ..., universal_entity_id_type: _Optional[str] = ...) -> None: ...
+
+class IssuerCode(_message.Message):
+    __slots__ = ("code_value", "coding_scheme_designator", "long_code_value", "urn_code_value")
+    CODE_VALUE_FIELD_NUMBER: _ClassVar[int]
+    CODING_SCHEME_DESIGNATOR_FIELD_NUMBER: _ClassVar[int]
+    LONG_CODE_VALUE_FIELD_NUMBER: _ClassVar[int]
+    URN_CODE_VALUE_FIELD_NUMBER: _ClassVar[int]
+    code_value: str
+    coding_scheme_designator: str
+    long_code_value: str
+    urn_code_value: str
+    def __init__(self, code_value: _Optional[str] = ..., coding_scheme_designator: _Optional[str] = ..., long_code_value: _Optional[str] = ..., urn_code_value: _Optional[str] = ...) -> None: ...
 
 class CodeResponse(_message.Message):
     __slots__ = ("attribute", "code", "subjects", "lookups")
@@ -57,12 +101,16 @@ class ImportLookupCodesRequest(_message.Message):
     def __init__(self, tenant: _Optional[str] = ..., table: _Optional[str] = ..., entries: _Optional[_Iterable[_Union[LookupEntry, _Mapping]]] = ...) -> None: ...
 
 class LookupEntry(_message.Message):
-    __slots__ = ("value", "code")
+    __slots__ = ("value", "code", "issuer", "namespace")
     VALUE_FIELD_NUMBER: _ClassVar[int]
     CODE_FIELD_NUMBER: _ClassVar[int]
+    ISSUER_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     value: str
     code: str
-    def __init__(self, value: _Optional[str] = ..., code: _Optional[str] = ...) -> None: ...
+    issuer: PatientIDIssuer
+    namespace: str
+    def __init__(self, value: _Optional[str] = ..., code: _Optional[str] = ..., issuer: _Optional[_Union[PatientIDIssuer, _Mapping]] = ..., namespace: _Optional[str] = ...) -> None: ...
 
 class ImportLookupCodesResponse(_message.Message):
     __slots__ = ("table", "added", "unchanged", "codes")

@@ -78,6 +78,29 @@ the code before this release is in github.com/amrshadid/coria.
 
 #### De-identification
 
+- A subject is the Patient ID with its issuer. The default subject label
+  (`sub-{#SubjectIdentity}`), the date shift, a profile's `hash`, `lookup` or
+  template of the Patient ID, the forward lookup and the hold of a deleted
+  subject's re-sent files key on the Patient ID with its Issuer of Patient ID
+  (0010,0021) and the identifying values of the Issuer of Patient ID
+  Qualifiers Sequence (0010,0024), or, when a file names no issuer, with its
+  receiver's new `namespace`: two hospitals' patients sharing a Patient ID are
+  two subjects. Each file's identity is read once from its header (an item's
+  text under its own character set); a file whose identity cannot be read is
+  held, never keyed by its Patient ID alone; at a de-identifying receiver a
+  file whose own subject is not its session's (one file of a study carrying
+  the issuer and another not, or two Patient IDs) is held `subject_mismatch`,
+  so one subject never holds dates moved by two offsets (a subject a committed
+  relabel renamed keeps receiving its files). A receiver's namespace is fixed
+  once it has received data; a study whose receiver was removed before it had
+  a session is held (`unrouted`, `receiver_removed`). New: `Receiver.namespace`
+  (`receiver add --namespace`), `CodeRequest.issuer`/`namespace` (`deid code
+  --issuer --issuer-qualifier --namespace`), `LookupEntry.issuer`/`namespace`
+  (columns of `profile lookup import`). On upgrade a file with no issuer,
+  through a receiver of the default namespace, keeps its label, date shift
+  and codes to the byte; a file carrying an issuer gets a new label, shift and
+  codes (nothing is released); a lookup table imported by Patient ID alone
+  answers only files that name no issuer under the default namespace.
 - Profiles per tenant, versioned, built on the composite bases
   `nopacs/longitudinal:1` and `nopacs/strict:1` (PS3.15 Annex E), with rules
   by tag, path, private element, value pattern and condition; lookup tables;

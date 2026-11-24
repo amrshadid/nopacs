@@ -105,7 +105,9 @@
 // registered is local, mostly the institution's own root, so it is
 // remapped even where the profile would keep it. A date is moved back by the
 // subject's shift, from 1 to the profile's most days, keyed by the
-// tenant's date key over the Patient ID, exactly the value the subject
+// tenant's date key over the subject identity (the Patient ID with its
+// issuer, or with the reception's namespace, Reception.Namespace, when the
+// file names none: naming.SubjectIdentity), exactly the bytes the subject
 // label's code is the keyed hash of (ShiftDays), so a subject has one
 // shift; the time of day is kept, and the shift is written nowhere. A job
 // over an archive, whose files no longer hold the Patient ID, gives the
@@ -113,8 +115,10 @@
 // keys the shift in its place; a reception never does. A
 // year, or a year and month, that the shift leaves as it was is emptied.
 // A hash and a template's "{#X}" are the naming rule's keyed hash of the
-// value (naming.HashText) under the tenant's naming key, so a hashed
-// Patient ID equals the subject's label code.
+// value (naming.HashText) under the tenant's naming key; of the top-level
+// Patient ID, of the subject identity, so a hashed Patient ID, and its
+// lookup code, follow the subject and its issuer, and equal the default
+// subject label's code.
 //
 // Fails closed. Everything is worked out before the data set is changed:
 // a file the profile cannot process returns a *Failure with a fixed Cause,

@@ -111,6 +111,16 @@ class DeidServiceServicer:
         code. It is how a person finds a subject's data from its Patient ID,
         for a withdrawal of consent, without the archive keeping a way back.
 
+        A Patient ID is unique only within its issuer (PS3.3 C.7.1.1), so for
+        attribute PatientID what is hashed is the subject identity: the
+        Patient ID with the issuer the request gives, or, with none, with a
+        namespace (Receiver.namespace). A Patient ID with no issuer under the
+        default namespace hashes as its value alone. A receiver whose subject
+        label is the default {#SubjectIdentity} is answered with the label it
+        gives that identity, under its own namespace when no issuer is given;
+        one whose rule a site wrote with {#PatientID} with the keyed hash of
+        the Patient ID alone.
+
         The value is read as a file's element would be: its padding removed
         as PS3.5 6.2 says for the attribute's VR (trailing spaces and NULs,
         and leading spaces for the VRs whose leading spaces are not

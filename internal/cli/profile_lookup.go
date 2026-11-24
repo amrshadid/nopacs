@@ -39,8 +39,15 @@ value or a code.`,
 		a.newLookupImport(), a.newLookupList())
 }
 
+// lookupColumns are the columns of an import's file, in order: the first
+// two always, the others when the file has them.
+var lookupColumns = []string{"value", "code", "issuer", "namespace"}
+
 // readLookupCSV reads an import's file: each record a value and its code,
-// a first record "value,code" (any case) taken as a header.
+// and, in a file of three or four columns, the Issuer of Patient ID of a
+// Patient ID value and the namespace of one with no issuer, empty for
+// none; every record has the file's first record's count of columns, and
+// a first record of the column names (any case) is taken as a header.
 func readLookupCSV(path string) ([]*v1.LookupEntry, error) {
 	f, err := os.Open(path) // #nosec G304 -- the person names the file to import.
 	if err != nil {
@@ -48,8 +55,11 @@ func readLookupCSV(path string) ([]*v1.LookupEntry, error) {
 	}
 	defer func() { _ = f.Close() }()
 	r := csv.NewReader(io.LimitReader(f, maxLookupFile+1))
-	r.FieldsPerRecord = 2
+	r.FieldsPerRecord = 0
 	r.ReuseRecord = true
+	notCSV := func(why string) error {
+		return fault.New(fault.Invalid, fmt.Sprintf("%s is not a CSV of value and code, and optionally issuer and namespace: %s", path, why))
+	}
 	var out []*v1.LookupEntry
 	for line := 1; ; line++ {
 		rec, err := r.Read()
@@ -57,20 +67,41 @@ func readLookupCSV(path string) ([]*v1.LookupEntry, error) {
 			break
 		}
 		if err != nil {
-			return nil, fault.New(fault.Invalid, fmt.Sprintf("%s is not a CSV of two columns, value and code: %s", path, csvProblem(err)))
+			return nil, notCSV(csvProblem(err))
 		}
-		if line == 1 && strings.EqualFold(strings.TrimSpace(rec[0]), "value") && strings.EqualFold(strings.TrimSpace(rec[1]), "code") {
+		if len(rec) < 2 || len(rec) > len(lookupColumns) {
+			return nil, notCSV("line " + strconv.Itoa(line) + " has " + strconv.Itoa(len(rec)) + " columns, not 2 to 4")
+		}
+		if line == 1 && isLookupHeader(rec) {
 			continue
 		}
 		if len(out) == maxLookupEntries {
 			return nil, fault.New(fault.Invalid, fmt.Sprintf("%s holds more than %d entries, the most one import takes; split it", path, maxLookupEntries))
 		}
-		out = append(out, &v1.LookupEntry{Value: rec[0], Code: strings.TrimSpace(rec[1])})
+		e := &v1.LookupEntry{Value: rec[0], Code: strings.TrimSpace(rec[1])}
+		if len(rec) > 2 && rec[2] != "" {
+			e.Issuer = &v1.PatientIDIssuer{Issuer: rec[2]}
+		}
+		if len(rec) > 3 {
+			e.Namespace = strings.TrimSpace(rec[3])
+		}
+		out = append(out, e)
 	}
 	if len(out) == 0 {
 		return nil, fault.New(fault.Invalid, path+" holds no entry")
 	}
 	return out, nil
+}
+
+// isLookupHeader reports whether rec is the column names of an import's
+// file, in their order, in any case.
+func isLookupHeader(rec []string) bool {
+	for i, v := range rec {
+		if !strings.EqualFold(strings.TrimSpace(v), lookupColumns[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // csvProblem says where a CSV is wrong without quoting any of it: a value
@@ -87,12 +118,21 @@ func csvProblem(err error) string {
 func (a *app) newLookupImport() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import <tenant> <table> FILE",
-		Short: "Import chosen codes into a lookup table from a CSV of value,code",
+		Short: "Import chosen codes into a lookup table from a CSV of value,code[,issuer[,namespace]]",
 		Long: `Import the codes a person chose into a lookup table, from a CSV file of two
 columns: the original value and its code. A first line "value,code" is a header.
 A code is 1 to 16 of A-Z, 0-9 and _. The server stores each value as its keyed
 hash, never as given, with its padding removed as an LO value's (spaces before
 and after).
+
+For a table a lookup rule on the Patient ID reads, a third column "issuer" gives
+each Patient ID's Issuer of Patient ID (0010,0021) and a fourth, "namespace",
+the receiver namespace of a Patient ID that comes with no issuer: a Patient ID
+is unique only within its issuer, so the entry is stored by the keyed hash of
+the subject identity, the Patient ID with its issuer or namespace, which is
+what such a rule meets in a file from that issuer. An entry with both empty is
+stored by its value alone, as in a file of two columns. Every line has the
+first line's number of columns.
 
 All or nothing, at most 10000 entries: an entry whose value the table already
 gives the same code is counted unchanged. One value with two codes in the file,

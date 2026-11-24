@@ -145,7 +145,10 @@ What the answer shows:
 
 - `quietPeriod: "60s"`, `maxOpenTime: "3600s"` and `maxFileBytes: "4294967296"`:
   the defaults, filled in and stored as the receiver's own values.
-- `naming` absent: the default rule, subject `sub-{#PatientID}`, session
+- `naming` absent: the default rule, subject `sub-{#SubjectIdentity}` (the
+  Patient ID with its Issuer of Patient ID, or with the receiver's
+  `namespace` when the file names no issuer; with neither, the Patient ID
+  alone), session
   `ses-{#StudyInstanceUID}`, scan `scan-{#SeriesInstanceUID}`. `{#...}` is a
   keyed hash of the value under a secret the tenant's server keeps, so no
   label (and so no list, event or directory name on the storage) carries what

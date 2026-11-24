@@ -37,7 +37,22 @@ type CodeRequest struct {
 	Attribute string `protobuf:"bytes,2,opt,name=attribute,proto3" json:"attribute,omitempty"`
 	// The value, as a file's element holds it, as UTF-8 text. Required; at
 	// most 1024 bytes.
-	Value         string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Value string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	// The issuer of the Patient ID, for attribute PatientID only: the
+	// subject identity is the Patient ID with its issuer (PatientIDIssuer),
+	// and two issuers' patients of one Patient ID are two subjects. Absent
+	// for a Patient ID that comes with no issuer. Set with another attribute,
+	// invalid.
+	Issuer *PatientIDIssuer `protobuf:"bytes,4,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// The namespace of a Patient ID that comes with no issuer
+	// (Receiver.namespace), for code and lookups: empty is the tenant's
+	// default namespace. Each subject label is answered under its receiver's
+	// own namespace, as that receiver names a file with no issuer, so this
+	// does not choose the receivers. Ignored when issuer is set, since an
+	// issuer names the population itself. Set with another attribute than
+	// PatientID, invalid. Otherwise empty or 1 to 63 characters under the
+	// rule of a tenant's name.
+	Namespace     string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -93,6 +108,268 @@ func (x *CodeRequest) GetValue() string {
 	return ""
 }
 
+func (x *CodeRequest) GetIssuer() *PatientIDIssuer {
+	if x != nil {
+		return x.Issuer
+	}
+	return nil
+}
+
+func (x *CodeRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+// PatientIDIssuer is who gave a Patient ID (PS3.3 C.7.1.1, and its Issuer
+// of Patient ID Macro, Table 10-18): the Issuer of Patient ID (0010,0021)
+// and the values of the Issuer of Patient ID Qualifiers Sequence
+// (0010,0024) that name an issuer, each as a file's element holds it, as
+// UTF-8 text, its padding removed as for its VR, at most 1024 bytes. A
+// field left empty is one the file does not have; an issuer with every
+// field empty is no issuer. Each must be given as the files give it: a
+// value written differently (another case, another spelling) is another
+// issuer, and so another subject.
+type PatientIDIssuer struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Issuer of Patient ID (0010,0021), LO.
+	Issuer string `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// Universal Entity ID (0040,0032), UT.
+	UniversalEntityId string `protobuf:"bytes,2,opt,name=universal_entity_id,json=universalEntityId,proto3" json:"universal_entity_id,omitempty"`
+	// Universal Entity ID Type (0040,0033), CS, such as "ISO".
+	UniversalEntityIdType string `protobuf:"bytes,3,opt,name=universal_entity_id_type,json=universalEntityIdType,proto3" json:"universal_entity_id_type,omitempty"`
+	// Identifier Type Code (0040,0035), CS, such as "MR".
+	IdentifierTypeCode string `protobuf:"bytes,4,opt,name=identifier_type_code,json=identifierTypeCode,proto3" json:"identifier_type_code,omitempty"`
+	// The Assigning Facility Sequence (0040,0036): its Local Namespace
+	// Entity ID (0040,0031), Universal Entity ID and its type.
+	AssigningFacility *IssuerDesignator `protobuf:"bytes,5,opt,name=assigning_facility,json=assigningFacility,proto3" json:"assigning_facility,omitempty"`
+	// The Assigning Jurisdiction Code Sequence (0040,0039).
+	AssigningJurisdiction *IssuerCode `protobuf:"bytes,6,opt,name=assigning_jurisdiction,json=assigningJurisdiction,proto3" json:"assigning_jurisdiction,omitempty"`
+	// The Assigning Agency or Department Code Sequence (0040,003A).
+	AssigningAgency *IssuerCode `protobuf:"bytes,7,opt,name=assigning_agency,json=assigningAgency,proto3" json:"assigning_agency,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PatientIDIssuer) Reset() {
+	*x = PatientIDIssuer{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PatientIDIssuer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PatientIDIssuer) ProtoMessage() {}
+
+func (x *PatientIDIssuer) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PatientIDIssuer.ProtoReflect.Descriptor instead.
+func (*PatientIDIssuer) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PatientIDIssuer) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *PatientIDIssuer) GetUniversalEntityId() string {
+	if x != nil {
+		return x.UniversalEntityId
+	}
+	return ""
+}
+
+func (x *PatientIDIssuer) GetUniversalEntityIdType() string {
+	if x != nil {
+		return x.UniversalEntityIdType
+	}
+	return ""
+}
+
+func (x *PatientIDIssuer) GetIdentifierTypeCode() string {
+	if x != nil {
+		return x.IdentifierTypeCode
+	}
+	return ""
+}
+
+func (x *PatientIDIssuer) GetAssigningFacility() *IssuerDesignator {
+	if x != nil {
+		return x.AssigningFacility
+	}
+	return nil
+}
+
+func (x *PatientIDIssuer) GetAssigningJurisdiction() *IssuerCode {
+	if x != nil {
+		return x.AssigningJurisdiction
+	}
+	return nil
+}
+
+func (x *PatientIDIssuer) GetAssigningAgency() *IssuerCode {
+	if x != nil {
+		return x.AssigningAgency
+	}
+	return nil
+}
+
+// IssuerDesignator is an HL7v2 hierarchic designator (PS3.3 Table 10-17).
+type IssuerDesignator struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Local Namespace Entity ID (0040,0031), UT.
+	LocalNamespaceEntityId string `protobuf:"bytes,1,opt,name=local_namespace_entity_id,json=localNamespaceEntityId,proto3" json:"local_namespace_entity_id,omitempty"`
+	// Universal Entity ID (0040,0032), UT.
+	UniversalEntityId string `protobuf:"bytes,2,opt,name=universal_entity_id,json=universalEntityId,proto3" json:"universal_entity_id,omitempty"`
+	// Universal Entity ID Type (0040,0033), CS.
+	UniversalEntityIdType string `protobuf:"bytes,3,opt,name=universal_entity_id_type,json=universalEntityIdType,proto3" json:"universal_entity_id_type,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *IssuerDesignator) Reset() {
+	*x = IssuerDesignator{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssuerDesignator) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssuerDesignator) ProtoMessage() {}
+
+func (x *IssuerDesignator) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssuerDesignator.ProtoReflect.Descriptor instead.
+func (*IssuerDesignator) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *IssuerDesignator) GetLocalNamespaceEntityId() string {
+	if x != nil {
+		return x.LocalNamespaceEntityId
+	}
+	return ""
+}
+
+func (x *IssuerDesignator) GetUniversalEntityId() string {
+	if x != nil {
+		return x.UniversalEntityId
+	}
+	return ""
+}
+
+func (x *IssuerDesignator) GetUniversalEntityIdType() string {
+	if x != nil {
+		return x.UniversalEntityIdType
+	}
+	return ""
+}
+
+// IssuerCode is a coded entry's identifying values (PS3.3 Table 8.8-1a);
+// its Code Meaning is not one, since two senders may word one code two
+// ways.
+type IssuerCode struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Code Value (0008,0100), SH.
+	CodeValue string `protobuf:"bytes,1,opt,name=code_value,json=codeValue,proto3" json:"code_value,omitempty"`
+	// Coding Scheme Designator (0008,0102), SH.
+	CodingSchemeDesignator string `protobuf:"bytes,2,opt,name=coding_scheme_designator,json=codingSchemeDesignator,proto3" json:"coding_scheme_designator,omitempty"`
+	// Long Code Value (0008,0119), UC.
+	LongCodeValue string `protobuf:"bytes,3,opt,name=long_code_value,json=longCodeValue,proto3" json:"long_code_value,omitempty"`
+	// URN Code Value (0008,0120), UR.
+	UrnCodeValue  string `protobuf:"bytes,4,opt,name=urn_code_value,json=urnCodeValue,proto3" json:"urn_code_value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssuerCode) Reset() {
+	*x = IssuerCode{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssuerCode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssuerCode) ProtoMessage() {}
+
+func (x *IssuerCode) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssuerCode.ProtoReflect.Descriptor instead.
+func (*IssuerCode) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *IssuerCode) GetCodeValue() string {
+	if x != nil {
+		return x.CodeValue
+	}
+	return ""
+}
+
+func (x *IssuerCode) GetCodingSchemeDesignator() string {
+	if x != nil {
+		return x.CodingSchemeDesignator
+	}
+	return ""
+}
+
+func (x *IssuerCode) GetLongCodeValue() string {
+	if x != nil {
+		return x.LongCodeValue
+	}
+	return ""
+}
+
+func (x *IssuerCode) GetUrnCodeValue() string {
+	if x != nil {
+		return x.UrnCodeValue
+	}
+	return ""
+}
+
 // CodeResponse is what the archive gives the value.
 type CodeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -100,7 +377,10 @@ type CodeResponse struct {
 	Attribute string `protobuf:"bytes,1,opt,name=attribute,proto3" json:"attribute,omitempty"`
 	// The keyed hash of the value under the tenant's naming key: 16
 	// characters of lower case base32, as a {#X} placeholder writes it (a
-	// hash action writes it in upper case in a CS element).
+	// hash action writes it in upper case in a CS element). For attribute
+	// PatientID, the keyed hash of the subject identity (the request's
+	// issuer, or its namespace), as a lookup table keys it and as a profile's
+	// hash action writes a file's Patient ID.
 	Code string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
 	// For each receiver whose naming rule makes its subject label from this
 	// attribute's keyed hash and fixed text alone, the label it gives the
@@ -116,7 +396,7 @@ type CodeResponse struct {
 
 func (x *CodeResponse) Reset() {
 	*x = CodeResponse{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[1]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -128,7 +408,7 @@ func (x *CodeResponse) String() string {
 func (*CodeResponse) ProtoMessage() {}
 
 func (x *CodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[1]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -141,7 +421,7 @@ func (x *CodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CodeResponse.ProtoReflect.Descriptor instead.
 func (*CodeResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{1}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CodeResponse) GetAttribute() string {
@@ -187,7 +467,7 @@ type SubjectLabelCode struct {
 
 func (x *SubjectLabelCode) Reset() {
 	*x = SubjectLabelCode{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[2]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -199,7 +479,7 @@ func (x *SubjectLabelCode) String() string {
 func (*SubjectLabelCode) ProtoMessage() {}
 
 func (x *SubjectLabelCode) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[2]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -212,7 +492,7 @@ func (x *SubjectLabelCode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubjectLabelCode.ProtoReflect.Descriptor instead.
 func (*SubjectLabelCode) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{2}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SubjectLabelCode) GetReceiver() string {
@@ -249,7 +529,7 @@ type LookupTableCode struct {
 
 func (x *LookupTableCode) Reset() {
 	*x = LookupTableCode{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[3]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -261,7 +541,7 @@ func (x *LookupTableCode) String() string {
 func (*LookupTableCode) ProtoMessage() {}
 
 func (x *LookupTableCode) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[3]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -274,7 +554,7 @@ func (x *LookupTableCode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupTableCode.ProtoReflect.Descriptor instead.
 func (*LookupTableCode) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{3}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *LookupTableCode) GetTable() string {
@@ -306,7 +586,7 @@ type ImportLookupCodesRequest struct {
 
 func (x *ImportLookupCodesRequest) Reset() {
 	*x = ImportLookupCodesRequest{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[4]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -318,7 +598,7 @@ func (x *ImportLookupCodesRequest) String() string {
 func (*ImportLookupCodesRequest) ProtoMessage() {}
 
 func (x *ImportLookupCodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[4]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -331,7 +611,7 @@ func (x *ImportLookupCodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportLookupCodesRequest.ProtoReflect.Descriptor instead.
 func (*ImportLookupCodesRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{4}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ImportLookupCodesRequest) GetTenant() string {
@@ -362,14 +642,28 @@ type LookupEntry struct {
 	Value string `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	// The code: 1 to 16 of A-Z, 0-9 and "_", which fits every text VR
 	// (PS3.5 6.2: CS's repertoire is the narrowest).
-	Code          string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	Code string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	// The issuer of the value, when it is a Patient ID that comes with one:
+	// the entry is then stored by the keyed hash of the subject identity
+	// (CodeRequest.issuer), which a lookup action on the Patient ID of a file
+	// from that issuer meets. Absent for a value with no issuer, stored by
+	// its own keyed hash, as every value of any other attribute.
+	Issuer *PatientIDIssuer `protobuf:"bytes,3,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// The namespace of a Patient ID that comes with no issuer
+	// (Receiver.namespace): set, the entry is stored by the keyed hash of
+	// the subject identity under that namespace, which a lookup action on
+	// the Patient ID of a file with no issuer through a receiver of that
+	// namespace meets. Empty, the default namespace: stored by the value's
+	// own keyed hash. Ignored when issuer is set. Otherwise 1 to 63
+	// characters under the rule of a tenant's name.
+	Namespace     string `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LookupEntry) Reset() {
 	*x = LookupEntry{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[5]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -381,7 +675,7 @@ func (x *LookupEntry) String() string {
 func (*LookupEntry) ProtoMessage() {}
 
 func (x *LookupEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[5]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -394,7 +688,7 @@ func (x *LookupEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupEntry.ProtoReflect.Descriptor instead.
 func (*LookupEntry) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{5}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LookupEntry) GetValue() string {
@@ -407,6 +701,20 @@ func (x *LookupEntry) GetValue() string {
 func (x *LookupEntry) GetCode() string {
 	if x != nil {
 		return x.Code
+	}
+	return ""
+}
+
+func (x *LookupEntry) GetIssuer() *PatientIDIssuer {
+	if x != nil {
+		return x.Issuer
+	}
+	return nil
+}
+
+func (x *LookupEntry) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -429,7 +737,7 @@ type ImportLookupCodesResponse struct {
 
 func (x *ImportLookupCodesResponse) Reset() {
 	*x = ImportLookupCodesResponse{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[6]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -441,7 +749,7 @@ func (x *ImportLookupCodesResponse) String() string {
 func (*ImportLookupCodesResponse) ProtoMessage() {}
 
 func (x *ImportLookupCodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[6]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -454,7 +762,7 @@ func (x *ImportLookupCodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportLookupCodesResponse.ProtoReflect.Descriptor instead.
 func (*ImportLookupCodesResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{6}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ImportLookupCodesResponse) GetTable() string {
@@ -503,7 +811,7 @@ type ListLookupTablesRequest struct {
 
 func (x *ListLookupTablesRequest) Reset() {
 	*x = ListLookupTablesRequest{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[7]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -515,7 +823,7 @@ func (x *ListLookupTablesRequest) String() string {
 func (*ListLookupTablesRequest) ProtoMessage() {}
 
 func (x *ListLookupTablesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[7]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -528,7 +836,7 @@ func (x *ListLookupTablesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLookupTablesRequest.ProtoReflect.Descriptor instead.
 func (*ListLookupTablesRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{7}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListLookupTablesRequest) GetTenant() string {
@@ -565,7 +873,7 @@ type ListLookupTablesResponse struct {
 
 func (x *ListLookupTablesResponse) Reset() {
 	*x = ListLookupTablesResponse{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[8]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -577,7 +885,7 @@ func (x *ListLookupTablesResponse) String() string {
 func (*ListLookupTablesResponse) ProtoMessage() {}
 
 func (x *ListLookupTablesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[8]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -590,7 +898,7 @@ func (x *ListLookupTablesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLookupTablesResponse.ProtoReflect.Descriptor instead.
 func (*ListLookupTablesResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{8}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListLookupTablesResponse) GetTables() []*LookupTable {
@@ -620,7 +928,7 @@ type LookupTable struct {
 
 func (x *LookupTable) Reset() {
 	*x = LookupTable{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[9]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -632,7 +940,7 @@ func (x *LookupTable) String() string {
 func (*LookupTable) ProtoMessage() {}
 
 func (x *LookupTable) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[9]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -645,7 +953,7 @@ func (x *LookupTable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupTable.ProtoReflect.Descriptor instead.
 func (*LookupTable) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{9}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LookupTable) GetName() string {
@@ -666,11 +974,32 @@ var File_nopacs_v1_deid_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_deid_proto_rawDesc = "" +
 	"\n" +
-	"\x14nopacs/v1/deid.proto\x12\tnopacs.v1\"^\n" +
+	"\x14nopacs/v1/deid.proto\x12\tnopacs.v1\"\xb0\x01\n" +
 	"\vCodeRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1c\n" +
 	"\tattribute\x18\x02 \x01(\tR\tattribute\x12\x19\n" +
-	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\"\xaf\x01\n" +
+	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x122\n" +
+	"\x06issuer\x18\x04 \x01(\v2\x1a.nopacs.v1.PatientIDIssuerR\x06issuer\x12\x1c\n" +
+	"\tnamespace\x18\x05 \x01(\tR\tnamespace\"\xb4\x03\n" +
+	"\x0fPatientIDIssuer\x12\x1b\n" +
+	"\x06issuer\x18\x01 \x01(\tB\x03\x80\x01\x01R\x06issuer\x123\n" +
+	"\x13universal_entity_id\x18\x02 \x01(\tB\x03\x80\x01\x01R\x11universalEntityId\x12<\n" +
+	"\x18universal_entity_id_type\x18\x03 \x01(\tB\x03\x80\x01\x01R\x15universalEntityIdType\x125\n" +
+	"\x14identifier_type_code\x18\x04 \x01(\tB\x03\x80\x01\x01R\x12identifierTypeCode\x12J\n" +
+	"\x12assigning_facility\x18\x05 \x01(\v2\x1b.nopacs.v1.IssuerDesignatorR\x11assigningFacility\x12L\n" +
+	"\x16assigning_jurisdiction\x18\x06 \x01(\v2\x15.nopacs.v1.IssuerCodeR\x15assigningJurisdiction\x12@\n" +
+	"\x10assigning_agency\x18\a \x01(\v2\x15.nopacs.v1.IssuerCodeR\x0fassigningAgency\"\xc5\x01\n" +
+	"\x10IssuerDesignator\x12>\n" +
+	"\x19local_namespace_entity_id\x18\x01 \x01(\tB\x03\x80\x01\x01R\x16localNamespaceEntityId\x123\n" +
+	"\x13universal_entity_id\x18\x02 \x01(\tB\x03\x80\x01\x01R\x11universalEntityId\x12<\n" +
+	"\x18universal_entity_id_type\x18\x03 \x01(\tB\x03\x80\x01\x01R\x15universalEntityIdType\"\xc7\x01\n" +
+	"\n" +
+	"IssuerCode\x12\"\n" +
+	"\n" +
+	"code_value\x18\x01 \x01(\tB\x03\x80\x01\x01R\tcodeValue\x12=\n" +
+	"\x18coding_scheme_designator\x18\x02 \x01(\tB\x03\x80\x01\x01R\x16codingSchemeDesignator\x12+\n" +
+	"\x0flong_code_value\x18\x03 \x01(\tB\x03\x80\x01\x01R\rlongCodeValue\x12)\n" +
+	"\x0eurn_code_value\x18\x04 \x01(\tB\x03\x80\x01\x01R\furnCodeValue\"\xaf\x01\n" +
 	"\fCodeResponse\x12\x1c\n" +
 	"\tattribute\x18\x01 \x01(\tR\tattribute\x12\x12\n" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x127\n" +
@@ -686,10 +1015,12 @@ const file_nopacs_v1_deid_proto_rawDesc = "" +
 	"\x18ImportLookupCodesRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x14\n" +
 	"\x05table\x18\x02 \x01(\tR\x05table\x120\n" +
-	"\aentries\x18\x03 \x03(\v2\x16.nopacs.v1.LookupEntryR\aentries\"<\n" +
+	"\aentries\x18\x03 \x03(\v2\x16.nopacs.v1.LookupEntryR\aentries\"\x8e\x01\n" +
 	"\vLookupEntry\x12\x19\n" +
 	"\x05value\x18\x01 \x01(\tB\x03\x80\x01\x01R\x05value\x12\x12\n" +
-	"\x04code\x18\x02 \x01(\tR\x04code\"{\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x122\n" +
+	"\x06issuer\x18\x03 \x01(\v2\x1a.nopacs.v1.PatientIDIssuerR\x06issuer\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\"{\n" +
 	"\x19ImportLookupCodesResponse\x12\x14\n" +
 	"\x05table\x18\x01 \x01(\tR\x05table\x12\x14\n" +
 	"\x05added\x18\x02 \x01(\x05R\x05added\x12\x1c\n" +
@@ -725,35 +1056,43 @@ func file_nopacs_v1_deid_proto_rawDescGZIP() []byte {
 	return file_nopacs_v1_deid_proto_rawDescData
 }
 
-var file_nopacs_v1_deid_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_nopacs_v1_deid_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_nopacs_v1_deid_proto_goTypes = []any{
 	(*CodeRequest)(nil),               // 0: nopacs.v1.CodeRequest
-	(*CodeResponse)(nil),              // 1: nopacs.v1.CodeResponse
-	(*SubjectLabelCode)(nil),          // 2: nopacs.v1.SubjectLabelCode
-	(*LookupTableCode)(nil),           // 3: nopacs.v1.LookupTableCode
-	(*ImportLookupCodesRequest)(nil),  // 4: nopacs.v1.ImportLookupCodesRequest
-	(*LookupEntry)(nil),               // 5: nopacs.v1.LookupEntry
-	(*ImportLookupCodesResponse)(nil), // 6: nopacs.v1.ImportLookupCodesResponse
-	(*ListLookupTablesRequest)(nil),   // 7: nopacs.v1.ListLookupTablesRequest
-	(*ListLookupTablesResponse)(nil),  // 8: nopacs.v1.ListLookupTablesResponse
-	(*LookupTable)(nil),               // 9: nopacs.v1.LookupTable
+	(*PatientIDIssuer)(nil),           // 1: nopacs.v1.PatientIDIssuer
+	(*IssuerDesignator)(nil),          // 2: nopacs.v1.IssuerDesignator
+	(*IssuerCode)(nil),                // 3: nopacs.v1.IssuerCode
+	(*CodeResponse)(nil),              // 4: nopacs.v1.CodeResponse
+	(*SubjectLabelCode)(nil),          // 5: nopacs.v1.SubjectLabelCode
+	(*LookupTableCode)(nil),           // 6: nopacs.v1.LookupTableCode
+	(*ImportLookupCodesRequest)(nil),  // 7: nopacs.v1.ImportLookupCodesRequest
+	(*LookupEntry)(nil),               // 8: nopacs.v1.LookupEntry
+	(*ImportLookupCodesResponse)(nil), // 9: nopacs.v1.ImportLookupCodesResponse
+	(*ListLookupTablesRequest)(nil),   // 10: nopacs.v1.ListLookupTablesRequest
+	(*ListLookupTablesResponse)(nil),  // 11: nopacs.v1.ListLookupTablesResponse
+	(*LookupTable)(nil),               // 12: nopacs.v1.LookupTable
 }
 var file_nopacs_v1_deid_proto_depIdxs = []int32{
-	2, // 0: nopacs.v1.CodeResponse.subjects:type_name -> nopacs.v1.SubjectLabelCode
-	3, // 1: nopacs.v1.CodeResponse.lookups:type_name -> nopacs.v1.LookupTableCode
-	5, // 2: nopacs.v1.ImportLookupCodesRequest.entries:type_name -> nopacs.v1.LookupEntry
-	9, // 3: nopacs.v1.ListLookupTablesResponse.tables:type_name -> nopacs.v1.LookupTable
-	0, // 4: nopacs.v1.DeidService.Code:input_type -> nopacs.v1.CodeRequest
-	4, // 5: nopacs.v1.DeidService.ImportLookupCodes:input_type -> nopacs.v1.ImportLookupCodesRequest
-	7, // 6: nopacs.v1.DeidService.ListLookupTables:input_type -> nopacs.v1.ListLookupTablesRequest
-	1, // 7: nopacs.v1.DeidService.Code:output_type -> nopacs.v1.CodeResponse
-	6, // 8: nopacs.v1.DeidService.ImportLookupCodes:output_type -> nopacs.v1.ImportLookupCodesResponse
-	8, // 9: nopacs.v1.DeidService.ListLookupTables:output_type -> nopacs.v1.ListLookupTablesResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1,  // 0: nopacs.v1.CodeRequest.issuer:type_name -> nopacs.v1.PatientIDIssuer
+	2,  // 1: nopacs.v1.PatientIDIssuer.assigning_facility:type_name -> nopacs.v1.IssuerDesignator
+	3,  // 2: nopacs.v1.PatientIDIssuer.assigning_jurisdiction:type_name -> nopacs.v1.IssuerCode
+	3,  // 3: nopacs.v1.PatientIDIssuer.assigning_agency:type_name -> nopacs.v1.IssuerCode
+	5,  // 4: nopacs.v1.CodeResponse.subjects:type_name -> nopacs.v1.SubjectLabelCode
+	6,  // 5: nopacs.v1.CodeResponse.lookups:type_name -> nopacs.v1.LookupTableCode
+	8,  // 6: nopacs.v1.ImportLookupCodesRequest.entries:type_name -> nopacs.v1.LookupEntry
+	1,  // 7: nopacs.v1.LookupEntry.issuer:type_name -> nopacs.v1.PatientIDIssuer
+	12, // 8: nopacs.v1.ListLookupTablesResponse.tables:type_name -> nopacs.v1.LookupTable
+	0,  // 9: nopacs.v1.DeidService.Code:input_type -> nopacs.v1.CodeRequest
+	7,  // 10: nopacs.v1.DeidService.ImportLookupCodes:input_type -> nopacs.v1.ImportLookupCodesRequest
+	10, // 11: nopacs.v1.DeidService.ListLookupTables:input_type -> nopacs.v1.ListLookupTablesRequest
+	4,  // 12: nopacs.v1.DeidService.Code:output_type -> nopacs.v1.CodeResponse
+	9,  // 13: nopacs.v1.DeidService.ImportLookupCodes:output_type -> nopacs.v1.ImportLookupCodesResponse
+	11, // 14: nopacs.v1.DeidService.ListLookupTables:output_type -> nopacs.v1.ListLookupTablesResponse
+	12, // [12:15] is the sub-list for method output_type
+	9,  // [9:12] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_deid_proto_init() }
@@ -767,7 +1106,7 @@ func file_nopacs_v1_deid_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_deid_proto_rawDesc), len(file_nopacs_v1_deid_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

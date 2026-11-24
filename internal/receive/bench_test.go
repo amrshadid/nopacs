@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/blob"
-	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/receive/header"
 	"github.com/amrshadid/nopacs/internal/tenant"
 	"github.com/amrshadid/nopacs/internal/testkit"
@@ -152,7 +151,7 @@ func BenchmarkDeidentifyAFile(b *testing.B) {
 	b.SetBytes(f.Size)
 	b.ResetTimer()
 	for range b.N {
-		out, q, err := e.p.prepareOne(e.ctx, tenant.Reception{ID: "r", Receiver: "dimse"}, rcv, label.Path{Subject: "sub-a", Session: "ses-a", Scan: "scan-a"}, wr)
+		out, q, err := e.p.prepareOne(e.ctx, tenant.Reception{ID: "r", Receiver: "dimse"}, rcv, ownPath(b, e, rcv, body, "ses-a", "scan-a"), wr)
 		if err != nil || q != nil || !out.made {
 			b.Fatalf("prepared %+v, held %+v: %v", out, q, err)
 		}

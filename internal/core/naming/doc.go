@@ -37,7 +37,13 @@
 // part both the pattern and the import would fill, is refused when the
 // rule is set.
 //
-// The default rule is subject sub-{#PatientID}, session
+// One placeholder is not an attribute: {#SubjectIdentity}
+// (IdentityPlaceholder) is the keyed hash of the file's subject identity,
+// its Patient ID with the Issuer of Patient ID and its qualifiers, or with
+// the receiver's namespace when the file names no issuer
+// (SubjectIdentity, ReadSubjectIdentity). It is only ever hashed.
+//
+// The default rule is subject sub-{#SubjectIdentity}, session
 // ses-{#StudyInstanceUID}, scan scan-{#SeriesInstanceUID}: by default no
 // label, and so no storage key, list or event, carries an identifier the
 // sender gave. A site that wants readable labels writes its own rule, and

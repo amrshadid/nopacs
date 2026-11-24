@@ -104,7 +104,13 @@ def plant(ds):
     ds.PatientName = PATIENT
     ds.PatientID = PATIENT_ID
     for k, v in PLANTED.items():
-        setattr(ds, k, v)
+        # The issuer is planted inside Other Patient IDs Sequence below, not
+        # at the top level: a subject is the Patient ID with its issuer, and
+        # the main study's other files carry none, so a top-level issuer
+        # here would make this file another subject's and hold it
+        # (subject_mismatch).
+        if k != "IssuerOfPatientID":
+            setattr(ds, k, v)
     for k, v in TYPED.items():
         setattr(ds, k, v)
     ds.SpecificCharacterSet = "ISO_IR 100"

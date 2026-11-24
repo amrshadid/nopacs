@@ -39,6 +39,16 @@ service DeidService {
   // code. It is how a person finds a subject's data from its Patient ID,
   // for a withdrawal of consent, without the archive keeping a way back.
   //
+  // A Patient ID is unique only within its issuer (PS3.3 C.7.1.1), so for
+  // attribute PatientID what is hashed is the subject identity: the
+  // Patient ID with the issuer the request gives, or, with none, with a
+  // namespace (Receiver.namespace). A Patient ID with no issuer under the
+  // default namespace hashes as its value alone. A receiver whose subject
+  // label is the default {#SubjectIdentity} is answered with the label it
+  // gives that identity, under its own namespace when no issuer is given;
+  // one whose rule a site wrote with {#PatientID} with the keyed hash of
+  // the Patient ID alone.
+  //
   // The value is read as a file's element would be: its padding removed
   // as PS3.5 6.2 says for the attribute's VR (trailing spaces and NULs,
   // and leading spaces for the VRs whose leading spaces are not
@@ -150,6 +160,85 @@ message CodeRequest {
   // The value, as a file's element holds it, as UTF-8 text. Required; at
   // most 1024 bytes.
   string value = 3 [debug_redact = true];
+
+  // The issuer of the Patient ID, for attribute PatientID only: the
+  // subject identity is the Patient ID with its issuer (PatientIDIssuer),
+  // and two issuers' patients of one Patient ID are two subjects. Absent
+  // for a Patient ID that comes with no issuer. Set with another attribute,
+  // invalid.
+  PatientIDIssuer issuer = 4;
+
+  // The namespace of a Patient ID that comes with no issuer
+  // (Receiver.namespace), for code and lookups: empty is the tenant's
+  // default namespace. Each subject label is answered under its receiver's
+  // own namespace, as that receiver names a file with no issuer, so this
+  // does not choose the receivers. Ignored when issuer is set, since an
+  // issuer names the population itself. Set with another attribute than
+  // PatientID, invalid. Otherwise empty or 1 to 63 characters under the
+  // rule of a tenant's name.
+  string namespace = 5;
+}
+
+// PatientIDIssuer is who gave a Patient ID (PS3.3 C.7.1.1, and its Issuer
+// of Patient ID Macro, Table 10-18): the Issuer of Patient ID (0010,0021)
+// and the values of the Issuer of Patient ID Qualifiers Sequence
+// (0010,0024) that name an issuer, each as a file's element holds it, as
+// UTF-8 text, its padding removed as for its VR, at most 1024 bytes. A
+// field left empty is one the file does not have; an issuer with every
+// field empty is no issuer. Each must be given as the files give it: a
+// value written differently (another case, another spelling) is another
+// issuer, and so another subject.
+message PatientIDIssuer {
+  // Issuer of Patient ID (0010,0021), LO.
+  string issuer = 1 [debug_redact = true];
+
+  // Universal Entity ID (0040,0032), UT.
+  string universal_entity_id = 2 [debug_redact = true];
+
+  // Universal Entity ID Type (0040,0033), CS, such as "ISO".
+  string universal_entity_id_type = 3 [debug_redact = true];
+
+  // Identifier Type Code (0040,0035), CS, such as "MR".
+  string identifier_type_code = 4 [debug_redact = true];
+
+  // The Assigning Facility Sequence (0040,0036): its Local Namespace
+  // Entity ID (0040,0031), Universal Entity ID and its type.
+  IssuerDesignator assigning_facility = 5;
+
+  // The Assigning Jurisdiction Code Sequence (0040,0039).
+  IssuerCode assigning_jurisdiction = 6;
+
+  // The Assigning Agency or Department Code Sequence (0040,003A).
+  IssuerCode assigning_agency = 7;
+}
+
+// IssuerDesignator is an HL7v2 hierarchic designator (PS3.3 Table 10-17).
+message IssuerDesignator {
+  // Local Namespace Entity ID (0040,0031), UT.
+  string local_namespace_entity_id = 1 [debug_redact = true];
+
+  // Universal Entity ID (0040,0032), UT.
+  string universal_entity_id = 2 [debug_redact = true];
+
+  // Universal Entity ID Type (0040,0033), CS.
+  string universal_entity_id_type = 3 [debug_redact = true];
+}
+
+// IssuerCode is a coded entry's identifying values (PS3.3 Table 8.8-1a);
+// its Code Meaning is not one, since two senders may word one code two
+// ways.
+message IssuerCode {
+  // Code Value (0008,0100), SH.
+  string code_value = 1 [debug_redact = true];
+
+  // Coding Scheme Designator (0008,0102), SH.
+  string coding_scheme_designator = 2 [debug_redact = true];
+
+  // Long Code Value (0008,0119), UC.
+  string long_code_value = 3 [debug_redact = true];
+
+  // URN Code Value (0008,0120), UR.
+  string urn_code_value = 4 [debug_redact = true];
 }
 
 // CodeResponse is what the archive gives the value.
@@ -159,7 +248,10 @@ message CodeResponse {
 
   // The keyed hash of the value under the tenant's naming key: 16
   // characters of lower case base32, as a {#X} placeholder writes it (a
-  // hash action writes it in upper case in a CS element).
+  // hash action writes it in upper case in a CS element). For attribute
+  // PatientID, the keyed hash of the subject identity (the request's
+  // issuer, or its namespace), as a lookup table keys it and as a profile's
+  // hash action writes a file's Patient ID.
   string code = 2;
 
   // For each receiver whose naming rule makes its subject label from this
@@ -214,6 +306,22 @@ message LookupEntry {
   // The code: 1 to 16 of A-Z, 0-9 and "_", which fits every text VR
   // (PS3.5 6.2: CS's repertoire is the narrowest).
   string code = 2;
+
+  // The issuer of the value, when it is a Patient ID that comes with one:
+  // the entry is then stored by the keyed hash of the subject identity
+  // (CodeRequest.issuer), which a lookup action on the Patient ID of a file
+  // from that issuer meets. Absent for a value with no issuer, stored by
+  // its own keyed hash, as every value of any other attribute.
+  PatientIDIssuer issuer = 3;
+
+  // The namespace of a Patient ID that comes with no issuer
+  // (Receiver.namespace): set, the entry is stored by the keyed hash of
+  // the subject identity under that namespace, which a lookup action on
+  // the Patient ID of a file with no issuer through a receiver of that
+  // namespace meets. Empty, the default namespace: stored by the value's
+  // own keyed hash. Ignored when issuer is set. Otherwise 1 to 63
+  // characters under the rule of a tenant's name.
+  string namespace = 4;
 }
 
 // ImportLookupCodesResponse says what the import stored.

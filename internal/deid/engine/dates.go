@@ -16,22 +16,26 @@ var errBadDate = errors.New("not a date of its VR")
 
 // ShiftDays returns a subject's date shift under a tenant's date key: a
 // whole number of days from 1 to most, the same for every file of the
-// subject. The subject is its Patient ID (0010,0020) as received, its
-// padding removed (naming.TrimValue), exactly the value the default naming
-// rule's subject label sub-{#PatientID} is the keyed hash of: so one
-// subject has one shift, and files under one subject label never get two.
-// The Issuer of Patient ID is not part of it, as it is not of the label;
-// two patients of one ID from two issuers are one subject to both. The
-// offset is the first 64 bits of HMAC-SHA-256 of the Patient ID under the
-// key, modulo most, plus one: never zero, so no date is kept as it was;
-// the bias of the modulo is below 2^-50 for any most the profile allows.
+// subject. The subject is the key of its subject identity
+// (naming.SubjectIdentity.Key) as received: the Patient ID (0010,0020)
+// with the Issuer of Patient ID (0010,0021) and its qualifiers, or with
+// the receiver's namespace when the file names no issuer, exactly the
+// bytes the default naming rule's subject label sub-{#SubjectIdentity} is
+// the keyed hash of: so one subject has one shift, files under one subject
+// label never get two, and two patients of one Patient ID from two issuers
+// get two. A file with no issuer under the default namespace is keyed by
+// its Patient ID alone, as before issuers were told apart, so its shift
+// does not move. The offset is the first 64 bits of HMAC-SHA-256 of the
+// subject under the key, modulo most, plus one: never zero, so no date is
+// kept as it was; the bias of the modulo is below 2^-50 for any most the
+// profile allows.
 //
 // The shift is never written into a file: Longitudinal Temporal
 // Information Modified (0028,0303) says dates were moved, and nothing says
 // by how much (PS3.15 E.3.6).
-func ShiftDays(key []byte, patientID string, most int32) int {
+func ShiftDays(key []byte, subject string, most int32) int {
 	m := hmac.New(sha256.New, key)
-	m.Write([]byte(patientID))
+	m.Write([]byte(subject))
 	sum := m.Sum(nil)
 	if most < 1 {
 		most = 1

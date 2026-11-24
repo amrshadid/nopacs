@@ -76,6 +76,31 @@ goes on with the others. A reception is complete when it is *quiet*, not when it
 is whole: DICOM does not say how many files a study has
 ([core/reception](../../internal/core/reception/doc.go)).
 
+When a reception is identified, a new subject's label comes from the receiver's
+naming rule. The default rule's subject is the keyed hash of the file's subject
+identity: its Patient ID with its Issuer of Patient ID and that issuer's
+qualifiers, since a Patient ID is unique only within its issuer. A file that
+names no issuer takes the receiver's namespace (`nopacs receiver add
+--namespace site-b`). Use one namespace per population of Patient IDs that came
+without an issuer: two receivers whose senders may reuse each other's numbers
+get two namespaces, two receivers fed by one hospital system share one. A file
+with no issuer under the default namespace is named by its Patient ID alone.
+
+The namespace is fixed once the receiver has received anything (a reception or
+a quarantined file names it): `receiver set --namespace` is then refused (exit
+5), since the same patient's next study would become a new subject and a
+deleted subject's files would no longer be held when sent again. A receiver for
+another population is a new receiver. Before its first file the namespace can be
+set, or returned to the default with `--namespace ""`. A study whose receiver is
+removed before the study has a session is held as `unrouted`, cause
+`receiver_removed`, rather than named under another namespace; it is rejected,
+or sent again through a receiver that exists. At a receiver that
+de-identifies, a file whose own subject label is not its session's subject (one
+file of a study carries the issuer and another does not, or two Patient IDs) is
+held, `deid_failed`, cause `subject_mismatch`, so one subject never holds dates
+moved by two offsets; a release holds it again unless it now agrees
+([Who a subject is](../concepts/deidentification.md#who-a-subject-is)).
+
 ## What a person can do about it
 
 - Watch it: `nopacs reception list`, `nopacs reception show`, the tenant's status

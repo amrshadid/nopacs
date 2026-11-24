@@ -306,19 +306,31 @@ func TestHashedPatientIDIsTheSubjectsCode(t *testing.T) {
 }
 
 // TestASubjectsLabelAndShiftAgree guards that the date shift is keyed by
-// exactly what the subject label is: files the default naming rule puts
-// under one subject (one Patient ID, its padding and leading spaces
-// aside, whatever the Issuer of Patient ID) get one shift, and a file of
-// another subject another label.
+// exactly what the subject label is, the label read from the file's
+// header and the shift from its data set, two readers of one file: files
+// the default naming rule puts under one subject (one Patient ID, its
+// padding and leading spaces aside, one issuer, or no issuer and one
+// namespace) get one shift; two issuers of one Patient ID, an issuer
+// named only by its qualifiers, and no issuer under two namespaces are
+// each another subject.
 func TestASubjectsLabelAndShiftAgree(t *testing.T) {
 	en := newTestEngine(t, testKeys, Options{}, rule("dates", vrSel("DA"), aShift))
 	hasher, err := naming.NewHasher(testKeys.Hash)
 	if err != nil {
 		t.Fatal(err)
 	}
+	qualified := []*dataset.Dataset{build(t, el{0x00400032, "UT", "2.16.840.1.113883.3.1"}, el{0x00400033, "CS", "ISO"})}
 	shifts := map[string]map[string]bool{}
-	for _, f := range []struct{ id, issuer string }{
-		{"PAT001", ""}, {" PAT001  ", "HOSPITAL A"}, {"PAT001", "HOSPITAL B"}, {"PAT002", "HOSPITAL A"},
+	for _, f := range []struct {
+		id, issuer, ns string
+		qualifiers     []*dataset.Dataset
+	}{
+		{"PAT001", "", "", nil}, {" PAT001  ", "", "", nil},
+		{"PAT001", "", "site-b", nil},
+		{" PAT001  ", "HOSPITAL A", "", nil}, {"PAT001", "HOSPITAL A", "site-b", nil},
+		{"PAT001", "HOSPITAL B", "", nil},
+		{"PAT001", "", "", qualified}, {"PAT001", "", "site-b", qualified},
+		{"PAT002", "HOSPITAL A", "", nil},
 	} {
 		els := []el{
 			{tSOPClass, "UI", ctImageStorage}, {tSOPInstance, "UI", "1.2.3.4"},
@@ -328,24 +340,29 @@ func TestASubjectsLabelAndShiftAgree(t *testing.T) {
 		if f.issuer != "" {
 			els = append(els, el{0x00100021, "LO", f.issuer})
 		}
+		if f.qualifiers != nil {
+			els = append(els, el{0x00100024, "SQ", f.qualifiers})
+		}
 		b := writeFile(t, build(t, els...))
 		h, err := header.Read(bytes.NewReader(b), int64(len(b)))
 		if err != nil {
 			t.Fatal(err)
 		}
-		labels, err := naming.Default().Labels(h, hasher)
+		labels, err := naming.Default().WithNamespace(f.ns).Labels(h, hasher)
 		if err != nil {
 			t.Fatal(err)
 		}
 		got := readFile(t, b)
-		apply(t, en, got)
+		if _, err := en.Apply(context.Background(), got, Reception{Namespace: f.ns}); err != nil {
+			t.Fatal(err)
+		}
 		if shifts[labels.Subject] == nil {
 			shifts[labels.Subject] = map[string]bool{}
 		}
 		shifts[labels.Subject][mustText(t, got, tStudyDate)] = true
 	}
-	if len(shifts) != 2 {
-		t.Fatalf("%d subjects, want 2", len(shifts))
+	if len(shifts) != 6 {
+		t.Fatalf("%d subjects, want 6", len(shifts))
 	}
 	for subject, dates := range shifts {
 		if len(dates) != 1 {

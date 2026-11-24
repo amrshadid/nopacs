@@ -79,6 +79,12 @@ type Receiver struct {
 	Storage string
 	// Naming is its naming rule, nil for the default (naming.DefaultSpec).
 	Naming *naming.Spec
+	// Namespace is the namespace of the subject identity of a file it
+	// receives that names no issuer of its Patient ID
+	// (naming.SubjectIdentity): empty for the tenant's default, or a name
+	// under the rule of a tenant's name. Two receivers of two namespaces
+	// make two subjects of one Patient ID that comes with no issuer.
+	Namespace string
 	// QuietPeriod is how long without a file before a reception is
 	// complete: whole seconds, 5 seconds to 1 hour.
 	QuietPeriod time.Duration
@@ -249,6 +255,7 @@ const (
 	FieldEnabled          ReceiverField = "enabled"
 	FieldStorage          ReceiverField = "storage"
 	FieldNaming           ReceiverField = "naming"
+	FieldNamespace        ReceiverField = "namespace"
 	FieldQuietPeriod      ReceiverField = "quiet_period"
 	FieldMaxOpenTime      ReceiverField = "max_open_time"
 	FieldMaxFileBytes     ReceiverField = "max_file_bytes"
@@ -274,7 +281,25 @@ const (
 
 // maxReceiverFieldCount is how many fields a receiver has that a change
 // can name (FieldImporter among them).
-const maxReceiverFieldCount = 22
+const maxReceiverFieldCount = 23
+
+// NamespaceChanges reports whether a change from stored to next moves the
+// receiver to another namespace. A store refuses such a change, with
+// NamespaceFixed, once the receiver has received anything (a reception or
+// a quarantined file names it).
+func NamespaceChanges(stored, next Receiver) bool { return stored.Namespace != next.Namespace }
+
+// NamespaceFixed is the refusal of a namespace change on a receiver that
+// has received data. The namespace is who a Patient ID that comes with no
+// issuer belongs to: changed under a receiver that has named subjects by
+// it, the same patient's next study would be a new subject, and a delete
+// of the old subject would no longer hold a re-sent file. A receiver for
+// another population is a new receiver.
+func NamespaceFixed(receiver string) error {
+	return Precondition("receiver.namespace: the receiver " + receiver + " has received data, so its namespace is fixed: " +
+		"a Patient ID that comes with no issuer is named by it, and changed, the same patient's next study would become a new subject; " +
+		"add a new receiver with the other namespace for the other population")
+}
 
 // Deidentifies reports whether the receiver de-identifies what it
 // receives, rather than archiving it as received.
@@ -311,6 +336,11 @@ func (r Receiver) Validate() error {
 	}
 	if err := ValidateName("storage", r.Storage); err != nil {
 		return err
+	}
+	if r.Namespace != "" {
+		if err := ValidateName("namespace", r.Namespace); err != nil {
+			return err
+		}
 	}
 	if r.QuietPeriod < MinQuietPeriod || r.QuietPeriod > MaxQuietPeriod || r.QuietPeriod%time.Second != 0 {
 		return invalid("a quiet period is a whole number of seconds from 5 seconds to 1 hour")
@@ -518,6 +548,8 @@ func ApplyReceiver(stored, change Receiver, fields []ReceiverField) (Receiver, e
 				n := *change.Naming
 				out.Naming = &n
 			}
+		case FieldNamespace:
+			out.Namespace = change.Namespace
 		case FieldQuietPeriod:
 			out.QuietPeriod = change.QuietPeriod
 		case FieldMaxOpenTime:

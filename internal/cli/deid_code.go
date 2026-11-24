@@ -5,12 +5,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/cli/output"
+	"github.com/amrshadid/nopacs/internal/core/naming"
 	"github.com/amrshadid/nopacs/internal/fault"
 )
 
@@ -19,7 +21,8 @@ const maxCodeValue = 1 << 10
 
 // newDeidCode builds "deid code".
 func (a *app) newDeidCode() *cobra.Command {
-	var patientID, attribute, value string
+	var patientID, attribute, value, issuer, namespace string
+	var qualifiers []string
 	cmd := &cobra.Command{
 		Use:   "code <tenant> (--patient-id VALUE|- | --attribute NAME --value VALUE|-)",
 		Short: "Find the codes the archive gives one value, such as a subject's label from its Patient ID",
@@ -39,12 +42,29 @@ the value from the first line of standard input, which keeps it out of the
 shell's history and the list of processes: prefer them to a value written on
 the command line.
 
+A Patient ID is unique only within the issuer that gave it, and the default
+naming rule's subject label is the keyed hash of the Patient ID with its issuer.
+Give the issuer as the files give it: --issuer for the Issuer of Patient ID
+(0010,0021), and --issuer-qualifier NAME=VALUE for a value of the Issuer of
+Patient ID Qualifiers Sequence (0010,0024), NAME one of UniversalEntityID,
+UniversalEntityIDType, IdentifierTypeCode,
+AssigningFacilitySequence.LocalNamespaceEntityID,
+AssigningFacilitySequence.UniversalEntityID,
+AssigningFacilitySequence.UniversalEntityIDType, and CodeValue,
+CodingSchemeDesignator, LongCodeValue or URNCodeValue after
+AssigningJurisdictionCodeSequence. or AssigningAgencyOrDepartmentCodeSequence.
+For a Patient ID that comes with no issuer, --namespace names the receiver
+namespace the code and lookups are answered under (the tenant's default when
+left out); each receiver's subject label is answered under its own namespace.
+
 It needs the admin role on the tenant. One value per call, at most 60 calls a
 minute by one key and 60 a minute into one tenant (exit 7 past either). Every
 call is in the tenant's audit log, written before the answer, with the key and
 the attribute, never the value; a call whose entry cannot be written is
 refused. The value is sent to the server only and shown nowhere.`,
 		Example: `  nopacs deid code lab1 --patient-id -
+  nopacs deid code lab1 --patient-id - --issuer HOSPITAL_A
+  nopacs deid code lab1 --patient-id - --issuer-qualifier UniversalEntityID=2.16.840.1.113883.3.1 --issuer-qualifier UniversalEntityIDType=ISO
   nopacs deid code lab1 --attribute AccessionNumber --value - --json`,
 		Args: exactArgs(1),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {
@@ -70,6 +90,14 @@ refused. The value is sent to the server only and shown nowhere.`,
 				}
 				req.Value = v
 			}
+			if issuer != "" || len(qualifiers) > 0 {
+				m, err := issuerMessage(issuer, qualifiers)
+				if err != nil {
+					return err
+				}
+				req.Issuer = m
+			}
+			req.Namespace = namespace
 			c, closeClient, err := a.open(cmd)
 			if err != nil {
 				return err
@@ -85,7 +113,38 @@ refused. The value is sent to the server only and shown nowhere.`,
 	cmd.Flags().StringVar(&patientID, "patient-id", "", "the Patient ID (0010,0020) to find the codes of, or - to read it from the first line of standard input")
 	cmd.Flags().StringVar(&attribute, "attribute", "", "the attribute the value is of: a keyword such as PatientID, or a tag such as 00100020 (PatientID when not given)")
 	cmd.Flags().StringVar(&value, "value", "", "the value, or - to read it from the first line of standard input")
+	cmd.Flags().StringVar(&issuer, "issuer", "", "the Patient ID's Issuer of Patient ID (0010,0021), as the files give it")
+	cmd.Flags().StringArrayVar(&qualifiers, "issuer-qualifier", nil, "a value of the Patient ID's Issuer of Patient ID Qualifiers Sequence (0010,0024), written NAME=VALUE, such as UniversalEntityID=2.16.840.1.113883.3.1; repeat for more")
+	cmd.Flags().StringVar(&namespace, "namespace", "", "the receiver namespace of a Patient ID that comes with no issuer (default: the tenant's default namespace)")
 	return cmd
+}
+
+// issuerMessage builds a Patient ID's issuer from --issuer and each
+// --issuer-qualifier NAME=VALUE, NAME one of naming.QualifierNames.
+func issuerMessage(issuer string, qualifiers []string) (*v1.PatientIDIssuer, error) {
+	m := &v1.PatientIDIssuer{Issuer: issuer, AssigningFacility: &v1.IssuerDesignator{},
+		AssigningJurisdiction: &v1.IssuerCode{}, AssigningAgency: &v1.IssuerCode{}}
+	// The fields of m by naming.QualifierNames, in its order.
+	into := [len(naming.QualifierNames)]*string{
+		&m.UniversalEntityId, &m.UniversalEntityIdType, &m.IdentifierTypeCode,
+		&m.AssigningFacility.LocalNamespaceEntityId, &m.AssigningFacility.UniversalEntityId, &m.AssigningFacility.UniversalEntityIdType,
+		&m.AssigningJurisdiction.CodeValue, &m.AssigningJurisdiction.CodingSchemeDesignator,
+		&m.AssigningJurisdiction.LongCodeValue, &m.AssigningJurisdiction.UrnCodeValue,
+		&m.AssigningAgency.CodeValue, &m.AssigningAgency.CodingSchemeDesignator,
+		&m.AssigningAgency.LongCodeValue, &m.AssigningAgency.UrnCodeValue,
+	}
+	for _, q := range qualifiers {
+		name, v, ok := strings.Cut(q, "=")
+		i := slices.Index(naming.QualifierNames[:], name)
+		if !ok || i < 0 {
+			return nil, fault.New(fault.Invalid, "--issuer-qualifier is NAME=VALUE, NAME one of "+strings.Join(naming.QualifierNames[:], ", "))
+		}
+		if *into[i] != "" {
+			return nil, fault.New(fault.Invalid, "--issuer-qualifier names "+name+" twice")
+		}
+		*into[i] = v
+	}
+	return m, nil
 }
 
 // readValue reads one value from the first line of standard input, its

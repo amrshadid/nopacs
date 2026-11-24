@@ -46,8 +46,17 @@ type Spec struct {
 }
 
 // DefaultSpec returns the rule a receiver has until one is set: subject
-// sub-{#PatientID}, session ses-{#StudyInstanceUID}, scan
+// sub-{#SubjectIdentity}, session ses-{#StudyInstanceUID}, scan
 // scan-{#SeriesInstanceUID}.
+//
+// The subject is the keyed hash of the file's subject identity
+// (SubjectIdentity): its Patient ID with the issuer that gave it, or with
+// the receiver's namespace when the file names none, since a Patient ID is
+// unique only within its issuer (PS3.3 C.7.1.1), and two patients of two
+// hospitals given one Patient ID must not become one subject. A file that
+// names no issuer, through a receiver of the default namespace, has the
+// label the keyed hash of its Patient ID alone gave before issuers were
+// told apart (SubjectIdentity.Key).
 //
 // Every label is a keyed hash, so by default no label, and so no storage
 // key, list or event that carries one, holds an identifier the sender
@@ -67,7 +76,7 @@ type Spec struct {
 // patient is a real reason to hold it for a person.
 func DefaultSpec() Spec {
 	return Spec{
-		Subject: "sub-{#PatientID}",
+		Subject: "sub-{#" + IdentityPlaceholder + "}",
 		Session: "ses-{#StudyInstanceUID}",
 		Scan:    "scan-{#SeriesInstanceUID}",
 	}
@@ -92,6 +101,7 @@ type piece struct {
 	part    string // the part's name, for a part placeholder
 	given   bool   // the part is given from outside the attributes, not the pattern's
 	hash    bool   // the placeholder gives the keyed hash of the value
+	ident   bool   // the placeholder is the subject identity (IdentityPlaceholder)
 }
 
 // template is one label's parsed template.
@@ -108,10 +118,24 @@ type Rule struct {
 	patAttr   string
 	patTag    Tag
 	pattern   *regexp.Regexp
+	namespace string
 }
 
 // Spec returns the written form the rule was parsed from.
 func (r *Rule) Spec() Spec { return r.spec }
+
+// WithNamespace returns the rule under the receiver's namespace ns (empty
+// for the tenant's default): the namespace of the subject identity of a
+// file that names no issuer (SubjectIdentity.Namespace). The rule itself is
+// not changed.
+func (r *Rule) WithNamespace(ns string) *Rule {
+	out := *r
+	out.namespace = ns
+	return &out
+}
+
+// Namespace returns the namespace WithNamespace gave the rule.
+func (r *Rule) Namespace() string { return r.namespace }
 
 // SyntaxError is a rule refused as written. Its text may show the rule,
 // which is configuration, never a value read from a file.
@@ -255,6 +279,9 @@ func parseTemplate(level, text string) (template, error) {
 			if err != nil {
 				return t, fail(i, err.Error())
 			}
+			if p.ident && !p.hash {
+				return t, fail(i, "{"+IdentityPlaceholder+"} is only hashed: the identity is bytes, not text a label holds; write {#"+IdentityPlaceholder+"}")
+			}
 			t.pieces = append(t.pieces, p)
 			i += end
 			lit = i + 1
@@ -307,6 +334,8 @@ func parsePlaceholder(name string) (piece, error) {
 		return piece{}, errorString("empty placeholder '{}'")
 	case partName(name):
 		return piece{part: name}, nil
+	case name == IdentityPlaceholder:
+		return piece{attr: name, ident: true}, nil
 	}
 	tag, err := ParseAttribute(name)
 	if err != nil {
@@ -393,61 +422,104 @@ func (r *Rule) Labels(a Attributes, h Hasher) (label.Path, error) {
 // and given lacks is an *Error with the fault Missing; its value is held to
 // the same rules as an attribute's.
 func (r *Rule) LabelsWithParts(a Attributes, given map[string]string, h Hasher) (label.Path, error) {
-	var parts []string // the pattern's submatches, read once
+	var st renderState
 	var out [3]string
 	for i, t := range r.templates {
-		var b strings.Builder
-		var from []string
-		for _, p := range t.pieces {
-			switch {
-			case p.literal != "":
-				b.WriteString(p.literal)
-			case p.given:
-				v, ok := given[p.part]
-				if !ok {
-					return label.Path{}, &Error{Level: t.level, Attribute: GivenSource, Part: p.part, Fault: Missing}
-				}
-				v, err := place(v, p, h)
-				if err != nil {
-					err.Level, err.Attribute, err.Part = t.level, GivenSource, p.part
-					return label.Path{}, err
-				}
-				b.WriteString(v)
-				from = append(from, p.part+" of "+GivenSource)
-			case p.part != "":
-				if parts == nil {
-					var err error
-					if parts, err = r.match(t.level, a); err != nil {
-						return label.Path{}, err
-					}
-				}
-				v, err := place(parts[r.pattern.SubexpIndex(p.part)], p, h)
-				if err != nil {
-					err.Level, err.Attribute, err.Part = t.level, r.patAttr, p.part
-					return label.Path{}, err
-				}
-				b.WriteString(v)
-				from = append(from, p.part+" of "+r.patAttr)
-			default:
-				v, ok := a.Lookup(p.tag)
-				if !ok {
-					return label.Path{}, &Error{Level: t.level, Attribute: p.attr, Fault: Missing}
-				}
-				v, err := place(v, p, h)
-				if err != nil {
-					err.Level, err.Attribute = t.level, p.attr
-					return label.Path{}, err
-				}
-				b.WriteString(v)
-				from = append(from, p.attr)
-			}
+		v, err := r.render(t, a, given, h, &st)
+		if err != nil {
+			return label.Path{}, err
 		}
-		out[i] = b.String()
-		if err := label.Check(out[i]); err != nil {
-			return label.Path{}, &Error{Level: t.level, Attribute: strings.Join(from, ", "), Fault: BadLabel, Err: err}
-		}
+		out[i] = v
 	}
 	return label.Path{Subject: out[0], Session: out[1], Scan: out[2]}, nil
+}
+
+// SubjectWithParts returns the subject label alone that LabelsWithParts
+// makes from a's attributes and the given parts, or its *Error: the label
+// one file would be filed under by itself, which a caller compares with
+// the subject its session was named under.
+func (r *Rule) SubjectWithParts(a Attributes, given map[string]string, h Hasher) (string, error) {
+	var st renderState
+	return r.render(r.templates[0], a, given, h, &st)
+}
+
+// renderState is what one file's labels read once: the pattern's
+// submatches and the subject identity's key.
+type renderState struct {
+	parts []string
+	ident []byte
+}
+
+// render makes one label of template t, held to the rule for a label.
+func (r *Rule) render(t template, a Attributes, given map[string]string, h Hasher, st *renderState) (string, error) {
+	var b strings.Builder
+	var from []string
+	for _, p := range t.pieces {
+		switch {
+		case p.literal != "":
+			b.WriteString(p.literal)
+		case p.given:
+			v, ok := given[p.part]
+			if !ok {
+				return "", &Error{Level: t.level, Attribute: GivenSource, Part: p.part, Fault: Missing}
+			}
+			v, err := place(v, p, h)
+			if err != nil {
+				err.Level, err.Attribute, err.Part = t.level, GivenSource, p.part
+				return "", err
+			}
+			b.WriteString(v)
+			from = append(from, p.part+" of "+GivenSource)
+		case p.part != "":
+			if st.parts == nil {
+				parts, err := r.match(t.level, a)
+				if err != nil {
+					return "", err
+				}
+				st.parts = parts
+			}
+			v, err := place(st.parts[r.pattern.SubexpIndex(p.part)], p, h)
+			if err != nil {
+				err.Level, err.Attribute, err.Part = t.level, r.patAttr, p.part
+				return "", err
+			}
+			b.WriteString(v)
+			from = append(from, p.part+" of "+r.patAttr)
+		case p.ident:
+			if st.ident == nil {
+				id, err := readIdentity(a, r.namespace)
+				if err != nil {
+					err.Level = t.level
+					return "", err
+				}
+				st.ident = id.Key()
+			}
+			v, err := place(string(st.ident), p, h)
+			if err != nil {
+				err.Level, err.Attribute = t.level, "PatientID"
+				return "", err
+			}
+			b.WriteString(v)
+			from = append(from, "PatientID", "IssuerOfPatientID")
+		default:
+			v, ok := a.Lookup(p.tag)
+			if !ok {
+				return "", &Error{Level: t.level, Attribute: p.attr, Fault: Missing}
+			}
+			v, err := place(v, p, h)
+			if err != nil {
+				err.Level, err.Attribute = t.level, p.attr
+				return "", err
+			}
+			b.WriteString(v)
+			from = append(from, p.attr)
+		}
+	}
+	out := b.String()
+	if err := label.Check(out); err != nil {
+		return "", &Error{Level: t.level, Attribute: strings.Join(from, ", "), Fault: BadLabel, Err: err}
+	}
+	return out, nil
 }
 
 // match reads the pattern's attribute and returns its submatches.
@@ -490,6 +562,11 @@ func place(v string, p piece, h Hasher) (string, *Error) {
 		return "", &Error{Fault: TooLong}
 	case h == nil:
 		return "", &Error{Fault: NoHasher}
+	case p.tag == TagPatientID && !p.ident && strings.IndexByte(v, 0) >= 0:
+		// A Patient ID holding a NUL could spell another subject
+		// identity's encoding (identityMark), so its hash could equal
+		// another population's patient's code; LO text holds no NUL.
+		return "", &Error{Fault: BadCharacter}
 	}
 	if p.uid {
 		if err := uid.Check(v); err != nil {
@@ -536,14 +613,36 @@ func checkValue(v string, isUID bool) *Error {
 // subject's identifier finds the subject's label (the forward lookup),
 // while nothing in the archive leads back. An *Error names a value the
 // placeholder refuses, as Labels would.
-func (r *Rule) HashedSubject(t Tag, v string, h Hasher) (string, bool, error) {
+//
+// A {#SubjectIdentity} placeholder is decided too when t is Patient ID:
+// issuer gives the Issuer of Patient ID and its qualifiers of the subject
+// asked for (its PatientID and Namespace are not read; v is the Patient
+// ID, and the namespace is the rule's, WithNamespace), so the label is the
+// one a file of that Patient ID from that issuer, or from no issuer
+// through this receiver, is given.
+func (r *Rule) HashedSubject(t Tag, v string, issuer SubjectIdentity, h Hasher) (string, bool, error) {
 	tmpl := r.templates[0]
 	var b strings.Builder
 	for _, p := range tmpl.pieces {
 		switch {
 		case p.literal != "":
 			b.WriteString(p.literal)
-		case p.hash && p.part == "" && p.tag == t:
+		case p.ident && t == TagPatientID:
+			id := issuer
+			id.PatientID, id.Namespace = v, r.namespace
+			if v == "" {
+				return "", true, &Error{Level: tmpl.level, Attribute: "PatientID", Fault: Empty}
+			}
+			if strings.IndexByte(v, 0) >= 0 {
+				return "", true, &Error{Level: tmpl.level, Attribute: "PatientID", Fault: BadCharacter}
+			}
+			s, err := place(string(id.Key()), p, h)
+			if err != nil {
+				err.Level, err.Attribute = tmpl.level, "PatientID"
+				return "", true, err
+			}
+			b.WriteString(s)
+		case p.hash && p.part == "" && !p.ident && p.tag == t:
 			s, err := place(v, p, h)
 			if err != nil {
 				err.Level, err.Attribute = tmpl.level, p.attr

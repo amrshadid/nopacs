@@ -22,7 +22,7 @@ import (
 // SetReceiverRequest.update_mask).
 var receiverMask = maskRules{
 	fields: append([]string{
-		string(tenant.FieldEnabled), string(tenant.FieldStorage), string(tenant.FieldNaming),
+		string(tenant.FieldEnabled), string(tenant.FieldStorage), string(tenant.FieldNaming), string(tenant.FieldNamespace),
 		string(tenant.FieldQuietPeriod), string(tenant.FieldMaxOpenTime), string(tenant.FieldMaxFileBytes),
 		string(tenant.FieldDIMSEPort), string(tenant.FieldDIMSEBindAddress), string(tenant.FieldDIMSEAETitle),
 		string(tenant.FieldDIMSECallers), string(tenant.FieldDIMSEAnyCaller), string(tenant.FieldDIMSETLS),
@@ -54,7 +54,8 @@ func trimAE(ae string) string { return strings.Trim(ae, " ") }
 // a mask names from. The durations and the size are returned as given, with
 // whether each was; the defaults are the caller's to fill.
 func receiverValues(field string, m *v1.Receiver) (r tenant.Receiver, quiet, open bool, err error) {
-	r = tenant.Receiver{Name: m.GetName(), Enabled: m.GetEnabled(), Storage: m.GetStorage(), MaxFileBytes: m.GetMaxFileBytes(), ForwardTo: m.GetForwardTo()}
+	r = tenant.Receiver{Name: m.GetName(), Enabled: m.GetEnabled(), Storage: m.GetStorage(), MaxFileBytes: m.GetMaxFileBytes(), ForwardTo: m.GetForwardTo(),
+		Namespace: m.GetNamespace()}
 	if len(r.ForwardTo) > tenant.MaxForwardTo {
 		return r, false, false, invalid(field+".forward_to", "names at most 16 senders")
 	}
@@ -284,7 +285,7 @@ func receiverMessage(r tenant.Receiver, h Health) *v1.Receiver {
 		Name: r.Name, Enabled: r.Enabled, Storage: r.Storage,
 		QuietPeriod: seconds(r.QuietPeriod), MaxOpenTime: seconds(r.MaxOpenTime), MaxFileBytes: r.MaxFileBytes,
 		Health: healthMessage(h), CreateTime: timestamp(r.Created), UpdateTime: timestamp(r.Updated),
-		ForwardTo: r.ForwardTo,
+		ForwardTo: r.ForwardTo, Namespace: r.Namespace,
 	}
 	if r.Naming != nil {
 		n := &v1.NamingRule{Subject: r.Naming.Subject, Session: r.Naming.Session, Scan: r.Naming.Scan}

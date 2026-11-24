@@ -285,6 +285,54 @@ func (h *Header) Lookup(t naming.Tag) (string, bool) {
 	return naming.TrimValue(e.VR, filereader.DecodeText(e.VR, e.Value, h.encodings)), true
 }
 
+// Item implements naming.ItemAttributes: the value at path, through the
+// first item of each sequence it names, decoded and trimmed as Lookup
+// does a top-level one. A value inside an item is decoded under the item's
+// own Specific Character Set (0008,0005) when it declares one, else the one
+// it inherits (PS3.5 6.1.2.3, PS3.3 C.12.1.1.2), as the DICOM library
+// decodes the data set the de-identification engine reads, so the two read
+// one value alike. A value left in the file, a sequence where text is
+// asked, or text longer than naming.MaxValueLength is an error, never an
+// empty value.
+func (h *Header) Item(path []naming.Tag) (string, bool, error) {
+	if len(path) == 0 {
+		return "", false, nil
+	}
+	enc := h.encodings
+	e, ok := h.byTag[tag.Tag(path[0])]
+	for _, t := range path[1:] {
+		if !ok {
+			return "", false, nil
+		}
+		if e.VR != "SQ" && len(e.Items) == 0 {
+			return "", true, errNotText
+		}
+		if len(e.Items) == 0 || e.Items[0] == nil {
+			return "", false, nil
+		}
+		first := e.Items[0].Elements
+		enc = filereader.TextEncodings(first, enc)
+		e, ok = nil, false
+		for _, c := range first {
+			if c.Tag == tag.Tag(t) {
+				e, ok = c, true
+				break
+			}
+		}
+	}
+	switch {
+	case !ok:
+		return "", false, nil
+	case e.ValueSkipped || len(e.Items) > 0 || e.VR == "SQ" || len(e.Value) > naming.MaxValueLength:
+		return "", true, errNotText
+	}
+	return naming.TrimValue(e.VR, filereader.DecodeText(e.VR, e.Value, enc)), true, nil
+}
+
+// errNotText is a value Item cannot answer as text: left in the file, a
+// sequence, or too long.
+var errNotText = errors.New("header: the value is not text held in memory")
+
 // The attributes the catalog keeps of a file's scan and session (PS3.6
 // Table 6-1): the session's Study Date and the scan's Modality, Series
 // Description and Series Number. Each is a study's or a series's

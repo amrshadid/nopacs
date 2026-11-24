@@ -51,7 +51,12 @@ site trusts.
 
 What arrives is archived to the tenant's storage named by --storage, under
 labels the naming rule makes. Without --naming-* the default rule is used, which
-carries no value the sender gave. A reception is complete after --quiet-period
+carries no value the sender gave: its subject label is the keyed hash of the
+Patient ID together with the Issuer of Patient ID and its qualifiers, so two
+hospitals' patients of one Patient ID are two subjects. A file with no issuer
+takes the receiver's --namespace in the issuer's place; leave it out for the
+tenant's default namespace, under which such a file is named by its Patient ID
+alone. A reception is complete after --quiet-period
 without a file for its study, or --max-open-time from its first file.
 
 With --type stow the receiver is instead the tenant's STOW-RS service,
@@ -240,6 +245,9 @@ func (a *app) receiverDetails(w io.Writer, r *v1.Receiver) error {
 		output.Pair{Label: "Quiet period", Value: spanText(r.GetQuietPeriod())},
 		output.Pair{Label: "Max open time", Value: spanText(r.GetMaxOpenTime())},
 		output.Pair{Label: "Max file size", Value: output.Bytes(r.GetMaxFileBytes())})
+	if ns := r.GetNamespace(); ns != "" {
+		pairs = append(pairs, output.Pair{Label: "Namespace", Value: ns})
+	}
 	if len(r.GetForwardTo()) > 0 {
 		pairs = append(pairs, output.Pair{Label: "Forwards to", Value: strings.Join(r.GetForwardTo(), ", ")})
 	}
