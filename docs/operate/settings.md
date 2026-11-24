@@ -108,6 +108,12 @@ its own entry, sealed in the same pass. **Export the log before setting it: what
 pruned is gone.** The age is counted back from the earlier of the clock and the log's
 latest checkpoint, so a clock set forward does not prune early.
 
+No pass seals while a backup over the API runs; the first pass after it seals
+what was written meanwhile. `backup.max-duration` (installation only, `6h` by
+default, from `1m` to `7d`) bounds how long such a backup may run, and with it
+how long it holds a database's read transaction, this pause and the server's one
+place for a backup or an export ([Backup](backup.md)).
+
 ## Corrections, scrubs and imports
 
 `delete.grace` is how long a delete's bytes stay on the storage, unserved and

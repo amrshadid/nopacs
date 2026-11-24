@@ -4,10 +4,12 @@
 
 Three jobs share this page: a **backup** of a whole installation, a **restore**
 of it onto an empty data directory, and the **move** of one tenant to another
-installation. All three are commands that run on the machine itself, as the user
-who runs the installation. Backup and restore need the server stopped; a move
-starts on the running server and ends with the import on the other machine, with
-that machine's server stopped. The rules are in the comments of
+installation. A backup is made either over the API while the server runs
+(`nopacs backup create`, by an installation admin from any machine that reaches
+the server) or on the machine itself with the server stopped (`nopacs-server
+backup create`); both write the same file. A restore runs on the machine, with
+the server stopped. A move starts on the running server and ends with the import
+on the other machine, with that machine's server stopped. The rules are in the comments of
 [`backup`](../../internal/backup/doc.go) and of the contract's
 [`backup.proto`](../../api/proto/nopacs/v1/backup.proto) and
 [`tenant.proto`](../../api/proto/nopacs/v1/tenant.proto).
@@ -37,10 +39,77 @@ It does not hold:
 Each database is read as of one moment, its *recovery point*. Anything changed
 after it is not in the backup.
 
-## Make a backup
+## Make a backup while the server runs
 
-The server must be stopped. The command takes the data directory's lock, so it
-refuses while a server runs on it.
+```sh
+nopacs backup create --out /backups/nopacs-2026-11-24.backup
+nopacs backup create --out /backups/nopacs-2026-11-24.backup --json
+```
+
+It needs the admin role on the installation (`BackupService.CreateBackup`); an
+operator, or a tenant's admin, is refused. The server goes on receiving and
+serving meanwhile.
+
+- **Where it is encrypted.** The server encrypts the file with the key derived
+  from the installation key file, exactly as the offline command does, before a
+  byte leaves it. The client never sees a key, and the file opens only with that
+  key file.
+- **The file.** It is written beside `--out` (mode 0600) and given its name only
+  once the server's summary has come and the size and SHA-256 of what was
+  written are the summary's. A backup cut short, by the network, the client or
+  the server, leaves nothing; a file already at `--out` is never replaced (exit
+  5). `--json` prints the summary: format, installation, time, size, SHA-256, key
+  version, and each section with its recovery point.
+- **Its moments.** The master database is read first, then each tenant's in turn,
+  each in a read transaction of its own, so each section stands for its own
+  moment, seconds apart from the others. A restore needs no more: each tenant is
+  reconciled on its own from its own recovery point (its correction records
+  newer than it applied, its catalog rebuilt from the storages as they are at
+  the restore), every key comes back suspended, and a tenant created or removed
+  while the backup ran makes it fail, so the master never names a tenant it holds
+  no section for. The audit's sealing pass is paused for the whole backup: a
+  pass that comes due is skipped, not waited for, and the first pass after the
+  backup seals what was written meanwhile. So no database is read holding an
+  anchor of a checkpoint another, read earlier, does not hold.
+- **What it holds open.** A read transaction takes no lock: receptions,
+  changes and the event feed go on while it is open, on SQLite and on Postgres
+  alike. What it costs is space while it is open: SQLite's write-ahead log
+  cannot be reset past it, and on Postgres the read transaction holds back
+  vacuum for the **whole cluster** (every database on that server keeps the old
+  row versions the backup may still read). The server sends the file as it
+  reads it, at most 1 MiB held at a time, so a client that reads slowly makes
+  the reads wait.
+- **How long it may run.** A client that reads nothing for 5 minutes is cut off
+  by the server's write stall bound. A client that reads slowly but steadily
+  passes that bound at every write, so the whole backup is bounded by the
+  installation's setting `backup.max-duration` (default `6h`, from `1m` to
+  `7d`, read when each backup starts): past it the backup stops at its next
+  row or write, the stream ends without its summary, answered resource
+  exhausted naming the setting (exit 7), and the entry that ends it says
+  `max_duration`. Until then it holds the read transaction, the pause of the
+  sealing pass and the server's one place for a backup or an export. Change it
+  with `nopacs setting set backup.max-duration 12h`.
+- **A key revoked meanwhile.** The caller's key is checked again every 15
+  seconds while the backup runs, and one that may no longer back up ends it,
+  answered as a new request would be. While the server waits on a client that
+  reads nothing, no byte leaves, and the stall bound ends it.
+- **One at a time.** One backup or tenant export runs on a server at a time;
+  another is answered resource exhausted (exit 7).
+- **Whole or nothing.** A tenant that is not ready (unreachable, failed,
+  upgrading) fails the backup, naming it. A moved or fenced tenant is backed up
+  as it stands.
+- **Audited.** One entry in the installation's log when the stream opens,
+  written before anything is read (a backup whose entry cannot be written is
+  refused, unavailable), and one when it ends, with the size, the SHA-256 and
+  the tenants held, or with how it failed.
+
+Check it with `nopacs-server backup verify FILE` on a machine that holds the key
+file (below).
+
+## Make a backup with the server stopped
+
+The command takes the data directory's lock, so it refuses while a server runs
+on it.
 
 ```sh
 nopacs-server backup create --data-dir /var/lib/nopacs --out /backups/nopacs-2026-11-22.backup
@@ -370,8 +439,19 @@ state is `fenced` and the reason names the storage and why. What to do:
 - **The drain can fail.** If the tenant's pipeline does not stop within 90
   seconds the export fails and the tenant is given back; try again when it is
   quieter.
-- **There is no backup call on the API yet.** `CreateBackup` is in the contract
-  and answers UNIMPLEMENTED; a backup is made on the machine, with the server
-  stopped. Restore and import are local commands by design.
+- **A backup's sections are moments apart.** Over the API each database is read
+  in its own transaction, one after another; nothing a restore needs depends on
+  one moment, but the report of what was lost is per tenant, each from its own
+  point.
+- **A slow client holds a read open.** A client that reads, however slowly, keeps
+  the database it is reading in one transaction until that section is sent, up
+  to `backup.max-duration`; only one that reads nothing for 5 minutes is cut
+  off sooner. Meanwhile SQLite's log grows and Postgres's vacuum is held back
+  across the cluster, and no export can run. Take a backup from a machine near
+  the server.
+- **No seal pass runs during a backup.** Passes that come due are skipped, so
+  entries written during a long backup stay unsealed (removable without a
+  trace) until the first pass after it.
+- Restore and import are local commands by design.
 - **Storages are not part of a backup.** What a backup cannot bring back, the
   storages' own backups must.

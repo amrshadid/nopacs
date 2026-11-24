@@ -445,7 +445,7 @@ func TestGrammar(t *testing.T) {
 		"correction delete": true, "correction relabel": true, "correction replace": true, "correction list": true,
 		"correction show": true, "correction undo": true, "correction purge": true, "correction allow": true,
 		"catalog subjects": true, "catalog sessions": true, "catalog scans": true, "scan show": true, "download": true,
-		"watch": true,
+		"watch": true, "backup create": true,
 	}
 	got := map[string]bool{}
 	for _, c := range cli.Command(cli.Env{}).Commands() {

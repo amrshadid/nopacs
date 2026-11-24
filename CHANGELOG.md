@@ -131,8 +131,7 @@ the code before this release is in github.com/amrshadid/coria.
 
 - The API contract `nopacs.v1` in `api/proto/nopacs/v1`, served over gRPC,
   gRPC-web and Connect, every reply carrying a `Nopacs-Request-Id` header.
-  Defined and not yet served: `BackupService/CreateBackup`,
-  `ReplicaService` and `RetentionService`.
+  Defined and not yet served: `ReplicaService` and `RetentionService`.
 - The command line `nopacs` for every service, with `--json` output and named
   client contexts, and an interactive program (`nopacs` with no arguments).
 - `nopacs job scrub`, `job rebuild` (`--mode compare|replace`; a replace needs
@@ -175,6 +174,14 @@ the code before this release is in github.com/amrshadid/coria.
   step of a correction or a rebuild; `make prove-interrupt` kills the real
   server at every step and checks reads, the catalog, the storage, a restore
   and a send from outside.
+- A backup of the running installation over the API
+  (`BackupService/CreateBackup`, installation admin; `nopacs backup create
+  --out FILE [--json]`): the same file as `nopacs-server backup create`, read
+  database by database in read transactions that hold no writer or event
+  back, encrypted by the server, streamed in chunks of at most 1 MiB, one
+  backup or export at a time, the audit's sealing pass paused meanwhile,
+  bounded as a whole by the setting `backup.max-duration` (6h by default, 1m
+  to 7d), audited before the first read and when it ends.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

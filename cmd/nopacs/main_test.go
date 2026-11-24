@@ -158,11 +158,10 @@ func TestMovedCommandsNameTheServerProgram(t *testing.T) {
 	}{
 		"init":           {[]string{"init", "--data-dir", "x"}, "nopacs: init: is not a nopacs command; run nopacs-server init\n"},
 		"serve":          {[]string{"serve"}, "nopacs: serve: is not a nopacs command; run nopacs-server serve\n"},
-		"backup":         {[]string{"backup"}, "nopacs: backup: is not a nopacs command; run nopacs-server backup\n"},
-		"backup create":  {[]string{"backup", "create", "--out", "f"}, "nopacs: backup: is not a nopacs command; run nopacs-server backup create\n"},
-		"backup restore": {[]string{"backup", "restore", "f"}, "nopacs: backup: is not a nopacs command; run nopacs-server backup restore\n"},
+		"backup verify":  {[]string{"backup", "verify", "f", "--key-file", "k"}, "nopacs: backup verify: is not a nopacs command; run nopacs-server backup verify\n"},
+		"backup restore": {[]string{"backup", "restore", "f"}, "nopacs: backup restore: is not a nopacs command; run nopacs-server backup restore\n"},
 		"tenant import":  {[]string{"tenant", "import", "f", "--transfer-key", "k"}, "nopacs: tenant import: is not a nopacs command; run nopacs-server tenant import\n"},
-		"flags first":    {[]string{"backup", "--help-me"}, "nopacs: backup: is not a nopacs command; run nopacs-server backup\n"},
+		"flags first":    {[]string{"init", "--help-me"}, "nopacs: init: is not a nopacs command; run nopacs-server init\n"},
 	}
 	for name, c := range cases {
 		var stdout, stderr bytes.Buffer

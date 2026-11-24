@@ -115,6 +115,22 @@ Usage: `nopacs audit verify [--tenant NAME] [--from SEQ] [--to SEQ] [--expect-se
 | `--tenant` | string |  | verify this tenant's log (default: the installation's log) |
 | `--to` | int64 |  | the last seq to verify (default: the last sealed entry) |
 
+### `nopacs backup`
+
+Back up the installation while the server runs
+
+Usage: `nopacs backup`
+
+#### `nopacs backup create`
+
+Write an encrypted backup of the running installation to a file
+
+Usage: `nopacs backup create --out FILE [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--out` | string |  | the file to write the backup to, never replacing one |
+
 ### `nopacs catalog`
 
 List a tenant's subjects, sessions and scans

@@ -26,6 +26,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/receive/stow"
 	"github.com/amrshadid/nopacs/internal/registry"
 	"github.com/amrshadid/nopacs/internal/secret"
+	"github.com/amrshadid/nopacs/internal/snapshot"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -135,6 +136,11 @@ type Config struct {
 	// after one never removes another's work in progress. Nil gives the
 	// API a record of its own, for a server that opens no other store.
 	StorageCleanups *place.Cleanups
+	// SealPause keeps the audit's sealing pass from sealing while a backup
+	// reads the databases one after another, and returns what lets it seal
+	// again, or an error when ctx ends before a running pass does
+	// (auditseal.Sealer.Pause). Nil for a server that seals nothing.
+	SealPause func(ctx context.Context) (resume func(), err error)
 }
 
 // Handlers is the services of the contract this package serves, each an
@@ -205,7 +211,7 @@ func New(cfg Config) (Handlers, error) {
 		live: cfg.Live, feeds: cfg.Feeds, stowReceivers: cfg.STOW, senders: cfg.SenderHealths, senderTests: cfg.SenderTests,
 		reads: cfg.Reads, heldFiles: cfg.HeldFiles, trials: make(chan struct{}, MaxTrialsAtOnce), deidMemory: cfg.DeidMemory,
 		installation: cfg.Installation, importGuarded: cfg.ImportGuarded, corrections: cfg.Corrections, replaceSources: cfg.ReplaceSources,
-		handoffs: cfg.Handoffs, cleanups: cfg.StorageCleanups,
+		handoffs: cfg.Handoffs, cleanups: cfg.StorageCleanups, sealPause: cfg.SealPause,
 	}
 	if c.cleanups == nil {
 		c.cleanups = &place.Cleanups{}
@@ -380,6 +386,8 @@ type core struct {
 	// a time on a server, as the contract says) and the tenants a reclaim
 	// takes back, so no reclaim runs beside an export of its tenant.
 	exports handoffSlot
+	// sealPause is Config.SealPause; nil for none.
+	sealPause func(ctx context.Context) (resume func(), err error)
 	// places orders the changes that depend on where the installation lets
 	// data go (its roots, endpoints, ports and bind addresses) against the
 	// changes of those settings: a storage or a receiver is checked and
@@ -402,6 +410,15 @@ type core struct {
 		// summarySend, when set, is the error an export's summary meets
 		// in place of its Send, after the data was streamed.
 		summarySend error
+		// backupDatabase, when set, stands for each database a backup
+		// reads, given the tenant's name ("" for the master) and the
+		// database, so a test can hold a read transaction open or fail
+		// one part way.
+		backupDatabase func(tenantName string, db snapshot.Database) snapshot.Database
+		// backupLimit, when not zero, stands for backup.max-duration.
+		backupLimit time.Duration
+		// recheck, when not zero, stands for RecheckInterval in watchKey.
+		recheck time.Duration
 	}
 }
 

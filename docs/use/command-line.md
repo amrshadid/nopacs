@@ -17,7 +17,9 @@ storage driver, so it can run on a machine that holds none of the server's data.
 run on the server's machine, some with the server stopped
 ([internal/servecmd](../../internal/servecmd/doc.go)): `init`, `serve`, `backup`
 and `tenant import`, and its own `version`. Typed to `nopacs`, one of these
-exits 2 with one line naming the `nopacs-server` command to run instead. Both
+(`backup verify` and `backup restore` among them) exits 2 with one line naming
+the `nopacs-server` command to run instead; `nopacs backup create` is the
+backup over the API, while the server runs. Both
 programs take the data directory as `--data-dir` or `NOPACS_DATA_DIR`.
 
 ## The commands
@@ -44,6 +46,7 @@ This table says what each command is for. Every command and every flag, with its
 | `nopacs reception` | `list` (filters `--receiver`, `--step`, `--in-progress`, `--since`, `--until`, `--study-uid`), `show`, `retry`, `discard --reason TEXT` |
 | `nopacs quarantine` | `list` (filters `--state`, `--reason`, `--receiver`, `--reception`, `--sop-uid`, `--study-uid`, `--since`, `--until`), `show [--header]`, `release [--storage NAME] [--profile NAME@VERSION]`, `reject --reason TEXT` |
 | `nopacs correction` | `delete <tenant> <subject>[/<session>[/<scan>]] [--instance ID] --reason TEXT [--preview] [--yes]` (shows what the delete would remove first, then asks for the target to be typed again unless `--yes`; `--preview` stops after it), `relabel <tenant> <subject>[/<session>[/<scan>]] --to LABEL --reason TEXT [--wait]`, `replace <tenant> <quarantined-file-id> --reason TEXT`, `list <tenant> [--kind KIND] [--state STATE]`, `show <tenant> <id>` (with what each storage did with each purged object, and the values a delete holds), `undo <tenant> <id> --reason TEXT`, `purge <tenant> <id> [--wait] [--yes]`, `allow <tenant> <id> (--subject LABEL \| --study UID \| --series UID \| --instance UID) --reason TEXT`. See [Correcting archived data](correcting.md) |
+| `nopacs backup` | `create --out FILE` (admin on the installation): a backup of the running installation over the API, encrypted by the server, written beside `FILE` and named when whole and its SHA-256 is the summary's, never replacing a file (exit 5); one backup or export at a time (exit 7 for another); `--json` prints the summary |
 | `nopacs-server backup` | `create --out FILE [--master-env VAR]`, `verify FILE [--key-file PATH]`, `restore FILE [--key-file PATH] [--master-env VAR] [--scratch-schema NAME] [--take-over]`: commands of `nopacs-server` that take `--data-dir`; create and restore need the server stopped. `nopacs tenant export <name> --out FILE --key-out FILE` (admin, `nopacs`), `nopacs-server tenant import FILE --transfer-key FILE [--db-env VAR] [--master-env VAR] [--scratch-schema NAME] [--take-over]` (on the server's machine, server stopped) and `nopacs tenant reclaim <name>` (local operator only, `nopacs`) move a tenant. See [Backup, restore and moving a tenant](../operate/backup.md) |
 | `nopacs catalog` | `subjects <tenant>`, `sessions <tenant> [<subject>]`, `scans <tenant> [<subject> [<session>]]`, with filters and `--order` |
 | `nopacs scan show` | `<tenant> <subject>/<session>/<scan> [--metadata]`: a scan, and the DICOM header of every instance as JSON |

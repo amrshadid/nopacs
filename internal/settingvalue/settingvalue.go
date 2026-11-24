@@ -203,6 +203,12 @@ func (r Reader) AuditSealInterval(ctx context.Context) (time.Duration, error) {
 	return typed(settings.AuditSealInterval, v, err, settings.ParseSealInterval)
 }
 
+// BackupMaxDuration returns the installation's backup.max-duration.
+func (r Reader) BackupMaxDuration(ctx context.Context) (time.Duration, error) {
+	v, err := r.Installation(ctx, settings.BackupMaxDuration)
+	return typed(settings.BackupMaxDuration, v, err, settings.ParseBackupMaxDuration)
+}
+
 // AuditRetention returns the installation's audit.retention; 0 keeps every
 // entry.
 func (r Reader) AuditRetention(ctx context.Context) (time.Duration, error) {

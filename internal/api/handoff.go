@@ -57,8 +57,37 @@ type handoffSlot struct {
 	mu sync.Mutex
 	// exporting is the tenant an export runs for; "" for none.
 	exporting string
+	// backingUp is set while a backup runs.
+	backingUp bool
 	// reclaiming are the tenants a reclaim is taking back.
 	reclaiming map[string]bool
+}
+
+// errOneAtATime is the refusal of a backup or an export asked while another
+// runs.
+var errOneAtATime = fault.New(fault.Exhausted, "a backup or an export is running on this server; one runs at a time")
+
+// takeBackup holds the slot for a backup. One backup or export runs at a
+// time, as the contract says: each holds a read transaction open on the
+// databases it reads for as long as its client takes, and two would only
+// double that cost for no gain, the second holding what the first holds.
+// A reclaim may run beside a backup: the backup reads whatever state the
+// tenant is in.
+func (s *handoffSlot) takeBackup() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.exporting != "" || s.backingUp {
+		return errOneAtATime
+	}
+	s.backingUp = true
+	return nil
+}
+
+// endBackup lets the slot go after a backup.
+func (s *handoffSlot) endBackup() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backingUp = false
 }
 
 // takeExport holds the slot for an export of the tenant named name.
@@ -66,8 +95,8 @@ func (s *handoffSlot) takeExport(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
-	case s.exporting != "":
-		return fault.New(fault.Exhausted, "a backup or an export is running on this server; one runs at a time")
+	case s.exporting != "" || s.backingUp:
+		return errOneAtATime
 	case s.reclaiming[name]:
 		return fault.New(fault.Precondition, "a reclaim of the tenant "+name+" is running; export it once the reclaim has ended")
 	}
@@ -187,7 +216,9 @@ func (s backupService) ExportTenant(ctx context.Context, req *v1.ExportTenantReq
 	if err := c.handoffs.Drain(ctx, name); err != nil {
 		return giveBack("its writers did not stop: "+fault.Message(err), err)
 	}
-	w := &exportWriter{stream: stream}
+	w := &chunkWriter{send: func(b []byte) error {
+		return stream.Send(&v1.ExportTenantResponse{Kind: &v1.ExportTenantResponse_Data{Data: b}})
+	}}
 	sum, key, err := backup.ExportTenant(ctx, backup.ExportConfig{Installation: c.installation, Keys: c.keys, Tenant: name, TenantID: row.ID,
 		Driver: row.Driver, DB: sdb, Store: st, Owners: c.handoffs, Out: w})
 	if err == nil {
@@ -212,7 +243,7 @@ func (s backupService) ExportTenant(ctx context.Context, req *v1.ExportTenantReq
 		}
 		return giveBack(fault.Message(err), err)
 	}
-	msg := &v1.ExportTenantResponse{Kind: &v1.ExportTenantResponse_Summary{Summary: &v1.TenantExportSummary{Summary: summaryMessage(sum), TransferKey: key}}}
+	msg := &v1.ExportTenantResponse{Kind: &v1.ExportTenantResponse_Summary{Summary: &v1.TenantExportSummary{Summary: summaryMessage(backup.ExportFormat, sum), TransferKey: key}}}
 	if err = c.seams.summarySend; err == nil {
 		err = stream.Send(msg)
 	}
@@ -277,15 +308,18 @@ func exportPreconditions(ctx context.Context, st tenant.Store) error {
 	return nil
 }
 
-// exportWriter sends what is written to it as the data of an export's
-// messages, at most exportChunk bytes each.
-type exportWriter struct {
-	stream nopacsv1connect.BackupServiceExportTenantServerStream
-	buf    []byte
+// chunkWriter sends what is written to it as the data of a backup's or an
+// export's messages, at most exportChunk bytes each, holding at most one
+// chunk: send blocks while the client reads nothing (the transport's flow
+// control), and with it the writer, so what is read from the databases
+// waits on the client rather than piling up in memory.
+type chunkWriter struct {
+	send func([]byte) error
+	buf  []byte
 }
 
 // Write implements io.Writer.
-func (w *exportWriter) Write(p []byte) (int, error) {
+func (w *chunkWriter) Write(p []byte) (int, error) {
 	n := len(p)
 	for len(p) > 0 {
 		take := min(len(p), exportChunk-len(w.buf))
@@ -301,22 +335,27 @@ func (w *exportWriter) Write(p []byte) (int, error) {
 }
 
 // flush sends the bytes held, if any.
-func (w *exportWriter) flush() error {
+func (w *chunkWriter) flush() error {
 	if len(w.buf) == 0 {
 		return nil
 	}
-	err := w.stream.Send(&v1.ExportTenantResponse{Kind: &v1.ExportTenantResponse_Data{Data: w.buf}})
+	err := w.send(w.buf)
 	w.buf = make([]byte, 0, exportChunk)
 	if err != nil {
-		return fault.Wrap(fault.Unavailable, err, "the export could not be sent")
+		return fault.Wrap(fault.Unavailable, err, "the stream could not be sent")
 	}
 	return nil
 }
 
-// summaryMessage returns an export's summary as the contract writes it.
-func summaryMessage(s backup.Summary) *v1.BackupSummary {
-	out := &v1.BackupSummary{Format: backup.ExportFormat, FormatVersion: backup.FormatVersion, InstallationId: s.Installation,
+// summaryMessage returns a backup's or an export's summary, of the format
+// named, as the contract writes it. An export's key version is 0, since a
+// transfer key encrypts it (backup.Summary.KeyVersion is not set for one).
+func summaryMessage(format string, s backup.Summary) *v1.BackupSummary {
+	out := &v1.BackupSummary{Format: format, FormatVersion: backup.FormatVersion, InstallationId: s.Installation,
 		Time: timestamp(s.Time), SizeBytes: s.Size, Sha256: s.SHA256}
+	if format == backup.Format {
+		out.KeyVersion = int32(s.KeyVersion) //nolint:gosec // G115: a key version is at most 2^31-1.
+	}
 	for _, sec := range s.Sections {
 		sum, _ := hex.DecodeString(sec.SHA256)
 		m := &v1.BackupSection{Tenant: sec.Tenant, SchemaVersion: int32(sec.Point.SchemaVersion), Tables: int32(sec.Tables), Rows: sec.Rows, //nolint:gosec // G115: a schema version and a count of tables are small.

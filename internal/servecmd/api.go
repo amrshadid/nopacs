@@ -233,7 +233,7 @@ func APIServices(d Deps) (Built, error) {
 		Receivers: receiverHealth{sup}, Live: receiverHealth{sup}, Feeds: feeds, Incoming: pipelineDecisions{sup}, Headers: heldHeaders{sup}, HeldFiles: heldHeaders{sup}, STOW: stowReceivers,
 		Reads: reads, SenderHealths: senderHealths{s: senders, deid: deids, scrub: scrubs, imports: imports, rebuilds: rebuilds}, SenderTests: senderTests{senders}, DeidMemory: deidMemory,
 		Installation: installation, ImportGuarded: importGuarded(d.DataDir), Corrections: engines, ReplaceSources: pipes,
-		Handoffs: handoffs{sup: sup, engines: engines, owners: owners}, StorageCleanups: cleanups})
+		Handoffs: handoffs{sup: sup, engines: engines, owners: owners}, StorageCleanups: cleanups, SealPause: sealer.Pause})
 	if err != nil {
 		closeRegistry(reg)
 		return Built{}, err
@@ -246,9 +246,14 @@ func APIServices(d Deps) (Built, error) {
 		Registry:       reg,
 		TenantsByState: counts.byState,
 		// A tenant's networks live in its own database; each answer is kept
-		// a few seconds, so a request into a tenant does not read it.
+		// a few seconds, so a request into a tenant does not read it. The
+		// rule is read through Reader: it guards every request, so a moved
+		// or fenced tenant, whose reads are served, still applies its rule,
+		// and a change there is refused afterward with the tenant's state
+		// (FAILED_PRECONDITION, TENANT_MOVED or TENANT_FENCED), never failed
+		// as an internal error by the check.
 		TenantNetworks: access.CachedTenantNetworks(func(ctx context.Context, t access.TenantRef) (settings.Networks, error) {
-			st, err := reg.Store(t.Name)
+			st, err := reg.Reader(t.Name)
 			if err != nil {
 				return nil, err
 			}
@@ -271,10 +276,13 @@ func APIServices(d Deps) (Built, error) {
 		// bounded by its own row limits, so the route is long as a whole.
 		// A store by STOW-RS may send a whole study in one request; a client
 		// that stops sending is cut by the receiver's read stall bound.
-		// An export of a long audit log streams for as long as it takes, as
-		// its contract says when the client sends no deadline.
+		// An export of a long audit log, a tenant's export and a backup
+		// stream for as long as they take, as their contract says when the
+		// client sends no deadline; a backup's client that stops reading is
+		// cut by the stall bound, which ends the read transactions it held.
 		LongMethods: []string{nopacsv1connect.DataServiceReadFilesProcedure, api.DownloadPattern, api.DICOMwebPattern, api.STOWPattern,
-			nopacsv1connect.AuditSealServiceExportAuditProcedure, nopacsv1connect.BackupServiceExportTenantProcedure},
+			nopacsv1connect.AuditSealServiceExportAuditProcedure, nopacsv1connect.BackupServiceExportTenantProcedure,
+			nopacsv1connect.BackupServiceCreateBackupProcedure},
 		// Stopped last first: the event keeper, the imports (each finishing
 		// the file it hands in), the scrubs, the deid jobs and the senders
 		// (each giving its unit back), then the receivers and pipelines,

@@ -145,12 +145,92 @@ func checkSchemas(ctx context.Context, dbs []Database) error {
 	return nil
 }
 
+// masterTenants passes the master's section to its Sink and keeps the id of
+// every row of its tenants table, so the backup can check that it holds a
+// section for each tenant the master's section lists, and none other.
+type masterTenants struct {
+	snapshot.Sink
+	// in is set while the rows are the tenants table's; col is its id
+	// column, -1 when it has none.
+	in  bool
+	col int
+	ids map[string]bool
+}
+
+// Table implements snapshot.Sink.
+func (m *masterTenants) Table(t snapshot.Table) error {
+	m.in, m.col = t.Name == "tenants", -1
+	if m.in {
+		for i, c := range t.Columns {
+			if c.Name == "id" {
+				m.col = i
+			}
+		}
+	}
+	return m.Sink.Table(t)
+}
+
+// Row implements snapshot.Sink.
+func (m *masterTenants) Row(values []any) error {
+	if m.in && m.col >= 0 && m.col < len(values) {
+		if id, ok := values[m.col].(string); ok {
+			m.ids[id] = true
+		}
+	}
+	return m.Sink.Row(values)
+}
+
+// match refuses a master's section whose tenants are not exactly the
+// tenants given. With the server stopped they always are; with it running,
+// a tenant created or removed between the listing of the tenants and the
+// master's read transaction would leave a backup whose master names a
+// tenant with no section (restored as a tenant with an empty database) or
+// a section the master does not name (which a restore refuses). Either is
+// answered unavailable: the same backup asked again a moment later
+// succeeds.
+func (m *masterTenants) match(tenants []Database) error {
+	if m.col < 0 && len(m.ids) == 0 && len(tenants) > 0 {
+		return fault.New(fault.Internal, "backup: the master's section has no tenants table with an id")
+	}
+	given := make(map[string]bool, len(tenants))
+	for _, d := range tenants {
+		given[d.TenantID] = true
+	}
+	if len(given) != len(m.ids) {
+		return tenantsChanged
+	}
+	for id := range m.ids {
+		if !given[id] {
+			return tenantsChanged
+		}
+	}
+	return nil
+}
+
+// tenantsChanged is the refusal of a backup whose master section lists
+// other tenants than the backup was given.
+var tenantsChanged = fault.New(fault.Unavailable, "backup: a tenant was created or removed while the backup was being taken; take it again")
+
 // Create writes a backup of the master and every tenant's database to
 // cfg.Out, each read in its own read transaction, encrypted as it is
 // written, so memory stays bounded whatever the databases hold. A database
 // that fails fails the backup: a backup is of the whole installation or
 // nothing. What Create wrote before a failure is no backup and opens to
 // nothing: the cipher's last chunk is written only by a whole one.
+//
+// The same function makes the backup with the server stopped and over the
+// API while it runs. Running, each database is read as of its own moment,
+// the master first and then each tenant in turn, so the sections stand for
+// moments a few seconds apart; nothing a restore needs depends on their
+// being one. Every reference between databases is a tenant's id in the
+// master, which match checks against the sections. Each tenant is
+// reconciled on its own: its correction records newer than its own recovery
+// point are applied, its catalog rebuilt from the storages as they are at
+// the restore, and what it lost after its own point reported. Every key the
+// master holds is suspended by a restore, so a key changed between the
+// master's moment and a tenant's grants nothing. The master is read first
+// so that the anchors it holds of each tenant's sealed audit log are never
+// ahead of that log as its section holds it.
 func Create(ctx context.Context, cfg CreateConfig) (Summary, error) {
 	if cfg.Keys == nil || cfg.Master == nil || cfg.Out == nil || cfg.Installation == "" {
 		return Summary{}, fault.New(fault.Internal, "backup: a backup needs the key file, the master database, the installation's id and a place to write")
@@ -192,7 +272,16 @@ func Create(ctx context.Context, cfg CreateConfig) (Summary, error) {
 		if err := pw.begin(start); err != nil {
 			return Summary{}, err
 		}
-		p, err := d.DB.Snapshot(ctx, pw)
+		var sink snapshot.Sink = pw
+		var listed *masterTenants
+		if i == 0 {
+			listed = &masterTenants{Sink: pw, ids: map[string]bool{}}
+			sink = listed
+		}
+		p, err := d.DB.Snapshot(ctx, sink)
+		if err == nil && listed != nil {
+			err = listed.match(cfg.Tenants)
+		}
 		if err != nil {
 			if d.Tenant != "" {
 				return Summary{}, fault.Wrap(fault.KindOf(err), err, "backup: the tenant "+d.Tenant+"'s database cannot be read: "+fault.Message(err))

@@ -52,11 +52,11 @@ Needs the admin role on the installation.`,
 				return fault.New(fault.Invalid, "--out and --key-out name the same file")
 			}
 			for _, p := range []string{out, keyOut} {
-				if err := absent(p); err != nil {
+				if err := absent(p, "export"); err != nil {
 					return err
 				}
 			}
-			file, err := createPart(out)
+			file, err := createPart(out, "export")
 			if err != nil {
 				return err
 			}
@@ -93,7 +93,7 @@ Needs the admin role on the installation.`,
 				return fault.Wrap(fault.KindOf(err), err, "the tenant "+output.Clean(args[0])+" is moved, and its transfer key could not be written: "+
 					fault.Message(err)+"; take it back with nopacs tenant reclaim and export it again")
 			}
-			if err := publish(part, out); err != nil {
+			if err := publish(part, out, "export"); err != nil {
 				return err
 			}
 			part = ""

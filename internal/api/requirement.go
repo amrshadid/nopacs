@@ -206,8 +206,10 @@ var rules = map[string]rule{
 	nopacsv1connect.TenantServiceReclaimTenantProcedure: fixed(installationAdmin),
 
 	// BackupService: admin on the installation. An export's handler names
-	// the tenant it hands off in its entries.
+	// the tenant it hands off in its entries; a backup's names the tenants
+	// it holds.
 	nopacsv1connect.BackupServiceExportTenantProcedure: fixed(installationAdmin),
+	nopacsv1connect.BackupServiceCreateBackupProcedure: fixed(installationAdmin),
 
 	// SettingsService: reader to read, admin to change, on the scope asked
 	// for. The object is the setting's name, never its value.
@@ -539,7 +541,6 @@ var rules = map[string]rule{
 // that serves a method moves its line into rules and its name off the
 // list, and the tests fail until both are done.
 //
-// BackupService's CreateBackup: admin on the installation.
 // ReplicaService: admin to attach,
 // detach, repair and switch, since each decides where the archive's bytes
 // are or writes to a primary; operator to backfill, recall (which costs the
@@ -552,8 +553,6 @@ var rules = map[string]rule{
 // of labels; the object of a storage, rule or hold method is its name or
 // id.
 var pendingRules = map[string]rule{
-	nopacsv1connect.BackupServiceCreateBackupProcedure: fixed(installationAdmin),
-
 	nopacsv1connect.ReplicaServiceListReplicasProcedure: byMessage(func(r *v1.ListReplicasRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{}
 	}),

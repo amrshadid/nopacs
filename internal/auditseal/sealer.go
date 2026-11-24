@@ -94,9 +94,55 @@ type Sealer struct {
 	stop  context.CancelFunc
 	done  sync.WaitGroup
 	stats stats
-	// mu keeps two passes from running at once in one process: the timer's
-	// and the last one.
+	// passing holds one token while a pass runs, so two passes never run at
+	// once in one process (the timer's and the last one), and Pause can
+	// wait for a running pass to end and still give up when its caller
+	// does, which a mutex cannot.
+	passing chan struct{}
+	// mu guards held.
 	mu sync.Mutex
+	// held counts the Pause calls not yet resumed; a pass that starts while
+	// it is above zero seals nothing.
+	held int
+}
+
+// Pause waits for a pass that is running to end and keeps any other from
+// sealing until the function it returns is called; that function may be
+// called more than once. It gives up, with ctx's error and nothing paused,
+// when ctx ends first: a pass stuck on a database that does not answer must
+// not hold the caller for ever. A pass that comes due while paused is
+// skipped, not waited for, so neither the timer nor Stop waits on what
+// paused it; the next pass seals what was written meanwhile, since a seq is
+// given at sealing. A backup made while the server runs reads the master
+// and each tenant's database at moments apart: a pass between two of those
+// reads would leave a database holding an anchor of a checkpoint another
+// database's section does not hold yet, which a restore of that backup
+// would then report as a log rolled back.
+func (s *Sealer) Pause(ctx context.Context) (resume func(), err error) {
+	select {
+	case s.passing <- struct{}{}:
+	case <-ctx.Done():
+		return nil, fault.Wrap(fault.Unavailable, ctx.Err(), "auditseal: a sealing pass is running and did not end before the request did")
+	}
+	s.mu.Lock()
+	s.held++
+	s.mu.Unlock()
+	<-s.passing
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.mu.Lock()
+			s.held--
+			s.mu.Unlock()
+		})
+	}, nil
+}
+
+// paused reports whether a Pause is not yet resumed.
+func (s *Sealer) paused() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.held > 0
 }
 
 // New returns a Sealer that is not yet running.
@@ -114,7 +160,7 @@ func New(cfg Config) (*Sealer, error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Sealer{cfg: cfg, log: log}, nil
+	return &Sealer{cfg: cfg, log: log, passing: make(chan struct{}, 1)}, nil
 }
 
 // Start runs a pass at once and then one every interval, read again after
@@ -175,8 +221,12 @@ func (s *Sealer) interval(ctx context.Context) time.Duration {
 // the server once more through Last; a test calls it directly. A log that
 // fails is logged and left for the next pass.
 func (s *Sealer) Pass(ctx context.Context) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.passing <- struct{}{}
+	defer func() { <-s.passing }()
+	if s.paused() {
+		s.log.Info("auditseal: a backup is reading the databases; this pass is skipped and the next seals what was written meanwhile")
+		return
+	}
 	var oldest time.Time
 	masterLast, masterOK := s.seal(ctx, s.cfg.Master, master.MasterAuditLog, "")
 	// The anchors the master keeps, read once a pass: a read per tenant

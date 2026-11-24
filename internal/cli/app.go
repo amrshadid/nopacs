@@ -318,7 +318,7 @@ that can no longer be answered, 7 a bound of the server reached.`,
 
 	root.AddCommand(
 		a.newVersion(),
-		moved("init", "nopacs-server init"), moved("serve", "nopacs-server serve"), moved("backup", "nopacs-server backup"),
+		moved("init", "nopacs-server init"), moved("serve", "nopacs-server serve"),
 		a.newWhoami(),
 		a.newContext(),
 		a.newTenant(),
@@ -339,33 +339,30 @@ that can no longer be answered, 7 a bound of the server reached.`,
 		a.newCatalog(),
 		a.newScan(),
 		a.newDownload(),
+		a.newBackup(),
 	)
 	return root
 }
 
 // moved returns a command that exists only to say where it went: init, serve,
-// backup and tenant import must touch the data directory with no server
-// running, so they belong to the nopacs-server program, and a person who types
-// one here is told so in one line (a usage error, exit 2) instead of "unknown
-// command". It takes any arguments and flags, so what was typed after the name
-// never changes the answer. It is hidden from the help: the command line lists
-// only what it does. target is what to run instead, without a verb.
+// backup verify and restore, and tenant import must touch the data directory
+// or the key file on the server's machine, so they belong to the
+// nopacs-server program, and a person who types one here is told so in one
+// line (a usage error, exit 2) instead of "unknown command". It takes any
+// arguments and flags, so what was typed after the name never changes the
+// answer. It is hidden from the help: the command line lists only what it
+// does. target is what to run instead.
 func moved(use, target string) *cobra.Command {
 	return &cobra.Command{
 		Use:                use,
 		Hidden:             true,
 		DisableFlagParsing: true,
 		Short:              "Moved to " + target,
-		Long:               "This command is part of the nopacs-server program, which holds the commands that touch the data directory with the server stopped.",
+		Long:               "This command is part of the nopacs-server program, which holds the commands that run on the server's machine.",
 		Example:            "  " + target,
 		Args:               cobra.ArbitraryArgs,
-		RunE: func(_ *cobra.Command, args []string) error {
-			// A verb typed after a group ("backup create") is named too.
-			run := target
-			if use == "backup" && len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-				run += " " + args[0]
-			}
-			return &runError{fault.New(fault.Invalid, "is not a nopacs command; run "+run)}
+		RunE: func(*cobra.Command, []string) error {
+			return &runError{fault.New(fault.Invalid, "is not a nopacs command; run "+target)}
 		},
 	}
 }

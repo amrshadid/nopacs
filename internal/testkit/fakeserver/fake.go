@@ -72,6 +72,7 @@ type Server struct {
 	deid      deid
 	seal      sealState
 	corr      corrections
+	backup    backupScript
 }
 
 // keyRecord is a key and the secret it was made with.
@@ -192,6 +193,7 @@ func (s *Server) Register(srv *connect.Server) {
 	s.registerDeid(srv)
 	s.registerRead(srv)
 	s.registerCorrections(srv)
+	nopacsv1connect.RegisterBackupServiceHandler(srv, backupHandler{s})
 }
 
 // interceptor is the one place every call passes: the request id first, so

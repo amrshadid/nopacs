@@ -116,14 +116,13 @@ tenant, a key, a storage, a receiver, a sender, a job) is not repeated plainly.
 
 ## What is served
 
-Every method of the contract is served except `BackupService/CreateBackup` (make a
-backup with `nopacs-server backup create` on the server's machine) and all of
-`ReplicaService` and `RetentionService`. Calling one of those, as an authenticated
+Every method of the contract is served except all of `ReplicaService` and
+`RetentionService`. Calling one of those, as an authenticated
 caller, answers `UNIMPLEMENTED`. `api/not-served.txt` in the repository lists them,
 and the tests keep the list true.
 
-The services: access (keys and grants), audit and audit seal, backup (a tenant's
-export), catalog, correction, data (the files of a scan), deid, job, metadata,
+The services: access (keys and grants), audit and audit seal, backup (a backup of
+the installation while it runs, and a tenant's export), catalog, correction, data (the files of a scan), deid, job, metadata,
 monitor (status and the live event feed), profile, quarantine, receiver, reception,
 sender, settings, storage and tenant. Each `*.proto` file holds one.
 

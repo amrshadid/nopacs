@@ -69,6 +69,8 @@ func TestBuiltin(t *testing.T) {
 
 		DeleteGrace: {Ordinary, "7d", false},
 
+		BackupMaxDuration: {InstallationOnly, "6h", false},
+
 		ImportRoots:          {InstallationOnly, "", false},
 		ImportAllowedRoots:   {SetByInstallation, "", true},
 		ImportMaxUnits:       {SetByInstallation, "4", false},

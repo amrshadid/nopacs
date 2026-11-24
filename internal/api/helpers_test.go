@@ -39,6 +39,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/receive"
 	"github.com/amrshadid/nopacs/internal/registry"
 	"github.com/amrshadid/nopacs/internal/secret"
+	"github.com/amrshadid/nopacs/internal/snapshot"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -227,6 +228,19 @@ type faultyMaster struct {
 	master.Store
 	failSetSetting   atomic.Bool
 	failRemoveTenant atomic.Bool
+	// failAppendAudit fails the entries a handler writes itself, before
+	// its answer; the access package's audit writer writes to the master
+	// unwrapped and is not affected.
+	failAppendAudit atomic.Bool
+}
+
+// AppendAudit fails as a master that does not answer while failAppendAudit
+// is set.
+func (m *faultyMaster) AppendAudit(ctx context.Context, entries ...master.AuditEntry) error {
+	if m.failAppendAudit.Load() {
+		return fault.New(fault.Unavailable, "the master does not answer (a test)")
+	}
+	return m.Store.AppendAudit(ctx, entries...)
 }
 
 // SetSetting fails as a master that does not answer while failSetSetting is
@@ -245,6 +259,27 @@ func (m *faultyMaster) RemoveTenant(ctx context.Context, id string, audit master
 		return fault.New(fault.Unavailable, "the master does not answer (a test)")
 	}
 	return m.Store.RemoveTenant(ctx, id, audit, by)
+}
+
+// CheckSchema implements snapshot.Database through the master it wraps, so
+// a backup reads the real master's database.
+func (m *faultyMaster) CheckSchema(ctx context.Context) error {
+	return m.Store.(snapshot.Database).CheckSchema(ctx)
+}
+
+// Snapshot implements snapshot.Database through the master it wraps.
+func (m *faultyMaster) Snapshot(ctx context.Context, sink snapshot.Sink) (snapshot.Point, error) {
+	return m.Store.(snapshot.Database).Snapshot(ctx, sink)
+}
+
+// MigrateTo implements snapshot.Database through the master it wraps.
+func (m *faultyMaster) MigrateTo(ctx context.Context, version int) error {
+	return m.Store.(snapshot.Database).MigrateTo(ctx, version)
+}
+
+// Load implements snapshot.Database through the master it wraps.
+func (m *faultyMaster) Load(ctx context.Context, version int, src snapshot.Source) error {
+	return m.Store.(snapshot.Database).Load(ctx, version, src)
 }
 
 // env is one test's installation: a SQLite master and SQLite tenants in a
@@ -301,6 +336,9 @@ type env struct {
 	// handoffs is what the handlers ask to drain a tenant and check its
 	// owner records: it answers as a test sets it.
 	handoffs testHandoffs
+	// sealPauses counts the pauses of the audit's sealing pass the handlers
+	// hold now.
+	sealPauses atomic.Int64
 }
 
 // newEnv returns a running installation with no tenant and no key, whose
@@ -375,7 +413,11 @@ func newEnvChecking(t testing.TB, interval time.Duration) *env {
 	e.engines = newTestEngines(t, e)
 	h, err := api.New(api.Config{Access: e.access, Registry: e.registry, Master: e.faulty, NewID: tenantID, Log: logger, Settings: e.known, Keys: e.keys, Now: e.now,
 		Incoming: e.parts, Headers: e.parts, HeldFiles: e.parts, Receivers: e.parts, Feeds: feeds, Installation: testInstallation,
-		Corrections: e.engines, ReplaceSources: testReplaceSources{e}, Handoffs: &e.handoffs})
+		Corrections: e.engines, ReplaceSources: testReplaceSources{e}, Handoffs: &e.handoffs,
+		SealPause: func(context.Context) (func(), error) {
+			e.sealPauses.Add(1)
+			return func() { e.sealPauses.Add(-1) }, nil
+		}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/access"
 	"github.com/amrshadid/nopacs/internal/dirimport"
 	"github.com/amrshadid/nopacs/internal/place"
+	"github.com/amrshadid/nopacs/internal/snapshot"
 	"github.com/amrshadid/nopacs/internal/trial"
 )
 
@@ -44,6 +45,20 @@ func SetImportCheck(h Handlers, roots dirimport.Roots, timeout time.Duration) {
 // SetSummarySend makes the summary of every export by h meet err in place
 // of its Send, after the export's data was streamed.
 func SetSummarySend(h Handlers, err error) { h.c.seams.summarySend = err }
+
+// SetBackupDatabases makes every backup by h read each database through
+// wrap, given the tenant's name ("" for the master) and the database.
+func SetBackupDatabases(h Handlers, wrap func(tenantName string, db snapshot.Database) snapshot.Database) {
+	h.c.seams.backupDatabase = wrap
+}
+
+// SetBackupLimit makes every backup by h bounded by limit in place of
+// backup.max-duration, whose least value is a minute.
+func SetBackupLimit(h Handlers, limit time.Duration) { h.c.seams.backupLimit = limit }
+
+// SetRecheck makes every stream by h check its caller's key again each
+// every, in place of RecheckInterval.
+func SetRecheck(h Handlers, every time.Duration) { h.c.seams.recheck = every }
 
 // SetSenderHealths makes the services of h answer a sender's health from
 // healths, as the part of the server that sends would.

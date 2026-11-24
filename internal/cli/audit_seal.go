@@ -394,10 +394,10 @@ Export before setting audit.retention: what retention prunes is gone.`,
 			var file *os.File
 			var part string
 			if !toStdout {
-				if err := absent(out); err != nil {
+				if err := absent(out, "export"); err != nil {
 					return err
 				}
-				if file, err = createPart(out); err != nil {
+				if file, err = createPart(out, "export"); err != nil {
 					return err
 				}
 				part = file.Name()
@@ -432,7 +432,7 @@ Export before setting audit.retention: what retention prunes is gone.`,
 				return fault.Wrap(fault.Internal, err, "writing the export: "+err.Error())
 			}
 			file = nil
-			if err := publish(part, out); err != nil {
+			if err := publish(part, out, "export"); err != nil {
 				return err
 			}
 			part = ""
@@ -464,51 +464,53 @@ Export before setting audit.retention: what retention prunes is gone.`,
 
 // absent returns a Precondition error when something is at path, a symbolic
 // link included, and an Internal one when whether something is there cannot
-// be told: an export never replaces a file, nor guesses that none is there.
-func absent(path string) error {
+// be told: what is written (what: "export", "backup") never replaces a
+// file, nor guesses that none is there.
+func absent(path, what string) error {
 	_, err := os.Lstat(path)
 	switch {
 	case err == nil:
-		return fault.New(fault.Precondition, fmt.Sprintf("%s exists; an export never replaces a file, so name another or remove it", output.Clean(path)))
+		return fault.New(fault.Precondition, fmt.Sprintf("%s exists; writing the %s never replaces a file, so name another or remove it", output.Clean(path), what))
 	case errors.Is(err, fs.ErrNotExist):
 		return nil
 	}
-	return fault.Wrap(fault.Internal, err, "writing the export: "+err.Error())
+	return fault.Wrap(fault.Internal, err, "writing the "+what+": "+err.Error())
 }
 
-// createPart creates the temporary an export is written to, beside out so
-// it can be published by a link or a rename: a new file of a name no other
-// file has (os.CreateTemp opens it with O_EXCL, so a symbolic link or a
-// file put at a name it picks is never written through or truncated), read
-// and written by its owner alone (audit entries name who did what).
-func createPart(out string) (*os.File, error) {
+// createPart creates the temporary an export or a backup (what) is written
+// to, beside out so it can be published by a link or a rename: a new file of
+// a name no other file has (os.CreateTemp opens it with O_EXCL, so a
+// symbolic link or a file put at a name it picks is never written through or
+// truncated), read and written by its owner alone (audit entries name who
+// did what).
+func createPart(out, what string) (*os.File, error) {
 	dir, base := filepath.Split(out)
 	if dir == "" {
 		dir = "."
 	}
 	f, err := os.CreateTemp(dir, "."+base+".*.part")
 	if err != nil {
-		return nil, fault.Wrap(fault.Internal, err, "writing the export: "+err.Error())
+		return nil, fault.Wrap(fault.Internal, err, "writing the "+what+": "+err.Error())
 	}
 	if err := f.Chmod(0o600); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
-		return nil, fault.Wrap(fault.Internal, err, "writing the export: "+err.Error())
+		return nil, fault.Wrap(fault.Internal, err, "writing the "+what+": "+err.Error())
 	}
 	return f, nil
 }
 
-// publish gives the written temporary part the name out, never replacing
-// what is there: a hard link fails when out exists, at the moment it is
-// made, so a file that appeared while the export was written is refused,
-// not replaced, and the temporary is removed after. Where a link cannot be
-// made (Windows, or a file system without hard links) it renames after
-// checking out is absent, which leaves a moment between the check and the
-// rename in which a file made at out is replaced.
-func publish(part, out string) error {
+// publish gives the written temporary part of an export or a backup (what)
+// the name out, never replacing what is there: a hard link fails when out
+// exists, at the moment it is made, so a file that appeared while it was
+// written is refused, not replaced, and the temporary is removed after.
+// Where a link cannot be made (Windows, or a file system without hard
+// links) it renames after checking out is absent, which leaves a moment
+// between the check and the rename in which a file made at out is replaced.
+func publish(part, out, what string) error {
 	appeared := func() error {
 		_ = os.Remove(part)
-		return fault.New(fault.Precondition, fmt.Sprintf("%s appeared while the export was written; the export is not kept", output.Clean(out)))
+		return fault.New(fault.Precondition, fmt.Sprintf("%s appeared while the %s was written; the %s is not kept", output.Clean(out), what, what))
 	}
 	if runtime.GOOS != "windows" {
 		err := os.Link(part, out)
@@ -520,7 +522,7 @@ func publish(part, out string) error {
 			return appeared()
 		}
 	}
-	if err := absent(out); err != nil {
+	if err := absent(out, what); err != nil {
 		if fault.KindOf(err) == fault.Precondition {
 			return appeared()
 		}
@@ -529,7 +531,7 @@ func publish(part, out string) error {
 	}
 	if err := os.Rename(part, out); err != nil {
 		_ = os.Remove(part)
-		return fault.Wrap(fault.Internal, err, "writing the export: "+err.Error())
+		return fault.Wrap(fault.Internal, err, "writing the "+what+": "+err.Error())
 	}
 	return nil
 }

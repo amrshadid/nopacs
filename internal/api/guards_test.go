@@ -73,6 +73,7 @@ func everyMethod(f *fixture) map[string]func(clients) outcome {
 			x := export(c, "lab1")
 			return outcome{err: x.err, requestID: x.requestID}
 		},
+		"CreateBackup": func(c clients) outcome { return createBackup(c).outcome() },
 		"ReclaimTenant": func(c clients) outcome {
 			return call(c.tenants.ReclaimTenant, &v1.ReclaimTenantRequest{Name: "lab1"})
 		},

@@ -63,9 +63,7 @@ func (t Table) Requirement(procedure string, msg proto.Message) (access.Requirem
 // pendingMethods are the methods of services otherwise served that the
 // contract defines and no handler serves yet: the method lines of
 // api/not-served.txt, which a test compares with this list.
-var pendingMethods = []string{
-	nopacsv1connect.BackupServiceCreateBackupProcedure,
-}
+var pendingMethods = []string{}
 
 // Pending reports whether procedure is one of pendingMethods, so the server
 // leaves it out of its routes as the binary's server does
@@ -144,6 +142,7 @@ func Contract() Table {
 		nopacsv1connect.TenantServiceReclaimTenantProcedure: admin,
 		// BackupService: "Role: admin on the installation."
 		nopacsv1connect.BackupServiceExportTenantProcedure: admin,
+		nopacsv1connect.BackupServiceCreateBackupProcedure: admin,
 
 		nopacsv1connect.SettingsServiceGetSettingProcedure: byMessage(
 			func() *nopacsv1.GetSettingRequest { return &nopacsv1.GetSettingRequest{} },

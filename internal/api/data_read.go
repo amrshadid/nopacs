@@ -49,7 +49,11 @@ func (c *core) watchKey(ctx context.Context, d access.Decision) (context.Context
 	ended := make(chan struct{})
 	go func() {
 		defer close(ended)
-		t := time.NewTicker(RecheckInterval)
+		every := RecheckInterval
+		if c.seams.recheck > 0 {
+			every = c.seams.recheck
+		}
+		t := time.NewTicker(every)
 		defer t.Stop()
 		for {
 			select {
