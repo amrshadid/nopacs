@@ -1,0 +1,581 @@
+package tenant
+
+import (
+	"context"
+	"time"
+
+	"github.com/amrshadid/nopacs/internal/core/label"
+	"github.com/amrshadid/nopacs/internal/core/record"
+	"github.com/amrshadid/nopacs/internal/master"
+)
+
+// Corrections is what the tenant's database keeps of corrections: recorded
+// changes to archived data, a delete, a relabel or a replace. The storage
+// side (the correction records, the copies, the new revisions, the purge
+// of objects) is the caller's; the store holds the one authority on how
+// far each correction got while the database lives.
+//
+// # The state machine
+//
+// A correction moves forward only (record.State.CanFollow): prepared to
+// committed or abandoned, committed to purging or (a delete) undone,
+// purging to purged. PrepareCorrection commits its row, prepared, with the
+// operation id the caller made (ValidateCorrectionID), its target, its
+// reason and its audit entry, before the caller writes anything to a
+// storage. CommitCorrection is the publishing transaction: what the
+// correction changes becomes visible to every read at once, with an
+// EventCatalogChanged. A transition a correction's state does not allow is
+// a precondition failure that changes nothing; asked of a correction
+// already in the state it would reach, it is answered as it stands, so a
+// step run again after a crash changes nothing more.
+//
+// # What a delete hides
+//
+// A delete's publishing transaction moves the catalog's rows of its target
+// out of every read: the subject, session and scan rows it removes whole
+// (a scan whose last instance it removes, a session whose last scan, a
+// subject whose last session, go with it), the instances, their scans'
+// receptions' counts, the sessions' modalities; the running totals of the
+// rows that stay, of the catalog and of each storage move with them. An
+// undo puts every row back as it was, its integer id kept when no row has
+// taken it since. Its purge, once its objects are removed, drops the rows
+// for good, and keeps for each instance its revision and checksum
+// (ResolveInstances answers it deleted).
+//
+// What names the deleted data is kept from the prepare on
+// (DeletedMatches): the subject's label for a subject's delete, and each
+// label the subject had before a relabel; each session's Study Instance UID
+// for a session's or a subject's, each scan's Series Instance UID, the
+// instance's SOP Instance UID. It stays after the purge: a withdrawal
+// holds. An abandoned or undone delete keeps nothing; AllowArrivals stops
+// one value of a purged delete from matching.
+//
+// # What a correction owns
+//
+// The publishing transaction fixes the objects the correction may remove
+// at its purge (PurgeTargets): the objects of the instances it hides,
+// relabels or supersedes, by their labels then, and the manifest and
+// metadata of each scan it hides or relabels, with the SHA-256 the caller
+// read of them before the publish (CorrectionCommit.Snapshots). A purge
+// never decides what to remove from what a storage holds now. While a
+// delete or relabel has not ended, the labels and UIDs it holds (a delete's
+// hidden rows; a relabel's old labels, and its new ones while prepared) are
+// taken for arrivals (HeldByCorrection): the archive step holds a file that
+// would land on them as a label conflict naming the correction, and the
+// commit refuses it.
+//
+// # The clock
+//
+// A purge is refused while the server's clock reads earlier than the
+// latest commit, purge or trusted time the corrections recorded (a clock
+// set back would purge early); an automatic purge is also paused while the
+// clock reads more than MaxClockStep past the last time it was trusted (a
+// clock that jumped forward would end every grace at once). An admin's
+// purge trusts the clock it runs at.
+//
+// # Relabel and replace
+//
+// A relabel's publishing transaction changes the labels of the whole
+// target at once: the subject, session and scan rows and the copies of
+// their labels in the rows beneath, and the keys of the instances whose
+// revision is past the first (whose key the catalog holds whole). A
+// replace's gives its instance the next revision, at its revision key, with
+// the new checksums, size and reception; keeps the revision it superseded
+// (instance_revisions); clears the instance's damage mark; and marks the
+// quarantined file released. Both give each scan they touch the SHA-256 of
+// the manifest written for it.
+//
+// # Overlap
+//
+// A correction is refused (precondition) while another not yet ended
+// covers any of the scans its target covers, under the old labels or a
+// relabel's new ones, compared case folded (label.Fold); and a delete or
+// relabel while a reception of any of its studies, or of its subject, has
+// not ended.
+type Corrections interface {
+	// PreviewDelete answers what a delete of target would remove, as the
+	// catalog holds it now, and the token a delete must carry (Confirm):
+	// a digest of the answer and of now.
+	PreviewDelete(ctx context.Context, target CorrectionTarget, now time.Time) (DeletePreview, error)
+	// PrepareCorrection commits a new correction, prepared, with its audit
+	// entry; it returns the correction, and false when an existing one is
+	// answered instead: a delete whose confirm token made one already, a
+	// replace of a quarantined file a replace not abandoned used, a
+	// relabel of the same target to the same label prepared or committed
+	// (one purged is done, and the same relabel asked later is new). A
+	// delete's token that does not match the preview made in this
+	// transaction, or is more than MaxConfirmAge old, is a precondition
+	// failure.
+	PrepareCorrection(ctx context.Context, p CorrectionPrepare, audit master.AuditEntry, guard Guard) (Correction, bool, error)
+	// CorrectionScans returns the scans the correction touches, by the
+	// labels they had when it was made, in order of storage then Series
+	// Instance UID.
+	CorrectionScans(ctx context.Context, id string) ([]CorrectionScan, error)
+	// CommitCorrection publishes a prepared correction (the publishing
+	// transaction above), fixing its CommitTime and PurgeAfter from
+	// c.Now and c.Grace.
+	CommitCorrection(ctx context.Context, c CorrectionCommit) (Correction, error)
+	// AbandonCorrection ends a prepared correction as abandoned, with why
+	// (a phrase of at most MaxStateReasonLength bytes); what names a
+	// delete's data stops matching.
+	AbandonCorrection(ctx context.Context, id, why string, now time.Time) (Correction, error)
+	// UndoCorrection undoes a committed delete, showing its rows again as
+	// they were, with the reason given and an EventCatalogChanged, or
+	// abandons a prepared relabel. A row of the catalog that has taken one
+	// of the delete's labels since is a precondition failure.
+	UndoCorrection(ctx context.Context, id, reason string, now time.Time, audit master.AuditEntry, guard Guard) (Correction, error)
+	// StartPurge moves a committed correction to purging. With audit nil it
+	// is the server's, and only a correction whose PurgeAfter has come and
+	// that is not unresolved moves; with an audit entry it is an admin's,
+	// and moves now (confirming an unresolved one). Both are refused while
+	// the clock reads earlier than a time recorded; the server's is also
+	// refused while the clock jumped (CheckPurgeClock).
+	StartPurge(ctx context.Context, id string, now time.Time, audit *master.AuditEntry, guard Guard) (Correction, error)
+	// CheckPurgeClock answers a precondition failure, changing nothing,
+	// when an automatic purge may not run at now: the clock reads earlier
+	// than the latest commit, purge or trusted time recorded, or more than
+	// MaxClockStep after the trusted time; else it records now as trusted.
+	CheckPurgeClock(ctx context.Context, now time.Time) error
+	// PurgeTargets returns, in order (every instance, then each scan's
+	// metadata, then its manifest), at most limit objects of a purging
+	// correction not yet settled, each saying whether a row of the catalog
+	// resolves to it now.
+	PurgeTargets(ctx context.Context, id string, limit int) ([]PurgeTarget, error)
+	// AddPurgeTargets records objects a purging correction owns that its
+	// publish did not fix (a correction known only from its record, after a
+	// restore); one recorded already is left as it is.
+	AddPurgeTargets(ctx context.Context, id string, targets []PurgeTarget) error
+	// SettlePurgeTargets records, in one transaction, what became of each
+	// of at most MaxPurgeTargets objects of a purging correction, and what
+	// its storage did with each version of those purged; one settled
+	// already, or a version recorded already, is left as it is.
+	SettlePurgeTargets(ctx context.Context, id string, settled []PurgeSettled) error
+	// RecordPurgedObject records one object of a purging correction removed
+	// from a storage, and what the storage did; recording the same object
+	// and version again changes nothing. For a purged correction it records
+	// what a later pass did with a version the storage retained.
+	RecordPurgedObject(ctx context.Context, o PurgedObject) error
+	// RetainedDue returns at most limit versions purged corrections
+	// recorded retained whose retention has ended by now.
+	RetainedDue(ctx context.Context, now time.Time, limit int) ([]PurgedObject, error)
+	// ClearWithdrawn removes, for a purging delete, what else names its
+	// data: the quarantined files of its target (records, any reason and
+	// state) and, for a session or subject, the received files of its
+	// ended receptions, whose subject, session and study it gives the
+	// correction's id. It returns the incoming paths whose bytes the caller
+	// removes; a run again finds nothing.
+	ClearWithdrawn(ctx context.Context, id string) ([]string, error)
+	// FinishPurge ends a purging correction as purged: a delete's hidden
+	// rows dropped (each instance's revision kept), a superseded revision
+	// marked purged; for an instance delete, the scan given the SHA-256 of
+	// the manifest written without the instance, when its manifest is still
+	// the one the purge read (ManifestBefore).
+	FinishPurge(ctx context.Context, f PurgeFinish) (Correction, error)
+	// RecordCopied sets how many objects a prepared relabel has copied.
+	RecordCopied(ctx context.Context, id string, copied int64) error
+	// MarkRecords records that every correction record of the correction
+	// was written with state.
+	MarkRecords(ctx context.Context, id string, state record.State) error
+	// Correction returns the correction of that id, or NotFound.
+	Correction(ctx context.Context, id string) (Correction, error)
+	// ListCorrections returns a page of the corrections the filter keeps,
+	// newest first.
+	ListCorrections(ctx context.Context, filter CorrectionFilter, page master.Page) ([]Correction, string, error)
+	// PendingCorrections returns, in order of id after the id given, at
+	// most limit corrections a start has to take up: those not ended, those
+	// whose records were not written with their state, and abandoned
+	// relabels whose copies were not swept.
+	PendingCorrections(ctx context.Context, after string, limit int) ([]Correction, error)
+	// MarkSwept records that an abandoned relabel's copies were removed.
+	MarkSwept(ctx context.Context, id string) error
+	// SweepableScans answers, by Series Instance UID, which scans of a
+	// relabel no longer prepared may have their copies under the new labels
+	// removed: those whose new path no live scan and no other correction
+	// not ended holds.
+	SweepableScans(ctx context.Context, id string) (map[string]bool, error)
+	// DueCorrections returns, in order of PurgeAfter, at most limit
+	// committed corrections whose PurgeAfter is not after now, unresolved
+	// ones left out, then the purging ones a stop or a failure left.
+	DueCorrections(ctx context.Context, now time.Time, limit int) ([]Correction, error)
+	// AllowArrivals lets one value a purged delete holds (Correction.Holds)
+	// arrive again. A delete not yet purged is a precondition failure, as is
+	// a correction that is not a delete or holds nothing.
+	AllowArrivals(ctx context.Context, id string, value HeldValue, reason string, now time.Time, audit master.AuditEntry,
+		guard Guard) (Correction, error)
+	// DeletedMatches answers which of what p names a delete not undone,
+	// abandoned or allowed names.
+	DeletedMatches(ctx context.Context, p DeletedProbe) (DeletedMatch, error)
+	// HeldByCorrection answers the correction not ended, and the level,
+	// that holds the scan path p or its study or series for arrivals, or
+	// the zero value.
+	HeldByCorrection(ctx context.Context, p label.Path, studyUID, seriesUID string) (CorrectionHold, error)
+	// ResolveInstances answers each pair, in the order given.
+	ResolveInstances(ctx context.Context, refs []InstanceRef) ([]ResolvedInstance, error)
+}
+
+// The bounds of corrections.
+const (
+	// MaxStateReasonLength is the longest state reason, the contract's.
+	MaxStateReasonLength = 256
+	// MaxConfirmAge is how long a delete's confirm token holds.
+	MaxConfirmAge = time.Hour
+	// MaxPreviewJobs is the most jobs a preview names.
+	MaxPreviewJobs = 100
+	// MaxResolve is the most pairs one ResolveInstances answers.
+	MaxResolve = 1000
+	// MaxDeletedProbe is the most series or instances one DeletedMatches
+	// looks up.
+	MaxDeletedProbe = 1000
+	// MaxGrace is the longest grace period, the contract's 90 days.
+	MaxGrace = 90 * 24 * time.Hour
+	// DefaultGrace is delete.grace when the tenant sets none.
+	DefaultGrace = 7 * 24 * time.Hour
+	// MaxClockStep is how far past the last trusted time the clock may read
+	// for an automatic purge to run. The tenant has no setting for it yet;
+	// two days lets a server be stopped over a weekend without an admin.
+	MaxClockStep = 48 * time.Hour
+	// MaxPurgeTargets is the most objects one PurgeTargets answers.
+	MaxPurgeTargets = 1000
+)
+
+// OriginPerson is the origin of a correction a person asked for.
+const OriginPerson = "person"
+
+// StateReasonUnresolved is the state reason of a correction found on a
+// storage with no row.
+const StateReasonUnresolved = "found on storage without its row"
+
+// CorrectionTarget names what a correction acts on, by labels and, for one
+// instance, its SOP Instance UID.
+type CorrectionTarget struct {
+	// Subject is the subject's label; required.
+	Subject string
+	// Session and Scan are the session's and scan's labels, empty for the
+	// level above.
+	Session, Scan string
+	// Instance is one instance's SOP Instance UID; empty for the whole
+	// scan.
+	Instance string
+}
+
+// Path returns the target's labels.
+func (t CorrectionTarget) Path() label.Path {
+	return label.Path{Subject: t.Subject, Session: t.Session, Scan: t.Scan}
+}
+
+// Level returns the level the target names (record.LevelSubject and the
+// others).
+func (t CorrectionTarget) Level() string {
+	switch {
+	case t.Instance != "":
+		return record.LevelInstance
+	case t.Scan != "":
+		return record.LevelScan
+	case t.Session != "":
+		return record.LevelSession
+	}
+	return record.LevelSubject
+}
+
+// CorrectionCounts are what a correction covers and how far it got.
+type CorrectionCounts struct {
+	// Subjects, Sessions, Scans and Instances are what it covers, Bytes
+	// those instances' bytes.
+	Subjects, Sessions, Scans, Instances, Bytes int64
+	// ObjectsRemoved and BytesRemoved count what its purge recorded.
+	ObjectsRemoved, BytesRemoved int64
+	// ObjectsCopied counts what a relabel copied.
+	ObjectsCopied int64
+	// ObjectsSuperseded counts what a relabel or replace keeps until its
+	// purge.
+	ObjectsSuperseded int64
+	// ObjectsKept counts the objects its purge left because a live row
+	// resolves to them or their bytes changed since the publish;
+	// ObjectsOwned counts every object it owns (PurgeTargets), settled or
+	// not.
+	ObjectsKept, ObjectsOwned int64
+}
+
+// PeerCopy is one sender a correction's data was sent to.
+type PeerCopy struct {
+	// Sender is the sender's name.
+	Sender string
+	// Instances counts the instances it answered sent.
+	Instances int64
+	// LastSend is when the last of its jobs that sent any changed state.
+	LastSend time.Time
+}
+
+// DeletePreview is what a delete would remove.
+type DeletePreview struct {
+	// Target is what was asked, and Level what the delete removes: the
+	// target's, or a scan's for an instance that is its scan's last.
+	Target CorrectionTarget
+	// Counts is what it covers.
+	Counts CorrectionCounts
+	// Storages are the storages that hold any of it, by name.
+	Storages []string
+	// SentTo are the senders any of it was sent to, by name: for one
+	// instance, those its scan was sent to.
+	SentTo []PeerCopy
+	// Jobs are the ids of at most MaxPreviewJobs jobs not ended that name
+	// its subject (and its session and scan, when they name one), newest
+	// first; JobsNotListed counts the rest. TenantJobs counts the jobs not
+	// ended over the whole tenant, which may reach it too; they start and
+	// end without changing the token.
+	Jobs          []string
+	JobsNotListed int64
+	TenantJobs    int64
+	// Quarantined and Receptions count what its purge clears besides its
+	// objects: the quarantined files of its target, and the receptions of
+	// its sessions whose labels and study it blanks.
+	Quarantined, Receptions int64
+	// HeldAfterPurge are the subject labels arrivals stay held under after
+	// the purge: a subject's label and its labels before a relabel.
+	HeldAfterPurge []string
+	// Issued is when the preview was made; Confirm its token.
+	Issued  time.Time
+	Confirm string
+}
+
+// CorrectionPrepare is a correction to record, prepared.
+type CorrectionPrepare struct {
+	// ID is its operation id (ValidateCorrectionID).
+	ID string
+	// Kind is what it does.
+	Kind record.Kind
+	// Target is what it acts on: for a relabel a subject, session or scan;
+	// for a replace, filled by the store from the quarantined file.
+	Target CorrectionTarget
+	// ToLabel is a relabel's new label.
+	ToLabel string
+	// Quarantine is a replace's quarantined file; NewSHA256 and NewSize the
+	// bytes it puts (after de-identification); RestoreLine the instance's
+	// line of the scan's metadata as it was, kept while it is prepared so
+	// a stop can write it back.
+	Quarantine  string
+	NewSHA256   SHA256
+	NewSize     int64
+	RestoreLine []byte
+	// Reason is the person's reason; Confirm a delete's token.
+	Reason, Confirm string
+	// KeyID is the key that asked, empty for the local operator.
+	KeyID string
+	// Now is when.
+	Now time.Time
+}
+
+// CorrectionCommit is a correction to publish.
+type CorrectionCommit struct {
+	// ID names it.
+	ID string
+	// Now is the publishing time, Grace the tenant's delete.grace then.
+	Now   time.Time
+	Grace time.Duration
+	// Manifests are, by Series Instance UID, the SHA-256 of the manifest a
+	// relabel or replace wrote for each scan it touches.
+	Manifests map[string]SHA256
+	// Snapshots are, by Series Instance UID, what a delete of scans or a
+	// relabel read of each scan's manifest and metadata under the old labels
+	// before the publish: the objects its purge may remove, and only while
+	// their bytes are these.
+	Snapshots map[string]ScanSnapshot
+}
+
+// CorrectionScan is a scan a correction touches.
+type CorrectionScan struct {
+	// Storage is the storage it is on.
+	Storage string
+	// Path is its labels when the correction was made; NewPath a
+	// relabel's, the same as Path otherwise.
+	Path, NewPath label.Path
+	// StudyUID and SeriesUID name it.
+	StudyUID, SeriesUID string
+	// Instances and Bytes are what it held.
+	Instances, Bytes int64
+}
+
+// Disposition is what a storage did with an object a purge removed.
+type Disposition string
+
+// The dispositions, the contract's ObjectDisposition.
+const (
+	DispositionRemoved  Disposition = "removed"
+	DispositionHidden   Disposition = "hidden"
+	DispositionRetained Disposition = "retained"
+	DispositionUnknown  Disposition = "unknown"
+)
+
+// PurgedObject is one object a purge removed.
+type PurgedObject struct {
+	// ID is the correction's.
+	ID string
+	// Storage and Key name the object; Version its version on a versioned
+	// bucket, "" for none.
+	Storage, Key, Version string
+	// Size and SHA256 are what the manifest or the catalog held of it.
+	Size   int64
+	SHA256 SHA256
+	// Disposition is what the storage did; RetainUntil when its retention
+	// ends, when it said.
+	Disposition Disposition
+	RetainUntil time.Time
+	// Now is when.
+	Now time.Time
+}
+
+// PurgeFinish ends a purge.
+type PurgeFinish struct {
+	// ID names the correction; Now is when.
+	ID  string
+	Now time.Time
+	// Manifest is, for an instance delete, the SHA-256 of the scan's
+	// manifest written without the instance, and ManifestBefore that of the
+	// manifest it was made from: the scan takes Manifest only while the
+	// catalog still holds ManifestBefore, so a reception that wrote the
+	// scan since keeps its own. ManifestBefore is zero when the rewrite
+	// changed nothing (a purge run again after a stop found the manifest
+	// already without the instance): the scan then takes Manifest.
+	Manifest, ManifestBefore SHA256
+	// Audit is the server's entry for the purge's end, or nil.
+	Audit *master.AuditEntry
+}
+
+// StorageDisposition sums what one storage did with a correction's purged
+// objects.
+type StorageDisposition struct {
+	// Storage is its name.
+	Storage string
+	// Removed, Hidden, Retained and Unknown count objects by disposition.
+	Removed, Hidden, Retained, Unknown int64
+	// VersionsRemoved counts versions deleted by version id.
+	VersionsRemoved int64
+	// RetainUntil is the latest retention end a storage stated.
+	RetainUntil time.Time
+}
+
+// Correction is one correction and how far it got.
+type Correction struct {
+	// ID is its operation id; Kind what it does; State where it is.
+	ID    string
+	Kind  record.Kind
+	State record.State
+	// Level is what a delete removes (possibly above its target's level,
+	// for a last instance), a relabel's level, or instance for a replace.
+	Level string
+	// Target is what it acts on, by the labels it had.
+	Target CorrectionTarget
+	// ToLabel is a relabel's new label; Quarantine a replace's file.
+	ToLabel, Quarantine string
+	// Reason, KeyID and Origin say who asked and why.
+	Reason, KeyID, Origin string
+	// Created, CommitTime, PurgeAfter and Ended are its times; zero when not
+	// reached.
+	Created, CommitTime, PurgeAfter, Ended time.Time
+	// StateReason says why it is not moving or was abandoned.
+	StateReason string
+	// RecordsState is the state its records were last written with.
+	RecordsState record.State
+	// OldRevision, NewRevision, OldSHA256, NewSHA256 are a replace's;
+	// ReceivedSHA256 and NewSize the new file's; InstanceKey and
+	// InstanceSize the old revision's object, or an instance delete's.
+	OldRevision, NewRevision    int
+	OldSHA256, NewSHA256        SHA256
+	ReceivedSHA256              SHA256
+	NewSize                     int64
+	InstanceKey                 string
+	InstanceSize                int64
+	ArrivalsAllowed, Unresolved bool
+	UndoReason                  string
+	Counts                      CorrectionCounts
+	Storages                    []string
+	Dispositions                []StorageDisposition
+	RestoreLine                 []byte
+	// Swept says an abandoned relabel's copies were removed.
+	Swept bool
+	// Holds are the values a delete holds arrivals by, read with one
+	// correction (Correction), not with a list.
+	Holds []HeldValue
+}
+
+// HasEnded reports whether the correction reached an end.
+func (c Correction) HasEnded() bool {
+	return c.State == record.StatePurged || c.State == record.StateUndone || c.State == record.StateAbandoned
+}
+
+// CorrectionFilter keeps the corrections a list answers.
+type CorrectionFilter struct {
+	// Kinds and States keep those of these; empty keeps all.
+	Kinds  []record.Kind
+	States []record.State
+}
+
+// DeletedProbe is what an arrival names, to match against deletes.
+type DeletedProbe struct {
+	// Subject is the subject label it would be archived under, "" for
+	// none known.
+	Subject string
+	// StudyUID is its study.
+	StudyUID string
+	// Series and Instances are its series' and instances' UIDs, at most
+	// MaxDeletedProbe each.
+	Series, Instances []string
+}
+
+// DeletedMatch is which of a probe a delete names, each with the delete's
+// id; empty and absent for none.
+type DeletedMatch struct {
+	// Subject and Study are the delete that names the probe's subject
+	// label and study.
+	Subject, Study string
+	// Series and Instances are, by UID, the delete that names each.
+	Series, Instances map[string]string
+}
+
+// Of returns the id of a delete that matches a file of that series and
+// instance (or its study or subject), or "".
+func (m DeletedMatch) Of(series, instance string) string {
+	switch {
+	case m.Instances[instance] != "":
+		return m.Instances[instance]
+	case m.Series[series] != "":
+		return m.Series[series]
+	case m.Study != "":
+		return m.Study
+	}
+	return m.Subject
+}
+
+// InstanceRef is an instance and one of its revisions.
+type InstanceRef struct {
+	// UID is its SOP Instance UID; Revision from 1.
+	UID      string
+	Revision int
+}
+
+// The answers of ResolveInstances.
+const (
+	ResolvedCurrent    = "current"
+	ResolvedSuperseded = "superseded"
+	ResolvedDeleted    = "deleted"
+	ResolvedUnknown    = "unknown"
+)
+
+// ResolvedInstance is what became of one pair.
+type ResolvedInstance struct {
+	// Ref is the pair asked.
+	Ref InstanceRef
+	// Disposition is one of the Resolved words.
+	Disposition string
+	// CurrentRevision is the instance's current revision, when held.
+	CurrentRevision int
+	// SHA256 is the asked revision's checksum, when known.
+	SHA256 SHA256
+	// Correction is the correction that superseded or deleted it.
+	Correction string
+	// BytesKept says the asked revision's bytes are still stored.
+	BytesKept bool
+	// Path is the instance's scan, by its labels now, for current and
+	// superseded.
+	Path label.Path
+}
