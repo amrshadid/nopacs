@@ -1,0 +1,30 @@
+# buf generation (format v2): the Go code of the API contract, into gen/.
+# Run with make proto, which installs the pinned plugins into bin/tools and
+# puts them first on PATH. gen/ is committed and never edited by hand; make
+# proto-check fails when it differs from what these files generate.
+version: v2
+
+# The proto files say nothing about Go: the Go package of each file is set
+# here, so another language's toolchain reads the same files unchanged.
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/amrshadid/nopacs/gen
+
+# gen/ holds only generated code, so it is emptied before each run and a file
+# whose proto file was removed does not stay behind.
+clean: true
+
+plugins:
+  # Local plugins only: no remote plugin, so generation needs no account and
+  # no network.
+  - local: protoc-gen-go
+    out: gen
+    opt: paths=source_relative
+  - local: protoc-gen-connect-go
+    out: gen
+    opt: paths=source_relative
+
+inputs:
+  - directory: api/proto

@@ -1,0 +1,462 @@
+# golangci-lint v2 configuration. The version that reads it is pinned in the
+# Makefile and in .github/workflows/checks.yml; a v1 binary refuses this file.
+version: "2"
+
+linters:
+  # The standard set (errcheck, govet, ineffassign, staticcheck, unused) and
+  # the linters below.
+  default: standard
+  enable:
+    # The architecture rule: imports point inward, toward internal/core.
+    - depguard
+    # errors.Is and errors.As, not == and type assertions, so a wrapped error
+    # with its context still matches.
+    - errorlint
+    # Security mistakes in code that handles patient data and secrets.
+    - gosec
+    - misspell
+    # Every exported identifier has a doc comment.
+    - revive
+    - unconvert
+
+  settings:
+    depguard:
+      rules:
+        # Reading archived bytes is checked against the manifest and bounded,
+        # and knows no transport: callers (the API, senders) decide what a
+        # De-identification is pure: a profile and the engine mean the same
+        # thing on every server and in every test, and no rule can become a
+        # way out for the values it removes. It touches no file, network,
+        # database or random source; what it needs is passed in.
+        deid:
+          files:
+            - "**/internal/deid/**"
+            - "!$test"
+          deny:
+            - pkg: os$
+              desc: de-identification touches no file; the pipeline hands it the data
+            - pkg: io/fs
+              desc: de-identification touches no file; the pipeline hands it the data
+            - pkg: path/filepath
+              desc: de-identification touches no file; the pipeline hands it the data
+            - pkg: net
+              desc: no de-identification rule may reach an address
+            - pkg: database/sql
+              desc: lookups reach the tenant database through an interface the caller passes
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: lookups reach the tenant database through an interface the caller passes
+            - pkg: crypto/rand
+              desc: de-identification is deterministic; nothing is drawn at random
+            - pkg: math/rand
+              desc: de-identification is deterministic; nothing is drawn at random
+        # mismatch means.
+        checkedread:
+          files:
+            - "**/internal/checkedread/**"
+            - "!$test"
+          deny:
+            - pkg: net/http
+              desc: checkedread knows no transport
+            - pkg: google.golang.org/grpc
+              desc: checkedread knows no transport
+            - pkg: connectrpc.com
+              desc: checkedread knows no transport
+            - pkg: github.com/amrshadid/go-dicom
+              desc: checkedread passes bytes; it does not parse DICOM
+            - pkg: github.com/amrshadid/nopacs/internal/api
+              desc: the API imports checkedread, never the reverse
+        # The live feed is handed readers (tenant.Events through
+        # events.Reader, the tenants through events.Tenants); it never opens a
+        # database or a connection itself, so it is tested with fakes and
+        # serves any database type.
+        events:
+          files:
+            - "**/internal/events/**"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: the live feed reads through tenant.Events and never knows the database type
+            - pkg: github.com/amrshadid/nopacs/internal/registry
+              desc: the live feed is handed its tenants (events.Tenants); it does not open them
+            - pkg: database/sql
+              desc: the live feed reads through tenant.Events
+            - pkg: net$
+              desc: the live feed opens no connection; the API's handler carries its messages
+            - pkg: net/http
+              desc: the live feed opens no connection; the API's handler carries its messages
+
+        # A storage uses only the credentials it is given. The SDK's config
+        # package reads the environment, shared files and instance metadata,
+        # which the S3 driver must never do.
+        s3-static-credentials:
+          files:
+            - "**/internal/**"
+          deny:
+            - pkg: github.com/aws/aws-sdk-go-v2/config
+              desc: reads credentials from the environment and files; the S3 driver uses only what it is given
+            - pkg: github.com/aws/aws-sdk-go-v2/feature/ec2/imds
+              desc: reads instance metadata; the S3 driver uses only what it is given
+            - pkg: github.com/aws/aws-sdk-go-v2/credentials
+              desc: not needed for static credentials, and pulls in the single sign-on and token-service clients
+
+        # The storage port (internal/blob) and its contract suite
+        # (internal/blob/blobtest) are stated as operations, so a bucket
+        # implements them as well as a disk, and the suite cannot be bent to
+        # one driver by knowing which one it runs on.
+        blob:
+          files:
+            - "**/internal/blob/*.go"
+            - "**/internal/blob/blobtest/**"
+          deny:
+            - pkg: os$
+              desc: the storage port knows no file system; internal/blob/dir does
+            - pkg: io/fs
+              desc: the storage port knows no file system; internal/blob/dir does
+            - pkg: path/filepath
+              desc: the storage port knows no file system; internal/blob/dir does
+            - pkg: github.com/amrshadid/nopacs/internal/blob/dir
+              desc: the port and its suite never import a driver; drivers import them
+            - pkg: github.com/aws
+              desc: the storage port knows no cloud SDK; the S3 driver does
+
+        # The core holds the domain: types, the reception state machine, naming
+        # and routing. It states what it needs as interfaces that the other
+        # packages implement, so it is tested without a database, a network or
+        # a storage, and a new database or storage type never changes it. An
+        # import from here outward would undo that, and nothing else in a
+        # review would show it. The rule is written before the package exists
+        # so the first file in it is already held to it.
+        #
+        # Strict: an import is refused unless the allow list names it, so a
+        # third-party package in the core needs a change here, reviewed like
+        # any other. An import on both lists passes only when its allow entry
+        # is the longer, which is how net/netip and net/url pass while the
+        # rest of net is refused.
+        core:
+          list-mode: strict
+          files:
+            - "**/internal/core/**"
+            # Non-test files only. A core test may read its testdata with os
+            # and path/filepath; the core itself, which the binary runs, may
+            # not.
+            - "!$test"
+          allow:
+            - $gostd
+            # The core's root package and its subpackages are the core.
+            - github.com/amrshadid/nopacs/internal/core$
+            - github.com/amrshadid/nopacs/internal/core/
+            # Pure value types with parsers and no I/O: an address in a
+            # receiver's list of callers, a storage location written as a URL.
+            - net/netip$
+            - net/url$
+          deny:
+            - pkg: github.com/amrshadid/nopacs
+              desc: the core imports nothing of NoPACs'; state the need as an interface in the core
+            # Databases.
+            - pkg: database/sql
+              desc: the core does not reach a database; the catalog package does
+            - pkg: modernc.org/sqlite
+              desc: the core does not reach a database; the catalog package does
+            - pkg: github.com/jackc/pgx
+              desc: the core does not reach a database; the catalog package does
+            # Networks: net covers net/http and every other package under it
+            # except the two allowed above.
+            - pkg: net
+              desc: the core does not reach the network; the receive, send and api packages do
+            - pkg: crypto/tls
+              desc: the core does not reach the network; the receive, send and api packages do
+            - pkg: connectrpc.com
+              desc: the core does not reach the network; the api package does
+            - pkg: google.golang.org/grpc
+              desc: the core does not reach the network; the api package does
+            - pkg: github.com/amrshadid/go-dicom/network
+              desc: the core does not reach the network; the receive and send packages do
+            - pkg: github.com/amrshadid/go-dicom/dicomweb
+              desc: the core does not reach the network; the dicomweb package does
+            # Storages: files and buckets.
+            - pkg: os$
+              desc: the core does not touch files; the blob package does
+            - pkg: os/
+              desc: the core does not touch files or processes
+            - pkg: io/ioutil
+              desc: the core does not touch files; the blob package does
+            - pkg: io/fs
+              desc: the core does not touch files; the blob package does
+            - pkg: path/filepath
+              desc: the core does not touch files; the blob package does
+            - pkg: embed
+              desc: the core carries no files; what it needs is passed in
+            - pkg: github.com/aws
+              desc: the core does not reach a storage; the blob package does
+            - pkg: github.com/minio
+              desc: the core does not reach a storage; the blob package does
+            # The system itself, under the standard library's safe surface.
+            - pkg: syscall
+              desc: the core makes no system calls
+            - pkg: unsafe
+              desc: the core does not step outside Go's memory safety
+            - pkg: runtime/cgo
+              desc: NoPACs is pure Go, and the core most of all
+            - pkg: plugin
+              desc: the core loads no code at run time
+            # Effects that make the core's result depend on more than its
+            # input, so a test could not pin it down.
+            - pkg: log
+              desc: the core returns errors and events; its callers log them
+            - pkg: crypto/rand
+              desc: the core draws no randomness; a caller passes in what it needs
+
+        # The master database's port (internal/master) and its contract suite
+        # (internal/master/mastertest) are stated as operations, so a database
+        # with no SQL at all can implement them, and the suite cannot be bent
+        # to one driver by knowing which one it runs on: each database is a
+        # driver behind the port, and two real drivers passing one suite is
+        # what shows the port is not shaped by either. An import of SQL or of
+        # a driver here would undo both without anything else in a review
+        # showing it.
+        master:
+          files:
+            - "**/internal/master/**"
+          deny:
+            - pkg: database/sql
+              desc: the master port is operations, not SQL; a driver package implements it
+            - pkg: modernc.org/sqlite
+              desc: the master port knows no database; internal/driver/sqlite does
+            - pkg: github.com/jackc/pgx
+              desc: the master port knows no database; the Postgres driver does
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: the port and its suite never import a driver; drivers import them
+            - pkg: github.com/amrshadid/nopacs/internal/driver/sqlkit
+              desc: sqlkit is for SQL drivers; the port must not assume SQL
+
+        # The tenant database's port (internal/tenant) and its contract suite
+        # (internal/tenant/tenanttest), held to the master port's rule for the
+        # same reasons.
+        tenant:
+          files:
+            - "**/internal/tenant/**"
+          deny:
+            - pkg: database/sql
+              desc: the tenant port is operations, not SQL; a driver package implements it
+            - pkg: modernc.org/sqlite
+              desc: the tenant port knows no database; internal/driver/sqlite does
+            - pkg: github.com/jackc/pgx
+              desc: the tenant port knows no database; the Postgres driver does
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: the port and its suite never import a driver; drivers import them
+            - pkg: github.com/amrshadid/nopacs/internal/driver/sqlkit
+              desc: sqlkit is for SQL drivers; the port must not assume SQL
+
+        # The tenant registry is given its drivers (registry.Config.Drivers),
+        # which is how its tests run a database that fails and hangs on
+        # demand. An import of a driver outside its tests would let it pick
+        # one itself.
+        registry:
+          files:
+            - "**/internal/registry/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: the registry is given its drivers in Config; the server wires them
+            - pkg: database/sql
+              desc: the registry reaches a tenant's database only through tenant.Store
+
+        # The handlers are joined to the server by the command that runs it
+        # (internal/servecmd), which imports both. The handlers satisfy
+        # the server's types by their shape and import neither the server
+        # nor the command line, so neither can come to depend on the other
+        # through them, and a handler cannot reach the server's credential
+        # code.
+        api:
+          files:
+            - "**/internal/api/**"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/server
+              desc: the handlers satisfy the server's types by their shape; internal/servecmd joins the two
+            - pkg: github.com/amrshadid/nopacs/internal/cli
+              desc: the handlers are a library of the server; the command line is a client of the API and shares nothing with them
+
+        # The handlers name a database type (master.SQLiteDriver) and are
+        # given their tenants by the registry; they never open a database. An
+        # import of the drivers would link pgx and the SQLite library into the
+        # handlers' package for two names, and let a handler open a database
+        # past the registry. Non-test files only: the handlers' tests give the
+        # registry real SQLite tenants through the drivers.
+        api-driver:
+          files:
+            - "**/internal/api/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: the handlers name a database type with master.SQLiteDriver and reach a tenant through the registry
+
+        # Only the DICOM listener and the senders speak DICOM on the network,
+        # so a third implementation of association handling cannot grow
+        # elsewhere. The engine's unknown.go takes the library's decoder of
+        # UN-encoded items, which lives in its network package but parses
+        # bytes only.
+        dicom-network:
+          files:
+            - $all
+            - "!**/internal/receive/dimse/**"
+            - "!**/internal/send/**"
+            - "!**/internal/deid/engine/unknown.go"
+          deny:
+            - pkg: github.com/amrshadid/go-dicom/network
+              desc: only internal/receive/dimse and internal/send speak DICOM on the network
+
+        # The supervisor is handed a way to make a listener; it never speaks
+        # DICOM itself, so it is tested with fake listeners.
+        supervise:
+          files:
+            - "**/internal/receive/supervise/**"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/receive/dimse
+              desc: the supervisor is handed a listener factory; servecmd joins the two
+            - pkg: github.com/amrshadid/go-dicom
+              desc: the supervisor never reads or speaks DICOM
+
+        # The command line is a client of the API and nothing else: it links no
+        # database or storage driver, no registry, no server and none of the
+        # commands that run the server, so it can sit on a machine that must
+        # never hold the server, its drivers or its data. This rule sees direct
+        # imports; a test of cmd/nopacs (go list -deps) sees them all.
+        command-line:
+          files:
+            - "**/internal/cli/**"
+            - "**/internal/tui/**"
+            - "**/cmd/nopacs/**"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: the command line reaches a database only through the server's API
+            - pkg: github.com/amrshadid/nopacs/internal/blob/dir
+              desc: the command line reaches a storage only through the server's API
+            - pkg: github.com/amrshadid/nopacs/internal/blob/s3
+              desc: the command line reaches a storage only through the server's API
+            - pkg: github.com/amrshadid/nopacs/internal/registry
+              desc: the command line does not open tenants; the server does
+            - pkg: github.com/amrshadid/nopacs/internal/server
+              desc: the command line is a client of the server, not part of it
+            - pkg: github.com/amrshadid/nopacs/internal/servecmd
+              desc: the commands that run the server are the nopacs-server program's
+
+        # Test helpers are for tests: nothing the binary runs imports them.
+        testkit:
+          files:
+            - $all
+            - "!$test"
+            - "!**/internal/testkit/**"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/testkit
+              desc: internal/testkit is for tests and test-only programs only
+
+        # The rules of where a tenant's data may be are one package that the
+        # handlers and the reception pipeline both use, so a rule is never
+        # applied one way when a storage is added and another when it is
+        # opened. It is handed settings and secrets through its own small
+        # interfaces; an import of either user would turn that around.
+        place:
+          files:
+            - "**/internal/place/**"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/api
+              desc: the handlers use package place; place never uses them
+            - pkg: github.com/amrshadid/nopacs/internal/receive
+              desc: the reception pipeline uses package place; place never uses it
+            - pkg: github.com/amrshadid/nopacs/internal/registry
+              desc: place is handed a tenant's secrets; it does not look a tenant up
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: place reads settings and secrets through its interfaces, never a database
+            - pkg: database/sql
+              desc: place reads settings and secrets through its interfaces, never a database
+
+        # The reception pipeline is written against the ports: a tenant's
+        # database through tenant.Pipeline and bytes through blob.Store. If it
+        # named a driver, a reception would work on one database or one kind
+        # of storage and the contract suites would no longer cover it.
+        # Non-test files only: its tests run it on the real drivers.
+        receive:
+          files:
+            - "**/internal/receive/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/driver
+              desc: the reception pipeline reaches a database through the tenant port
+            - pkg: github.com/amrshadid/nopacs/internal/blob/dir
+              desc: the reception pipeline reaches a storage through blob.Store
+            - pkg: github.com/amrshadid/nopacs/internal/blob/s3
+              desc: the reception pipeline reaches a storage through blob.Store
+            - pkg: database/sql
+              desc: the reception pipeline reaches a database through the tenant port
+            - pkg: github.com/amrshadid/nopacs/internal/registry
+              desc: the reception pipeline is handed its tenant, it does not look one up
+
+        # Package driver is the one door to the database drivers: it opens a
+        # master or a tenant by the type and address it is given, so nothing
+        # outside it comes to depend on which database it runs on, and a
+        # third database type changes driver alone. The excepted tests open a
+        # real SQLite master (sqlite.OpenMaster) to run their package against
+        # the database the binary uses.
+        database-drivers:
+          files:
+            - $all
+            - "!**/internal/driver/**"
+            - "!**/internal/access/*_test.go"
+            - "!**/internal/servecmd/*_test.go"
+            - "!**/internal/server/*_test.go"
+            - "!**/internal/testkit/servertest/*_test.go"
+          deny:
+            - pkg: github.com/amrshadid/nopacs/internal/driver/sqlite
+              desc: only internal/driver opens the SQLite driver; ask it for a master.Store or a tenant.Store
+            - pkg: github.com/amrshadid/nopacs/internal/driver/postgres
+              desc: only internal/driver opens the Postgres driver; ask it for a master.Store or a tenant.Store
+
+        # Only the SQLite driver reaches the SQLite library, so nothing else
+        # in the binary can come to depend on which database it runs on.
+        sqlite-library:
+          files:
+            - $all
+            - "!**/internal/driver/sqlite/**"
+          deny:
+            - pkg: modernc.org/sqlite
+              desc: only internal/driver/sqlite uses the SQLite library; ask for a master.Store from internal/driver
+
+        # The same for Postgres: only its driver reaches pgx.
+        # internal/testkit makes and drops the scratch schemas tests use, so
+        # it speaks to Postgres as an administrator; nothing the binary runs
+        # imports it (the testkit rule), so no running code learns the
+        # database from it.
+        postgres-library:
+          files:
+            - $all
+            - "!**/internal/driver/postgres/**"
+            - "!**/internal/testkit/**"
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: only internal/driver/postgres uses pgx; ask for a master.Store from internal/driver
+
+    misspell:
+      locale: US
+
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+
+  exclusions:
+    generated: lax
+    # The code buf generates from api/proto: never edited, so nothing a
+    # linter says about it can be acted on. The proto files are linted by buf.
+    paths:
+      - ^gen/
+    # Not the "comments" preset: it would silence the missing doc comment
+    # warnings that the revive rules above are here to give.
+    presets:
+      - common-false-positives
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: true

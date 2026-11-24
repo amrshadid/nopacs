@@ -1,0 +1,31 @@
+# buf configuration (format v2) for the API contract in api/proto. The buf
+# version that reads it is pinned in the Makefile (BUF_VERSION).
+version: v2
+
+modules:
+  - path: api/proto
+
+# No deps: the contract imports only protobuf's well-known types, which buf
+# carries itself, so nothing is fetched from the Buf Schema Registry.
+
+lint:
+  use:
+    # The rules buf recommends for an API: names, packages, one request and
+    # one response message per method, enum zero values.
+    - STANDARD
+    # Every message, field, enum, enum value, service and method has a
+    # comment. The contract is read by people who build on it without the
+    # server's code; a missing comment fails the lint, not a review.
+    - COMMENTS
+  # A rule is switched off here, with its reason, or not at all; a comment in
+  # a proto file cannot switch one off.
+  disallow_comment_ignores: true
+
+breaking:
+  use:
+    # The strictest category: besides what breaks the wire, it refuses what
+    # breaks generated code and JSON, such as a renamed field, a moved type or
+    # a deleted method. Under it a field is never removed from nopacs.v1,
+    # even with its number reserved: it is marked deprecated and stays. A
+    # breaking change is nopacs.v2 beside nopacs.v1.
+    - FILE

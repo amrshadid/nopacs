@@ -1,0 +1,28 @@
+# Build output
+/bin/
+/dist/
+
+# Test and profile output
+*.test
+*.out
+*.prof
+coverage.*
+
+# Local data directories made while trying the binary
+/data/
+
+# Python's compiled copies of the check scripts, and what installing and
+# testing the Python client leaves behind
+__pycache__/
+*.egg-info/
+/clients/python/build/
+.pytest_cache/
+
+# The TypeScript client's installed packages and compiled output
+/clients/typescript/node_modules/
+/clients/typescript/dist/
+
+# Editors and systems
+.DS_Store
+.idea/
+.vscode/
