@@ -1,0 +1,751 @@
+syntax = "proto3";
+
+// Package nopacs.v1 is the API of a NoPACs installation: the contract that
+// other systems build on. It is served by ConnectRPC on one TLS port, so a
+// stock gRPC client, a Connect client and a plain HTTP client posting JSON all
+// reach the same methods.
+//
+// Who is calling. A request over the network carries a key in the
+// Authorization header as a bearer token (RFC 6750): "Authorization: Bearer
+// nopacs_<id>_<secret>". A request on the installation's local socket carries no
+// key: its caller is the operating system user that runs the server, the
+// local operator.
+//
+// What a caller may do. A key holds grants; a grant gives a role (Role) on a
+// scope (Scope): one tenant, or the installation. The local operator holds no
+// grant and is admin on the installation and on every tenant. Each method's
+// comment names the role it needs and on what.
+//
+// The order of checks. Every request is checked in this order, and the first
+// check that fails gives the answer: (1) the caller is authenticated, or the
+// answer is UNAUTHENTICATED; (2) the caller holds the role the method needs,
+// or the answer is PERMISSION_DENIED (or NOT_FOUND for a missing tenant, as
+// below); (3) the request is valid, or the answer is INVALID_ARGUMENT. So a
+// caller who may not call a method learns nothing about what a valid request
+// to it looks like. A request that is not a well-formed call at the
+// transport level (its content type, HTTP method, compression or timeout
+// header) is answered by the protocol itself, before authentication, and
+// that answer reveals nothing about the method, the caller or the archive.
+//
+// Every method's comment also says what it writes to the audit log and which
+// error kinds it can answer. Which log an entry goes to is said once, on
+// AuditService in audit.proto: a refused request is always written to the
+// installation's log, with the tenant's name when it named one; an allowed
+// request, to the log of the tenant or the installation it concerns. The
+// kinds and the codes that carry them:
+//
+//   - invalid: INVALID_ARGUMENT (HTTP 400). The request is malformed, breaks a
+//     rule stated on its fields, or exceeds a limit below. Sending it again
+//     unchanged fails again.
+//   - unauthenticated: UNAUTHENTICATED (HTTP 401). No key, a key the server
+//     does not know, a wrong secret, an expired key, a revoked key and a
+//     suspended key (Key.suspended) all get this one answer, with the same
+//     message, so a caller cannot tell them apart.
+//   - permission denied: PERMISSION_DENIED (HTTP 403). The key is good but
+//     holds no grant with the role the method needs.
+//   - not found: NOT_FOUND (HTTP 404). The thing named does not exist, and
+//     the caller may know that it does not. A subject, session or scan
+//     asked for by a label a relabel moved (CorrectionService.Relabel) is
+//     answered so with the reason RELABELED, its metadata "correction" (the
+//     relabel's id) and "to_label" (the label it has now), so a client
+//     that holds old labels finds the data.
+//   - conflict: ALREADY_EXISTS (HTTP 409). The change would collide with what
+//     exists, such as a second tenant with the same name.
+//   - precondition: FAILED_PRECONDITION (HTTP 400). What the request names
+//     is in a state that forbids the change, such as removing a storage
+//     that holds files, releasing a file already rejected, or using a port
+//     the installation has not allotted to the tenant. The message says
+//     which. Sending it again unchanged fails again until that state
+//     changes. A change to a tenant that is read only carries the reason
+//     TENANT_MOVED (an export handed it to another installation) or
+//     TENANT_FENCED (its storages' owner record names another installation
+//     or a later generation). A delete of data a hold covers carries the
+//     reason HELD, its metadata "hold" (the id of a hold that covers it,
+//     RetentionService); a person's delete of data a retention rule keeps
+//     at least until a time to come carries RETENTION_MINIMUM, its metadata
+//     "keep_until" (that time, RFC 3339, UTC), and succeeds with
+//     override_retention and a reason (CorrectionService.Delete).
+//   - unavailable: UNAVAILABLE (HTTP 503). A database the request needs does
+//     not answer, or a tenant is not ready. Sending it again later may
+//     succeed. With the reason TENANT_RESTORING, the tenant is being
+//     reconciled after a restore; with NOT_ONLINE, the storage holds the
+//     object in a tier it cannot read at once (never answered as not found
+//     or data loss: the bytes are not missing), and no copy in step on
+//     another storage is online. NOT_ONLINE carries the metadata
+//     "recall_state", the state of the object's recall: "none",
+//     "requested", "in_progress" or "failed"; a reader's request starts
+//     none (ReplicaService.Recall does). Only while a recall is requested
+//     or in progress does it also carry a google.rpc.RetryInfo detail with
+//     a retry delay, and the plain HTTP download a Retry-After header (RFC
+//     9110 10.2.3): without a recall, waiting brings nothing back. With
+//     the reason STORAGE_SWITCHING, a write to a storage being switched to
+//     its replica waits for the swap (ReplicaService.SwitchStorage); it
+//     carries a google.rpc.RetryInfo detail, and STOW-RS a Retry-After
+//     header.
+//   - cursor expired: OUT_OF_RANGE (HTTP 400). Only MonitorService.Watch
+//     answers it, with one of two reasons: CURSOR_EXPIRED, the cursor points
+//     before the oldest event kept, so the events after it can no longer all
+//     be answered; or EVENT_HISTORY_CHANGED, the cursor belongs to another
+//     history of the tenant's feed (its database was restored, imported or
+//     loaded, which starts a new history), or points past the newest event.
+//     Sending it again fails again; the client starts over from a status.
+//   - data loss: DATA_LOSS (HTTP 500). An archived file, or a file the
+//     server keeps beside it, is missing from its storage or is not what
+//     was archived: its bytes do not match the SHA-256 its scan's manifest
+//     holds, or a scrub found it so (ScrubJob) and marked it. Answered
+//     only where archived files are read
+//     (MetadataService, DataService and its plain HTTP download, where it
+//     is HTTP 500); the message names the scan, and the cause is in the
+//     server's log. Sending it again fails again until the
+//     file is mended from another copy.
+//
+// Where a kind above names a reason, it travels as a google.rpc.ErrorInfo
+// detail (google/rpc/error_details.proto) of the error, with the domain
+// "nopacs", that reason, and the metadata the kind names. A client that does
+// not read details still has the code and the message; the reasons are
+// fixed words, and a reason added later is one a client does not know.
+//
+// Any method can also answer INTERNAL (HTTP 500) for a fault of the server,
+// RESOURCE_EXHAUSTED for a message over the size limit (and for too many
+// open streams and downloads, for Watch, DataService.ReadFiles,
+// AuditSealService.ExportAudit, and one backup or export at a time for
+// BackupService), and DEADLINE_EXCEEDED when its deadline passes.
+// The message of an INTERNAL answer says nothing about the cause; the cause
+// is in the server's log and the audit entry, under the request's id.
+//
+// A tenant that does not exist. A request that names a tenant with no such
+// tenant is answered NOT_FOUND when the caller may list every tenant: a key
+// with reader or more on the installation, or the local operator. Every other
+// caller is answered PERMISSION_DENIED, with the same message as when it holds
+// no grant on an existing tenant, so a key cannot learn the names of tenants
+// it was not given. An operator who mistypes a name is told so; a caller with
+// no right to know learns nothing.
+//
+// The request id. The server makes an id for every request and returns it in
+// the response header "Nopacs-Request-Id", on success and on error alike. A
+// client cannot set it: a request header of that name is ignored. The same id
+// is in the server's log and in the request's audit entry.
+//
+// Reads and retries. Every Get and List method, WhoAmI, Watch and ReadFiles
+// is marked NO_SIDE_EFFECTS, and the changes that may be repeated safely are
+// marked IDEMPOTENT. A read still writes an audit entry: that entry is the
+// server's record of the call, not a change to anything a read answers, and
+// repeating the read answers the same. CreateTenant, CreateKey, AddStorage,
+// AddReceiver, AddSender, CreateJob and RetentionService.AddRetentionRule
+// are neither, as each call makes a new thing. These changes are not
+// repeated plainly, and say what a repeat does: CorrectionService.Delete
+// (a Delete carrying a confirm token already used answers the correction
+// that token made), CorrectionService.Replace (a Replace of a quarantined
+// file already used answers the correction it made),
+// CorrectionService.Relabel (a Relabel with the same target and new label
+// as a correction not abandoned answers that correction),
+// RetentionService.Dispose (a Dispose carrying a confirm token already
+// used answers the dispose job it made), ReplicaService.Repair (a repair
+// job of the same storage, replica and findings queued or running is
+// answered), RetentionService.PlaceHold (an active hold with the same
+// target and reason is answered) and ReplicaService.SwitchStorage (a call
+// carrying a confirm token already used answers the switch it started),
+// each marked IDEMPOTENT for that reason; and
+// BackupService.ExportTenant, whose repeat is refused, since the tenant is
+// then handed off.
+//
+// Limits. A message over 4 MB is refused. Every call has a deadline; when the
+// client sends none, the server applies 30 seconds, except to the stream of
+// MonitorService.Watch, which stays open until either side ends it, to
+// the stream of DataService.ReadFiles, which may carry a subject's files
+// for hours (its comment says how a stalled one ends), and to the streams
+// of AuditSealService.ExportAudit, BackupService.CreateBackup and
+// BackupService.ExportTenant, which carry a whole log or database, and to
+// ReplicaService.SwitchStorage, whose drain its own drain_timeout bounds
+// (a switch, once accepted, runs to its end whatever becomes of the call).
+// A list
+// answers 100 items unless page_size asks for another number, and at most
+// 1000; a larger page_size is invalid.
+//
+// Rules of the whole package. A list method takes page_size and page_token and
+// answers next_page_token, never an offset; a page token is opaque, at most
+// 1 KiB, and valid only with the request it came from. Times are UTC. Ids are
+// opaque strings, compared whole and never parsed. A thing a person names (a
+// tenant, a storage, a receiver) has its name as its id, under the tenant
+// name rule; a thing the server makes (a reception, a quarantined file, an
+// event's cursor) has an id the server makes.
+//
+// Partial changes. A Set method that changes a configuration of several
+// fields (SetStorage, SetReceiver, SetSender) takes a google.protobuf.FieldMask,
+// update_mask, naming the fields it changes; every other field keeps its
+// value. The mask is required and must not be empty or "*", so a call
+// changes only what it names. A named field takes the value given, its zero
+// value included, so a list can be emptied and an option turned off; a
+// secret is the exception, kept unless named and never set to empty. A field
+// the server answers is read-only, and naming it is invalid.
+//
+// Secrets cross the API in six fields only,
+// CreateTenantRequest.database_address (in), S3Storage.secret_access_key (in,
+// by AddStorage and SetStorage; always empty in an answer),
+// StowSender.credential (in, by AddSender and SetSender; always empty in an
+// answer), CreateKeyResponse.secret, RotateKeyResponse.secret and
+// TenantExportSummary.transfer_key (out, once). All six are marked
+// debug_redact. The mark is metadata, not
+// protection: the protobuf library prints such a field like any other
+// (checked with protobuf-go v1.36.12, in every text form). The server's own
+// redactor reads the mark and removes the six fields before anything is
+// logged.
+//
+// Where a request may come from. A request off the local socket must pass,
+// in this order: the installation's denied networks and allowed networks
+// (the settings access.denied-networks and access.allowed-networks), judged
+// before its key is read; then, once its key and grant are known, the
+// networks of the tenant it names (access.tenant-networks), and the key's
+// own networks and client certificate (Key.networks,
+// Key.client_cert_sha256). A request refused by any of them is answered
+// UNAUTHENTICATED, exactly as a key that is no good, and recorded in the
+// installation's audit log with the rule's name; the caller is never told
+// which rule. The caller's address is the connection's, or, when the
+// connection comes from a proxy listed in access.trusted-proxies, the
+// rightmost address that is not itself a listed proxy in the one header
+// access.forwarded-header names (X-Forwarded-For by default, or Forwarded,
+// RFC 7239); the other header is never read, and from any other connection
+// neither is. The local socket is never refused by a network rule.
+//
+// Failed calls. Requests refused because their key is no good are counted
+// per address (IPv6 per /64), and requests refused because a good key lacks
+// the role are counted per key, over access.failure-window. Past
+// access.failure-limit failures in the window, each further refusal is
+// answered one second late; at twice the limit, the address or the key is
+// blocked for access.block-time: every request from it, a good key's
+// included, is answered UNAUTHENTICATED, and the block is audited. A
+// request that succeeds is never counted, delayed or blocked for its own
+// sake, however many a key makes. The counts are kept in the server's
+// memory and are lost when it restarts.
+package nopacs.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "nopacs/v1/scope.proto";
+
+// AccessService manages keys and the grants that give them roles, and tells a
+// caller who it is. In this version only an admin on the installation makes,
+// reads, revokes and grants keys.
+service AccessService {
+  // CreateKey makes a key and answers its secret, once. The server keeps only
+  // the SHA-256 of the secret, so it can never show the secret again.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the new key's id as its
+  // object and its holder in details; never its secret.
+  // Errors: unauthenticated, permission denied, invalid, unavailable (the
+  // master database does not answer).
+  rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
+
+  // GetKey answers one key, revoked and expired keys included.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the key's id as its
+  // object.
+  // Errors: unauthenticated, permission denied, invalid, not found (no key
+  // has that id), unavailable (the master database does not answer).
+  rpc GetKey(GetKeyRequest) returns (GetKeyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListKeys answers every key of the installation, revoked and expired keys
+  // included, oldest first.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log.
+  // Errors: unauthenticated, permission denied, invalid, unavailable (the
+  // master database does not answer).
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // RevokeKey ends a key for good: from this call on, a request with it is
+  // answered UNAUTHENTICATED. Its grants stay listed, so the record shows what
+  // the key could do, but they give nothing. Revoking a revoked key changes
+  // nothing and answers the key with its first revoke time. Revoking a
+  // rotated key does not revoke its successor (Key.successor_id), which is
+  // revoked by its own call.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the key's id as its
+  // object.
+  // Errors: unauthenticated, permission denied, invalid, not found (no key
+  // has that id), unavailable (the master database does not answer).
+  rpc RevokeKey(RevokeKeyRequest) returns (RevokeKeyResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // SetGrant sets the role of a key on a scope. A key holds at most one grant
+  // per scope; when it already holds one there, its role is replaced in the
+  // same step, so a role is changed without a moment of no access. A role
+  // includes the roles below it (Role), so one per scope is enough.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the key's id as its
+  // object, and the scope, the previous role (when there was one) and the new
+  // role in details.
+  // Errors: unauthenticated, permission denied, invalid, not found (no key
+  // has that id, or no tenant has the scope's name: a caller who passes the
+  // role check may list every tenant, so it is told), conflict (the key is
+  // revoked), unavailable (the master database does not answer).
+  rpc SetGrant(SetGrantRequest) returns (SetGrantResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListGrants answers the grants of one key, or the grants on one scope.
+  // The grants of one key come with the installation first, then tenants in
+  // a stable order that is not otherwise specified; the grants on one scope
+  // come in order of key id. Exactly one of the two filters is required:
+  // there is no listing of every grant at once.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the filter in details.
+  // Errors: unauthenticated, permission denied, invalid, not found (no tenant
+  // has the scope's name: a caller who passes the role check may list every
+  // tenant, so it is told), unavailable (the master database does not
+  // answer).
+  rpc ListGrants(ListGrantsRequest) returns (ListGrantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // RemoveGrant takes back a key's grant on one scope. Removing a grant the
+  // key does not hold changes nothing and succeeds, so a repeated call does
+  // not fail.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the key's id as its
+  // object, and the scope and the role removed (when there was one) in
+  // details.
+  // Errors: unauthenticated, permission denied, invalid, not found (no key
+  // has that id, or no tenant has the scope's name: a caller who passes the
+  // role check may list every tenant, so it is told), unavailable (the master
+  // database does not answer).
+  rpc RemoveGrant(RemoveGrantRequest) returns (RemoveGrantResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // WhoAmI answers the caller: the key the request carried with that key's
+  // grants, or the local operator.
+  //
+  // Role: none; any caller the server authenticates.
+  // Audit: one entry in the installation's log.
+  // Errors: unauthenticated, unavailable (the master database does not
+  // answer).
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // RotateKey replaces a key with a new one, its successor, and answers the
+  // successor's secret, once. The successor holds the same grants, holder,
+  // networks and client certificate. The rotated key keeps working for the
+  // overlap, or until its own expiry when that is sooner, and then stops:
+  // whoever holds it has the overlap to switch, with no moment without a
+  // working key. The successor lives as long as the rotated key was made to
+  // live, counted from now, but never longer than the installation's setting
+  // key.max-lifetime (built-in default 3650 days); a key made never to
+  // expire makes a successor that never expires. A key is rotated at most
+  // once; its successor may be rotated in turn. A key rotating itself,
+  // without admin on the installation, keeps working at least an hour beside
+  // its successor, so a thief holding it cannot cut its holder off at once.
+  //
+  // Role: admin on the installation; or the key being rotated itself, so a
+  // system renews its own key with no person involved. Any other key is
+  // answered permission denied.
+  // Audit: one entry in the installation's log, with the rotated key's id as
+  // its object, and the successor's id, the rotated key's new end and the
+  // overlap in details; never the secret.
+  // Errors: unauthenticated, permission denied, invalid, not found (no key
+  // has that id), conflict (the key is revoked, has expired, or was already
+  // rotated), unavailable (the master database does not answer).
+  rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+
+  // SetKeyRules replaces where a key may be used from: its networks and the
+  // client certificate it must come with. The key's next request is judged
+  // by the new rules.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry in the installation's log, with the key's id as its
+  // object and the new rules in details.
+  // Errors: unauthenticated, permission denied, invalid, not found (no key
+  // has that id), conflict (the key is revoked), unavailable (the master
+  // database does not answer).
+  rpc SetKeyRules(SetKeyRulesRequest) returns (SetKeyRulesResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ReinstateKeys lets suspended keys work again off the local socket
+  // (Key.suspended). A restore suspends every key it brings back, since a
+  // key revoked, or a grant removed, after the backup was made would
+  // otherwise work again; a person reviews the keys and reinstates those
+  // that should work, by id or all at once. Only the local operator may
+  // call it: a key is answered permission denied whatever its grants, as
+  // every key may be suspended. A key not suspended is left as it is.
+  //
+  // Role: admin on the installation.
+  // Audit: one entry per key reinstated in the installation's log, with
+  // the key's id as its object.
+  // Errors: unauthenticated, permission denied (also any caller but the
+  // local operator), invalid (also both key_ids and all, or neither; more
+  // than 1000 ids), not found (a key id the installation does not have),
+  // unavailable (the master database does not answer).
+  rpc ReinstateKeys(ReinstateKeysRequest) returns (ReinstateKeysResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}
+
+// Role is what a grant allows. Each role includes every role listed before it.
+// On a tenant, a role acts on that tenant only; on the installation, it acts
+// on the installation's own objects, not on what is inside a tenant. The local
+// operator holds no grant and is admin on the installation and on every
+// tenant.
+enum Role {
+  // No role. Refused as invalid wherever a role is required; in an answer, it
+  // means there was none.
+  ROLE_UNSPECIFIED = 0;
+
+  // On a tenant: read its data, its status and its settings. On the
+  // installation: list every tenant and read their states, and read the
+  // installation's settings.
+  ROLE_READER = 1;
+
+  // On a tenant: a reader that may also send data in. Not given on the
+  // installation: SetGrant refuses it there as invalid.
+  ROLE_WRITER = 2;
+
+  // On a tenant: a writer that may also run jobs and review quarantined
+  // files. On the installation: a reader that may also see every tenant's
+  // status.
+  ROLE_OPERATOR = 3;
+
+  // On a tenant: an operator that may also change the tenant's configuration,
+  // its settings among it, and read its audit log. On the installation: may
+  // also create and remove tenants, make and revoke keys, set and remove
+  // grants, change the installation's settings and read its audit log.
+  ROLE_ADMIN = 4;
+}
+
+// Key is a credential held by a person or a system. It never carries its
+// secret: the server keeps only the secret's SHA-256, and the secret is
+// answered once, by CreateKey.
+message Key {
+  // The key's public id, the <id> part of nopacs_<id>_<secret>. It names the key
+  // in grants, in the audit log and in this API; it is not a secret.
+  string id = 1;
+
+  // The name of the person or system that holds the key, as given to
+  // CreateKey.
+  string holder = 2;
+
+  // When the key was made.
+  google.protobuf.Timestamp create_time = 3;
+
+  // When the key stops working. Absent when the key was made never to expire.
+  google.protobuf.Timestamp expire_time = 4;
+
+  // When a request last carried the key. Absent when it has never been used.
+  // It is written at most once a minute per key, so it can be up to a minute
+  // behind.
+  google.protobuf.Timestamp last_use_time = 5;
+
+  // When the key was revoked. Absent while it is not revoked.
+  google.protobuf.Timestamp revoke_time = 6;
+
+  // The networks a request with the key may come from, each an address or
+  // a network in CIDR form (address/bits) in its one written form: IPv4
+  // dotted, IPv6 as RFC 5952 writes it, no bit set past the prefix, a
+  // single address without /32 or /128. Empty for every network. At most
+  // 64.
+  repeated string networks = 7;
+
+  // The SHA-256 of the TLS client certificate a request with the key must
+  // present, in 64 lowercase hexadecimal digits; empty for none. A request
+  // that comes through a proxy that ends TLS presents none.
+  string client_cert_sha256 = 8;
+
+  // The caller's address at the use last_use_time records, written with it;
+  // empty when the key was never used off the local socket.
+  string last_use_address = 9;
+
+  // The id of the key a rotation replaced this one with; empty when it was
+  // never rotated.
+  string successor_id = 10;
+
+  // Whether the key is suspended: refused off the local socket, as a key
+  // that is no good, until the local operator reinstates it
+  // (ReinstateKeys). A restore suspends every key it brings
+  // back, since a key revoked, or a grant removed, after the backup was
+  // made would otherwise work again.
+  bool suspended = 11;
+
+  // When it was suspended. Absent while it is not.
+  google.protobuf.Timestamp suspend_time = 12;
+}
+
+// Grant gives one key one role on one scope.
+message Grant {
+  // The id of the key that holds the grant.
+  string key_id = 1;
+
+  // What the grant acts on: one tenant, or the installation.
+  Scope scope = 2;
+
+  // The role the grant gives.
+  Role role = 3;
+}
+
+// Principal is who a request was made by.
+message Principal {
+  // The caller. Exactly one is set.
+  oneof caller {
+    // The key the request carried, without its secret.
+    Key key = 1;
+
+    // The local operator, on the installation's local socket.
+    LocalOperator local_operator = 2;
+  }
+
+  // The grants of the key, in the order ListGrants answers them. Empty for
+  // the local operator, who holds no grant: it is admin on the installation
+  // and on every tenant by being the user that runs the server.
+  repeated Grant grants = 3;
+}
+
+// LocalOperator is the operating system user that runs the server, calling on
+// the installation's local socket.
+message LocalOperator {
+  // The operating system's id of the user: a numeric uid on Linux and macOS,
+  // a security identifier (SID) on Windows.
+  string user_id = 1;
+}
+
+// CreateKeyRequest asks for a new key.
+message CreateKeyRequest {
+  // The name of the person or system that will hold the key. Required; at
+  // most 256 bytes of UTF-8.
+  string holder = 1;
+
+  // When the key stops working. When neither field is set, the key expires
+  // after the installation's setting key.default-lifetime, whose built-in
+  // default is 90 days, or key.max-lifetime when that is shorter.
+  oneof expiry {
+    // The key expires this long after it is made. Must be positive and at
+    // most the installation's setting key.max-lifetime (built-in default
+    // 3650 days).
+    google.protobuf.Duration expire_after = 2;
+
+    // The key never expires. Must be true when set; false is refused as
+    // invalid, so a key without an expiry is always asked for in so many
+    // words.
+    bool never_expire = 3;
+  }
+
+  // The networks the key may be used from, as Key.networks states them.
+  // Empty for every network.
+  repeated string networks = 4;
+
+  // The SHA-256 of the TLS client certificate the key must come with, as
+  // Key.client_cert_sha256 states it. Empty for none.
+  string client_cert_sha256 = 5;
+}
+
+// CreateKeyResponse is the new key and, once, its secret.
+message CreateKeyResponse {
+  // The new key.
+  Key key = 1;
+
+  // SECRET. The whole key, nopacs_<id>_<secret>, as a client sends it in the
+  // Authorization header. This is one of the four fields through which a
+  // secret crosses the API, and the only time this one is answered: the
+  // server keeps only its SHA-256 and cannot answer it again. A client shows
+  // it to its user once and does not log it. The debug_redact mark is read by
+  // the server's redactor; the protobuf library itself still prints the field.
+  string secret = 2 [debug_redact = true];
+}
+
+// GetKeyRequest names a key.
+message GetKeyRequest {
+  // The key's id. Required.
+  string id = 1;
+}
+
+// GetKeyResponse is the key named.
+message GetKeyResponse {
+  // The key.
+  Key key = 1;
+}
+
+// ListKeysRequest asks for a page of keys.
+message ListKeysRequest {
+  // The most keys to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 1;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB.
+  string page_token = 2;
+}
+
+// ListKeysResponse is a page of keys.
+message ListKeysResponse {
+  // The keys of this page.
+  repeated Key keys = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// RevokeKeyRequest names the key to revoke.
+message RevokeKeyRequest {
+  // The key's id. Required.
+  string id = 1;
+}
+
+// RevokeKeyResponse is the revoked key.
+message RevokeKeyResponse {
+  // The key, with its revoke time.
+  Key key = 1;
+}
+
+// SetGrantRequest is the role to set for a key on a scope.
+message SetGrantRequest {
+  // The id of the key. Required.
+  string key_id = 1;
+
+  // The scope the role acts on. Required.
+  Scope scope = 2;
+
+  // The role to set. Required; ROLE_WRITER is refused on the installation.
+  Role role = 3;
+}
+
+// SetGrantResponse is the grant as it now stands, and what it replaced.
+message SetGrantResponse {
+  // The grant, as stored.
+  Grant grant = 1;
+
+  // The role the key held on the scope before this call. ROLE_UNSPECIFIED
+  // when it held none.
+  Role previous_role = 2;
+}
+
+// ListGrantsRequest asks for a page of the grants of one key or on one scope.
+message ListGrantsRequest {
+  // Which grants to list. Exactly one is required.
+  oneof filter {
+    // The grants of this key, on every scope.
+    string key_id = 1;
+
+    // The grants on this scope, of every key.
+    Scope scope = 2;
+  }
+
+  // The most grants to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 3;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a filter other than the
+  // one it was made with.
+  string page_token = 4;
+}
+
+// ListGrantsResponse is a page of grants.
+message ListGrantsResponse {
+  // The grants of this page.
+  repeated Grant grants = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// RemoveGrantRequest names a grant by its key and its scope.
+message RemoveGrantRequest {
+  // The id of the key that holds the grant. Required.
+  string key_id = 1;
+
+  // The scope of the grant. Required.
+  Scope scope = 2;
+}
+
+// RemoveGrantResponse is what was removed.
+message RemoveGrantResponse {
+  // The role the key held on the scope before this call. ROLE_UNSPECIFIED
+  // when it held none and nothing was removed.
+  Role previous_role = 1;
+}
+
+// WhoAmIRequest has no fields: the caller is read from the request itself.
+message WhoAmIRequest {}
+
+// WhoAmIResponse is the caller.
+message WhoAmIResponse {
+  // Who made the request, with what it may do.
+  Principal principal = 1;
+}
+
+// RotateKeyRequest names the key to rotate.
+message RotateKeyRequest {
+  // The key's id. Required.
+  string id = 1;
+
+  // How long the rotated key keeps working beside its successor: from zero
+  // to 30 days, and at least one hour for a key rotating itself without
+  // admin on the installation. Unset means one day.
+  google.protobuf.Duration overlap = 2;
+}
+
+// RotateKeyResponse is the successor and, once, its secret.
+message RotateKeyResponse {
+  // The successor.
+  Key key = 1;
+
+  // SECRET. The successor's whole key, nopacs_<id>_<secret>, answered this
+  // once, as CreateKeyResponse.secret is. The debug_redact mark is read by
+  // the server's redactor; the protobuf library itself still prints the
+  // field.
+  string secret = 2 [debug_redact = true];
+
+  // The rotated key as it now stands, with its new expire_time and its
+  // successor_id.
+  Key rotated = 3;
+}
+
+// SetKeyRulesRequest is where a key may now be used from.
+message SetKeyRulesRequest {
+  // The key's id. Required.
+  string id = 1;
+
+  // The networks, as Key.networks states them; empty for every network.
+  repeated string networks = 2;
+
+  // The client certificate's SHA-256, as Key.client_cert_sha256 states it;
+  // empty for none.
+  string client_cert_sha256 = 3;
+}
+
+// SetKeyRulesResponse is the key with its new rules.
+message SetKeyRulesResponse {
+  // The key.
+  Key key = 1;
+}
+
+// ReinstateKeysRequest names the suspended keys to reinstate: by id, or
+// all of them.
+message ReinstateKeysRequest {
+  // The ids of the keys: 1 to 1000. Empty with all.
+  repeated string key_ids = 1;
+
+  // Reinstate every suspended key, after a review. False with key_ids.
+  bool all = 2;
+}
+
+// ReinstateKeysResponse is what was reinstated.
+message ReinstateKeysResponse {
+  // With key_ids, the keys reinstated by this call, ordered by id; a key
+  // named that was not suspended is not listed. Empty with all, which
+  // answers only the count, since every key may have been suspended.
+  repeated Key keys = 1;
+
+  // How many keys this call reinstated.
+  int64 reinstated = 2;
+}

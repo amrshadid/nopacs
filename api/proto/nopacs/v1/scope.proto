@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets) is said on the package in access.proto.
+package nopacs.v1;
+
+// Scope is what a grant, a setting, an audit log or a request acts on: one
+// tenant, or the installation itself. The one type is used wherever a scope
+// appears, so every method reads and writes it the same way.
+message Scope {
+  // Which scope. Exactly one is set; a scope with neither is refused as
+  // invalid.
+  oneof kind {
+    // One tenant, by its name.
+    string tenant = 1;
+
+    // The installation: its own objects (tenants, keys, grants, its settings,
+    // its audit log), not what is inside a tenant.
+    Installation installation = 2;
+  }
+}
+
+// Installation is the installation as a scope. It has no fields: there is one
+// installation, so naming it is enough.
+message Installation {}

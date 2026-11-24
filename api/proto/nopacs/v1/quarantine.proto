@@ -1,0 +1,692 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "google/protobuf/timestamp.proto";
+import "nopacs/v1/receiver.proto";
+
+// QuarantineService reviews a tenant's quarantined files. A file the server
+// received and could not archive as it is (not DICOM, a label it cannot
+// make, a different file under a SOP Instance UID the tenant holds, a
+// storage that refused it, and the other reasons of QuarantineReason) is
+// held, with a record of why, when, from whom and in which reception. It is
+// never archived as it is and never discarded on its own: it stays until a
+// person releases it, so it runs through the pipeline again, or rejects it,
+// so its bytes are removed and its record stays.
+//
+// A held file is kept in the server's incoming area, not on a storage, and
+// counts against the tenant's incoming limit.
+//
+// The UIDs a record holds are the ones received, as the sender wrote them.
+// When a later version replaces identifiers at reception, the archive's own
+// UIDs will be separate fields.
+//
+// Every method acts inside one tenant, named by the request's tenant field,
+// so a request into a tenant that is not ready is answered UNAVAILABLE.
+service QuarantineService {
+  // ListQuarantinedFiles answers a tenant's quarantined files, newest first
+  // by the time they were quarantined, filtered by state, reason, receiver,
+  // reception, time, and the Study or SOP Instance UID as received.
+  //
+  // Role: reader on the tenant; operator on the tenant to filter by a UID,
+  // since looking a file up by an identifier the caller already holds is a
+  // search for a person's data.
+  // Audit: one entry in the tenant's log, with the filters in details; a
+  // UID filter is recorded only as present.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant; also a UID
+  // filter from a caller without operator), invalid, not found (a tenant
+  // that does not exist, for a caller who may list every tenant),
+  // unavailable (the tenant's database does not answer, or the tenant is
+  // not ready).
+  rpc ListQuarantinedFiles(ListQuarantinedFilesRequest) returns (ListQuarantinedFilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // GetQuarantinedFile answers one quarantined file, and its DICOM header
+  // when asked for and when one could be read.
+  //
+  // Role: reader on the tenant; operator on the tenant with include_header,
+  // since the header holds what the sender sent, identifying data included.
+  // Audit: one entry in the tenant's log, with the file's id as its object
+  // and whether the header was asked for in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant; also
+  // include_header from a caller without operator), invalid, not found (the
+  // tenant has no quarantined file with that id; a tenant that does not
+  // exist, for a caller who may list every tenant), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc GetQuarantinedFile(GetQuarantinedFileRequest) returns (GetQuarantinedFileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ReleaseQuarantinedFile runs a held file through the pipeline again, as
+  // if it arrived now at the receiver it first came to, or at the receiver
+  // the request names: it joins that receiver's reception of its study that
+  // is still receiving, or starts one, and the answer names that reception.
+  // The file's record becomes released. If the file fails again, it is
+  // quarantined again under a new record with a new id, whose released_from
+  // names this one; this record stays released.
+  //
+  // A file quarantined as QUARANTINE_REASON_DIFFERENT_FILE is released only
+  // when the tenant no longer holds an instance under its SOP Instance UID,
+  // which nothing in this version causes: in this version such a file can
+  // only be rejected. A release never replaces an archived instance:
+  // replacing one deletes archived data, and will be an operation of its
+  // own, with a recorded reason and proof of the copy that replaces it.
+  //
+  // A file whose record is already released is answered as it stands, so a
+  // repeated call releases nothing more.
+  //
+  // A file held at a receiver that de-identifies is released only through
+  // a receiver that de-identifies: released through one that archives as
+  // received, a file that joins no reception would land again there and be
+  // archived identified.
+  //
+  // Role: operator on the tenant; admin on the tenant to name a profile
+  // version, since a version decides what leaves a file, as a receiver's
+  // does.
+  // Audit: one entry in the tenant's log, with the file's id as its object,
+  // and the mode, the receiver, the storage and profile version named and
+  // the reception it joined in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a mode other than RELEASE_MODE_AS_IS), not found (the tenant has
+  // no quarantined file with that id; a tenant that does not exist, for a
+  // caller who may list every tenant), precondition (the file is rejected,
+  // or its content was never kept; it is a different file and the tenant
+  // holds an instance under its SOP Instance UID; the receiver it came to
+  // has been removed and the request names none; the receiver named does
+  // not exist; the storage named does not exist; the file was held at a
+  // receiver that de-identifies and the receiver it runs by archives as
+  // received; the profile version named does not exist, cannot
+  // de-identify a receiver's files, or is named through a receiver that
+  // archives as received), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc ReleaseQuarantinedFile(ReleaseQuarantinedFileRequest) returns (ReleaseQuarantinedFileResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // RejectQuarantinedFile removes a held file's bytes from the server, for
+  // good, and keeps its record as rejected, with the reason given. Nothing
+  // on a storage is touched. A file already rejected is answered as it
+  // stands, with its first reason, so a repeated call removes nothing more.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the file's id as its object,
+  // and its quarantine reason, size and SHA-256 in details; the reason given
+  // is kept on the record.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a missing or too long reason), not found (the tenant has no
+  // quarantined file with that id; a tenant that does not exist, for a
+  // caller who may list every tenant), precondition (the file is released),
+  // unavailable (the tenant's database does not answer, or the tenant is
+  // not ready).
+  rpc RejectQuarantinedFile(RejectQuarantinedFileRequest) returns (RejectQuarantinedFileResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}
+
+// QuarantineReason is why a file was quarantined. A reason added in a later
+// version is a new value; a client shows a value it does not know as a
+// reason it cannot name, with the record's details. The keys each reason
+// puts in details are listed with it; no detail ever holds an attribute's
+// value.
+enum QuarantineReason {
+  // Never answered by the server. As a filter, it means every reason.
+  QUARANTINE_REASON_UNSPECIFIED = 0;
+
+  // The bytes received do not parse as a DICOM data set (PS3.5 Section 7)
+  // in the transfer syntax agreed for them. Details: "offset", the byte at
+  // which parsing stopped.
+  QUARANTINE_REASON_NOT_DICOM = 1;
+
+  // The file's SOP Class UID (0008,0016) is not the Affected SOP Class UID
+  // of the C-STORE it came in, and is not a class the receiver accepts. The
+  // C-STORE was answered with status A900, "Error: Data Set Does Not Match
+  // SOP Class" (PS3.4 B.2.3, Table B.2-1), so the sender still holds it; the
+  // bytes are kept so a person can see what was sent, and a release after
+  // the receiver accepts the class archives it. Details: "sop_class_uid",
+  // the class the file holds, as received.
+  QUARANTINE_REASON_SOP_CLASS_NOT_ACCEPTED = 2;
+
+  // The file is larger than the receiver's max_file_bytes. Its bytes are not
+  // kept, and the C-STORE was answered with status A700, "Refused: Out of
+  // Resources" (PS3.4 B.2.3, Table B.2-1), so the sender still holds it; it
+  // cannot be released. A sender may try again, and each try makes a new
+  // record. Details: "limit", the bound in bytes.
+  QUARANTINE_REASON_TOO_LARGE = 3;
+
+  // A UID the server needs (SOP Instance, SOP Class, Study Instance or
+  // Series Instance UID) is missing or not a valid UID (PS3.5 9.1).
+  // Details: "attribute", the attribute's keyword, and "fault": "missing",
+  // "empty" or "bad_uid".
+  QUARANTINE_REASON_BAD_UID = 4;
+
+  // The naming rule could not make a label (NamingRule). Details: "label",
+  // which one ("subject", "session" or "scan"); "attribute", the keyword or
+  // tag of the attribute (or the part of the pattern) that gave it, empty
+  // when the fault is in the label as a whole; and "fault": "missing",
+  // "empty", "too_long", "bad_character", "bad_uid", "no_match" or
+  // "bad_label".
+  QUARANTINE_REASON_BAD_LABEL = 5;
+
+  // The label made for a new subject, session or scan is held by another
+  // one. Details: "label" ("subject", "session" or "scan") and "fault":
+  // "held_by_another_session" (a session label held by another study of
+  // the subject), "held_by_another_scan" (a scan label held by another
+  // series of the session), "two_subjects_for_one_study" (files of one
+  // study gave two subject labels), or "case_collision" (a label that
+  // differs from one held at the same level only in the case of its
+  // letters, which a file system that ignores case would make one
+  // directory), or "held_by_correction" (a label or UID a correction not
+  // yet ended holds; the details then also carry "correction", its id, and
+  // "label" may be "instance").
+  QUARANTINE_REASON_LABEL_CONFLICT = 6;
+
+  // The tenant holds a different file under the same SOP Instance UID: the
+  // same UID with another SHA-256, as when a sender corrects attributes and
+  // sends the object again under its UID, or sends the same object in
+  // another transfer syntax. The archived file is kept and the C-STORE was
+  // answered success. The record's kept_sha256 is the archived file's
+  // checksum. In this version the file can only be rejected: a release
+  // would quarantine it again while the archived instance is held, and
+  // replacing an archived instance will be its own operation, with a
+  // recorded reason. Details: none beyond the record's own fields.
+  QUARANTINE_REASON_DIFFERENT_FILE = 7;
+
+  // The tenant holds the SOP Instance UID under another study or another
+  // series: an instance UID is unique in a tenant. The C-STORE was answered
+  // success. Details: "study_instance_uid" and "series_instance_uid" of the
+  // instance the tenant holds, as received.
+  QUARANTINE_REASON_UID_ELSEWHERE = 8;
+
+  // The storage refused the file's write, or did not answer, after the
+  // server's retries. Details: "storage", its name, and "fault", one of
+  // StorageFault's values in lowercase without its prefix, such as
+  // "unreachable"; never the storage's own words.
+  QUARANTINE_REASON_STORAGE_REFUSED = 9;
+
+  // The file read back from the storage after it was written does not have
+  // the SHA-256 computed when it was received. The copy in the incoming area
+  // is the one kept. Details: "storage", its name, and "read_sha256", the
+  // checksum of what was read.
+  QUARANTINE_REASON_READ_BACK_MISMATCH = 10;
+
+  // The file's header (the attributes before its pixel data) runs past the
+  // bound the server reads a header to, so its UIDs could not be read and
+  // it cannot be placed. Unlike QUARANTINE_REASON_TOO_LARGE, its bytes are
+  // kept, so a person can release it (it is then checked again as it was
+  // received) or reject it. The bound is the setting receiver.header-limit.
+  // Details: "limit", the bound in bytes.
+  QUARANTINE_REASON_HEADER_TOO_LARGE = 11;
+
+  // The server recorded the file as received, and its copy in the incoming
+  // area was gone when the pipeline came to read it: removed or lost from
+  // the disk outside the server. There are no bytes left to keep, so it
+  // cannot be released, and the record keeps what is known of the file (its
+  // UIDs, size and checksum as received). Details: none beyond the record's
+  // own fields.
+  QUARANTINE_REASON_INCOMING_LOST = 12;
+
+  // The file's SOP Class, SOP Instance, Study Instance or Series Instance
+  // UID read from its whole header differs from the one the receiver read
+  // from its first bytes to decide where it goes (a stow receiver's part,
+  // checked against the study its request names): a data set that repeats
+  // a placing attribute, or gives one after an attribute of a later tag,
+  // against the order of tags (PS3.5 7.1). The file was answered stored;
+  // it is never placed by what its first bytes did not say. Its bytes are
+  // kept, and a release places it by its whole header. Details:
+  // "attribute", the keyword of the first attribute that differs.
+  QUARANTINE_REASON_UID_MISMATCH = 13;
+
+  // The receiver's de-identification profile cannot process the file, so
+  // it was never archived; its original bytes are kept. Details: "cause",
+  // a fixed word: "no_subject" (a date to shift and no Patient ID to find
+  // the subject's shift by), "lookup_missing" (a lookup table holds no
+  // code for a value and its rule says to quarantine), "bad_value" (a value
+  // the action reads or writes is not one of its VR, PS3.5 6.2),
+  // "too_deep", "too_large", "internal" (a fault of the server's own, every
+  // change undone), "no_profile" (the file arrived at a receiver that
+  // de-identifies and its receiver now names no profile),
+  // "recorded_as_received" (the file arrived while its receiver archived as
+  // received and its receiver de-identifies now; a release checks it again
+  // as a file that just arrived, so it is de-identified), "profile_unusable"
+  // (the profile version cannot run in this version of the server),
+  // "unreadable" or "unwritable" (the data set cannot be read, or written
+  // back, for de-identification), "uid_not_remapped" (the profile
+  // leaves a Study, Series or SOP Instance UID other than the keyed
+  // remapping the server places the file by), "pixels_too_large" (the
+  // image needs work on its pixels and decoded is larger than the setting
+  // deid.pixel-limit; a release once the setting is raised archives it),
+  // "pixels_unsupported" (a pixel rule cannot fill an image of its
+  // layout), "pixels_undecodable" (its frames, or its JPEG segments, do
+  // not decode), "frames_mismatch" (its native pixels hold more bytes than
+  // its stated frames), "pixel_region_outside" (a pixel rule's rectangle lies
+  // wholly outside the image), "pixel_text_unsearched" (its compressed
+  // pixel data has segments that are not searched, such as JPEG 2000's,
+  // and the profile holds such images) or "detect_implausible" (the
+  // detector found regions covering more of the picture than text does);
+  // "path", the element where it
+  // failed, as tags of eight hexadecimal digits with item numbers, such as
+  // "00081115[0]/0020000E", when there is one; and "rule", the rule's name
+  // (or "rule" and its position), when one decided. A release de-identifies
+  // the file again with its receiver's profile version then.
+  QUARANTINE_REASON_DEID_FAILED = 14;
+
+  // The check after de-identification, a separate read of the
+  // de-identified file, found a value the profile removed from the file
+  // still in it (or in a label made for it), so it was never archived.
+  // Details: "path", the element it was found in as for
+  // QUARANTINE_REASON_DEID_FAILED, and "kind", the kind of value found:
+  // "name", "date", "uid" or "text" (an identifier or any other text).
+  // Never the value. A release de-identifies the file again with its
+  // receiver's profile version then, so a profile changed to clean the
+  // value lets it through.
+  QUARANTINE_REASON_RESIDUAL_VALUE = 15;
+
+  // A rule of the receiver's profile whose action is quarantine applies to
+  // an element the file holds. Details: "rule", the rule's name (or "rule"
+  // and its position).
+  QUARANTINE_REASON_PROFILE_REFUSED = 16;
+
+  // The study's receiver routes each study by its routes, and this one was
+  // not routed: no route chose it and the routing holds what none chooses
+  // (Receiver.routing), a route could not be evaluated, or another
+  // reception of the study made its session on another storage while this
+  // one was in flight. Every file of the reception is held, its bytes
+  // kept. Details: "cause", "no_match", "route_unusable" or
+  // "session_elsewhere", and "route", the route's name, for
+  // "route_unusable". A release may name the storage the study goes to
+  // (ReleaseQuarantinedFileRequest.storage); without one the routes run
+  // again.
+  QUARANTINE_REASON_UNROUTED = 17;
+
+  // The image's pixels may carry burned-in text and no pixel rule of the
+  // receiver's profile matches it, so it was never archived; its original
+  // bytes are kept. Details: "cause", why it is at risk, read from the
+  // image as received: "burned_in_annotation" (Burned In Annotation
+  // (0028,0301) is YES), "secondary_capture" (a Secondary Capture Image
+  // Storage SOP class, and Burned In Annotation is not NO), "sop_class" (a
+  // SOP class commonly drawn on: ultrasound, visible light, ophthalmic,
+  // and Burned In Annotation is not NO), "modality" (a modality commonly
+  // drawn on: US, IVUS, ES, GM, XC, SC, OT, XA, RF, OP, SM, PX, IO, and
+  // Burned In Annotation is not NO) or "slide_label" (a whole slide's
+  // label or overview image). A release de-identifies the file
+  // again with its receiver's profile version then, so a profile given a
+  // pixel rule for such images lets it through.
+  QUARANTINE_REASON_BURNED_IN_RISK = 18;
+
+  // The file belongs to data a person deleted from the archive
+  // (CorrectionService.Delete): its SOP Instance UID is that of a deleted
+  // instance, its Series Instance UID that of a deleted scan, its Study
+  // Instance UID that of a deleted session, or, after a subject was
+  // deleted, the naming rule gave it that subject's label. It is held, not
+  // archived, so that a consent withdrawn
+  // is not undone by the next time a scanner or a peer sends the study
+  // again. The C-STORE was answered success, so the sender does not send it
+  // again and again. It is released only once an admin allows the deleted
+  // target to arrive again. Details: "correction", the id of the deletion
+  // it matched.
+  QUARANTINE_REASON_WAS_DELETED = 19;
+
+  // The file repairs an archived instance a scrub marked damaged
+  // (ScrubJob): its SOP Instance UID is that instance's and its SHA-256 as
+  // received is the one the instance was received with, so it is the same
+  // file sent again. It is held rather than archived, since the instance's
+  // UID is held, and an admin puts it in place with
+  // CorrectionService.Replace, which clears the damage mark. The C-STORE
+  // was answered success. Details: "finding", the id of the scrub finding
+  // it matches.
+  QUARANTINE_REASON_REPAIRS_DAMAGED = 20;
+}
+
+// QuarantineState is what has been decided about a quarantined file.
+enum QuarantineState {
+  // Never answered by the server. As a filter, it means every state.
+  QUARANTINE_STATE_UNSPECIFIED = 0;
+
+  // Held: waiting for a person to release or reject it.
+  QUARANTINE_STATE_HELD = 1;
+
+  // Released: it was run through the pipeline again.
+  QUARANTINE_STATE_RELEASED = 2;
+
+  // Rejected: its bytes were removed.
+  QUARANTINE_STATE_REJECTED = 3;
+}
+
+// ReleaseMode is how a released file is run through the pipeline again.
+enum ReleaseMode {
+  // No mode. Refused as invalid by ReleaseQuarantinedFile; in an answer, the
+  // file was not released.
+  RELEASE_MODE_UNSPECIFIED = 0;
+
+  // As it is, by the pipeline's rules now: for after the cause was mended,
+  // such as a naming rule that was fixed. A file whose cause remains is
+  // quarantined again.
+  RELEASE_MODE_AS_IS = 1;
+
+  // Number 2 was a mode that replaced the archived instance under the file's
+  // SOP Instance UID. It is removed: replacing an archived instance deletes
+  // archived data, which a release never does. Neither the number nor the
+  // name is used again.
+  reserved 2;
+  reserved "RELEASE_MODE_OVERWRITE";
+}
+
+// Caller is who sent data to a receiver.
+message Caller {
+  // The Calling AE Title the caller gave (PS3.8 9.3.2), with leading and
+  // trailing spaces removed. Empty when it was not read.
+  string calling_ae_title = 1;
+
+  // The Called AE Title the caller gave. Empty when it was not read.
+  string called_ae_title = 2;
+
+  // The network address the caller's connection came from: in a quarantine
+  // record, with its port, as "192.0.2.7:51234" or "[2001:db8::7]:51234";
+  // in an event that groups connections, the host's address alone, as
+  // "192.0.2.7" or "2001:db8::7".
+  string address = 3;
+}
+
+// QuarantinedFile is the record of one quarantined file. It stays after the
+// file is released or rejected.
+message QuarantinedFile {
+  // The record's id, made by the server, unique in the tenant. Opaque, at
+  // most 64 bytes.
+  string id = 1;
+
+  // Why the file was quarantined.
+  QuarantineReason reason = 2;
+
+  // More about the reason, under the keys the reason lists: at most 16
+  // entries, keys of at most 32 bytes of lowercase ASCII letters and "_",
+  // values of at most 256 bytes. Never a secret, and never an attribute's
+  // value: a UID, as received, is the only thing from the file a detail may
+  // hold.
+  map<string, string> details = 3;
+
+  // What has been decided about it.
+  QuarantineState state = 4;
+
+  // The name of the receiver it arrived at. No other receiver is given that
+  // name while a record names it.
+  string receiver = 5;
+
+  // The id of the reception it belonged to. Empty when it was quarantined
+  // before its study could be known, as a file that is not DICOM or has no
+  // valid Study Instance UID.
+  string reception = 6;
+
+  // Who sent it.
+  Caller caller = 7;
+
+  // Its size in bytes, as written to the incoming area: the DICOM file
+  // header and the data set. For QUARANTINE_REASON_TOO_LARGE, the bytes
+  // read before the bound stopped it.
+  int64 size_bytes = 8;
+
+  // The SHA-256 of the file as received, in lowercase hexadecimal, 64
+  // characters. Empty when its content was not kept whole.
+  string sha256 = 9;
+
+  // The SHA-256 of the file the tenant holds under the same SOP Instance
+  // UID, in lowercase hexadecimal. Set for QUARANTINE_REASON_DIFFERENT_FILE
+  // only.
+  string kept_sha256 = 10;
+
+  // The SOP Class UID (0008,0016), as received, when it could be read
+  // (PS3.3 C.12.1).
+  string sop_class_uid = 11;
+
+  // The SOP Instance UID (0008,0018), as received, when it could be read.
+  string sop_instance_uid = 12;
+
+  // The Study Instance UID (0020,000D), as received, when it could be read.
+  string study_instance_uid = 13;
+
+  // The Series Instance UID (0020,000E), as received, when it could be
+  // read.
+  string series_instance_uid = 14;
+
+  // The Transfer Syntax UID the file was sent in (PS3.5 Section 10).
+  string transfer_syntax_uid = 15;
+
+  // Whether the server holds the file's bytes: true while it is held,
+  // false for a rejected file and for one whose bytes were never kept
+  // (QUARANTINE_REASON_TOO_LARGE). Only a file whose bytes are held can be
+  // released.
+  bool content_kept = 16;
+
+  // When it was quarantined.
+  google.protobuf.Timestamp quarantine_time = 17;
+
+  // When it was released or rejected. Absent while it is held.
+  google.protobuf.Timestamp decide_time = 18;
+
+  // How it was released. RELEASE_MODE_UNSPECIFIED unless it is released.
+  ReleaseMode release_mode = 19;
+
+  // The id of the reception its release joined. Empty unless it is
+  // released.
+  string release_reception = 20;
+
+  // Why it was rejected, as given to RejectQuarantinedFile. Empty unless it
+  // is rejected.
+  string reject_reason = 21;
+
+  // The id of the record whose release quarantined this file again. Empty
+  // unless this record was made by a release that failed.
+  string released_from = 22;
+
+  // The name of the receiver its release ran through. Empty unless it is
+  // released.
+  string release_receiver = 23;
+
+  // Why it was released, as given to ReleaseQuarantinedFile. Empty unless it
+  // is released and a reason was given.
+  string release_reason = 24;
+
+  // The name of the storage its release named
+  // (ReleaseQuarantinedFileRequest.storage). Empty unless it is released
+  // and a storage was named.
+  string release_storage = 25;
+
+  // The profile version its release named
+  // (ReleaseQuarantinedFileRequest.profile). Unset unless it is released
+  // and a version was named.
+  ProfileVersionRef release_profile = 26;
+
+  // The id of the import job that handed the file in (JobService,
+  // ImportJob), so a held file can be traced to the job whose counts it is
+  // in. Empty for a file that arrived any other way; a file a release
+  // quarantines again keeps it. The job counts the file quarantined once,
+  // at its first decision; a release later changes this record, not the
+  // job's counts.
+  string import_job = 27;
+
+  // For a file an import job handed in, its path relative to the import
+  // receiver's root, its segments joined by "/", so a person can find the
+  // source. It can hold what identifies a person (a folder named after a
+  // patient): answered only to an operator or more on the tenant, empty to
+  // a reader, and never written to a log, an event or an audit entry.
+  string import_path = 28 [debug_redact = true];
+}
+
+// ListQuarantinedFilesRequest asks for a page of a tenant's quarantined
+// files. Every filter given must hold for a file to be listed.
+message ListQuarantinedFilesRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // Only the files in this state. QUARANTINE_STATE_UNSPECIFIED for every
+  // state; a review asks for QUARANTINE_STATE_HELD.
+  QuarantineState state = 2;
+
+  // Only the files with this reason. QUARANTINE_REASON_UNSPECIFIED for every
+  // reason.
+  QuarantineReason reason = 3;
+
+  // Only the files that arrived at the receiver of this name. Empty for
+  // every receiver.
+  string receiver = 4;
+
+  // Only the files of the reception with this id. Empty for every
+  // reception.
+  string reception = 5;
+
+  // Only the files quarantined at or after this time. Absent for no lower
+  // bound.
+  google.protobuf.Timestamp start_time = 6;
+
+  // Only the files quarantined before this time. Absent for no upper bound.
+  // Must be after start_time when both are set.
+  google.protobuf.Timestamp end_time = 7;
+
+  // The most files to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 8;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant or filters other
+  // than those it was made with.
+  string page_token = 9;
+
+  // Only the files of this Study Instance UID, as received. Empty for every
+  // study. Needs operator on the tenant.
+  string study_instance_uid = 10;
+
+  // Only the files of this SOP Instance UID, as received. Empty for every
+  // instance. Needs operator on the tenant.
+  string sop_instance_uid = 11;
+}
+
+// ListQuarantinedFilesResponse is a page of quarantined files.
+message ListQuarantinedFilesResponse {
+  // The files of this page, newest first.
+  repeated QuarantinedFile files = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// GetQuarantinedFileRequest names a quarantined file.
+message GetQuarantinedFileRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The record's id. Required; at most 64 bytes.
+  string id = 2;
+
+  // Whether to answer the file's DICOM header in header_json. Needs
+  // operator on the tenant.
+  bool include_header = 3;
+}
+
+// GetQuarantinedFileResponse is the quarantined file named.
+message GetQuarantinedFileResponse {
+  // The record.
+  QuarantinedFile file = 1;
+
+  // The file's data set in the DICOM JSON model (PS3.18 Annex F), without
+  // its bulk data: Pixel Data and every attribute with a value longer than
+  // 1 KiB are left out entirely, with no BulkDataURI and no InlineBinary.
+  // Answered only when include_header was true, the file's bytes are held,
+  // its data set could be read, and the result is at most 1 MiB; a longer
+  // one is never cut, but left out, with header_too_large set. It holds
+  // what the sender sent, identifying data included.
+  string header_json = 2;
+
+  // Whether the header was left out because it is longer than 1 MiB.
+  bool header_too_large = 3;
+}
+
+// ReleaseQuarantinedFileRequest names the file to release and how.
+message ReleaseQuarantinedFileRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The record's id. Required; at most 64 bytes.
+  string id = 2;
+
+  // How to run it again: RELEASE_MODE_AS_IS, the one mode of this version.
+  // Required.
+  ReleaseMode mode = 3;
+
+  // The name of the receiver whose configuration (storage, naming rule) the
+  // file runs by. Empty for the receiver it first came to; required when
+  // that receiver has been removed.
+  string receiver = 4;
+
+  // Why it is released, in words for whoever reads the record later: a
+  // release is a decision, kept with the record as a rejection's reason is.
+  // Optional; when given, 1 to 1024 bytes of UTF-8, not only spaces. A
+  // file already released keeps the reason of its first release.
+  string reason = 5;
+
+  // The name of the tenant's storage the reception the file joins is
+  // archived to, in place of the storage the receiver's routing would
+  // choose: a file held as QUARANTINE_REASON_UNROUTED is released naming
+  // one. It chooses the storage only: the profile version and the senders
+  // are still those of the route that holds for the study, or the
+  // receiver's when none does, and the routing's default does not hold it
+  // again. Optional; empty lets the routing choose again. A storage the
+  // tenant does not have is a precondition failure, and so is a replica, a
+  // storage of the archive tier, and a storage
+  // other than the one an earlier release into the same reception named.
+  // A study whose session the archive already holds stays on that
+  // session's storage. A file that joins no reception (it lands again, as
+  // a file recorded as received at a receiver that de-identifies now does)
+  // keeps the storage through its new landing: the reception it joins then
+  // is archived there. The storage is recorded with the record
+  // (QuarantinedFile.release_storage) and in the release's audit entry.
+  string storage = 6;
+
+  // The profile version the reception the file joins is de-identified
+  // with, in place of the one its route or its receiver names: a file a
+  // profile could not process (QUARANTINE_REASON_DEID_FAILED,
+  // QUARANTINE_REASON_PROFILE_REFUSED, QUARANTINE_REASON_RESIDUAL_VALUE)
+  // is released through a fixed version. Optional; when given, the
+  // request needs admin on the tenant (a version decides what leaves a
+  // file, as a receiver's does), the version must be one the tenant has
+  // and pass the checks a receiver's version passes, and the receiver the
+  // file runs by must de-identify; each is a precondition failure
+  // otherwise, and so is a version other than the one an earlier release
+  // into the same reception named. It applies to that reception's files
+  // only: a later arrival of the session goes by the session's choice. A
+  // file that joins no reception keeps it through its new landing. The
+  // version is recorded with the record (QuarantinedFile.release_profile)
+  // and in the release's audit entry.
+  ProfileVersionRef profile = 7;
+}
+
+// ReleaseQuarantinedFileResponse is the record after the release.
+message ReleaseQuarantinedFileResponse {
+  // The record, released, with the receiver and the reception it joined.
+  QuarantinedFile file = 1;
+}
+
+// RejectQuarantinedFileRequest names the file to reject and why.
+message RejectQuarantinedFileRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The record's id. Required; at most 64 bytes.
+  string id = 2;
+
+  // Why it is rejected, in words for whoever reads the record later.
+  // Required: 1 to 1024 bytes of UTF-8, not only spaces.
+  string reason = 3;
+}
+
+// RejectQuarantinedFileResponse is the record after the rejection.
+message RejectQuarantinedFileResponse {
+  // The record, rejected, with its reason.
+  QuarantinedFile file = 1;
+}

@@ -1,0 +1,1206 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "nopacs/v1/access.proto";
+import "nopacs/v1/audit_seal.proto";
+import "nopacs/v1/correction.proto";
+import "nopacs/v1/job.proto";
+import "nopacs/v1/quarantine.proto";
+import "nopacs/v1/reception.proto";
+import "nopacs/v1/receiver.proto";
+import "nopacs/v1/retention.proto";
+import "nopacs/v1/scope.proto";
+import "nopacs/v1/sender.proto";
+import "nopacs/v1/storage.proto";
+import "nopacs/v1/tenant.proto";
+
+// MonitorService tells what a tenant is doing, in two forms: GetStatus, its
+// numbers now, in one answer; and Watch, a live stream of its events, from a
+// point a client can resume from. A client that follows a tenant reads its
+// status once, then watches from the status's event_cursor: the counts and
+// the cursor are read in one snapshot of the tenant's database, so every
+// event after the cursor is a change the counts do not hold, and every
+// event at or before it is one they do.
+//
+// Both act on a Scope: one tenant, or the installation, which means every
+// tenant at once. Every tenant at once needs operator on the installation:
+// what is inside a tenant is not the installation's own object, and reader
+// on the installation reads only tenants' registrations and states.
+//
+// Events are written in the same transaction as the change they report, and
+// a tenant's events are answered in the order of the commits that wrote
+// them. A reception makes one event per step it reaches, with its counts,
+// never one per file, and an accepted association makes none (a reception
+// counts the associations that fed it); a quarantined file makes one event
+// per file, and so does the decision on it; a job makes one event per state
+// it reaches and, while it runs, at most one of progress every 10 seconds,
+// never one per instance. Events carry labels, ids and
+// counts; they never carry an attribute's value or a UID as such. A label is
+// as identifying as the naming rule that made it (NamingRule). Events are
+// kept for the setting events.retention, and then pruned, the period
+// measured by the server's clock from when an event was written, to within
+// an hour, never by the time the event carries: a period such as
+// "90d", from "1d" to "3650d"; an ordinary setting, whose installation value
+// the installation's admin sets and a tenant's admin may override for the
+// tenant; built-in default "90d".
+service MonitorService {
+  // GetStatus answers the numbers now of one tenant, or of every tenant.
+  // It answers whatever the tenant's state: a tenant whose database does not
+  // answer is answered with its database's state and what the server holds
+  // in memory, and without what is read from the database, rather than with
+  // an error, since that is when its status matters most.
+  //
+  // Role: reader on the tenant asked for; operator on the installation for
+  // every tenant.
+  // Audit: one entry in the log of the scope asked for (for every tenant,
+  // the installation's log).
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a page_size or page_token with a tenant scope), not found (a
+  // tenant that does not exist, for a caller who may list every tenant),
+  // unavailable (the master database does not answer).
+  // Limits: for every tenant, a page of tenants, ordered by name, as a list
+  // is paged.
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // Watch streams the events of one tenant, or of every tenant, as they are
+  // committed, starting after the cursors given or, without them, from now.
+  // The first message of every stream is a keep-alive, sent at once, which
+  // says the stream is open and gives the cursors it starts from. After
+  // that, when nothing is sent for 15 seconds the server sends another, so
+  // a client that hears nothing for much longer knows the stream is lost
+  // and resumes from its last cursors.
+  //
+  // The server keeps no queue per client: it reads each client's events
+  // from the tenants' databases at the pace the client reads them, so a
+  // slow client falls behind without costing the server memory, and loses
+  // nothing until its cursor is older than what is kept. A stream may end
+  // at any time, such as when the server stops (UNAVAILABLE); the client
+  // resumes from the cursors of the last event or keep-alive it received.
+  //
+  // With every tenant, the events of each tenant come in that tenant's
+  // commit order, with no order between tenants. Each event's cursor is its
+  // tenant's, and each keep-alive carries the cursor of every tenant the
+  // stream follows in tenant_cursors, which a new stream takes, with resume
+  // set, to resume tenant by tenant. A tenant whose database stops
+  // answering, or does not answer a read within 5 seconds, is skipped while
+  // the stream goes on and named in each keep-alive's unanswered_tenants;
+  // it is tried again after a wait that doubles from one second to a
+  // minute, and its events follow from where they stopped. A tenant created
+  // while the stream is open joins it from its first event. A tenant that
+  // leaves the list of tenants is paused, its cursor kept, and goes on from
+  // it if it is listed again; a tenant removed and created again under the
+  // same name is another tenant, followed from its first event. One stream
+  // follows at most 10000 tenants: an installation with more is answered
+  // resource exhausted.
+  //
+  // The caller's key and grant are checked again at least every 15 seconds
+  // while the stream is open: a key revoked or expired, or a grant removed,
+  // ends the stream with the answer a new call would get, and so does the
+  // removal of the one tenant a stream watches.
+  //
+  // Role: reader on the tenant asked for; operator on the installation for
+  // every tenant.
+  // Audit: one entry in the log of the scope asked for when the stream
+  // opens, with the cursors' presence and the event types in details, and
+  // one when it ends, with how many events it carried.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a cursor not made by a Watch or status of the tenant it is given
+  // for, cursor with every tenant or tenant_cursors with one tenant), not
+  // found (a tenant that does not exist, for a caller who may list every
+  // tenant), cursor expired (reason CURSOR_EXPIRED: a cursor points before
+  // the oldest event its tenant keeps; reason EVENT_HISTORY_CHANGED: a
+  // cursor belongs to another history of its tenant's feed, as after its
+  // database was restored, imported or loaded, or points after the newest
+  // event it holds; the message names the tenant; the client reads that
+  // tenant's status again, resynchronizes from the catalog for a new
+  // history, and watches from its event_cursor), unavailable
+  // (with one tenant, its database does not answer or it is not ready, when
+  // the stream opens or while it is open; the client resumes later from its
+  // last cursor), resource exhausted (the caller, a key or the local
+  // operator, already holds 16 open streams, or the server holds 1024; or,
+  // with every tenant, the installation has more than 10000 tenants).
+  // Limits: no deadline is applied to the stream when the client sends
+  // none; the 30-second default of other calls does not hold here.
+  rpc Watch(WatchRequest) returns (stream WatchResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ReceptionStepCount is how many receptions are in one step.
+message ReceptionStepCount {
+  // The step.
+  ReceptionStep step = 1;
+
+  // How many receptions of the tenant are in it now.
+  int64 receptions = 2;
+}
+
+// TenantCounts are the numbers of a tenant kept in its database. They are
+// running totals, updated in the transaction of each change, so they equal
+// what the catalog holds after every commit and are not counted per call.
+message TenantCounts {
+  // Subjects in the catalog.
+  int64 subjects = 1;
+
+  // Sessions in the catalog.
+  int64 sessions = 2;
+
+  // Scans in the catalog.
+  int64 scans = 3;
+
+  // Instances (archived files) in the catalog.
+  int64 instances = 4;
+
+  // Quarantined files held now: not released or rejected.
+  int64 quarantined_files = 5;
+
+  // Bytes the server holds for the quarantined files held now; a record
+  // whose bytes were never kept counts none.
+  int64 quarantined_bytes = 6;
+
+  // The receptions in progress, one entry per step that has any, in the
+  // order of the steps. A step with none is left out. The ended steps
+  // (done, quarantined, failed) are never listed.
+  repeated ReceptionStepCount receptions_in_progress = 7;
+
+  // Bytes the tenant holds in the server's incoming area: files received
+  // and not yet archived, files of failed receptions not yet retried or
+  // discarded, and quarantined files held.
+  int64 incoming_bytes = 8;
+
+  // The jobs in progress, one entry per state that has any, in the order
+  // of the states. A state with none is left out. The ended states (done,
+  // partial, failed, canceled) are never listed.
+  repeated JobStateCount jobs_in_progress = 9;
+}
+
+// JobStateCount is how many jobs are in one state.
+message JobStateCount {
+  // The state.
+  JobState state = 1;
+
+  // How many jobs of the tenant are in it now.
+  int64 jobs = 2;
+}
+
+// SenderStatus is a sender's state now.
+message SenderStatus {
+  // The sender's name.
+  string sender = 1;
+
+  // Whether it reaches its peer, and why not.
+  SenderHealth health = 2;
+
+  // Its associations (for a stow sender, requests) open now.
+  int32 open_associations = 3;
+}
+
+// Throughput is how fast files move through a tenant now, measured by the
+// server over the last 10 seconds. It is held in memory, not in the
+// database snapshot: after a restart it starts again from zero.
+message Throughput {
+  // Files received per second, into every receiver of the tenant.
+  double files_received_per_second = 1;
+
+  // Bytes received per second.
+  double bytes_received_per_second = 2;
+
+  // Files archived per second, to every storage of the tenant.
+  double files_archived_per_second = 3;
+
+  // Bytes archived per second.
+  double bytes_archived_per_second = 4;
+}
+
+// StorageStatus is a storage's space now.
+message StorageStatus {
+  // The storage's name.
+  string storage = 1;
+
+  // Bytes of the archived files the catalog holds on it, in the status's
+  // snapshot: a running total kept with each commit. A scan's manifest and
+  // metadata, a few kilobytes each, are not counted.
+  int64 used_bytes = 2;
+
+  // Bytes it can still take: the smaller of what its file system reports
+  // free and what is left under its capacity_bytes, read when the status is
+  // made. Absent when unknown: an S3 storage with no capacity_bytes, or a
+  // file system that did not answer.
+  optional int64 free_bytes = 3;
+
+  // Its capacity_bytes; zero for none.
+  int64 capacity_bytes = 4;
+
+  // Whether its free space is below its reserve (the installation's setting
+  // storage.reserve, ReceiverService), so its
+  // receivers refuse new associations until space returns. False when its
+  // free space is unknown.
+  bool nearly_full = 5;
+
+  // For an S3 storage, the bucket's versioning, read when the storage was
+  // opened, so a person sees what a purge can claim: on a versioned bucket
+  // a removed object's older versions stay unless purge_versions deletes
+  // them. STORAGE_VERSIONING_DIRECTORY for a directory.
+  StorageVersioning versioning = 6;
+
+  // For an S3 storage, whether the bucket has object lock enabled, read
+  // when the storage was opened: a locked version cannot be removed before
+  // its retention ends, and a purge reports it retained.
+  bool object_lock = 7;
+
+  // Its tier (Storage.tier).
+  StorageTier tier = 8;
+
+  // For a replica, the name of its primary; empty otherwise. How far it is
+  // from its primary is in TenantStatus.replicas.
+  string replica_of = 9;
+
+  // Whether a switch (ReplicaService.SwitchStorage) of this primary is in
+  // progress, so the receivers and routes that name it refuse new data for
+  // now (ASSOCIATION_FAILURE_STORAGE_SWITCHING) and every other write to
+  // it waits. A switch runs to its end or refusal whatever becomes of the
+  // call that started it; this, last_switch_time and the
+  // EVENT_TYPE_STORAGE_SWITCHED event tell how it ended.
+  bool switching = 10;
+
+  // When the last switch of this storage ended, made or refused, by the
+  // server's clock. Absent when none has run.
+  google.protobuf.Timestamp last_switch_time = 11;
+
+  // Its switch_generation (Storage): how many switches changed the place
+  // its name names.
+  int64 switch_generation = 12;
+}
+
+// RecallCounts are a tenant's recalls of objects from its archive-tier
+// storages, by state, and the job units waiting for them.
+message RecallCounts {
+  // Recalls recorded and being asked of the store.
+  int64 requested = 1;
+
+  // Recalls the store has accepted and is working on.
+  int64 in_progress = 2;
+
+  // Objects recalled and readable now, until their recall ends.
+  int64 online = 3;
+
+  // Recalls the store refused or did not complete, not yet asked again.
+  int64 failed = 4;
+
+  // Job units waiting for a recall, with the reason "recalling".
+  int64 units_waiting = 5;
+}
+
+// StorageVersioning is an S3 bucket's versioning, as the bucket answered
+// it (GetBucketVersioning).
+enum StorageVersioning {
+  // Never answered by the server.
+  STORAGE_VERSIONING_UNSPECIFIED = 0;
+
+  // A directory storage: it keeps no versions, and a removal removes the
+  // bytes.
+  STORAGE_VERSIONING_DIRECTORY = 1;
+
+  // The bucket was never versioned: a removal removes the bytes.
+  STORAGE_VERSIONING_OFF = 2;
+
+  // The bucket keeps every version: a removal by key only hides the bytes
+  // behind a delete marker.
+  STORAGE_VERSIONING_ENABLED = 3;
+
+  // Versioning was turned off after being on: versions made before stay.
+  STORAGE_VERSIONING_SUSPENDED = 4;
+
+  // The server could not read it, for want of permission or because the
+  // store does not answer the question; a purge reports what it could not
+  // prove as unknown.
+  STORAGE_VERSIONING_UNKNOWN = 5;
+}
+
+// ReceiverStatus is a receiver's state now.
+message ReceiverStatus {
+  // The receiver's name.
+  string receiver = 1;
+
+  // Whether it accepts data, and why not.
+  ReceiverHealth health = 2;
+
+  // Whether it admits any caller, so a status shows a receiver open to
+  // everyone.
+  bool any_caller = 3;
+}
+
+// TenantStatus is one tenant's numbers now.
+message TenantStatus {
+  // The tenant's name.
+  string tenant = 1;
+
+  // Whether the tenant's database answers and its tables are current, from
+  // the server's current view, as TenantService answers it.
+  TenantState database_state = 2;
+
+  // When the tenant entered that state.
+  google.protobuf.Timestamp database_state_time = 3;
+
+  // The position of the tenant's event feed in the same snapshot as the
+  // counts: a Watch of this tenant from this cursor answers exactly the
+  // events whose changes the counts do not hold. Empty when the tenant's
+  // database did not answer. Opaque; at most 1 KiB.
+  string event_cursor = 4;
+
+  // The tenant's counts. Absent when its database did not answer.
+  TenantCounts counts = 5;
+
+  // How fast files move through it now.
+  Throughput throughput = 6;
+
+  // Each of its storages, ordered by name. Empty when its database did not
+  // answer; a client tells that from a tenant with no storage by counts
+  // being absent.
+  repeated StorageStatus storages = 7;
+
+  // Each of its receivers, ordered by name, from the server's memory, so
+  // they are answered also when its database does not answer.
+  repeated ReceiverStatus receivers = 8;
+
+  // The tenant's setting incoming.limit in bytes: the most it may hold in
+  // the server's incoming area before its receivers refuse new
+  // associations. Zero for no limit of its own.
+  int64 incoming_limit_bytes = 9;
+
+  // Each of its senders, ordered by name, from the server's memory, so
+  // they are answered also when its database does not answer.
+  repeated SenderStatus senders = 10;
+
+  // Its last scrub, so a person sees when its stored bytes were last
+  // proven. Absent when no scrub has run, and when its database did not
+  // answer.
+  ScrubSummary last_scrub = 11;
+
+  // The scrub findings that hold now, one entry per kind that has any, in
+  // the order of the kinds, whatever scrub found them. Empty when there
+  // are none, and when its database did not answer.
+  repeated ScrubFindingCount open_findings = 12;
+
+  // How far its audit log is sealed (AuditSealService). Absent when its
+  // database did not answer.
+  AuditSealStatus audit_seal = 13;
+
+  // Its deletes committed and not yet purged: hidden, their bytes kept
+  // until their purge time and still undone by UndoCorrection; and those
+  // purging. Zero when its database did not answer.
+  int64 pending_deletions = 14;
+
+  // The bytes those deletes keep on its storages until they are purged.
+  int64 pending_deletion_bytes = 15;
+
+  // The id of its event feed's history (WatchKeepAlive.event_history): a
+  // restore, an import or a load of its database begins a new one, and a
+  // cursor of another history is refused. Opaque; at most 64 bytes. Empty
+  // when its database did not answer.
+  string event_history = 16;
+
+  // The generation this tenant holds in the owner record on its storages:
+  // one more each time an import or a restore took them over, so a server
+  // whose generation is lower knows it no longer owns them and fences the
+  // tenant (TENANT_STATE_FENCED). Zero when its database did not answer.
+  int64 owner_generation = 17;
+
+  // Its corrections found by a rebuild or a restore as a record on a
+  // storage with no row in its database, applied fail-closed and waiting
+  // for an admin to undo or purge them (Correction.unresolved). Zero when
+  // its database did not answer.
+  int64 unresolved_corrections = 18;
+
+  // Each of its replicas, with how far it is from its primary, ordered by
+  // primary, then replica name. Empty when it has none, and when its
+  // database did not answer.
+  repeated ReplicaStatus replicas = 19;
+
+  // Its recalls from archive-tier storages, and the job units waiting for
+  // them. Absent when its database did not answer.
+  RecallCounts recalls = 20;
+
+  // Where its retention stands: rules, sessions due, the daily pass and its
+  // clock, holds. Absent when its database did not answer.
+  RetentionStatus retention = 21;
+}
+
+// ScrubSummary is a tenant's last scrub, for a status.
+message ScrubSummary {
+  // The scrub job's id (JobService).
+  string job = 1;
+
+  // Where it is.
+  JobState state = 2;
+
+  // When its first work started. Absent while it is queued.
+  google.protobuf.Timestamp start_time = 3;
+
+  // When it ended. Absent while it is queued or running.
+  google.protobuf.Timestamp end_time = 4;
+
+  // The findings it recorded, one entry per kind that has any.
+  repeated ScrubFindingCount findings = 5;
+}
+
+// ScrubFindingCount is how many scrub findings are of one kind.
+message ScrubFindingCount {
+  // The kind.
+  ScrubFindingKind kind = 1;
+
+  // How many.
+  int64 findings = 2;
+}
+
+// GetStatusRequest asks for the status of one tenant or of every tenant.
+message GetStatusRequest {
+  // A tenant, for its status; or the installation, for every tenant's.
+  // Required.
+  Scope scope = 1;
+
+  // With the installation, the most tenants to answer: zero means 100; at
+  // most 1000. A larger or negative value is invalid. Must be zero with a
+  // tenant.
+  int32 page_size = 2;
+
+  // With the installation, the next_page_token of the previous page, or
+  // empty for the first page. Opaque; at most 1 KiB. Must be empty with a
+  // tenant.
+  string page_token = 3;
+}
+
+// GetStatusResponse is the status asked for.
+message GetStatusResponse {
+  // One tenant's status, or a page of every tenant's, ordered by name. Every
+  // tenant the scope covers is answered, whatever its state.
+  repeated TenantStatus tenants = 1;
+
+  // The page_token that asks for the next page. Empty on the last page, and
+  // always with a tenant scope.
+  string next_page_token = 2;
+
+  // When the answer was made.
+  google.protobuf.Timestamp time = 3;
+
+  // With the installation, the keys that work now and expire within the
+  // installation's setting key.expiry-warning (built-in default 7 days),
+  // oldest first, on every page; empty with a tenant. Each such key is also
+  // reported once a day in the server's log of access events.
+  repeated Key expiring_keys = 4;
+
+  // With the installation, how far the installation's own audit log is
+  // sealed, on every page; absent with a tenant, whose log's seal is its
+  // TenantStatus.audit_seal.
+  AuditSealStatus installation_audit_seal = 5;
+}
+
+// EventType is the kind of an event. A type added in a later version is a
+// new value with a new payload: a client skips an event of a type it does
+// not know, and takes its cursor.
+enum EventType {
+  // Never answered by the server; refused as invalid in a filter.
+  EVENT_TYPE_UNSPECIFIED = 0;
+
+  // A receiver turned callers away.
+  EVENT_TYPE_ASSOCIATION_FAILED = 1;
+
+  // A reception reached a step.
+  EVENT_TYPE_RECEPTION_STEP = 2;
+
+  // A file was quarantined.
+  EVENT_TYPE_FILE_QUARANTINED = 3;
+
+  // A quarantined file was released or rejected.
+  EVENT_TYPE_QUARANTINE_DECIDED = 4;
+
+  // A receiver went up or down, or down for another reason.
+  EVENT_TYPE_RECEIVER_HEALTH = 5;
+
+  // A storage became nearly full, or recovered.
+  EVENT_TYPE_STORAGE_SPACE = 6;
+
+  // The pass that gives frame tables to the metadata of scans archived
+  // before them rewrote a scan's metadata, or ended.
+  EVENT_TYPE_FRAMES_ADDED = 7;
+
+  // A job was made or reached a state.
+  EVENT_TYPE_JOB_STEP = 8;
+
+  // A running job's counts, at most once every 10 seconds per job.
+  EVENT_TYPE_JOB_PROGRESS = 9;
+
+  // A sender went up or down, or down for another reason.
+  EVENT_TYPE_SENDER_HEALTH = 10;
+
+  // A scrub recorded a finding, or cleared one.
+  EVENT_TYPE_SCRUB_FINDING = 11;
+
+  // A correction changed what the catalog shows: a delete committed, undone
+  // or purged; a relabel or a replace published.
+  EVENT_TYPE_CATALOG_CHANGED = 12;
+
+  // A rebuild made a new catalog the one in use, or a restore or an import
+  // rebuilt it; the first event of a new history.
+  EVENT_TYPE_CATALOG_REBUILT = 13;
+
+  // A replica's lag passed the tenant's replica.lag-alert, or fell back
+  // under it.
+  EVENT_TYPE_REPLICA_BEHIND = 14;
+
+  // A switch made a replica the primary (ReplicaService.SwitchStorage), or
+  // was refused and every write resumed on the old place.
+  EVENT_TYPE_STORAGE_SWITCHED = 15;
+
+  // A hold was placed or released, or found on a storage and made active.
+  EVENT_TYPE_HOLD_CHANGED = 16;
+
+  // The tenant's retention was paused for a clock jump, or resumed when an
+  // admin confirmed the time.
+  EVENT_TYPE_RETENTION_CLOCK = 17;
+}
+
+// AssociationFailure is why a DIMSE receiver turned a caller away. Each
+// value says which mechanism of PS3.8 the caller saw. A value added in a
+// later version is a new value.
+enum AssociationFailure {
+  // Never answered by the server.
+  ASSOCIATION_FAILURE_UNSPECIFIED = 0;
+
+  // Rejected (A-ASSOCIATE-RJ, rejected-permanent, PS3.8 9.3.4,
+  // "calling-AE-title-not-recognized"): the caller matches none of the
+  // receiver's allowed callers.
+  ASSOCIATION_FAILURE_CALLER_NOT_ALLOWED = 1;
+
+  // Rejected (A-ASSOCIATE-RJ, rejected-permanent,
+  // "called-AE-title-not-recognized"): the caller called an AE title that
+  // is not the receiver's.
+  ASSOCIATION_FAILURE_CALLED_AE_TITLE_NOT_RECOGNIZED = 2;
+
+  // Accepted with every presentation context rejected (A-ASSOCIATE-AC,
+  // PS3.8 9.3.3.2, "abstract-syntax-not-supported" or
+  // "transfer-syntaxes-not-supported"): the association exists, but no
+  // proposed SOP class and transfer syntax is one the receiver accepts, so
+  // nothing can be sent on it. This event is the only one it makes.
+  ASSOCIATION_FAILURE_NO_ACCEPTABLE_CONTEXT = 3;
+
+  // Rejected (A-ASSOCIATE-RJ, rejected-transient): the incoming area or the
+  // receiver's storage has less free space than its reserve
+  // (storage.reserve).
+  ASSOCIATION_FAILURE_NEARLY_FULL = 4;
+
+  // Rejected (A-ASSOCIATE-RJ, rejected-transient): the tenant is not ready.
+  ASSOCIATION_FAILURE_TENANT_NOT_READY = 5;
+
+  // The TLS handshake failed and the connection was closed before any
+  // association was asked for; the caller's AE titles are unknown.
+  ASSOCIATION_FAILURE_TLS_FAILED = 6;
+
+  // Aborted by the receiver (A-ABORT, PS3.8 9.3.8) because the caller broke
+  // the upper layer protocol (PS3.8 Section 9), before or after the
+  // association was accepted. Files the association had already stored
+  // stay received; a store it cut short is not kept. This event is the
+  // only one it makes.
+  ASSOCIATION_FAILURE_PROTOCOL_ERROR = 7;
+
+  // Rejected (A-ASSOCIATE-RJ, rejected-transient): the tenant holds as many
+  // bytes in the incoming area as its setting incoming.limit allows.
+  ASSOCIATION_FAILURE_INCOMING_LIMIT = 8;
+
+  // Rejected (A-ASSOCIATE-RJ, rejected-transient): the storage the
+  // receiver archives to is being switched to its replica
+  // (ReplicaService.SwitchStorage); the caller tries again and lands on
+  // the new place.
+  ASSOCIATION_FAILURE_STORAGE_SWITCHING = 9;
+}
+
+// StorageSpaceState is whether a storage has room.
+enum StorageSpaceState {
+  // Never answered by the server.
+  STORAGE_SPACE_STATE_UNSPECIFIED = 0;
+
+  // Its free space fell below its reserve (the installation's setting
+  // storage.reserve).
+  STORAGE_SPACE_STATE_NEARLY_FULL = 1;
+
+  // Its free space is above its reserve again.
+  STORAGE_SPACE_STATE_RECOVERED = 2;
+}
+
+// AssociationFailed is a receiver turning callers away. Failures are grouped
+// by receiver, failure and the caller's host address (without its port):
+// the first failure of a group makes an event at once, and further ones in
+// the minute after it are counted and make one event at the end of that
+// minute. When more than 64 distinct hosts fail at one receiver within a
+// minute, the failures of the hosts beyond those 64 are folded into one
+// event at the end of the minute, with caller empty. So a caller trying
+// again and again, or many callers at once, cannot flood the feed.
+message AssociationFailed {
+  // The receiver's name.
+  string receiver = 1;
+
+  // Who called, as far as it is known: the host's address without its port,
+  // and the AE titles when they were read. Absent for the event that folds
+  // the failures of many hosts together.
+  Caller caller = 2;
+
+  // Why the caller was turned away.
+  AssociationFailure failure = 3;
+
+  // How many failures the event stands for: 1 for the first of a group,
+  // more for an event at the end of a minute.
+  int64 count = 4;
+
+  // How many distinct hosts the event stands for: 1, or more for the event
+  // that folds many hosts together.
+  int64 hosts = 5;
+}
+
+// ReceptionStepReached is a reception reaching a step.
+message ReceptionStepReached {
+  // The reception's id.
+  string reception = 1;
+
+  // The name of the receiver it arrived at.
+  string receiver = 2;
+
+  // Its arrival number: 1 for the first reception of its study, more for a
+  // later one.
+  int32 arrival = 3;
+
+  // The step it reached.
+  ReceptionStep step = 4;
+
+  // The step it left: RECEPTION_STEP_UNSPECIFIED for a reception's first
+  // step (receiving, or complete for one made by RetryReception). With it
+  // a client keeps the receptions in progress by step (TenantCounts) from a
+  // status and the events after its cursor, whatever step a reception fails
+  // from.
+  ReceptionStep previous_step = 9;
+
+  // Its totals when it reached the step.
+  ReceptionCounts counts = 5;
+
+  // Its subject's label. Empty before it is identified.
+  string subject_label = 6;
+
+  // Its session's label. Empty before it is identified.
+  string session_label = 7;
+
+  // The id of the failed reception it runs again. Empty unless it was made
+  // by RetryReception.
+  string retry_of = 8;
+}
+
+// FileQuarantined is one file quarantined.
+message FileQuarantined {
+  // The quarantined file's record id.
+  string file = 1;
+
+  // The id of its reception. Empty when it had none.
+  string reception = 2;
+
+  // The name of the receiver it arrived at.
+  string receiver = 3;
+
+  // Why it was quarantined.
+  QuarantineReason reason = 4;
+
+  // Its size in bytes.
+  int64 size_bytes = 5;
+
+  // The tenant's quarantined files held, this one included.
+  int64 held_files = 6;
+
+  // The bytes the server holds for the tenant's quarantined files held, as
+  // TenantCounts.quarantined_bytes counts them.
+  int64 held_bytes = 7;
+}
+
+// QuarantineDecided is a quarantined file released or rejected.
+message QuarantineDecided {
+  // The quarantined file's record id.
+  string file = 1;
+
+  // What was decided: released or rejected.
+  QuarantineState state = 2;
+
+  // How it was released. RELEASE_MODE_UNSPECIFIED for a rejection.
+  ReleaseMode release_mode = 3;
+
+  // The id of the reception its release joined. Empty for a rejection.
+  string release_reception = 4;
+
+  // The tenant's quarantined files held after the decision.
+  int64 held_files = 5;
+
+  // The bytes the server holds for the tenant's quarantined files held
+  // after the decision, as TenantCounts.quarantined_bytes counts them.
+  int64 held_bytes = 6;
+}
+
+// ReceiverHealthChanged is a receiver's state changing.
+message ReceiverHealthChanged {
+  // The receiver's name.
+  string receiver = 1;
+
+  // Its new state.
+  ReceiverHealth health = 2;
+}
+
+// StorageSpaceChanged is a storage becoming nearly full or recovering.
+message StorageSpaceChanged {
+  // The storage's name.
+  string storage = 1;
+
+  // Whether it is nearly full or recovered.
+  StorageSpaceState state = 2;
+
+  // Its used bytes then.
+  int64 used_bytes = 3;
+
+  // Its free bytes then. Absent when unknown.
+  optional int64 free_bytes = 4;
+}
+
+// FramesAdded is the progress of the pass that gives frame tables (where
+// each frame of an instance's pixel data lies in its file) to the metadata
+// of scans archived before such tables were recorded. The server runs it
+// once at each start; it reads only the metadata's first bytes for a scan
+// already done, so a pass with nothing to do writes no event. One event
+// reports a scan's metadata rewritten; one with finished set reports the
+// end of a pass that rewrote any.
+message FramesAdded {
+  // The subject label of the scan rewritten; empty when finished.
+  string subject_label = 1;
+
+  // Its session's label; empty when finished.
+  string session_label = 2;
+
+  // Its label; empty when finished.
+  string scan_label = 3;
+
+  // How many of the scan's instances were given a table; 0 when finished.
+  int64 instances = 4;
+
+  // The pass's total so far of scans rewritten.
+  int64 scans_done = 5;
+
+  // The pass's total so far of instances given a table.
+  int64 instances_done = 6;
+
+  // Set on the event that ends a pass, every scan of the tenant checked.
+  bool finished = 7;
+}
+
+// JobStepReached is a job made or reaching a state.
+message JobStepReached {
+  // The job's id.
+  string job = 1;
+
+  // The state it reached: queued for a job just made.
+  JobState state = 2;
+
+  // The state it left: JOB_STATE_UNSPECIFIED for a job just made. With it
+  // a client keeps the jobs in progress by state (TenantCounts) from a
+  // status and the events after its cursor.
+  JobState previous_state = 3;
+
+  // Its counts when it reached the state.
+  JobCounts counts = 4;
+
+  // For a send job, the name of its sender.
+  string sender = 5;
+
+  // For a job a receiver's forward made, the receiver's name. Empty
+  // otherwise.
+  string receiver = 6;
+
+  // For a job a receiver's forward made, the reception's id. Empty
+  // otherwise.
+  string reception = 7;
+
+  // The id of the ended job whose unsent instances it sends. Empty unless
+  // RetryJob made it.
+  string retry_of = 8;
+
+  // Why it is held back or why it ended as it did, as Job.reason.
+  string reason = 9;
+}
+
+// JobProgressed is a running job's counts. At most one per job every 10
+// seconds, and none when its counts did not change; its state's events
+// carry the counts at each state.
+message JobProgressed {
+  // The job's id.
+  string job = 1;
+
+  // Its counts now.
+  JobCounts counts = 2;
+
+  // For a send job, the name of its sender.
+  string sender = 3;
+}
+
+// SenderHealthChanged is a sender's state changing.
+message SenderHealthChanged {
+  // The sender's name.
+  string sender = 1;
+
+  // Its new state.
+  SenderHealth health = 2;
+}
+
+// ScrubFindingChanged is a scrub finding recorded or cleared. It names the
+// scan by labels, never the object's key or the instance's id, which hold
+// a UID as received.
+message ScrubFindingChanged {
+  // The finding's id (ListScrubFindings).
+  string finding = 1;
+
+  // What was found.
+  ScrubFindingKind kind = 2;
+
+  // The name of the storage it is on.
+  string storage = 3;
+
+  // The label of the subject of the scan it belongs to; empty for an
+  // orphan that names no scan.
+  string subject_label = 4;
+
+  // The label of that scan's session; empty as subject_label.
+  string session_label = 5;
+
+  // The label of that scan; empty as subject_label.
+  string scan_label = 6;
+
+  // Set when a later scrub read it good again and cleared it.
+  bool cleared = 7;
+
+  // The id of the scrub job.
+  string job = 8;
+}
+
+// CatalogChanged is a correction changing what the catalog shows.
+message CatalogChanged {
+  // The correction's id (CorrectionService).
+  string correction = 1;
+
+  // What it does.
+  CorrectionKind kind = 2;
+
+  // The state it reached.
+  CorrectionState state = 3;
+
+  // The label of the subject it acts on.
+  string subject_label = 4;
+
+  // The label of the session it acts on; empty for a whole subject.
+  string session_label = 5;
+
+  // The label of the scan it acts on; empty for a whole session.
+  string scan_label = 6;
+
+  // For a relabel, the new label of the target's level.
+  string to_label = 7;
+
+  // The instances the change covers.
+  int64 instances = 8;
+
+  // For a replace, the instance's new revision; 0 otherwise.
+  int32 revision = 9;
+
+  // Who asked for the correction: a person, or a retention rule.
+  CorrectionOrigin origin = 10;
+}
+
+// ReplicaBehind is a replica's lag passing the tenant's replica.lag-alert,
+// or falling back under it. One event each way, never one per scan.
+message ReplicaBehind {
+  // The replica's name.
+  string replica = 1;
+
+  // The name of its primary.
+  string primary = 2;
+
+  // Its lag then (ReplicaStatus.lag).
+  google.protobuf.Duration lag = 3;
+
+  // The scans not in step then: pending, copying or damaged.
+  int64 scans_behind = 4;
+
+  // Set on the event that says the lag fell back under the alert.
+  bool recovered = 5;
+}
+
+// StorageSwitched is a switch's end: a replica made the primary in one
+// step, after which the primary's name names the replica's former place
+// and the replica's name the primary's former place, as a replica of the
+// primary; or a switch refused, the places unchanged and every write
+// resumed.
+message StorageSwitched {
+  // The primary's name.
+  string primary = 1;
+
+  // The replica's name, now on the former primary's place.
+  string replica = 2;
+
+  // The scans the drain copied before the swap.
+  int64 scans_drained = 3;
+
+  // The associations and requests refused during the pause, each tried
+  // again by its sender.
+  int64 associations_refused = 4;
+
+  // How long the receivers refused new data.
+  google.protobuf.Duration pause = 5;
+
+  // Set when the switch was refused, the places unchanged.
+  bool refused = 6;
+
+  // Why it was refused, from a fixed set of phrases the server has, such
+  // as "replica not in step when drain_timeout passed" or "server
+  // restarted" (the server stopped before the swap committed); at most 256
+  // bytes.
+  // Empty for a switch made.
+  string refusal = 7;
+
+  // The primary's switch_generation after the event: raised by one for a
+  // switch made (the replica's is raised too), unchanged for one refused.
+  int64 switch_generation = 8;
+}
+
+// HoldChanged is a hold placed, released, or found on a storage and made
+// active. It names the target by labels, never its reason, which stays with
+// the hold for an operator to read.
+message HoldChanged {
+  // The hold's id (RetentionService).
+  string hold = 1;
+
+  // Its state now.
+  HoldState state = 2;
+
+  // The label of the subject it covers; empty for the whole tenant.
+  string subject_label = 3;
+
+  // The label of the session it covers; empty for a whole subject.
+  string session_label = 4;
+
+  // The label of the scan it covers; empty for a whole session.
+  string scan_label = 5;
+
+  // Whether it covers the whole tenant.
+  bool whole_tenant = 6;
+
+  // Whether a rebuild or a restore found its record on a storage with no
+  // row and made it active.
+  bool found_on_storage = 7;
+}
+
+// RetentionClock is the tenant's retention paused for a clock jump, or
+// resumed.
+message RetentionClock {
+  // Whether it is paused now.
+  bool paused = 1;
+
+  // How far the clock moved forward between the last pass and the one that
+  // paused. Absent on the event that resumes.
+  google.protobuf.Duration clock_step = 2;
+
+  // The time of the last pass the server trusts: before the jump, or the
+  // time an admin confirmed.
+  google.protobuf.Timestamp last_pass_time = 3;
+}
+
+// CatalogRebuilt is a catalog made again from the storages and put in use
+// in one transaction. When it begins a new history (after a restore, an
+// import or a load), it is that history's first event, and a consumer that
+// sees it reads the catalog again from a status and lists rather than
+// trusting what it built from the old feed.
+message CatalogRebuilt {
+  // The rebuild job's id (JobService); empty for one a restore or an
+  // import ran.
+  string job = 1;
+
+  // The instances the new catalog holds.
+  int64 instances = 2;
+
+  // Whether it begins a new history of the feed.
+  bool new_history = 3;
+}
+
+// Event is one thing that happened in a tenant.
+message Event {
+  // The event's cursor: a Watch of its tenant from it answers the events
+  // after this one. Opaque; at most 1 KiB; compared whole, never parsed or
+  // ordered by a client.
+  string cursor = 1;
+
+  // When the change it reports was committed.
+  google.protobuf.Timestamp time = 2;
+
+  // The name of the tenant it happened in.
+  string tenant = 3;
+
+  // Its type: always the one that names the payload set.
+  EventType type = 4;
+
+  // What happened. Exactly one is set, the one its type names. A client
+  // that finds none it knows set is reading a type added later.
+  oneof payload {
+    // A receiver turned callers away.
+    AssociationFailed association_failed = 5;
+
+    // A reception reached a step.
+    ReceptionStepReached reception_step = 6;
+
+    // A file was quarantined.
+    FileQuarantined file_quarantined = 7;
+
+    // A quarantined file was released or rejected.
+    QuarantineDecided quarantine_decided = 8;
+
+    // A receiver's state changed.
+    ReceiverHealthChanged receiver_health = 9;
+
+    // A storage became nearly full or recovered.
+    StorageSpaceChanged storage_space = 10;
+
+    // The pass of frame tables rewrote a scan's metadata, or ended.
+    FramesAdded frames_added = 11;
+
+    // A job was made or reached a state.
+    JobStepReached job_step = 12;
+
+    // A running job's counts.
+    JobProgressed job_progress = 13;
+
+    // A sender's state changed.
+    SenderHealthChanged sender_health = 14;
+
+    // A scrub finding was recorded or cleared.
+    ScrubFindingChanged scrub_finding = 15;
+
+    // A correction changed what the catalog shows.
+    CatalogChanged catalog_changed = 16;
+
+    // A catalog was made again and put in use.
+    CatalogRebuilt catalog_rebuilt = 17;
+
+    // A replica's lag passed the alert, or fell back under it.
+    ReplicaBehind replica_behind = 18;
+
+    // A replica was made the primary.
+    StorageSwitched storage_switched = 19;
+
+    // A hold was placed, released or found on a storage.
+    HoldChanged hold_changed = 20;
+
+    // The tenant's retention was paused for a clock jump, or resumed.
+    RetentionClock retention_clock = 21;
+  }
+}
+
+// WatchKeepAlive opens every stream, and is sent again when no event has
+// been sent for 15 seconds.
+message WatchKeepAlive {
+  // When it was sent.
+  google.protobuf.Timestamp time = 1;
+
+  // On one tenant, the position the stream has read up to, past events the
+  // filter left out: resuming from it skips them again rather than reading
+  // them a second time. Empty with every tenant. Opaque; at most 1 KiB.
+  string cursor = 2;
+
+  // With every tenant, the position the stream has read up to in each
+  // tenant it follows (full) or in each tenant whose position changed since
+  // the keep-alive before (not full), by tenant name, those left out of the
+  // list of tenants for now included; an empty cursor for a tenant it
+  // follows from its first event and has not read yet. A client keeps a
+  // map: a full keep-alive replaces it, a later one is applied to it, and
+  // the map is what a new stream resumes from (WatchRequest.tenant_cursors).
+  // A stream never stops following a tenant, so no entry is ever taken out.
+  // A tenant it was asked to start from now and could not read yet is left
+  // out: resumed without it, the tenant starts from its first event, which
+  // loses nothing. Empty with one tenant. Each cursor is opaque, at most 1
+  // KiB; a keep-alive names at most 10000 tenants, about 200 bytes each at
+  // most, within one message.
+  map<string, string> tenant_cursors = 3;
+
+  // With every tenant, the tenants the stream is skipping for now because
+  // their database did not answer, in order of name, all of them in every
+  // keep-alive. Empty with one tenant.
+  repeated string unanswered_tenants = 4;
+
+  // With every tenant, set on the keep-alive that opens the stream, whose
+  // tenant_cursors name every tenant followed; a later keep-alive names
+  // only those whose position changed, so a mostly idle stream's keep-alive
+  // is a few bytes, not the whole map. Always false with one tenant.
+  bool full = 5;
+
+  // With one tenant, the id of its feed's history (TenantStatus has it
+  // too). A consumer keys what it has seen by (history, cursor), so the
+  // same cursor in a new history is never taken for one already read.
+  // Empty with every tenant. Opaque; at most 64 bytes.
+  string event_history = 6;
+
+  // With every tenant, the history id of each tenant named in
+  // tenant_cursors, by tenant name, in the same full or changed-only way.
+  // Empty with one tenant. Each id opaque, at most 64 bytes.
+  map<string, string> tenant_event_histories = 7;
+}
+
+// WatchRequest asks for a stream of events.
+message WatchRequest {
+  // A tenant, for its events; or the installation, for every tenant's.
+  // Required.
+  Scope scope = 1;
+
+  // With one tenant, start after this cursor: an event's cursor, a
+  // keep-alive's, or a status's event_cursor, of the same tenant. Empty to
+  // start from now. Opaque; at most 1 KiB. Must be empty with every tenant.
+  string cursor = 2;
+
+  // Only events of these types. Empty for every type; at most 16 values,
+  // none of them EVENT_TYPE_UNSPECIFIED.
+  repeated EventType types = 3;
+
+  // With every tenant, where to start in each tenant, by tenant name: a
+  // keep-alive's tenant_cursors, or cursors gathered from events and
+  // statuses; an empty cursor starts the tenant from its first event kept.
+  // A tenant not listed starts from now, or with resume from its first
+  // event kept; a listed tenant that no longer exists is left out. At most
+  // 10000 entries, each cursor at most 1 KiB, within the 4 MB limit of a
+  // message. Must be empty with one tenant.
+  map<string, string> tenant_cursors = 4;
+
+  // With every tenant, tenant_cursors are a keep-alive's: a tenant they do
+  // not name is new to the client (created after that keep-alive, or not
+  // read by that stream yet) and starts from its first event kept, so a
+  // resumed stream loses none of its events. A client that resumes sets it,
+  // even with no cursors at all. Must be false with one tenant.
+  bool resume = 5;
+}
+
+// WatchResponse is one message of the stream: an event or a keep-alive.
+message WatchResponse {
+  // Which it is. Exactly one is set.
+  oneof kind {
+    // An event.
+    Event event = 1;
+
+    // The stream is open: the first message, and again after 15 seconds
+    // with no event.
+    WatchKeepAlive keep_alive = 2;
+  }
+}

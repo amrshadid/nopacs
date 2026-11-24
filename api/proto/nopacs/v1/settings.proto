@@ -1,0 +1,281 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets) is said on the package in access.proto.
+package nopacs.v1;
+
+import "nopacs/v1/scope.proto";
+
+// SettingsService reads and changes settings. The server knows a fixed list
+// of settings, each with a built-in default; the installation may set its own
+// value of any of them, and a tenant may override those the setting allows. A
+// setting is resolved as the tenant's override when it has one, else the
+// installation's value when it has one, else the built-in default. A setting
+// never holds a secret.
+//
+// Who may set a setting, and where, is a property of the setting, one of
+// three kinds:
+//
+//   - An ordinary setting: the installation's admin sets the installation's
+//     value, and, when the setting allows a tenant override, the tenant's
+//     admin sets the tenant's.
+//   - An installation-only setting: it has an installation value and no
+//     tenant override; a tenant scope is refused as invalid. It holds what
+//     only the installation may decide, such as which directories and
+//     endpoints storages may use.
+//   - A setting set on a tenant by the installation's admin only: a tenant's
+//     value is set and unset by an admin on the installation, never by the
+//     tenant's own admin (who is answered PERMISSION_DENIED), and is read by
+//     a reader on the tenant. It holds what the installation hands out to
+//     tenants, such as the ports a tenant's receivers may use. Such a
+//     setting may also have an installation value, the default for every
+//     tenant, or may refuse the installation scope as invalid when a
+//     default makes no sense; the setting says which. A value may be
+//     refused because of what other tenants hold, such as a port range that
+//     overlaps another tenant's: the installation's admin may list every
+//     tenant, so it is told (precondition).
+//
+// A value that would take away what a tenant's receiver, storage or sender
+// uses (a port, a bind address, a directory root, an import root or its
+// allotment to the tenant, an S3 endpoint, a destination) is refused
+// (precondition), and so is unsetting it; the receiver or storage is moved
+// or removed first.
+//
+// The settings a receiver, a storage, a sender, a job or the event feed
+// reads, with their kinds, are named where they are used: receiver.ports,
+// receiver.bind-addresses, receiver.header-limit, receiver.allow-as-received,
+// incoming.limit and storage.reserve (ReceiverService), storage.directory-roots and
+// storage.s3-endpoints (StorageService), sender.destinations,
+// sender.allow-plain-http, sender.max-associations and
+// sender.tenant-max-associations (SenderService), job.failures-kept
+// (JobService), read.per-caller (built-in default "16", 1 to 1024) and
+// read.per-server (built-in default "256", 16 to 65536), both
+// installation-only, the most reads of archived bytes one caller and the
+// whole server hold open at once (DataService, DownloadService; a change
+// that makes the first exceed the second is refused as a precondition),
+// and events.retention (MonitorService). delete.grace (an ordinary
+// setting, a tenant may override it; built-in default "7d", "0d" to "90d";
+// CorrectionService). Those of keeping
+// the archive whole, not yet in use by the server: scrub.rate and
+// scrub.interval (ordinary settings, a tenant may override them; JobService,
+// ScrubJob), and audit.seal-interval and audit.retention
+// (installation-only; AuditSealService). Those of importing a directory,
+// not yet in use by the server: import.roots (installation-only; built-in
+// default none) and import.allowed-roots (set on a tenant by the
+// installation's admin only, no installation value; built-in default none)
+// (ReceiverService), import.max-units (set on a tenant by the
+// installation's admin only, with an installation value; built-in default
+// "4"), import.server-max-units (installation-only; built-in default "8")
+// and import.max-dir-entries (installation-only; built-in default
+// "200000") (JobService). Those of replicas, cold tiers and retention, not
+// yet in use by the server: replica.rate (bytes per second per replica,
+// such as "64MiB", from "1MiB" to "10GiB"; built-in default "64MiB"),
+// replica.lag-alert (a period from "1m" to "30d"; built-in default "1h"),
+// replica.repair ("manual" or "auto"; built-in default "manual") and
+// recall.wait (a period from "1h" to "30d"; built-in default "48h"), each
+// an ordinary setting a tenant may override (ReplicaService);
+// scrub.archive-sample (a percentage from "0%" to "100%"; an ordinary
+// setting a tenant may override; built-in default "0%") (JobService,
+// ScrubJob); retention.shorten-notice (a period from "1d" to "365d";
+// built-in default "30d") and retention.max-per-pass (a whole number from
+// 1 to 100000; built-in default "1000"), each set on a tenant by the
+// installation's admin only, with an installation value, since they bound
+// what a tenant's own admin can make go at once; and
+// retention.max-clock-step (a period from "1h" to "30d"; installation-only,
+// since the clock is the server's; built-in default "2d")
+// (RetentionService).
+//
+// The paths of import.roots, like those of storage.directory-roots, are
+// answered only to an admin on the installation; any other caller is
+// answered the roots' names alone, one per line.
+service SettingsService {
+  // GetSetting answers the value of one setting as it applies to the scope
+  // asked for: on the installation, the installation's value, else the
+  // built-in default; on a tenant, the tenant's override when it has one,
+  // else what applies on the installation. The answer's scope and source say
+  // where the value came from. The paths of storage.directory-roots and
+  // import.roots are answered only to an admin on the installation; any
+  // other caller is
+  // answered the roots' names alone, one per line.
+  //
+  // Role: reader on the scope asked for.
+  // Audit: one entry in the log of the scope asked for, with the setting's
+  // name as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (no setting the server knows has that name; a tenant that does
+  // not exist, for a caller who may list every tenant), unavailable (the
+  // database of the scope does not answer, or the tenant is not ready).
+  rpc GetSetting(GetSettingRequest) returns (GetSettingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // SetSetting sets the installation's value of a setting, or a tenant's
+  // override of it when the setting allows one. The change and its audit
+  // entry are written together or not at all.
+  //
+  // Role: admin on the scope set; for a setting set on a tenant by the
+  // installation's admin only, admin on the installation, whatever the
+  // scope.
+  // Audit: one entry in the log of the scope set, with the setting's name as
+  // its object; the value is not recorded.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a value the setting does not accept, and a scope the setting does
+  // not take), not found (no setting the server knows has that name; a
+  // tenant that does not exist, for a caller who may list every tenant),
+  // precondition (a value the setting refuses because of what exists, such
+  // as a port range another tenant holds), unavailable (the database of the
+  // scope does not answer, or the tenant is not ready).
+  rpc SetSetting(SetSettingRequest) returns (SetSettingResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // UnsetSetting removes a value set on a scope: a tenant's override, so what
+  // applies on the installation applies to the tenant again, or the
+  // installation's value, so the built-in default applies again. Removing a
+  // value that is not set changes nothing and succeeds.
+  //
+  // Role: admin on the scope; for a setting set on a tenant by the
+  // installation's admin only, admin on the installation, whatever the
+  // scope.
+  // Audit: one entry in the log of the scope, with the setting's name as its
+  // object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a scope the setting does not take), not found
+  // (no setting the server knows has that name; a tenant that does not
+  // exist, for a caller who may list every tenant), unavailable (the
+  // database of the scope does not answer, or the tenant is not ready).
+  rpc UnsetSetting(UnsetSettingRequest) returns (UnsetSettingResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListSettings answers settings of one scope, ordered by name: on the
+  // installation, every setting the server knows with the value that applies
+  // there (the installation's, else the built-in default); on a tenant, only
+  // that tenant's overrides. The paths of storage.directory-roots and
+  // import.roots are answered only to an admin on the installation; any
+  // other caller is
+  // answered the roots' names alone, one per line.
+  //
+  // Role: reader on the scope asked for.
+  // Audit: one entry in the log of the scope asked for.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the database of the scope does not answer, or the
+  // tenant is not ready).
+  rpc ListSettings(ListSettingsRequest) returns (ListSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// SettingSource is where the value of a setting comes from.
+enum SettingSource {
+  // Not said. A request leaves it so; the server never answers it.
+  SETTING_SOURCE_UNSPECIFIED = 0;
+
+  // The server's built-in default: neither the installation nor the tenant
+  // has set a value.
+  SETTING_SOURCE_BUILT_IN = 1;
+
+  // The installation's value.
+  SETTING_SOURCE_INSTALLATION = 2;
+
+  // The tenant's override.
+  SETTING_SOURCE_TENANT = 3;
+}
+
+// Setting is one named value, set on the installation or on a tenant.
+message Setting {
+  // The setting's name, from the fixed list of settings the server knows:
+  // 1 to 128 characters of lowercase ASCII letters, digits, ".", "_" and "-".
+  string name = 1;
+
+  // Where the value is set: the installation (its value or the built-in
+  // default), or a tenant's override.
+  Scope scope = 2;
+
+  // The value, in the text form the setting defines, such as "90d" for a
+  // period; at most 64 KiB. The server refuses a value that form does not
+  // accept.
+  string value = 3;
+
+  // Where the value comes from: the built-in default, the installation's
+  // value or the tenant's override. Answered by the server; ignored in a
+  // request.
+  SettingSource source = 4;
+}
+
+// GetSettingRequest names a setting and the scope to resolve it on.
+message GetSettingRequest {
+  // The setting's name. Required; 1 to 128 characters of lowercase ASCII
+  // letters, digits, ".", "_" and "-".
+  string name = 1;
+
+  // The scope the value is resolved on: a tenant (its override, else the
+  // installation's default) or the installation (its default). Required.
+  Scope scope = 2;
+}
+
+// GetSettingResponse is the setting's value on the scope asked for.
+message GetSettingResponse {
+  // The setting; its scope and source are where its value came from.
+  Setting setting = 1;
+}
+
+// SetSettingRequest is the value to set.
+message SetSettingRequest {
+  // The setting. Its name, scope and value are required.
+  Setting setting = 1;
+}
+
+// SetSettingResponse is the setting as stored.
+message SetSettingResponse {
+  // The setting, as stored.
+  Setting setting = 1;
+}
+
+// UnsetSettingRequest names a value to remove.
+message UnsetSettingRequest {
+  // The setting's name. Required; 1 to 128 characters of lowercase ASCII
+  // letters, digits, ".", "_" and "-".
+  string name = 1;
+
+  // The scope whose value is removed: a tenant's override, or the
+  // installation's value. Required.
+  Scope scope = 2;
+}
+
+// UnsetSettingResponse is the setting as it now applies to the scope.
+message UnsetSettingResponse {
+  // What applies on the scope again: for a tenant, the installation's value
+  // or the built-in default; for the installation, the built-in default.
+  Setting setting = 1;
+}
+
+// ListSettingsRequest asks for a page of the settings set on one scope.
+message ListSettingsRequest {
+  // The scope to list: a tenant's overrides, or every setting as it applies
+  // on the installation. Required.
+  Scope scope = 1;
+
+  // The most settings to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 2;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a scope other than the one
+  // it was made with.
+  string page_token = 3;
+}
+
+// ListSettingsResponse is a page of settings.
+message ListSettingsResponse {
+  // The settings of this page.
+  repeated Setting settings = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
