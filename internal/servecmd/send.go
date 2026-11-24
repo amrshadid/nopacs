@@ -1,0 +1,158 @@
+package servecmd
+
+import (
+	"context"
+	"path/filepath"
+
+	"github.com/amrshadid/nopacs/internal/api"
+	"github.com/amrshadid/nopacs/internal/checkedread"
+	"github.com/amrshadid/nopacs/internal/deid/check"
+	"github.com/amrshadid/nopacs/internal/deidjob"
+	"github.com/amrshadid/nopacs/internal/dirimport"
+	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/place"
+	"github.com/amrshadid/nopacs/internal/rebuild"
+	"github.com/amrshadid/nopacs/internal/registry"
+	"github.com/amrshadid/nopacs/internal/scrub"
+	"github.com/amrshadid/nopacs/internal/send"
+	"github.com/amrshadid/nopacs/internal/settingvalue"
+	"github.com/amrshadid/nopacs/internal/tenant"
+)
+
+// newSending returns the supervisor of every tenant's senders, over the
+// registry's tenants. Its reads of archived bytes count in reads, the
+// server's one count, so the bound on reads open covers the API's and the
+// senders' together. Storages are opened as the API opens them for a
+// read; a stow sender's credential is opened with the installation key
+// under the context it was sealed with (place.CredentialContext).
+func newSending(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots) (*send.Supervisor, error) {
+	values := settingvalue.Reader{Master: d.Master}
+	opener := place.Opener{Values: values, Keys: d.Keys, StaleUploadAge: -1}
+	tenantID := func(ctx context.Context, name string) (string, error) {
+		row, err := d.Master.TenantByName(ctx, name)
+		return row.ID, err
+	}
+	return send.New(send.Config{
+		Tenants:        registryTenants{master: d.Master, registry: reg},
+		Installation:   values,
+		TenantSettings: func(st tenant.Store) send.TenantSettings { return values.OnTenant(st) },
+		OpenStorages: func(name string, p tenant.Pipeline) send.Storages {
+			return checkedread.NewStores(opener, tenantID, p, name)
+		},
+		Credential: func(ctx context.Context, tenantName, sender string, sealed []byte) (string, error) {
+			id, err := tenantID(ctx, tenantName)
+			if err != nil {
+				return "", err
+			}
+			plain, err := d.Keys.Open(place.CredentialContext(id, sender), sealed)
+			if err != nil {
+				return "", fault.Wrap(fault.Internal, err, "the sender's sealed credential does not open with the installation key")
+			}
+			return string(plain), nil
+		},
+		Reads:  reads,
+		TLSDir: func(tenantName string) string { return filepath.Join(d.DataDir, TLSDirName, tenantName) },
+		Wake:   wake,
+		Logger: d.Log,
+	})
+}
+
+// newDeidJobs returns the supervisor of every tenant's deid jobs, over the
+// registry's tenants. Its reads of archived bytes count in reads, the
+// server's one count; storages are opened as the senders open them; a
+// check reads the tenant's UID key from the registry, as a reception does.
+func newDeidJobs(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots, memory check.Memory) (*deidjob.Supervisor, error) {
+	values := settingvalue.Reader{Master: d.Master}
+	opener := place.Opener{Values: values, Keys: d.Keys, StaleUploadAge: -1}
+	tenantID := func(ctx context.Context, name string) (string, error) {
+		row, err := d.Master.TenantByName(ctx, name)
+		return row.ID, err
+	}
+	return deidjob.New(deidjob.Config{
+		Tenants:        registryTenants{master: d.Master, registry: reg},
+		Installation:   values,
+		TenantSettings: func(st tenant.Store) deidjob.TenantSettings { return values.OnTenant(st) },
+		OpenStorages: func(name string, p tenant.Pipeline) deidjob.Storages {
+			return checkedread.NewStores(opener, tenantID, p, name)
+		},
+		UIDKey: reg.UIDKey,
+		Reads:  reads,
+		Memory: memory,
+		Wake:   wake,
+		Logger: d.Log,
+	})
+}
+
+// senderHealths answers the API's question of a sender's health from the
+// send supervisor, and passes the API's notice of a change of a tenant's
+// senders or jobs to it and to the supervisors of deid jobs, of scrubs and
+// of imports.
+type senderHealths struct {
+	s        *send.Supervisor
+	deid     *deidjob.Supervisor
+	scrub    *scrub.Supervisor
+	imports  *dirimport.Supervisor
+	rebuilds *rebuild.Supervisor
+}
+
+var (
+	_ api.SenderHealths = senderHealths{}
+	_ api.SenderChanges = senderHealths{}
+	_ api.SenderTester  = senderTests{}
+)
+
+// SendersChanged makes the supervisor read the tenant's senders, and its
+// idle workers look for work, at once; and the tenant's deid jobs and
+// scrubs be looked for at once.
+func (h senderHealths) SendersChanged(tenantName string) {
+	h.s.Poke(tenantName)
+	if h.deid != nil {
+		h.deid.Poke(tenantName)
+	}
+	if h.scrub != nil {
+		h.scrub.Poke(tenantName)
+	}
+	if h.imports != nil {
+		// A job made, canceled or retried: the import units are looked for
+		// at once (dirimport.Supervisor.Poke).
+		h.imports.Poke(tenantName)
+	}
+	if h.rebuilds != nil {
+		h.rebuilds.Poke(tenantName)
+	}
+}
+
+// SenderHealth returns the supervisor's health of the sender. One the
+// supervisor has not read yet (just added, or its tenant just ready) is
+// down when disabled and unknown otherwise, as the contract says of a
+// sender the server has not connected to.
+func (h senderHealths) SenderHealth(tenantName string, s tenant.Sender) api.SenderHealth {
+	got, ok := h.s.Health(tenantName, s.Name)
+	if !ok {
+		if !s.Enabled {
+			return api.SenderHealth{State: tenant.SenderDown, DownReason: tenant.SenderDownDisabled, Since: s.Updated}
+		}
+		return api.SenderHealth{State: tenant.SenderUnknown, Since: s.Updated}
+	}
+	return api.SenderHealth{State: got.State, DownReason: got.DownReason, Fault: got.Fault, Detail: got.Detail, Since: got.Since,
+		FailedConnections: got.FailedConnections, NextTry: got.NextTry, LastSuccess: got.LastSuccess,
+		OpenAssociations: h.s.OpenAssociations(tenantName, s.Name)}
+}
+
+// senderTests runs the API's TestSender through the send supervisor,
+// which connects as a send would.
+type senderTests struct{ s *send.Supervisor }
+
+// TestSender runs the steps and gives them in the API's terms.
+func (t senderTests) TestSender(ctx context.Context, tenantName string, s tenant.Sender) ([]api.SenderTestResult, error) {
+	steps, err := t.s.TestSender(ctx, tenantName, s)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.SenderTestResult, len(steps))
+	for i, st := range steps {
+		out[i] = api.SenderTestResult{Step: api.SenderTestStep(st.Step), Outcome: api.SenderTestOutcome(st.Outcome),
+			Duration: st.Duration, Fault: st.Fault, Detail: st.Detail}
+	}
+	return out, nil
+}
