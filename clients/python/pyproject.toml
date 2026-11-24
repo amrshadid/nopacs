@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nopacs"
+version = "0.0.0"
+description = "Python client for the NoPACs research imaging archive's API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    # The generated code refuses an older grpcio or protobuf than the
+    # compiler that wrote it (src/nopacs/v1).
+    "grpcio>=1.85.1",
+    "protobuf>=7.35.1,<8",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+nopacs = ["py.typed"]
+"nopacs.v1" = ["*.pyi"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
