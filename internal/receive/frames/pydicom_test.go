@@ -13,7 +13,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/receive/sidecar"
 )
 
-// The variables of the pydicom comparison, listed in docs/testing.md.
+// The variables of the pydicom comparison, listed in docs/develop/testing.md.
 const (
 	// pythonEnv names the Python, with pydicom, that runs the comparison.
 	// Set, even to nothing, it means the comparison was asked for, and a

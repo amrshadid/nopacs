@@ -112,8 +112,26 @@ check: check-comments fmt vet lint vuln test build size
 # go vet on 64 bits, linux/386 and windows, lint, and the race tests of every
 # package. The scale variables are emptied, so a value left in the shell does
 # not turn a scale test on.
-gates: check-comments fmt vet lint
+gates: check-comments check-docs check-doc-links fmt vet lint
 	NOPACS_TEST_SCALE= NOPACS_TEST_ALL_SEEDS= NOPACS_SCALE_INSTANCES= $(GO) test -race -count=1 ./...
+
+# The reference pages of docs/reference are written from the code that defines
+# what they list, so they cannot say what the programs do not do. check-docs
+# writes nothing and fails, naming the page, when a committed page differs; the
+# metrics page starts a throwaway server on a short path under /tmp.
+.PHONY: docs check-docs check-doc-links
+docs:
+	$(GO) run ./internal/testkit/cmd/refdocs
+
+check-docs:
+	$(GO) run ./internal/testkit/cmd/refdocs -check
+
+# Every relative link and anchor in README.md and docs/ resolves; the checker is
+# tried first on a tree of its own with known good and bad links.
+check-doc-links:
+	@command -v "$(PYTHON)" > /dev/null || { echo "check-doc-links: no interpreter $(PYTHON)" >&2; exit 1; }
+	$(PYTHON) -I scripts/check/doc-links.py --self-test
+	$(PYTHON) -I scripts/check/doc-links.py
 
 # Every comment, document and script message says its reason itself; one that
 # points at a note a reader of the repository cannot see explains nothing. The
@@ -267,7 +285,7 @@ check-auditchain:
 # As for check-seal, -count=1 so a cached pass is never reported, and the
 # variable is always set, so the check runs or fails. PYTHON needs pydicom,
 # and for check-dicomweb and check-stow dicomweb-client too
-# (docs/testing.md). PYDICOM_CORPUS=<pydicom's test_files directory> adds
+# (docs/develop/testing.md). PYDICOM_CORPUS=<pydicom's test_files directory> adds
 # that corpus's files where the test takes them.
 PYDICOM_CORPUS ?=
 CHECK_READING_ENV = $(if $(PYDICOM_CORPUS),NOPACS_PYDICOM_CORPUS="$(PYDICOM_CORPUS)")

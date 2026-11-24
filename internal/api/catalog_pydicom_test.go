@@ -12,7 +12,7 @@ import (
 )
 
 // pythonCatalogEnv names the Python, with pydicom, that runs the catalog
-// comparison; it is listed in docs/testing.md. The corpus variable of the
+// comparison; it is listed in docs/develop/testing.md. The corpus variable of the
 // metadata comparison adds files to the archive.
 const pythonCatalogEnv = "NOPACS_CHECK_CATALOG_PYTHON"
 

@@ -372,7 +372,7 @@ func TestAStudyStoredBySTOWIsArchived(t *testing.T) {
 }
 
 // stowPythonEnv names the Python, with dicomweb-client and pydicom, that
-// runs the outside check of STOW-RS (docs/testing.md). Set, even to
+// runs the outside check of STOW-RS (docs/develop/testing.md). Set, even to
 // nothing, it means the check was asked for, and a missing interpreter
 // fails it.
 const stowPythonEnv = "NOPACS_CHECK_STOW_PYTHON"

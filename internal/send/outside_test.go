@@ -14,7 +14,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// The environment the outside tests read (docs/testing.md): the Python with
+// The environment the outside tests read (docs/develop/testing.md): the Python with
 // pynetdicom and pydicom, the directory of dcmtk's programs, and whether a
 // missing dcmtk fails the test rather than skips it.
 const (

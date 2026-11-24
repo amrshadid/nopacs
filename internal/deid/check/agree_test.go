@@ -27,7 +27,7 @@ import (
 )
 
 // The variables of the outside check, the same the engine's corpus test
-// reads (docs/testing.md).
+// reads (docs/develop/testing.md).
 const (
 	// pythonEnv names the Python, with pydicom, that runs
 	// scripts/check/deid-pydicom.py.

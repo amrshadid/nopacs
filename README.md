@@ -68,8 +68,9 @@ nopacs tenant create lab1 --data-dir ./data   # a client: any other terminal
 
 With no key, the `nopacs` commands reach the server on its local socket as the user that
 runs it; over the network (`--listen`, `--tls-cert`, `--tls-key`, and a key on
-the client) they need a key. [Running NoPACs](docs/running.md) goes on from here
-to the storages, receivers and keys, and [the command line](docs/command-line.md)
+the client) they need a key. [A first archive](docs/start/first-archive.md) goes on from here
+to a first study archived and read back, [Running NoPACs](docs/operate/running.md)
+to the storages, receivers and keys, and [the command line](docs/use/command-line.md)
 lists every command.
 
 ## Documentation
@@ -78,9 +79,9 @@ lists every command.
 
 | If you | Start with |
 |---|---|
-| run NoPACs | [Running NoPACs](docs/running.md), [the command line](docs/command-line.md), [settings](docs/settings.md) |
-| build on its API | [Receiving data through the API](docs/api-walkthrough-reception.md), [reading the archive](docs/reading.md); the contract is in `api/proto/nopacs/v1` |
-| extend the code | [Architecture](docs/architecture.md), [the guides](docs/README.md#if-you-extend-the-code), [testing](docs/testing.md), [gates and outside checks](docs/gates.md) |
+| run NoPACs | [Install](docs/start/install.md), [a first archive](docs/start/first-archive.md), [Running NoPACs](docs/operate/running.md), [the command line](docs/use/command-line.md), [settings](docs/operate/settings.md) |
+| build on its API | [The API overview](docs/api/overview.md), [receiving data through the API](docs/api/reception-walkthrough.md), [reading the archive](docs/use/reading.md); the contract is in `api/proto/nopacs/v1` |
+| extend the code | [Architecture](docs/develop/architecture.md), [the guides](docs/README.md#by-reader), [testing](docs/develop/testing.md), [gates and outside checks](docs/develop/gates.md) |
 
 Each package's own documentation is its `doc.go` (`go doc ./internal/receive`);
 the pages in `docs/` hold what no single package can say.

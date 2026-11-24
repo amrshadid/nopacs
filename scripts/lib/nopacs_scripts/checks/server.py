@@ -21,7 +21,7 @@ calls the server run by scripts/check/server.sh:
     refused, then with the admin key, which must make the tenant ready, and
     ListTenants, which must list it to the admin key and nothing to the key
     with no grant; then the first and the third use of
-    docs/api-walkthrough-reception.md, call by call, on that tenant (see
+    docs/api/reception-walkthrough.md, call by call, on that tenant (see
     check_reception), with the directory root NOPACS_CHECK_ROOT names,
     which the installation's setting storage.directory-roots lists as
     "fast".

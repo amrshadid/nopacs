@@ -27,7 +27,7 @@ import (
 )
 
 // downloadPythonEnv names the Python that runs the download's outside
-// check, listed in docs/testing.md. Set, even to nothing, it means the
+// check, listed in docs/develop/testing.md. Set, even to nothing, it means the
 // check was asked for, and a missing interpreter or curl fails it.
 const downloadPythonEnv = "NOPACS_CHECK_DOWNLOAD_PYTHON"
 

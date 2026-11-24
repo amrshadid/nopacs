@@ -11,7 +11,7 @@ import (
 
 // The variables of the catalog's measurements at scale, which build a
 // synthetic tenant of millions of instances and take from minutes to hours,
-// so no make target that runs on every change sets them. docs/testing.md
+// so no make target that runs on every change sets them. docs/develop/testing.md
 // lists them.
 const (
 	// ScaleInstancesEnv is how many instances the catalog's scale tests

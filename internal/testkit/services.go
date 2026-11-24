@@ -16,7 +16,7 @@ import (
 // The variables that name the services a test may use, and the ones that
 // make a missing service a failure rather than a skip. CI sets the REQUIRE
 // variables where the service is always there, so a service that failed to
-// start cannot make a test pass by not running. docs/testing.md lists them.
+// start cannot make a test pass by not running. docs/develop/testing.md lists them.
 const (
 	// PostgresEnv is the address of a Postgres database tests may make
 	// schemas in (postgres://user:password@host:port/db).

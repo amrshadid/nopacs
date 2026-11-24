@@ -12,7 +12,7 @@
 # TLS and for the local operator on the socket. Every answer must carry a
 # Nopacs-Request-Id. /metrics must parse with the Prometheus Python
 # client. Against the real program, grpcurl and Python also walk the first
-# and third uses of docs/api-walkthrough-reception.md (a tenant set up to
+# and third uses of docs/api/reception-walkthrough.md (a tenant set up to
 # receive: its ports, a directory storage tested, a receiver added and
 # changed; and the review of quarantine, on a tenant with nothing held, with
 # every refusal it names), each on a tenant of its own, under a directory

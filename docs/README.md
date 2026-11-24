@@ -2,50 +2,90 @@
 
 [Back to the project's README](../README.md)
 
-This directory holds what no single package can say: how the parts meet, the
-flows through them, and the guides for people who run, call or extend NoPACs. What
-one package holds, and its rules and why, is in that package's `doc.go` (open
-the file, or run `go doc ./internal/receive`). The pages link to those instead of
-copying them.
+NoPACs is a research imaging archive: it receives DICOM, de-identifies it, catalogs it
+as subject, session and scan, keeps it whole, and serves it through an API with keys.
+These pages hold what no single package can say: how the parts meet, how to run and
+use the archive, and how to build on or extend it. What one package holds, and its
+rules and why, is in that package's `doc.go` (open the file, or run `go doc
+./internal/receive`); the pages link to those instead of copying them.
 
-## If you run NoPACs
+The pages are grouped by what you came to do:
 
-| Page | What it is for |
+| Folder | You come to | Pages |
+|---|---|---|
+| [start](start/install.md) | get going | install the two programs; a first archive end to end |
+| [concepts](concepts/archive.md) | understand | what an archive is made of; the lifecycle of a file; the security model; de-identification |
+| [operate](operate/running.md) | run a site | running; settings; backup and moving a tenant; choosing a database; upgrading; troubleshooting |
+| [use](use/command-line.md) | work in the archive | the command line; receiving; routing; reading; sending; importing; correcting; profiles |
+| [api](api/overview.md) | build on it | the overview; a walkthrough; DICOMweb; the clients |
+| [reference](reference/settings.md) | look a fact up | settings, commands, errors, events, metrics, environment variables, all generated from the code |
+| [develop](develop/architecture.md) | change the code | architecture; testing; gates; guides |
+
+## By reader
+
+**You run NoPACs for a site.**
+[Install](start/install.md), make [a first archive](start/first-archive.md), then
+[run it](operate/running.md), set [its settings](operate/settings.md), [back it up](operate/backup.md),
+[choose a database](operate/database.md), and keep [troubleshooting](operate/troubleshooting.md) and
+[upgrading](operate/upgrading.md) at hand. The security side is [the security model](concepts/security.md).
+
+**You work with the data.**
+[The command line](use/command-line.md) (with contexts for many installations, and the
+interactive program), [receiving](use/receiving.md), [reading](use/reading.md),
+[sending on](use/sending.md), [importing](use/importing.md) and [correcting](use/correcting.md).
+
+**You build on the API.**
+[The overview](api/overview.md), [receiving through the API](api/reception-walkthrough.md),
+[DICOMweb](api/dicomweb.md) and [the clients](api/clients.md). The contract is `api/proto/nopacs/v1`; the
+generated clients are in `clients/python` and `clients/typescript`.
+
+**You change the code.**
+[Architecture](develop/architecture.md), [testing](develop/testing.md), [gates and outside checks](develop/gates.md)
+and the guides: [a database driver](develop/guides/database-driver.md), [a storage driver](develop/guides/storage-driver.md),
+[an API method](develop/guides/api-method.md), [a migration](develop/guides/migration.md) and
+[an event type](develop/guides/event-type.md).
+
+## By task
+
+| I want to | Go to |
 |---|---|
-| [Running NoPACs](running.md) | Make an installation, run the server, make the first key, set a tenant up to receive |
-| [The command line](command-line.md) | Every command, how it connects, its output and exit codes, and the interactive program |
-| [Sending data on](sending.md) | Senders and jobs: send a subject, a session or a scan to a PACS or a DICOMweb service, or forward each reception, and follow it to its end |
-| [Importing a directory](importing.md) | How a directory of DICOM files will be imported (defined in the API, not yet served): roots, layouts, the map file, counts, and a recipe for an XNAT archive |
-| [Correcting archived data](correcting.md) | Delete, relabel or replace archived data: the preview, the grace period, undo, the purge and what it can claim, what stays held, what is out of reach |
-| [Backup, restore and moving a tenant](backup.md) | Back up an installation, check a backup, restore it, and hand one tenant to another installation: what is and is not kept, the suspended keys, the owner records, reclaim, the fenced state, what stays weak |
-| [Settings](settings.md) | Every setting with its default, who may set it, and whether a change needs a restart |
+| install the programs | [Install the two programs](start/install.md) |
+| see the whole thing work once | [A first archive](start/first-archive.md) |
+| understand the words (installation, tenant, subject, session, scan) | [What an archive is made of](concepts/archive.md) |
+| make an installation and a server | [Running NoPACs](operate/running.md) |
+| give a person or a program a key | [Running NoPACs: the first key](operate/running.md#the-first-key), [the security model](concepts/security.md) |
+| work with several installations from one computer | [Contexts](use/command-line.md#contexts) |
+| set a tenant up to receive scans | [Running NoPACs: make a tenant that receives](operate/running.md#make-a-tenant-that-receives) |
+| remove identifying data on the way in | [De-identification](concepts/deidentification.md), [profiles](use/profiles.md) |
+| send each study to a storage by where it comes from | [Routing](use/routing.md) |
+| see what arrived, and why a file is held | [A reception, end to end](use/receiving.md) |
+| read the archive back | [Reading the archive](use/reading.md), [DICOMweb](api/dicomweb.md) |
+| send archived data on to a PACS | [Sending data on](use/sending.md) |
+| bring in a directory of existing files | [Importing a directory](use/importing.md) |
+| delete, relabel or replace archived data | [Correcting archived data](use/correcting.md) |
+| back up, restore, or move a tenant | [Backup, restore and moving a tenant](operate/backup.md) |
+| check that the audit log was not changed | [Running NoPACs](operate/running.md#check-that-the-audit-log-was-not-changed) |
+| pick SQLite or Postgres | [Choosing a database](operate/database.md) |
+| find out why something fails | [Troubleshooting](operate/troubleshooting.md), [error kinds and codes](reference/errors.md) |
+| look up a setting, a flag, a metric | [settings](reference/settings.md), [commands](reference/commands.md), [metrics](reference/metrics.md), [events](reference/events.md), [environment](reference/environment.md) |
+| call the API from code | [The API overview](api/overview.md), [the clients](api/clients.md) |
+| add a driver, a method or a migration | [The guides](develop/architecture.md#next) |
 
-## If you build on its API
+## What is not written yet
 
-| Page | What it is for |
-|---|---|
-| [Receiving data through the API](api-walkthrough-reception.md) | Three uses, call by call: set a tenant up to receive, follow a study to archived, settle a quarantined file |
-| [Reading the archive](reading.md) | Catalog, metadata, data and DICOMweb, and what each read checks |
-| [A reception, end to end](reception.md) | What happens from a sender's first file to a verified scan, and its states |
-
-The contract itself is `api/proto/nopacs/v1`; the generated clients are in
-`clients/python` and `clients/typescript`.
-
-## If you extend the code
-
-| Page | What it is for |
-|---|---|
-| [Architecture](architecture.md) | The parts of an installation, how packages depend on each other, the path of a request, where state lives, the rules and what enforces each |
-| [Testing](testing.md) | The kinds of test, how a slow one is marked, and every environment variable the tests and scripts read |
-| [Gates and outside checks](gates.md) | Each `make` target a change passes, and the tools that check NoPACs from outside |
-| [A database driver](guides/database-driver.md) | Implement the master and tenant ports for another database |
-| [A storage driver](guides/storage-driver.md) | Implement `blob.Store` for another kind of storage |
-| [An API method](guides/api-method.md) | From the contract to the handler, the command and the proof |
-| [A migration](guides/migration.md) | Change a schema: the baseline until the first release, a forward migration after |
-| [An event type](guides/event-type.md) | Report a new change on the live feed |
+These are planned and have no page: the DICOM Conformance Statement and the
+de-identification support matrix (what is checked per kind of image and transfer
+syntax), the requirements map (which feature meets which technical requirement of
+HIPAA and GDPR, and how it is proven), the operations guide (signals and thresholds
+with examples), the originals policy, a recipe for a viewer behind a login, the
+page on using the archive with an AI assistant, and the published service levels.
+The pages above say plainly what each feature does not do yet.
 
 ## Conventions
 
 - Diagrams are Mermaid code in the Markdown; GitHub draws them.
-- Commands shown here were checked against `nopacs --help`; if one differs from
-  what you see, the binary is right and the page is a bug.
+- Commands shown here were checked against the programs' `--help`; if one differs
+  from what you see, the program is right and the page is a bug.
+- The pages in [reference](reference/settings.md) are written by `make docs` from the
+  code, and `make check-docs` fails when one is out of date. Do not edit them by hand.
+- `make check-doc-links` fails when a link or an anchor in these pages does not resolve.

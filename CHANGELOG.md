@@ -141,6 +141,11 @@ the code before this release is in github.com/amrshadid/coria.
   their own words (read good / with a finding; cataloged / left out).
 - Generated clients for Python (`nopacs`, `clients/python`) and TypeScript
   (`nopacs`, `clients/typescript`), tested against a real server.
+- Documentation regrouped by what a reader comes to do (start, concepts,
+  operate, use, api, reference, develop); the reference pages for settings,
+  commands, errors, events, metrics and environment variables are generated
+  from the code (`make docs`) and checked (`make check-docs`), and every
+  link and anchor is checked (`make check-doc-links`).
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

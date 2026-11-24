@@ -15,7 +15,7 @@ import (
 )
 
 // pythonEnv names the Python, with pydicom, the outside test reads the
-// archive with (docs/testing.md).
+// archive with (docs/develop/testing.md).
 const pythonEnv = "NOPACS_PYTHON"
 
 // readBack is the outside check's script: given the storage's data

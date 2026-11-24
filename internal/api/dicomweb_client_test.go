@@ -9,7 +9,7 @@ import (
 )
 
 // dicomwebPythonEnv names the Python, with dicomweb-client and pydicom,
-// that runs the outside check of DICOMweb (docs/testing.md). Set, even to
+// that runs the outside check of DICOMweb (docs/develop/testing.md). Set, even to
 // nothing, it means the check was asked for, and a missing interpreter
 // fails it.
 const dicomwebPythonEnv = "NOPACS_CHECK_DICOMWEB_PYTHON"

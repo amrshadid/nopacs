@@ -21,7 +21,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// scaleEnv is the variable that makes the scale tests run (docs/testing.md).
+// scaleEnv is the variable that makes the scale tests run (docs/develop/testing.md).
 const scaleEnv = "NOPACS_TEST_SCALE"
 
 // skipScale skips a test at millions of rows except in the run made for it

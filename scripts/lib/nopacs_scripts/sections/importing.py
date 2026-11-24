@@ -4,7 +4,7 @@ It builds and runs the real program, sets it up with its own command line, and
 imports directory trees built from the public corpus, only through its
 commands (setting, tenant, storage, receiver, job import, job show, job files,
 job units). Trees: one in the shape of an XNAT archive (the recipe of
-docs/importing.md, with a map file under the root), one in a generic
+docs/use/importing.md, with a map file under the root), one in a generic
 pattern shape with a map sent with the job, with traps planted in them (a
 link, two names of one file, files that are not DICOM, a folder wider than
 import.max-dir-entries, a path over 2048 bytes, a folder named "ct:9", a file
