@@ -1,0 +1,22 @@
+# buf generation (format v2): the TypeScript code of the API contract, into
+# src/gen. Run through scripts/generate.mjs, which starts buf from this
+# directory so the plugin below is the one installed by npm ci. src/gen is
+# committed and never edited by hand.
+version: v2
+
+# src/gen holds only generated code, so it is emptied before each run and a
+# file whose proto file was removed does not stay behind.
+clean: true
+
+plugins:
+  # The plugin is a local program: generation needs no account and no network.
+  - local: node_modules/.bin/protoc-gen-es
+    out: src/gen
+    opt:
+      # TypeScript sources, imported with the .js extension, which is what
+      # the NodeNext module resolution of tsconfig.json requires.
+      - target=ts
+      - import_extension=js
+
+inputs:
+  - directory: ../../api/proto
