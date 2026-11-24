@@ -1,0 +1,53 @@
+name: Branch policy
+
+# main is release only: it takes changes from develop and from nowhere else, so
+# everything in a release has already been merged and checked on develop.
+#
+# GitHub's branch rules can require a pull request and passing checks, but not
+# the branch a pull request comes from, so the rule is stated as this check.
+# While the repository is private on the free plan, GitHub refuses branch
+# protection on it (the API answers 403), so this check cannot be made required:
+# it advises. A red result tells whoever merges not to, but GitHub still allows
+# the merge. When the repository is public, a protection rule on main makes it
+# required.
+#
+# It also runs on pull requests into develop, where it always passes. A check
+# belongs to a commit, not to a pull request: a pull request refused here and
+# then retargeted at develop, as the message says to do, would otherwise keep
+# its failed check with nothing to replace it.
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, reopened, synchronize, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  source-branch:
+    name: Pull request source branch
+    runs-on: ubuntu-latest
+    # It compares two strings; anything near this limit is a hung runner.
+    timeout-minutes: 5
+    steps:
+      - name: A pull request into main comes from develop
+        env:
+          # Through the environment, never pasted into the script with ${{ }}:
+          # a branch name is chosen by whoever opens the pull request, and
+          # pasted in it would run as shell code.
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          echo "Base: $BASE_REF. Head: $HEAD_REF on $HEAD_REPO."
+          if [ "$BASE_REF" != main ]; then
+            echo "The base is not main, so any source branch is allowed."
+            exit 0
+          fi
+          if [ "$HEAD_REF" = develop ] && [ "$HEAD_REPO" = "$BASE_REPO" ]; then
+            echo "The source is develop in this repository. Allowed."
+            exit 0
+          fi
+          echo "::error::A pull request into main must come from develop in this repository; this one comes from '$HEAD_REF' on '$HEAD_REPO'. Retarget it at develop: edit the pull request and change its base branch."
+          exit 1

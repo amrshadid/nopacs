@@ -1,0 +1,741 @@
+name: Checks
+
+# Every pull request, whatever branch it targets, and every push to the two
+# branches that keep history. A feature branch is checked by its pull request,
+# so a push to one does not run this twice.
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+# A new push to a pull request makes the run for the previous one worthless;
+# cancel it rather than spend the private repository's minutes finishing it.
+# Pushes to develop and main are never cancelled, so each merge is checked.
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# bash named explicitly, on every system, so GitHub runs each script with
+# "bash -eo pipefail": a command that fails inside a pipe, such as make size
+# piped to tee below, then fails its step instead of being hidden by the last
+# command of the pipe. Without it the default shell runs without pipefail.
+defaults:
+  run:
+    shell: bash
+
+# Each step runs a Makefile target, the same command a person runs locally, so
+# CI and a laptop cannot disagree about what a gate is.
+#
+# Actions are pinned to a commit, with the release in the comment: a tag can be
+# moved to other code, a commit cannot.
+jobs:
+  linux:
+    name: Linux - Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    # A run that hangs is stopped long before GitHub's six hours. With its
+    # cache restored this job takes about five minutes; with no cache (a new
+    # key, or the first run on a branch whose base has none) it compiles
+    # everything and takes about fifteen. The limit must leave room for
+    # that: a cold run that is stopped saves no cache, so the next run is
+    # cold too and is stopped again, for good.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.26', '1.27']
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The newest patch release (see .github/actions/setup-go). The module
+      # and build caches are kept, keyed on go.sum (and, by setup-go, on the
+      # Go version and the system): most of a job's time
+      # was compiling modernc.org/sqlite's translation of SQLite, once for
+      # each of vet, vet on 386, lint, the race build, the 386 tests and the
+      # five static builds, and that output does not change until go.sum
+      # does. The Makefile is named too, which gives this job a key apart
+      # from the thin cache the Postgres jobs once saved under go.sum alone
+      # (a key is never overwritten, so that one would be restored for
+      # good); the key also changes when the targets do, which is when the
+      # cached output stops matching them.
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: |
+            go.sum
+            Makefile
+
+      - name: Go version
+        run: go version
+
+      - name: gofmt -s
+        run: make fmt
+
+      - name: go vet, amd64 and 386
+        run: make vet
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          # Keep in step with GOLANGCI_LINT_VERSION in the Makefile.
+          version: v2.15.0
+          install-only: true
+
+      - name: golangci-lint
+        run: make lint GOLANGCI_LINT=golangci-lint
+
+      - name: govulncheck
+        run: make vuln
+
+      - name: go test -race
+        run: make test
+
+      # The registry at 1,000 tenants, once per run, without the race
+      # detector (the race and 32-bit steps skip it).
+      - name: The registry at 1,000 tenants
+        if: matrix.go == '1.27'
+        run: make test-scale
+
+      # The sealed-secret format checked against another implementation:
+      # Python's cryptography package and what it pulls in, at exact versions
+      # with their hashes, so a changed file on the package index is refused
+      # (.github/actions/python-tools).
+      - name: Python tools
+        id: python
+        uses: ./.github/actions/python-tools
+        with:
+          requirements: scripts/requirements/check-seal.txt
+
+      - name: Outside check, sealing against Python cryptography
+        env:
+          VENV_PYTHON: ${{ steps.python.outputs.python }}
+        run: |
+          "$VENV_PYTHON" -c 'import cryptography; print("cryptography", cryptography.__version__)'
+          make check-seal PYTHON="$VENV_PYTHON"
+
+      # The tests as 32-bit binaries, which an x86-64 Linux runs natively:
+      # int is 32 bits there and the SQLite library is translated for it.
+      # One Go only, to spend fewer minutes.
+      - name: go test, linux/386
+        if: matrix.go == '1.27'
+        run: make test-386
+
+      # The SQLite master database read back by SQLite's own command line
+      # tool: tables, rows, integrity and foreign key checks, and a dump
+      # searched for the sample key's secret (absent) and hash (present).
+      - name: Outside check, the SQLite master read by sqlite3
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends sqlite3 > /dev/null
+          make check-master-sqlite
+
+      # The command line's JSON output checked by Python's json module, and
+      # its bash completion script by bash -n. Neither needs more than the
+      # runner has: the script uses only Python's standard library.
+      - name: Outside check, command line JSON parsed by Python
+        run: make check-json PYTHON=python3
+
+      - name: Outside check, bash completion parsed by bash -n
+        run: make check-completion
+
+      # A tenant's SQLite database, created by the registry as the server
+      # will, read back by the same tool: where its file is and its mode,
+      # tables, rows, integrity, and the master's row and state change.
+      - name: Outside check, a SQLite tenant read by sqlite3
+        run: make check-tenant-sqlite
+
+      # The interactive program, run as built under a pseudo-terminal by
+      # Python's pty module against the in-process fake server: keys pressed,
+      # the screen read, quit, SIGTERM and SIGINT sent mid-session, and the
+      # terminal checked to have been restored. Standard library only; Linux
+      # and macOS, since Windows has no pty module.
+      - name: Outside check, interactive program under a pseudo-terminal
+        run: make check-tui PYTHON=python3
+
+      # Each fuzz target for ten seconds, on one Go only: the inputs it finds
+      # do not depend on the Go release, and the minutes are limited.
+      - name: Fuzzing, 10 seconds a target
+        if: matrix.go == '1.27'
+        run: make fuzz FUZZTIME=10s
+
+  # The static builds, their sizes and the check that the Linux binary is
+  # static, in a job of their own beside the Linux job, for each Go. Since
+  # serve links the SQLite driver, each of the five targets compiles
+  # modernc.org/sqlite's translation of SQLite, which took the Linux job past
+  # its 15 minutes when the builds were its last steps.
+  builds:
+    name: Builds - Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.26', '1.27']
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The module and build caches, keyed on go.sum, as in the Linux job.
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Go version
+        run: go version
+
+      - name: Static builds
+        run: make build
+
+      # The size is written to the job summary so a pull request that makes the
+      # binary much larger shows it without anyone opening the log. pipefail
+      # (see defaults) makes a failing make size fail this step despite tee.
+      - name: Binary sizes
+        run: |
+          {
+            echo "### Binary sizes, Go ${{ matrix.go }}"
+            echo
+            make --no-print-directory size
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Each binary was built with CGO_ENABLED=0; this shows the Linux one is
+      # in fact static, so a change that brings in C cannot pass unseen.
+      - name: The linux/amd64 binary is static
+        run: make check-static
+
+  # The Postgres master database against real servers, versions 16 and 18.
+  # The Postgres tests make a schema of their own in the service's database
+  # and skip when NOPACS_TEST_POSTGRES is not set, as they do in the Linux
+  # job above and on Windows, which has no service containers. Here
+  # NOPACS_REQUIRE_POSTGRES turns a missing address into a failure, so a
+  # service that did not start fails this job instead of letting it pass by
+  # running nothing. psql and pg_dump for the outside check come from the
+  # server's own image, so their version equals the server's (pg_dump
+  # refuses a newer server).
+  postgres:
+    name: Postgres ${{ matrix.postgres }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '18']
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: ci-throwaway-password
+          POSTGRES_DB: nopacs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nopacs_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NOPACS_TEST_POSTGRES: postgres://postgres:ci-throwaway-password@127.0.0.1:5432/nopacs_test?sslmode=disable
+      NOPACS_REQUIRE_POSTGRES: '1'
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The module and build caches, under a key of their own. With go.sum
+      # alone the key was the Linux job's on Go 1.27 (setup-go keys on the
+      # system, the Go version and the files named here), and caches are
+      # never overwritten: these jobs, which build only internal/driver and
+      # finish first, saved a thin cache that the Linux job then restored,
+      # recompiling everything else in each of vet, lint and the builds
+      # (12 minutes of its 15 on one run). A second file named here makes
+      # the key differ; it changes rarely.
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+          cache-dependency-path: |
+            go.sum
+            internal/driver/postgres/doc.go
+
+      - name: Go version
+        run: go version
+
+      # dcmtk's storescu sends the study of the end-to-end test of serve.
+      - name: dcmtk
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends dcmtk > /dev/null
+
+      # -v so each test's result, a skip included, is in the log.
+      - name: go test -race, the Postgres driver, the contract suite and the reception end to end
+        run: make test-postgres DCMTK=/usr/bin
+
+      # The same tests as 32-bit binaries, which an x86-64 Linux runs
+      # natively. One server version only, to spend fewer minutes.
+      - name: go test, Postgres driver, linux/386
+        if: matrix.postgres == '18'
+        run: GOOS=linux GOARCH=386 CGO_ENABLED=0 go test -count=1 ./internal/driver/postgres
+
+      # Every list, claim and lookup of the reception pipeline against a few
+      # million rows, read from the query plan. The test leaves itself out
+      # under the race detector and on 32 bits, where it would measure them,
+      # so it has a run of its own.
+      - name: Query plans at millions of rows
+        run: NOPACS_TEST_SCALE=1 go test -count=1 -v -run '^TestScalePipelinePlans$' ./internal/driver/postgres
+
+      - name: Outside check, the Postgres master read by psql and pg_dump
+        run: |
+          make check-master-postgres \
+            PSQL="docker run --rm -i --network host postgres:${{ matrix.postgres }} psql" \
+            PG_DUMP="docker run --rm -i --network host postgres:${{ matrix.postgres }} pg_dump"
+
+      - name: Outside check, a Postgres tenant read by psql and pg_dump
+        run: |
+          make check-tenant-postgres \
+            PSQL="docker run --rm -i --network host postgres:${{ matrix.postgres }} psql" \
+            PG_DUMP="docker run --rm -i --network host postgres:${{ matrix.postgres }} pg_dump"
+
+  # The server's outside checks, in a job of their own so the Linux job keeps
+  # its time: the local socket refused to a second operating system user, and
+  # curl, grpcurl and Python's grpcio against a real server process with the
+  # stand-in handlers and against the real program (scripts/check/server.sh),
+  # and the real program end to end (make check-e2e). Linux only: the second user
+  # needs sudo, which the runner has without a password.
+  server:
+    name: Server - outside checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+
+      # A second user with no home and no shell. The test runs this test
+      # binary as that user with sudo: once with run/ as the server keeps it
+      # (the connect must be refused) and once with run/ and the socket opened
+      # to everyone, so the peer credential check is the only guard left (the
+      # server must close the connection unanswered).
+      - name: The local socket refused to another user
+        run: |
+          sudo useradd --no-create-home --shell /usr/sbin/nologin nopacs-other
+          NOPACS_TEST_OTHER_USER=nopacs-other go test -count=1 -v -run '^TestSocketRefusesOtherUser$' ./internal/server
+
+      # The Python packages at exact versions with their hashes
+      # (.github/actions/python-tools); grpcurl from its release, checked
+      # against the SHA-256 committed in scripts/tools/grpcurl.sha256 (keep its
+      # version in step with GRPCURL_VERSION in the Makefile).
+      - name: Python tools
+        id: python
+        uses: ./.github/actions/python-tools
+        with:
+          requirements: scripts/requirements/check-server.txt
+
+      - name: Outside check, curl, grpcurl and Python grpcio against the server
+        env:
+          VENV_PYTHON: ${{ steps.python.outputs.python }}
+        run: |
+          bash scripts/tools/install-grpcurl.sh v1.9.4 "$RUNNER_TEMP/grpcurl/grpcurl"
+          make check-server PYTHON="$VENV_PYTHON" GRPCURL="$RUNNER_TEMP/grpcurl/grpcurl"
+
+      # The real program end to end: init, serve with the local socket and
+      # TLS, the real commands as processes over both, a second serve
+      # refused, a stop by SIGTERM and a restart (TestRealServerEndToEnd).
+      # Here, not in the Linux job, whose time is kept for go test.
+      - name: The real program end to end
+        run: make check-e2e
+
+  # The proof of this version (scripts/prove/run.sh): the binaries built as make
+  # build builds them, the Linux one started for real, and every claim of this
+  # version shown by tools that are not NoPACs. Postgres is a service
+  # container the script uses for its tenant databases, and stops and starts
+  # again to show that a tenant stops alone; the second operating system user
+  # is made with sudo. NOPACS_PROVE_STRICT=1: nothing may be skipped here,
+  # so a check that could not run fails the job instead of passing unseen.
+  proof:
+    name: 'Proof: the installed binary, from outside'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci-throwaway-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The same cache key as the Builds job on Go 1.27: this job compiles
+      # the same five static builds.
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+
+      # The Python packages at exact versions with their hashes
+      # (.github/actions/python-tools): the server's checks, and pydicom and
+      # dicomweb-client for reading the archive; sqlite3 and dcmtk from the
+      # distribution; grpcurl from its release, checked against
+      # scripts/tools/grpcurl.sha256.
+      - name: Python tools
+        id: python
+        uses: ./.github/actions/python-tools
+        with:
+          requirements: scripts/requirements/check-server.txt scripts/requirements/prove-reading.txt
+
+      - name: Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends sqlite3 dcmtk > /dev/null
+          sqlite3 --version
+          /usr/bin/storescu --version | head -1
+          bash scripts/tools/install-grpcurl.sh v1.9.4 "$RUNNER_TEMP/grpcurl/grpcurl"
+
+      - name: The proof
+        env:
+          NOPACS_PROVE_PG_CONTAINER: ${{ job.services.postgres.id }}
+          NOPACS_PROVE_PG_PORT: '5432'
+          NOPACS_PROVE_STRICT: '1'
+          VENV_PYTHON: ${{ steps.python.outputs.python }}
+        run: |
+          make prove PYTHON="$VENV_PYTHON" GRPCURL="$RUNNER_TEMP/grpcurl/grpcurl" DCMTK=/usr/bin | tee "$RUNNER_TEMP/proof.log"
+
+      # The table of every check and what it measured, on the run's page,
+      # also when a check failed.
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Proof: the installed binary, from outside"
+            echo
+            sed -n '/^| Check |/,$p' "$RUNNER_TEMP/proof.log" 2> /dev/null || echo "no summary: the proof did not reach its end"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The proof of reception (make prove-reception): the real program receives
+  # public studies from dcmtk and pynetdicom, and dcmdump, pydicom, hashlib
+  # and sqlite3 check what it archived, quarantined and counted, through
+  # crashes by signal 9 at each step of a reception, on a directory and on
+  # an S3 bucket, and with a tenant's catalog on Postgres. dcmtk from the distribution; pydicom and pynetdicom at
+  # exact versions with their hashes.
+  proof-reception:
+    name: 'Proof: reception, from outside'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci-throwaway-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+
+      - name: Python tools
+        id: python
+        uses: ./.github/actions/python-tools
+        with:
+          requirements: scripts/requirements/prove-reception.txt
+
+      - name: Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends dcmtk > /dev/null
+          /usr/bin/storescu --version | head -1
+
+      # Silo, at the image the S3 job pins, for the tenant that archives to
+      # a bucket.
+      - name: An S3 server
+        run: make s3-up S3_SERVERS=silo
+
+      # A tenant on the service's Postgres, its catalog read by psql inside
+      # the service container, so psql's version is the server's.
+      - name: The proof of reception
+        env:
+          VENV_PYTHON: ${{ steps.python.outputs.python }}
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          make prove-reception PYTHON="$VENV_PYTHON" DCMTK=/usr/bin \
+            PROVE_S3="http://throwaway-key:throwaway-secret@127.0.0.1:59000/prove-reception" \
+            PROVE_POSTGRES="postgres://postgres:ci-throwaway-password@127.0.0.1:5432/postgres?sslmode=disable" \
+            PROVE_PSQL="docker exec -i $PG_CONTAINER psql -U postgres"
+
+  # Reception's speed against the branch a change goes into (make
+  # bench-gate): the base's tree and this one measured in turns on the same
+  # runner, failing on a slowdown past the margin. The whole history is
+  # fetched so the base commit is there.
+  bench:
+    name: 'Speed: reception against the base'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+
+      - name: Reception against the base
+        env:
+          BASE: ${{ github.base_ref || 'develop' }}
+        run: make bench-gate BENCH_BASE="origin/$BASE"
+
+  # there on every pull request. The newest Go only: Windows minutes count
+  # double against a private repository, and the older Go is tested on Linux.
+  windows:
+    name: Windows - Go 1.27
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The module and build caches, keyed on go.sum, as in the Linux job.
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+
+      - name: Go version
+        run: go version
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -count=1 -v ./...
+
+  # macOS only after a merge: a macOS minute counts as ten against a private
+  # repository, and the work is done on macOS, where the tests run before every
+  # pull request. When the repository is public this joins the pull requests.
+  macos:
+    name: macOS - Go 1.27
+    if: github.event_name == 'push'
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The module and build caches, keyed on go.sum, as in the Linux job.
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+
+      - name: Go version
+        run: go version
+
+      - name: go test
+        run: go test -count=1 -v ./...
+
+  # The S3 storage driver against two real servers: Silo, the maintained fork
+  # of MinIO, and RustFS, a separate implementation, since one server's
+  # behavior is not the protocol's. Each is started with docker run, by make
+  # s3-up (the images are pinned by digest in the Makefile), because a
+  # service container cannot be given the server's command. The tests skip
+  # when NOPACS_TEST_S3 is not set; make test-s3 sets it with
+  # NOPACS_REQUIRE_S3, which turns a server that did not start into a
+  # failure, so a green job means the suite ran.
+  s3:
+    name: S3 (${{ matrix.server }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        server: [silo, rustfs]
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start Silo
+        if: matrix.server == 'silo'
+        run: make s3-up S3_SERVERS=silo
+
+      - name: Start RustFS
+        if: matrix.server == 'rustfs'
+        run: make s3-up S3_SERVERS=rustfs
+
+      # Either server answers its port before it can serve; the tests create
+      # their bucket, so a listing that is answered at all is enough. s3-up
+      # has waited already; this says so in a step of its own, with the
+      # server's log if it never answered.
+      - name: Wait for the server
+        run: make s3-wait S3_SERVERS=${{ matrix.server }}
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+
+      - name: dcmtk
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends dcmtk > /dev/null
+
+      - name: go test -race, the S3 driver and the reception end to end
+        run: make test-s3 S3_SERVERS=${{ matrix.server }} DCMTK=/usr/bin
+
+      - name: Server log on failure
+        if: failure()
+        run: docker logs nopacs-test-${{ matrix.server }} | tail -100
+
+  # The API contract in api/proto: buf lint, the breaking-change check against
+  # the base, the check that the committed gen/ is what the proto files
+  # generate, and a second toolchain (Python's grpcio-tools) compiling the same
+  # files. Linux only: none of it depends on the system.
+  contract:
+    name: API contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # The whole history, so the breaking check can read its base. The
+      # checkout keeps no credentials, so a later git fetch of the private
+      # repository would be refused; the checkout's own fetch is the only one.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # Go builds the two protoc plugins and runs nothing else here. buf is
+      # not built: make downloads its release binary and checks it against
+      # the SHA-256 in scripts/tools/buf.sha256 (scripts/tools/install-buf.sh).
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+          cache: 'false'
+
+      # Cheap and system-independent, so it rides with the contract's checks:
+      # no comment, document or script refers to a note outside the repository.
+      - name: Comments cite nothing outside the repository
+        run: make check-comments
+
+      - name: buf lint
+        run: make proto-lint
+
+      # The base is the pull request's target branch, or the commit a push
+      # replaced. After a force push that commit may be in no branch and so
+      # not in the clone; the check then compares with the pushed commit's
+      # parent and says so. A push that made a branch has no commit before it
+      # and is not compared.
+      - name: buf breaking
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            make proto-breaking PROTO_BASE="origin/$BASE_REF"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            if git cat-file -e "$BEFORE^{commit}" 2> /dev/null; then
+              make proto-breaking PROTO_BASE="$BEFORE"
+            else
+              echo "proto-breaking: $BEFORE, the commit before this push, is not in the clone (a force push?); comparing with HEAD^ instead"
+              make proto-breaking PROTO_BASE=HEAD^
+            fi
+          else
+            echo "proto-breaking: skipped, this push has no commit before it to compare with"
+          fi
+
+      - name: gen/ is current
+        run: make proto-check
+
+      # grpcio-tools and what it pulls in, at exact versions with their
+      # hashes (.github/actions/python-tools).
+      - name: Python tools
+        id: python
+        uses: ./.github/actions/python-tools
+        with:
+          requirements: scripts/requirements/proto.txt
+
+      - name: Python grpcio-tools compiles the contract
+        env:
+          VENV_PYTHON: ${{ steps.python.outputs.python }}
+        run: make proto-python PYTHON="$VENV_PYTHON"
+
+      # The Python client's own pinned packages replace the environment the
+      # step above used; the client is then installed into it without
+      # fetching anything more.
+      - name: Python client tools
+        id: client
+        uses: ./.github/actions/python-tools
+        with:
+          requirements: scripts/requirements/client-python.txt
+
+      - name: The Python client matches the contract and works against the server
+        env:
+          VENV_PYTHON: ${{ steps.client.outputs.python }}
+        run: |
+          "$VENV_PYTHON" -m pip install --quiet --disable-pip-version-check --no-deps --no-build-isolation ./clients/python
+          make client-python-check PYTHON="$VENV_PYTHON"
+          make client-python-test PYTHON="$VENV_PYTHON"
+
+      # The TypeScript client's packages come from its lockfile (npm ci), so
+      # a version that changed on the registry is refused.
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: clients/typescript/package-lock.json
+
+      - name: The TypeScript client matches the contract
+        run: make client-ts-check
+
+      - name: The TypeScript client works against the server
+        run: make client-ts-test
+
+      # Reported, never gating: an advisory published today would otherwise
+      # fail a change that did not touch the client.
+      - name: Advisories on the TypeScript client's packages
+        continue-on-error: true
+        run: make client-ts-audit

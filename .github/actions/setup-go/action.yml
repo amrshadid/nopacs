@@ -1,0 +1,36 @@
+# Go for a job of checks.yml, set up one way in every job, so the pin of
+# setup-go and the choice of the newest patch release are written once.
+#
+# check-latest takes the newest patch release rather than whatever the runner
+# image has cached: govulncheck reports the standard library of the Go that
+# runs it, so an old patch would fail it for nothing. setup-go keys the module
+# and build caches on the system, the Go version and the files named in
+# cache-dependency-path; a job names files of its own when its cache must not
+# be shared (see the Linux and Postgres jobs). The inputs pass through
+# unchanged, so a job's cache key is what it was before this action existed.
+#
+# The action is pinned to a commit, with the release in the comment: a tag
+# can be moved to other code, a commit cannot.
+name: Set up Go
+description: Go at the newest patch release of a version, with the module and build caches.
+inputs:
+  go-version:
+    description: The Go release, such as '1.27'.
+    required: true
+  cache:
+    description: "'true' to restore and save the module and build caches, 'false' for none."
+    required: false
+    default: 'true'
+  cache-dependency-path:
+    description: The files whose contents key the caches, one per line.
+    required: false
+    default: go.sum
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: ${{ inputs.go-version }}
+        check-latest: true
+        cache: ${{ inputs.cache }}
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}

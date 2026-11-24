@@ -1,0 +1,125 @@
+# The scale measurements: a synthetic tenant of millions of instances on
+# SQLite and on Postgres, and the storage benchmark of a scan read one object
+# at a time against one object read by ranges, on a directory and two S3
+# servers. They take too long for every change, so the workflow runs only when
+# started by hand (Actions, "Scale", Run workflow), on Linux, whose disk
+# flushes are far cheaper than macOS's. Each job writes its numbers to the
+# run's summary.
+name: Scale
+
+# A push to a branch named scale/... starts it too, since a workflow started
+# by hand must also be on the default branch, which changes only at a
+# release.
+on:
+  push:
+    branches: ['scale/**']
+  workflow_dispatch:
+    inputs:
+      instances:
+        description: Instances in the synthetic tenant
+        required: true
+        default: '10000000'
+
+permissions:
+  contents: read
+
+# bash with pipefail (GitHub's bash -e has none), so a test that fails fails
+# its step though its output goes through tee.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  sqlite:
+    name: Catalog at scale, SQLite
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+      - name: Room on the runner's disk
+        # A standard runner keeps about 14 GB free; the measurement needs
+        # more, so the toolchains it does not use are removed from this
+        # throwaway machine first.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: The catalog at scale
+        env:
+          NOPACS_SCALE_INSTANCES: ${{ inputs.instances || '10000000' }}
+        run: |
+          NOPACS_SCALE_SUMMARY="$GITHUB_STEP_SUMMARY" go test -count=1 -v -timeout 330m -run '^TestScaleCatalog$' ./internal/driver/sqlite | tee "$RUNNER_TEMP/scale.log"
+
+  postgres:
+    name: Catalog at scale, Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci-throwaway-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+      - name: Room on the runner's disk
+        # A standard runner keeps about 14 GB free; the measurement needs
+        # more, so the toolchains it does not use are removed from this
+        # throwaway machine first.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: The catalog at scale
+        env:
+          NOPACS_SCALE_INSTANCES: ${{ inputs.instances || '10000000' }}
+          NOPACS_TEST_POSTGRES: postgres://postgres:ci-throwaway-password@127.0.0.1:5432/postgres?sslmode=disable
+          NOPACS_REQUIRE_POSTGRES: '1'
+        run: |
+          NOPACS_SCALE_SUMMARY="$GITHUB_STEP_SUMMARY" go test -count=1 -v -timeout 330m -run '^TestScaleCatalog$' ./internal/driver/postgres | tee "$RUNNER_TEMP/scale.log"
+
+  storage:
+    name: Packed scans against one object per instance
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: '1.27'
+      - name: S3 servers
+        run: make s3-up
+      - name: The storage benchmark
+        run: |
+          {
+            go test -count=1 -run '^$' -bench BenchmarkPackedScan -benchtime 10x ./internal/blob/dir
+            for port in 59000 59001; do
+              NOPACS_TEST_S3="http://throwaway-key:throwaway-secret@127.0.0.1:$port/nopacs-scale" NOPACS_REQUIRE_S3=1 go test -count=1 -run '^$' -bench BenchmarkPackedScan -benchtime 10x ./internal/blob/s3
+            done
+          } | tee "$RUNNER_TEMP/bench.log"
+      - name: Summary
+        if: always()
+        run: |
+          { echo "### Packed scans against one object per instance"; echo; echo '```'; grep -E '^Benchmark|ns/op|MB/s' "$RUNNER_TEMP/bench.log" 2> /dev/null | head -100; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,29 @@
+# The Python packages an outside check needs, installed by make tools-python
+# as a person installs them: each at an exact version with its hashes
+# (pip install --require-hashes), wheels only, so a file on the package index
+# that changed is refused. In a virtual environment under the runner's
+# temporary directory, because the runner's system Python refuses pip
+# installs (PEP 668) and the checkout stays as it was cloned.
+#
+# Needs the repository checked out (the Makefile and the requirement files).
+name: Python tools
+description: A virtual environment with the hashed Python requirements of the outside checks.
+inputs:
+  requirements:
+    description: The requirement files to install, separated by spaces, such as scripts/requirements/check-seal.txt.
+    required: true
+outputs:
+  python:
+    description: The path of the environment's Python interpreter.
+    value: ${{ steps.install.outputs.python }}
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: bash
+      env:
+        REQUIREMENTS: ${{ inputs.requirements }}
+      run: |
+        python3 --version
+        make tools-python PYTHON_REQUIREMENTS="$REQUIREMENTS" PYTHON_ENV="$RUNNER_TEMP/venv"
+        echo "python=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_OUTPUT"
