@@ -1,0 +1,29 @@
+# What scripts/prove/deid.py needs beside scripts/requirements/prove-reception.txt:
+# numpy, through which pydicom decodes pixels, encodes RLE and compares the
+# frames a pixel rule filled, and Pillow, through which pydicom decodes a
+# JPEG baseline image; each at an exact version, with the SHA-256 of every
+# file pip may choose for it on Linux x86_64 (CPython 3.12 to 3.14) and on
+# macOS. Installed together with the other file:
+#
+#   pip install --require-hashes -r scripts/requirements/prove-reception.txt \
+#       -r scripts/requirements/prove-deid.txt
+#
+# so a file that differs from the one hashed here is refused. The hashes were
+# made by scripts/requirements/hash.sh prove-deid with "pip download" and
+# "pip hash"; to change a version, edit the line below and run it again.
+numpy==2.4.4 \
+    --hash=sha256:86b6f55f5a352b48d7fbfd2dbc3d5b780b2d79f4d3c121f33eb6efb22e9a2015 \
+    --hash=sha256:23cbfd4c17357c81021f21540da84ee282b9c8fba38a03b7b9d09ba6b951421e \
+    --hash=sha256:81f4a14bee47aec54f883e0cad2d73986640c1590eb9bfaaba7ad17394481e6e \
+    --hash=sha256:e823b8b6edc81e747526f70f71a9c0a07ac4e7ad13020aa736bb7c9d67196115 \
+    --hash=sha256:c901b15172510173f5cb310eae652908340f8dede90fff9e3bf6c0d8dfd92f83 \
+    --hash=sha256:2483e4584a1cb3092da4470b38866634bafb223cbcd551ee047633fd2584599a \
+    --hash=sha256:27a8d92cd10f1382a67d7cf4db7ce18341b66438bdd9f691d7b0e48d104c2a9d
+Pillow==11.3.0 \
+    --hash=sha256:9c412fddd1b77a75aa904615ebaa6001f169b26fd467b4be93aded278266b288 \
+    --hash=sha256:921bd305b10e82b4d1f5e802b6850677f965d8394203d182f078873851dada69 \
+    --hash=sha256:676b2815362456b5b3216b4fd5bd89d362100dc6f4945154ff172e206a22c024 \
+    --hash=sha256:7db51d222548ccfd274e4572fdbf3e810a5e66b00608862f947b163e613b67dd \
+    --hash=sha256:13f87d581e71d9189ab21fe0efb5a23e9f28552d5be6979e84001d3b8505abe8 \
+    --hash=sha256:0b275ff9b04df7b640c59ec5a3cb113eefd3795a8df80bac69646ef699c6981a \
+    --hash=sha256:93efb0b4de7e340d99057415c749175e24c8864302369e05914682ba642e5d77
