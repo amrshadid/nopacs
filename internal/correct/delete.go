@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/blob"
-	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -221,22 +220,9 @@ func (e *Engine) snapshots(ctx context.Context, id string) (map[string]tenant.Sc
 		if err != nil {
 			return nil, err
 		}
-		var snap tenant.ScanSnapshot
-		mk, _ := layout.ManifestKey(s.Path)
-		sk, _ := layout.MetadataKey(s.Path)
-		for _, x := range []struct {
-			key  string
-			sum  *tenant.SHA256
-			size *int64
-		}{{mk, &snap.Manifest, &snap.ManifestSize}, {sk, &snap.Metadata, &snap.MetadataSize}} {
-			n, sum, err := hashOf(ctx, st, x.key)
-			if fault.KindOf(err) == fault.NotFound {
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-			*x.sum, *x.size = sum, n
+		snap, err := tenant.ReadScanSnapshot(ctx, st, s.Path)
+		if err != nil {
+			return nil, err
 		}
 		out[s.SeriesUID] = snap
 	}
