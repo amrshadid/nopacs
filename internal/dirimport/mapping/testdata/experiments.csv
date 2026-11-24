@@ -1,0 +1,7 @@
+ID,project,subject_ID,subject_label,label,xsiType,date
+XNAT_E00001,trial_a,XNAT_S00001,sub01,sub01_MR1,xnat:mrSessionData,2020-01-02
+XNAT_E00002,trial_a,XNAT_S00001,sub01,sub01_MR2,xnat:mrSessionData,2020-03-04
+XNAT_E00003,trial_b,XNAT_S00002,"sub,02",sub01_MR1,xnat:mrSessionData,
+XNAT_E00004,trial_b,XNAT_S00003,"say ""x""",MR 3,xnat:ctSessionData,2021-05-06
+XNAT_E00005,trial_b,XNAT_S00004,"two
+lines",Größe,xnat:petSessionData,2022-07-08
