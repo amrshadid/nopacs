@@ -254,6 +254,11 @@ func (s jobService) CancelJob(ctx context.Context, req *v1.CancelJobRequest) (*v
 		return nil, c.failIn(d, st, err)
 	}
 	c.sendersChanged(req.GetTenant())
+	if out.Kind == tenant.JobRebuild {
+		// A replace canceled no longer holds the tenant's receivers: they
+		// are told at once, not at the supervisor's next round.
+		c.receiversChanged(req.GetTenant())
+	}
 	return &v1.CancelJobResponse{Job: c.newJobViews(p, req.GetTenant()).message(ctx, out)}, nil
 }
 

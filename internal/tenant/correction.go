@@ -92,6 +92,21 @@ import (
 // relabel's new ones, compared case folded (label.Fold); and a delete or
 // relabel while a reception of any of its studies, or of its subject, has
 // not ended.
+//
+// While a rebuild of the tenant is queued or running (Rebuilding's
+// RebuildRunning), a new correction (PrepareCorrection), the publish of one
+// prepared before (CommitCorrection), an undo, the start of a purge whoever
+// asks it (StartPurge of a committed correction, the server's as an
+// admin's), each page of a purge's objects settled (SettlePurgeTargets) and
+// each older version of a manifest or metadata recorded
+// (RecordPurgedObject while purging), and a purge's end (FinishPurge) are
+// refused (precondition),
+// changing nothing: the shadow the rebuild builds from the storages would
+// miss a change made while it reads them, or read a scan's manifest and
+// metadata torn, and a replace would make that the catalog at its
+// activation. A purge refused part way goes on from where it stopped once
+// the rebuild has ended. Each check is made under the tenant's
+// configuration lock, as the making of a rebuild is.
 type Corrections interface {
 	// PreviewDelete answers what a delete of target would remove, as the
 	// catalog holds it now, and the token a delete must carry (Confirm):

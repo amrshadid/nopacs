@@ -157,6 +157,13 @@ func (k Sending) SettlePurgeTargets(ctx context.Context, id string, settled []te
 		if c.State != corr.StatePurging {
 			return tenant.Precondition("the correction is " + string(c.State) + ", not purging")
 		}
+		// A purge going on (one in flight when a rebuild was made, or one a
+		// stop left purging) stops at the end of its page of objects: the
+		// objects it removed stay unsettled, and the purge run again once
+		// the rebuild has ended asks the storage of each again.
+		if err := k.checkNoRebuild(ctx, tx); err != nil {
+			return err
+		}
 		for _, s := range settled {
 			for _, o := range s.Removals {
 				if err := k.insertPurged(ctx, tx, o); err != nil {

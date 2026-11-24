@@ -18,12 +18,14 @@
 // What a rebuild leaves out it counts, never guesses:
 //
 //   - a scan a delete's correction record names, and the instances an
-//     instance delete names (tenant.TallyLeftOutDeleted). A record is
-//     applied as its state says, a delete still prepared as committed: a
-//     delete is fail-closed, since showing withdrawn data is the worse
-//     error; each delete applied is tallied unresolved
-//     (tenant.TallyUnresolvedCorrection), since this database holds no row
-//     of it to confirm it. A relabel's record hides the tree its state
+//     instance delete names (tenant.TallyLeftOutDeleted). With no
+//     Config.Decide a record is applied as its state says, a delete still
+//     prepared as committed: a delete is fail-closed, since showing
+//     withdrawn data is the worse error. The server's rebuilds and a
+//     restore's apply each record as the correction's row says (ByRow):
+//     a delete prepared, undone or abandoned there hides nothing, whatever
+//     its record says. Each delete applied is tallied unresolved
+//     (tenant.TallyUnresolvedCorrection). A relabel's record hides the tree its state
 //     says is not the archive's (the old labels once published, the new
 //     ones before), so the two trees a relabel leaves during its grace are
 //     never both cataloged;

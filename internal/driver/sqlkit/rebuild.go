@@ -488,6 +488,18 @@ func (k Rebuild) RebuildReplacing(ctx context.Context) (bool, error) {
 	return out, err
 }
 
+// RebuildRunning implements tenant.Rebuilding, by the condition the
+// corrections' refusals read (rebuildNotEnded).
+func (k Rebuild) RebuildRunning(ctx context.Context) (bool, error) {
+	var out bool
+	err := k.Host.Read(ctx, "the tenant's rebuilds cannot be read", func(tx SendingTx) error {
+		var err error
+		out, err = exists(ctx, tx, rebuildNotEnded+k.D.NotEnded)
+		return err
+	})
+	return out, err
+}
+
 // FailRebuild implements tenant.Rebuilding.
 func (k Rebuild) FailRebuild(ctx context.Context, fence tenant.WorkFence, reason string, now time.Time) (tenant.Job, error) {
 	if err := fence.Validate(); err != nil {

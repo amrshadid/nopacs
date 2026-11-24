@@ -296,40 +296,6 @@ func (o oneTenant) Names(context.Context) ([]string, error) { return []string{o.
 // Store implements rebuild.Tenants.
 func (o oneTenant) Store(string) (tenant.Store, error) { return o.store, nil }
 
-// applyAs answers how a restore's rebuild applies a correction record
-// (rebuild.Config.Decide), for the records that verify under the key file
-// (the rebuild applies none that does not). A record that verifies was
-// written by this installation, but may be older or newer than the backup,
-// and after the adoption every record has a row, so the row decides: the
-// record is
-// applied with the row's state, a delete the backup holds prepared hiding
-// nothing (a start abandons it, as its request was never answered); a
-// record of another kind than its row is applied not at all. A delete made
-// from its record alone that says it was purged hides nothing either: if
-// its data is still on the storage, the purge it claims did not happen,
-// and the data stays shown while an admin decides the delete, which still
-// holds an arrival of what it names.
-func applyAs(ctx context.Context, p tenant.Pipeline, c record.Correction) (record.Correction, bool, error) {
-	row, err := p.Correction(ctx, c.ID)
-	if fault.KindOf(err) == fault.NotFound {
-		return c, true, nil
-	}
-	if err != nil {
-		return c, false, err
-	}
-	switch {
-	case row.Kind != c.Kind:
-		return c, false, nil
-	case c.Kind == record.KindDelete && c.State == record.StatePurged && row.Unresolved && row.StateReason == tenant.StateReasonUnresolved:
-		return c, false, nil
-	}
-	c.State = row.State
-	if c.Kind == record.KindDelete && c.State == record.StatePrepared {
-		c.State = record.StateAbandoned
-	}
-	return c, true, nil
-}
-
 // rebuildPoll is how often a restore looks at its rebuild job.
 const rebuildPoll = 100 * time.Millisecond
 
@@ -369,9 +335,12 @@ func rebuildCatalog(ctx context.Context, cfg RestoreConfig, m master.Store, t op
 		},
 		PollInterval: rebuildPoll,
 		Logger:       cfg.Log,
-		Decide:       applyAs,
-		Keys:         cfg.Keys,
-		TenantID:     tenantID,
+		// A record that verifies was written by this installation, but may
+		// be older or newer than the backup; after the adoption every record
+		// has a row, so the row decides.
+		Decide:   rebuild.ByRow,
+		Keys:     cfg.Keys,
+		TenantID: tenantID,
 	})
 	if err != nil {
 		return job, nil, err

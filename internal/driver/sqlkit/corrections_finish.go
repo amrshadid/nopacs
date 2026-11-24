@@ -28,6 +28,11 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 		if c.State != corr.StatePurging {
 			return tenant.Precondition("the correction is " + string(c.State) + ", not purging")
 		}
+		// The end sets the manifest's checksum a scan's catalog row holds,
+		// which a shadow built meanwhile would overwrite with the one it read.
+		if err := k.checkNoRebuild(ctx, tx); err != nil {
+			return err
+		}
 		if c.Kind == corr.KindDelete {
 			if err := k.dropDeleted(ctx, tx, *c, f.Manifest, f.ManifestBefore); err != nil {
 				return err

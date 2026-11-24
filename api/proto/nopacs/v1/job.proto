@@ -250,9 +250,17 @@ import "nopacs/v1/quarantine.proto";
 // job makes, except a relabel's two trees, which its record resolves. In
 // compare mode it tallies each difference from the catalog in use and
 // drops the shadow. In replace mode the tenant's receivers refuse new data
-// while the shadow is built (a transient refusal the sender tries again,
-// as when a storage is nearly full), so nothing lands that the shadow
-// would miss, and corrections are refused; once the build is complete
+// from the moment the job is queued until it ends, however it ends (a
+// transient refusal the sender tries again, as when a storage is nearly
+// full; cancel the job to lift it at once), and the build starts only once
+// the tenant's receptions and correction requests in flight have ended, so
+// nothing lands that the shadow would miss. While any rebuild is queued or
+// running, corrections and every step of a purge are refused, and a purge
+// goes on once the job has ended. While the receptions or corrections do
+// not stop for its build, each attempt fails and is tried again, about a
+// day in all at worst. A replace that ends partial removes from the catalog
+// in use the scans it left out, whose files stay on the storage; once the
+// build is complete
 // (every key listed, every manifest read, the counts adding up) one
 // transaction makes the shadow the catalog in use, with an
 // EVENT_TYPE_CATALOG_REBUILT event, so every read sees the whole old
@@ -488,8 +496,7 @@ service JobService {
   // storage, or none for every storage. A rebuild job names its mode; one
   // that replaces the catalog also needs admin on the tenant, checked after
   // the requirement below, since it empties the catalog and fills it again,
-  // and is answered permission denied to an operator; a replace is not
-  // served yet, and is answered unimplemented to an admin; a rebuild may name
+  // and is answered permission denied to an operator; a rebuild may name
   // from_storage only in compare mode. An import job that sets
   // retention_start needs admin on the tenant likewise, since it decides
   // when retention counts from (RetentionService). An import job names

@@ -374,7 +374,7 @@ func newEnvChecking(t testing.TB, interval time.Duration) *env {
 	t.Cleanup(func() { _ = feeds.Close() })
 	e.engines = newTestEngines(t, e)
 	h, err := api.New(api.Config{Access: e.access, Registry: e.registry, Master: e.faulty, NewID: tenantID, Log: logger, Settings: e.known, Keys: e.keys, Now: e.now,
-		Incoming: e.parts, Headers: e.parts, HeldFiles: e.parts, Feeds: feeds, Installation: testInstallation,
+		Incoming: e.parts, Headers: e.parts, HeldFiles: e.parts, Receivers: e.parts, Feeds: feeds, Installation: testInstallation,
 		Corrections: e.engines, ReplaceSources: testReplaceSources{e}, Handoffs: &e.handoffs})
 	if err != nil {
 		t.Fatal(err)

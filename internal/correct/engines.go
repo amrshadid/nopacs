@@ -72,9 +72,13 @@ type Engines struct {
 	// the life of Engines: an engine made anew for a tenant (its database
 	// opened again) takes the same lock as the one it replaces, whose work
 	// may still run.
-	works   map[string]*sync.Mutex
-	started bool
-	stopped bool
+	works map[string]*sync.Mutex
+	// retiring counts, by tenant, the engines replaced that something
+	// (a request among them) still holds, so Quiesce waits for those as
+	// for the current engine's requests.
+	retiring map[string]int
+	started  bool
+	stopped  bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -119,8 +123,8 @@ func NewEngines(cfg EnginesConfig) (*Engines, error) {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Engines{cfg: cfg, runs: map[string]*engineRun{}, works: map[string]*sync.Mutex{}, ctx: ctx, cancel: cancel,
-		stop: make(chan struct{})}, nil
+	return &Engines{cfg: cfg, runs: map[string]*engineRun{}, works: map[string]*sync.Mutex{}, retiring: map[string]int{}, ctx: ctx,
+		cancel: cancel, stop: make(chan struct{})}, nil
 }
 
 // errEnginesStopped answers a request for an engine once Stop has begun.
@@ -188,6 +192,7 @@ func (es *Engines) acquire(ctx context.Context, name string, st tenant.Store) (*
 		// The old engine may still be in a request's or a background job's
 		// hands: what it opened is closed once the last lets it go.
 		es.wg.Add(1)
+		es.retiring[name]++
 		go es.retire(name, old)
 	}
 	work := es.works[name]
@@ -205,6 +210,11 @@ func (es *Engines) acquire(ctx context.Context, name string, st tenant.Store) (*
 func (es *Engines) retire(name string, r *engineRun) {
 	defer es.wg.Done()
 	r.holds.Wait()
+	es.mu.Lock()
+	if es.retiring[name]--; es.retiring[name] <= 0 {
+		delete(es.retiring, name)
+	}
+	es.mu.Unlock()
 	if r.close == nil {
 		return
 	}
@@ -220,6 +230,16 @@ func (es *Engines) waitRecovered(ctx context.Context, name string, r *engineRun)
 	case <-r.ready:
 		return nil
 	default:
+	}
+	// Recover waits for a rebuild of the tenant to end (recoverAsked), so a
+	// request would wait out RecoverWait for nothing: it is told at once,
+	// as the store would tell it of any change it asked for.
+	if rb, ok := r.store.(interface {
+		RebuildRunning(ctx context.Context) (bool, error)
+	}); ok {
+		if running, err := rb.RebuildRunning(ctx); err == nil && running {
+			return fault.New(fault.Precondition, "a rebuild of the tenant is running")
+		}
 	}
 	es.mu.Lock()
 	if es.stopped {
@@ -253,7 +273,9 @@ func (es *Engines) recoverAsked(name string, r *engineRun) {
 	defer es.wg.Done()
 	defer r.holds.Done()
 	r.work.Lock()
-	es.recover(name, r)
+	if !es.rebuilding(name, r) {
+		es.recover(name, r)
+	}
 	r.work.Unlock()
 	es.mu.Lock()
 	r.recovering = false
@@ -303,11 +325,37 @@ func (es *Engines) Go(name string, st tenant.Store, what string, work func(ctx c
 	go func() {
 		defer es.wg.Done()
 		defer r.holds.Done()
-		r.work.Lock()
-		defer r.work.Unlock()
-		if es.ctx.Err() != nil {
-			return
+		for {
+			r.work.Lock()
+			if es.ctx.Err() != nil {
+				r.work.Unlock()
+				return
+			}
+			// Asked under the work lock, which Quiesce takes after a rebuild
+			// is made: work that finds one waits, without the lock, until it
+			// has ended, rather than write what the build reads.
+			if !es.rebuilding(name, r) {
+				break
+			}
+			r.work.Unlock()
+			// An engine replaced meanwhile (its database opened anew, or the
+			// tenant removed and made again) is not waited on: its database
+			// may be closed, and work that waited on it for ever would hold
+			// it, so it is never let go and the tenant never quiet. The work
+			// is dropped; the next start's Recover, or the pass, takes up
+			// what it would have done.
+			if !es.current(name, r) {
+				es.cfg.Log.Warn("corrections: background work for an engine replaced while it waited for a rebuild was dropped",
+					"tenant", name, "work", what)
+				return
+			}
+			select {
+			case <-es.stop:
+				return
+			case <-time.After(es.cfg.Interval):
+			}
 		}
+		defer r.work.Unlock()
 		if err := work(es.ctx, r.engine); err != nil && es.ctx.Err() == nil {
 			es.cfg.Log.Warn("corrections: background work failed; the pass tries again", "tenant", name, "work", what,
 				"error", fault.Message(err))
@@ -337,7 +385,7 @@ func (es *Engines) Idle(ctx context.Context, name string) error {
 	return nil
 }
 
-// idlePoll is how often Idle tries the tenant's lock of background work.
+// idlePoll is how often Idle and Quiesce try the tenant's locks.
 const idlePoll = 50 * time.Millisecond
 
 // Start runs the pass now and then every Interval, in the background.
@@ -402,10 +450,16 @@ func (es *Engines) pass() {
 	}
 }
 
-// passOne runs one tenant's part of the pass, under its work lock.
+// passOne runs one tenant's part of the pass, under its work lock, unless
+// a rebuild of the tenant is queued or running: then Recover, the abandon
+// of what requests left and the purges all wait for the next pass after it
+// has ended (rebuilding says why).
 func (es *Engines) passOne(name string, r *engineRun) {
 	r.work.Lock()
 	defer r.work.Unlock()
+	if es.rebuilding(name, r) {
+		return
+	}
 	if !r.recovered {
 		if !es.recover(name, r) {
 			return

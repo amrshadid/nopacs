@@ -313,7 +313,8 @@ func (s *Supervisor) Poke(name string) {
 // running, none starting and none stopping: what it held is archived, quarantined or left
 // in incoming with its place kept, and nothing more is written for it here
 // until a pipeline starts again. A tenant the supervisor runs no worker for
-// is drained. An export asks it, after Poke, before it takes its snapshot.
+// is drained. An export asks it, after Poke, before it takes its snapshot,
+// and a rebuild that replaces the catalog before it builds its shadow.
 func (s *Supervisor) Drained(name string) bool {
 	s.mu.Lock()
 	t := s.tenants[name]

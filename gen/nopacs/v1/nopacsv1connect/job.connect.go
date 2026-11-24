@@ -121,8 +121,7 @@ type JobServiceClient interface {
 	// storage, or none for every storage. A rebuild job names its mode; one
 	// that replaces the catalog also needs admin on the tenant, checked after
 	// the requirement below, since it empties the catalog and fills it again,
-	// and is answered permission denied to an operator; a replace is not
-	// served yet, and is answered unimplemented to an admin; a rebuild may name
+	// and is answered permission denied to an operator; a rebuild may name
 	// from_storage only in compare mode. An import job that sets
 	// retention_start needs admin on the tenant likewise, since it decides
 	// when retention counts from (RetentionService). An import job names
@@ -330,8 +329,7 @@ type JobServiceHandler interface {
 	// storage, or none for every storage. A rebuild job names its mode; one
 	// that replaces the catalog also needs admin on the tenant, checked after
 	// the requirement below, since it empties the catalog and fills it again,
-	// and is answered permission denied to an operator; a replace is not
-	// served yet, and is answered unimplemented to an admin; a rebuild may name
+	// and is answered permission denied to an operator; a rebuild may name
 	// from_storage only in compare mode. An import job that sets
 	// retention_start needs admin on the tenant likewise, since it decides
 	// when retention counts from (RetentionService). An import job names

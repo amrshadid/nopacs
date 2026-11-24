@@ -13,6 +13,9 @@ import (
 // worker last saw it. It is replaced whole, so a listener reads it with one
 // atomic load.
 type gateState struct {
+	// rebuilding: a rebuild that replaces the tenant's catalog is queued or
+	// running, so no pipeline runs until it ends.
+	rebuilding bool
 	// notReady: the tenant's database does not answer, or no pipeline runs.
 	notReady bool
 	// incomingFull: the incoming area's disk is below the reserve.
@@ -32,12 +35,17 @@ func (t *tenantRun) setGates(change func(*gateState)) {
 }
 
 // refusal returns why run's receiver refuses new associations and stores
-// now: the tenant not ready, the incoming disk or the receiver's storage
-// below the reserve, the tenant over its incoming limit; "" when none.
+// now: the tenant's catalog being rebuilt or the tenant not ready, the
+// incoming disk or the receiver's storage below the reserve, the tenant over
+// its incoming limit; "" when none. A rebuild is answered as a tenant not
+// ready: a temporary failure the sender tries again (an association
+// rejected as transient, PS3.8 9.3.4, or a store in an open one answered
+// A700H, PS3.4 B.2.3; PS3.18 10.5.3, 503 with Retry-After), as for every
+// gate here.
 func (t *tenantRun) refusal(run *receiverRun) tenant.AssociationFailure {
 	g := t.gates.Load()
 	switch {
-	case g.notReady:
+	case g.rebuilding, g.notReady:
 		return tenant.FailureTenantNotReady
 	case g.incomingFull:
 		return tenant.FailureNearlyFull
@@ -54,6 +62,8 @@ func (t *tenantRun) refusal(run *receiverRun) tenant.AssociationFailure {
 func (t *tenantRun) upHealth(r tenant.Receiver, now time.Time) Health {
 	g := t.gates.Load()
 	switch {
+	case g.rebuilding:
+		return down(tenant.DownTenantNotReady, tenant.PhraseTenantRebuilding, now)
 	case g.notReady:
 		return down(tenant.DownTenantNotReady, tenant.PhraseTenantNotReady, now)
 	case g.incomingFull:

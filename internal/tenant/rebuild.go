@@ -144,6 +144,11 @@ type Rebuilding interface {
 	// or running: while it is, nothing should land in the catalog in use
 	// that its shadow would miss.
 	RebuildReplacing(ctx context.Context) (bool, error)
+	// RebuildRunning reports whether a rebuild of either mode is queued or
+	// running: while it is, the corrections write nothing to a storage or
+	// to the catalog (the rule is the Corrections port's), since its build
+	// reads both and would see a change made meanwhile torn or not at all.
+	RebuildRunning(ctx context.Context) (bool, error)
 }
 
 // JobRebuild is the kind of a rebuild job (rebuild.go).

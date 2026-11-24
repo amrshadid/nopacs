@@ -101,8 +101,18 @@ the code before this release is in github.com/amrshadid/coria.
   with a grace period (`delete.grace`), relabel, replace, undo and purge, each
   kept as a signed record on the storage (`CorrectionService`,
   `nopacs correction`).
-- Scrub jobs read every stored object back against its checksum; rebuild jobs
-  compare or rebuild a tenant's catalog from its storages.
+- Scrub jobs read every stored object back against its checksum. Rebuild
+  jobs make a tenant's catalog again from its storages into a shadow
+  catalog, reading each correction record as the tenant's database says it
+  stands: `compare` (operator) lists the differences; `replace` (admin)
+  makes the shadow the catalog in use in one transaction with a
+  `catalog_rebuilt` event. From the moment a replace is queued until it
+  ends, however it ends and across a restart, the tenant's receivers refuse
+  new files as a temporary failure (association rejected as transient,
+  STOW-RS 503 with Retry-After); before it builds, the tenant's receptions
+  and correction requests in flight end and corrections left half done are
+  rolled back. While any rebuild is queued or running, corrections and every
+  step of a purge are refused.
 - Backup and restore of an installation (`nopacs-server backup
   create|restore|verify`, `.nopacs` files in a chunked AES-256-GCM format),
   and the hand-off of a tenant to another installation (`nopacs tenant

@@ -53,6 +53,7 @@ const (
 	PhraseStorageFull            = "the storage is nearly full"
 	PhraseTenantNotReady         = "the tenant's database does not answer"
 	PhraseTenantUpgrading        = "the tenant is being upgraded"
+	PhraseTenantRebuilding       = "the tenant's catalog is being rebuilt"
 	PhraseStopping               = "the server is stopping"
 	PhraseCouldNotStart          = "the receiver could not start"
 	PhraseIncomingLimit          = "the tenant's incoming limit is reached"
@@ -70,7 +71,7 @@ var healthPhrases = map[ReceiverDownReason][]string{
 	DownTLS: {PhraseCertificateExpired, PhraseCertificateNotYet, PhraseCertificateKeyMismatch,
 		PhraseCertificateUnreadable, PhraseKeyUnreadable},
 	DownNearlyFull:     {PhraseIncomingFull, PhraseStorageFull},
-	DownTenantNotReady: {PhraseTenantNotReady, PhraseTenantUpgrading},
+	DownTenantNotReady: {PhraseTenantNotReady, PhraseTenantUpgrading, PhraseTenantRebuilding},
 	DownStopping:       {PhraseStopping},
 	DownOther:          {PhraseCouldNotStart},
 	DownIncomingLimit:  {PhraseIncomingLimit},

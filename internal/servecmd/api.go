@@ -201,7 +201,7 @@ func APIServices(d Deps) (Built, error) {
 	scrubJobs.Store(scrubs)
 	// The rebuilds, which read the storages' meta/ trees and write each
 	// tenant's shadow catalog.
-	rebuilds, err := newRebuilds(d, reg, feeds.Wake)
+	rebuilds, err := newRebuilds(d, reg, feeds.Wake, handoffs{sup: sup, engines: engines})
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)

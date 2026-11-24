@@ -111,6 +111,12 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 		if c.State != corr.StatePrepared {
 			return tenant.Precondition("the correction is " + string(c.State) + ", not prepared")
 		}
+		// A correction prepared before a rebuild was made is not published
+		// while it runs: its shadow, read from the storages meanwhile, could
+		// miss the change, and a replace would drop it at its activation.
+		if err := k.checkNoRebuild(ctx, tx); err != nil {
+			return err
+		}
 		var err error
 		switch c.Kind {
 		case corr.KindDelete:
@@ -439,10 +445,10 @@ func (k Sending) StartPurge(ctx context.Context, id string, now time.Time, audit
 			if err := k.checkClockIn(ctx, tx, now, audit == nil); err != nil {
 				return err
 			}
-			if audit != nil {
-				if err := k.checkNoRebuild(ctx, tx); err != nil {
-					return err
-				}
+			// The server's purge as an admin's: a purge rewrites manifests and
+			// metadata a rebuild reads, and removes what its shadow may name.
+			if err := k.checkNoRebuild(ctx, tx); err != nil {
+				return err
 			}
 			if _, err := tx.Exec(ctx, `UPDATE corrections SET unresolved = ? WHERE id = ?`, k.D.Bool(false), c.ID); err != nil {
 				return err
@@ -476,6 +482,13 @@ func (k Sending) RecordPurgedObject(ctx context.Context, o tenant.PurgedObject) 
 		}
 		if c.State != corr.StatePurging {
 			return tenant.Precondition("the correction is " + string(c.State) + ", not purging")
+		}
+		// The older versions of a scan's manifest and metadata a purge
+		// removes are recorded here, one at a time: a purge going on stops
+		// at the next (SettlePurgeTargets stops it at the end of a page of
+		// its objects).
+		if err := k.checkNoRebuild(ctx, tx); err != nil {
+			return err
 		}
 		return k.insertPurged(ctx, tx, o)
 	})

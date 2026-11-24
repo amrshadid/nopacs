@@ -21,7 +21,12 @@ const (
 	reasonStorage  = "a storage did not answer"
 	reasonRecord   = "a correction record cannot be read"
 	reasonDatabase = "the tenant's database did not answer"
+	reasonDrain    = "the tenant's receptions did not stop in time"
 )
+
+// errDrain marks a replace's wait for the tenant's writers that ended
+// before they stopped.
+var errDrain = errors.New("the tenant's writers did not stop")
 
 // errStopped is a unit that must write nothing more: its lease is lost,
 // the server stops, or its tenant was let go.
@@ -57,6 +62,10 @@ func (t *tenantRun) work(p tenant.Pipeline, w tenant.Work) {
 		<-renewed
 	}()
 	defer sup.cfg.Wake(t.name)
+	// Last of all, once the unit has written its end (or its attempt's
+	// failure, or the job's): receivers a replace held back see at once
+	// whether it still holds them.
+	defer sup.cfg.Resume(t.name)
 	err := u.run()
 	switch {
 	case err == nil, u.lost.Load(), errors.Is(err, errStopped):
@@ -68,6 +77,8 @@ func (t *tenantRun) work(p tenant.Pipeline, w tenant.Work) {
 	switch {
 	case errors.Is(err, errUnreadableRecord):
 		reason = reasonRecord
+	case errors.Is(err, errDrain):
+		reason = reasonDrain
 	case errors.Is(err, errStorage):
 		reason = reasonStorage
 	case fault.KindOf(err) == fault.Precondition:
@@ -166,7 +177,10 @@ func (u *unitRun) run() error {
 	u.job = job
 	u.log = u.log.With("job", job.ID)
 	if !job.State.Ended() {
-		err := u.build()
+		err := u.drain()
+		if err == nil {
+			err = u.build()
+		}
 		if err == nil {
 			err = u.end()
 		}
@@ -192,6 +206,27 @@ func (u *unitRun) run() error {
 		return err
 	}
 	return u.p.CompleteWork(ctx, u.fence, u.sup.cfg.Now(), nil)
+}
+
+// drain waits, for a replace, until nothing in the process writes the
+// tenant's catalog in use (Config.Drain), before the build reads a storage
+// and so before the activation: a file archived after the build passed its
+// scan would leave the catalog at the activation. A compare changes no
+// catalog and waits for nothing. It runs at every start of the unit, a
+// build resumed after a restart included, since what it waits for may have
+// started again in between.
+func (u *unitRun) drain() error {
+	if u.sup.cfg.Drain == nil || u.job.Rebuild == nil || u.job.Rebuild.Mode != tenant.RebuildReplace {
+		return nil
+	}
+	if err := u.sup.cfg.Drain(u.ctx, u.t.name); err != nil {
+		if u.ctx.Err() != nil {
+			return errStopped
+		}
+		return errors.Join(errDrain, err)
+	}
+	u.log.Info("rebuilds: the tenant's receptions are stopped; the shadow is built")
+	return nil
 }
 
 // end compares the shadow and ends the job, or makes it the catalog in use.

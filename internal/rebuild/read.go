@@ -82,18 +82,13 @@ func relabeled(p label.Path, level, to string) label.Path {
 // ones before (its copy may be partial). A replace hides nothing: the
 // manifest names the revision it read back before naming it.
 //
-// The record alone is read: the build does not yet read the tenant's own
-// row of the correction, so every delete it applies is one with no row to
-// confirm it, counted unresolved, and the record's state decides. That is
-// the fail-closed side: a delete the record names is applied, whatever a
-// row might say. Reading the row is where this changes: a record whose row
-// says the correction ended (undone, or abandoned while the record still
-// says prepared) hides nothing and is not counted; a record whose row
-// says committed is applied and not counted; only a record with no row,
-// or a row that cannot be read, stays applied as committed and counted
-// unresolved, as the contract's "unresolved_correction" says. A restore's
-// rebuild reads the row already: Config.Decide hands add the record with
-// the row's state, or keeps it out.
+// With no Config.Decide the record alone is read, and its state decides: the
+// fail-closed side, a delete the record names applied whatever a row might
+// say. The server's rebuilds and a restore's read the row (ByRow): add is
+// handed the record with the row's state, so a delete undone or abandoned,
+// or still prepared, hides nothing whatever its record says, or it is kept
+// out. Every delete applied is counted unresolved either way; counting
+// only those with no row to confirm them is not done yet.
 func (h *hides) add(c record.Correction) {
 	switch c.Kind {
 	case record.KindDelete:

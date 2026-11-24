@@ -147,8 +147,23 @@ func (t *tenantRun) reconcile(read bool) {
 	if !ok {
 		return
 	}
-	if !sameStore(st, t.store) || t.pipeline == nil {
-		t.restartPipeline(st, p)
+	switch paused, known := t.replacing(p); {
+	case known && paused:
+		// A rebuild replaces the catalog: no pipeline runs until it ends,
+		// so nothing is archived that its shadow would miss, while the
+		// listeners go on refusing as a temporary failure.
+		t.setGates(func(g *gateState) { g.rebuilding = true })
+		t.stopPipeline()
+	case !known:
+		// Not known whether a rebuild holds the tenant: a pipeline that
+		// runs is left running (its writes fail as the read did, and a
+		// replace waits for it to stop before building), and none is
+		// started until the next round knows.
+	default:
+		t.setGates(func(g *gateState) { g.rebuilding = false })
+		if !sameStore(st, t.store) || t.pipeline == nil {
+			t.restartPipeline(st, p)
+		}
 	}
 	t.setGates(func(g *gateState) { g.notReady = t.pipeline == nil })
 	if read || t.rows == nil || !time.Now().Before(t.nextRead) {
@@ -171,6 +186,21 @@ func (t *tenantRun) reconcile(read bool) {
 	}
 	t.apply(rows)
 	t.publish()
+}
+
+// replacing reports whether a rebuild that replaces the tenant's catalog is
+// queued or running, read from the tenant's database at every round so a
+// restart, a job made by a request, and a job ended in any way are all
+// seen; known is false when the database did not answer.
+func (t *tenantRun) replacing(p tenant.Pipeline) (paused, known bool) {
+	ctx, cancel := context.WithTimeout(t.sup.ctx, opTimeout)
+	defer cancel()
+	paused, err := p.RebuildReplacing(ctx)
+	if err != nil {
+		t.log.Warn("receivers: whether a rebuild replaces the tenant's catalog could not be read", "reason", fault.Message(err))
+		return false, false
+	}
+	return paused, true
 }
 
 // readReceivers reads every receiver of the tenant, page after page.
@@ -211,6 +241,13 @@ func (t *tenantRun) restartPipeline(st tenant.Store, p tenant.Pipeline) {
 	t.stopPipeline()
 	if again, err := t.sup.cfg.Tenants.Store(t.name); err != nil || !sameStore(again, st) {
 		// Read only, unreachable or reopened since: the next round decides.
+		return
+	}
+	// Asked again with starting set, as the tenant is: a replace made after
+	// the round's first look either is seen here, and nothing starts, or
+	// its unit's drain finds starting set (or the pipeline published) and
+	// waits for the stop the next round makes.
+	if paused, known := t.replacing(p); paused || !known {
 		return
 	}
 	t.store = st

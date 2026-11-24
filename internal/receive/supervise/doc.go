@@ -38,6 +38,15 @@
 // health says so once when it starts and once when it ends, as one event
 // each (ReceiverHealthChanged), never per file or per association.
 //
+// While a rebuild that replaces the tenant's catalog is queued or running
+// (tenant.Rebuilding's RebuildReplacing, read from the tenant's database
+// at every round, so it holds across a restart and ends with the job
+// however the job ends), the tenant's pipeline is stopped and none is
+// started, and its receivers are down as not ready ("the tenant's catalog
+// is being rebuilt"), refusing as transient: nothing is archived that the
+// shadow being built would miss. Drained tells the rebuild when the stop
+// is over.
+//
 // Callers turned away are grouped by receiver, failure and host (the
 // contract's AssociationFailed): the first of a group makes an event at
 // once, the rest in the minute after are counted into one event at its end,

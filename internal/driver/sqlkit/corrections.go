@@ -401,10 +401,18 @@ func checkOverlap(ctx context.Context, tx SendingTx, path label.Path, except str
 	return nil
 }
 
-// checkNoRebuild refuses a correction while a rebuild of the tenant runs:
-// its shadow would miss the change.
+// rebuildNotEnded selects a rebuild job of either mode not ended, the
+// dialect's condition on jobs.ended appended.
+const rebuildNotEnded = `SELECT 1 FROM rebuild_jobs AS r JOIN jobs ON jobs.id = r.job_id WHERE `
+
+// checkNoRebuild refuses a correction's step while a rebuild of the tenant
+// is queued or running: its shadow would miss the change, or read it torn.
+// Every caller is in a transaction that holds the tenant's configuration
+// lock (step, stepRow and PrepareCorrection take it first, before the
+// correction's row), which CreateJob of a rebuild takes too, so on a database with several
+// writers the check and the making of a rebuild never pass each other.
 func (k Sending) checkNoRebuild(ctx context.Context, tx SendingTx) error {
-	busy, err := exists(ctx, tx, `SELECT 1 FROM rebuild_jobs AS r JOIN jobs ON jobs.id = r.job_id WHERE `+k.D.NotEnded)
+	busy, err := exists(ctx, tx, rebuildNotEnded+k.D.NotEnded)
 	if err != nil {
 		return err
 	}

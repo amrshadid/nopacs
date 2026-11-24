@@ -171,6 +171,60 @@ revision) pair a platform kept, whether it is current, superseded, deleted or
 unknown. A replace is not undone: the way back is another replace from the old
 file.
 
+## While the catalog is rebuilt
+
+A rebuild job makes the catalog again from what the storages hold, into a
+shadow catalog beside the one in use. A `compare` rebuild (operator) lists the
+differences and drops the shadow. A `replace` rebuild (admin) makes the shadow
+the catalog in use, in one transaction with a `catalog_rebuilt` event, so every
+read sees the whole old catalog or the whole new one. Both are made through
+`JobService.CreateJob`; there is no command for them yet.
+
+From the moment a replace is queued until it ends, however it ends (activated,
+failed, canceled, or its attempts run out), the tenant's receivers refuse new
+files as a temporary failure, as when a storage is nearly full: a DICOM sender's
+association is rejected as transient (a store in an association already open
+is answered A700, out of resources) and the sender tries again; a STOW-RS
+client is answered 503 with `Retry-After`. Their health reads down, not
+ready, "the tenant's catalog is being rebuilt". Before the build reads the
+storages, the server waits for two things. First, the tenant's reception
+pipeline stops, the files it held archived or left in the incoming area to be
+archived after (at most 90 seconds). Second, every correction request in
+flight and the corrections' background work end (at most 15 minutes). A
+correction in flight is abandoned when its publish is refused; a purge in
+flight stops at the end of its page of objects (up to 500) and goes on after
+the rebuild; a relabel whose copy is running copies to its end and is then
+abandoned, since its publish is refused. Then what a stop or a failure left is
+settled: a delete or a replace left prepared is abandoned, what it wrote
+undone, and every correction record that lags its row is written again; if
+one cannot be, the attempt fails. Only then does the build read the storages,
+so nothing archived or corrected meanwhile is missing from the new catalog or
+read half written. The build also reads each correction record as the
+correction's row in the tenant's database says, so a delete that was never
+published, or was undone, hides nothing even if its record says otherwise. If
+either wait runs out, the attempt fails and is tried again later, with the
+receivers still refusing. In the worst case (a pipeline that never stops, or
+corrections that never finish) the receivers refuse until the job's attempts
+run out (30 attempts) and it ends failed, which takes about a day. Cancel it
+(`JobService.CancelJob`) to lift the pause at once. The pause is the job
+itself in the tenant's database, so a server restarted during the build
+keeps it, and the build goes on from the last scan it wrote. A directory
+import waits and goes on after; a quarantined file is not released until the
+job ends.
+
+A replace that ends partial has left some scans out (each counted in a
+`left_out|...` tally: unreadable, a profile version the tenant does not have,
+labels or a series held twice). It removes those scans from the catalog in
+use, though their files stay on the storage. Run a compare first and read its
+differences before a replace.
+
+While a rebuild of either mode is queued or running, a new correction, the
+publish of one prepared before, an undo, and every step of a purge (its start,
+whether the server's own or an admin's, each page of objects, its end) are refused
+(failed precondition), and the server's corrections pass waits: the shadow
+would miss the change, or read a scan's manifest and metadata torn. A purge
+due meanwhile runs once the rebuild has ended.
+
 ## What the archive cannot reach
 
 - Copies already sent to a peer by a job or a receiver's forward are the

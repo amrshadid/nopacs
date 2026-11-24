@@ -105,6 +105,28 @@ type Config struct {
 	// TenantID returns the id of the tenant named name, which its records
 	// are authenticated for. Required.
 	TenantID func(ctx context.Context, name string) (string, error)
+	// Drain returns once nothing in the process can write the catalog in
+	// use of the tenant named name: its reception pipeline stopped (the
+	// files it held archived, or left in the incoming area with their
+	// place kept) while its receivers refuse, and every correction request
+	// in flight and its corrections' background work ended (what begins
+	// after finds the job and changes nothing). A replace's unit calls it
+	// before every build, first or resumed: a file archived, or a
+	// correction's record or manifest written, while the shadow is built
+	// would be missed or read torn, and the activation would make that the
+	// catalog.
+	// The pause it waits for is the replace job itself, queued or running
+	// in the tenant's database (tenant.Rebuilding's RebuildReplacing), so
+	// it holds across a restart and ends with the job, whatever ends it.
+	// An error fails the attempt, which is tried again later. Nil waits for
+	// nothing: for a caller that keeps every writer away itself, as a
+	// restore does, whose tenant serves nothing until it ends.
+	Drain func(ctx context.Context, tenantName string) error
+	// Resume is called with a tenant's name once a unit of its rebuilds
+	// has stopped working, however it stopped, so receivers a replace held
+	// back look again at once rather than at their next periodic read; nil
+	// does nothing.
+	Resume func(tenantName string)
 
 	// seams are what a test changes.
 	seams seams
@@ -138,6 +160,9 @@ func (c Config) check() (Config, error) {
 	}
 	if c.Wake == nil {
 		c.Wake = func(string) {}
+	}
+	if c.Resume == nil {
+		c.Resume = func(string) {}
 	}
 	if c.Now == nil {
 		c.Now = time.Now

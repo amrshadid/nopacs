@@ -15,9 +15,8 @@ import (
 // and, on a Postgres tenant, the scratch schema its shadow is built in,
 // which the store checks. One that replaces the catalog needs admin on the
 // tenant, checked after the operator's requirement, so an operator is
-// answered permission denied; an admin is answered that it is not served
-// yet. A rebuild from one storage is refused before this as not served.
-// Its audit entry names its mode.
+// answered permission denied. A rebuild from one storage is refused before
+// this as not served. Its audit entry names its mode.
 func (s jobService) createRebuildJob(ctx context.Context, d access.Decision, p tenant.Pipeline, st tenant.Store,
 	req *v1.CreateJobRequest) (*v1.CreateJobResponse, error) {
 	c := s.c
@@ -44,22 +43,31 @@ func (s jobService) createRebuildJob(ctx context.Context, d access.Decision, p t
 	if err := nj.Validate(); err != nil {
 		return nil, c.failIn(d, st, err)
 	}
+	// A replace empties the catalog and fills it again, so it needs admin:
+	// checked first, so an operator is told the role it lacks whatever the
+	// store would say of the job, and again in the transaction that makes
+	// the job, as every role is.
+	need := master.RoleOperator
 	if mode == tenant.RebuildReplace {
-		// An operator is told the role it lacks, as a served replace would
-		// tell it; an admin, that a replace is not served: nothing yet
-		// pauses the receivers or holds corrections back while its shadow
-		// is built, so a file archived meanwhile would leave the catalog.
-		if err := c.roleGuard(d, master.RoleAdmin)(ctx); err != nil {
+		need = master.RoleAdmin
+		if err := c.roleGuard(d, need)(ctx); err != nil {
 			return nil, c.failIn(d, st, err)
 		}
-		return nil, c.refuseNotServed(d, st, "rebuild.mode: a replace rebuild is not served yet")
 	}
 	facts := access.Facts{Object: id, Details: map[string]string{detailKind: "rebuild", detailMode: string(mode)}}
-	out, err := p.CreateJob(ctx, nj, changeEntry(d, facts), c.roleGuard(d, master.RoleOperator))
+	out, err := p.CreateJob(ctx, nj, changeEntry(d, facts), c.roleGuard(d, need))
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}
 	c.sendersChanged(req.GetTenant())
+	if mode == tenant.RebuildReplace {
+		// The replace job, queued, is the pause itself: the receivers'
+		// supervisor reads it at once rather than at its next round, stops
+		// the tenant's pipeline and refuses new files as a temporary
+		// failure until the job ends, and the rebuild builds its shadow
+		// once that stop is over.
+		c.receiversChanged(req.GetTenant())
+	}
 	return &v1.CreateJobResponse{Job: c.newJobViews(p, req.GetTenant()).message(ctx, out)}, nil
 }
 

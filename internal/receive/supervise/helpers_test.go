@@ -51,6 +51,9 @@ type tenants struct {
 	// calls counts the asks for the store; from the ask movedFrom on (0 for
 	// never) the tenant is refused as read only, as a moved one is.
 	calls, movedFrom int
+	// onCall, when set, runs inside each ask for the store with its number
+	// (calls after it), before the store is answered.
+	onCall func(n int)
 }
 
 func (ts *tenants) Names(context.Context) ([]string, error) { return []string{"lab"}, nil }
@@ -65,6 +68,9 @@ func (ts *tenants) Store(name string) (tenant.Store, error) {
 		return nil, fault.New(fault.Unavailable, "the tenant lab is unreachable")
 	}
 	ts.calls++
+	if ts.onCall != nil {
+		ts.onCall(ts.calls)
+	}
 	if ts.movedFrom > 0 && ts.calls >= ts.movedFrom {
 		return nil, fault.New(fault.Precondition, "the tenant lab is moved")
 	}

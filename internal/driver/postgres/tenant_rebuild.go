@@ -376,3 +376,8 @@ func (t *Tenant) ShadowsLeft(ctx context.Context) ([]string, error) {
 func (t *Tenant) RebuildReplacing(ctx context.Context) (bool, error) {
 	return t.rebuild().RebuildReplacing(ctx)
 }
+
+// RebuildRunning implements tenant.Rebuilding.
+func (t *Tenant) RebuildRunning(ctx context.Context) (bool, error) {
+	return t.rebuild().RebuildRunning(ctx)
+}

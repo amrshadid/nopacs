@@ -34,6 +34,9 @@ type testParts struct {
 	rejected  []string
 	released  []string
 	retried   []string
+	// poked lists the tenants whose receivers the handlers said changed
+	// (api.ReceiverChanges), in order.
+	poked []string
 	// header, when set, answers Header; otherwise no header can be read.
 	header atomic.Pointer[func(f tenant.QuarantinedFile, limit int) (string, bool, error)]
 	// heldFile, when set, answers HeldFile; otherwise no held file can be
