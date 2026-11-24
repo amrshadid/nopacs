@@ -45,6 +45,7 @@ type storageFlags struct {
 	bucket      string
 	prefix      string
 	pathStyle   bool
+	purge       bool
 	accessKeyID string
 	credEnv     string
 	credFile    string
@@ -68,6 +69,7 @@ func (f *storageFlags) add(cmd *cobra.Command, forSet bool) {
 	fl.StringVar(&f.bucket, "bucket", "", "s3: the bucket's name; it must exist, the server never makes one")
 	fl.StringVar(&f.prefix, "prefix", "", "s3: the prefix every key is written under, ending in \"/\", such as nopacs/lab-a/; empty for the whole bucket")
 	fl.BoolVar(&f.pathStyle, "path-style", false, "s3: address the bucket in the URL's path rather than its host name; most stores other than AWS need it, and the server requires it at an endpoint the installation allows private addresses at")
+	fl.BoolVar(&f.purge, "purge-versions", true, "s3: on a bucket that keeps versions, a purge of a correction deletes every older version of each object it removes, so the bytes are gone; --purge-versions=false leaves them, hidden behind a delete marker")
 	fl.StringVar(&f.accessKeyID, "access-key-id", "", "s3: the access key id of the credentials the server uses (it is not a secret)")
 	fl.StringVar(&f.credEnv, "credential-env", "", "s3: name of the environment variable that holds the secret access key that goes with --access-key-id")
 	fl.StringVar(&f.credFile, "credential-file", "", "s3: path of a file, readable only by you, that holds the secret access key that goes with --access-key-id")
@@ -132,7 +134,7 @@ func (f *storageFlags) given(cmd *cobra.Command, names ...string) bool {
 // dirNames and s3Names are the flags of each type; --capacity belongs to both.
 var (
 	dirNames = []string{"root", "path"}
-	s3Names  = []string{"endpoint", "region", "bucket", "prefix", "path-style", "access-key-id", "credential-env", "credential-file"}
+	s3Names  = []string{"endpoint", "region", "bucket", "prefix", "path-style", "purge-versions", "access-key-id", "credential-env", "credential-file"}
 )
 
 // newStorageAdd builds "storage add".
@@ -184,6 +186,9 @@ written to and how much room it has.`,
 					Endpoint: f.endpoint, Region: f.region, Bucket: f.bucket, Prefix: f.prefix, PathStyle: f.pathStyle,
 					AccessKeyId: f.accessKeyID, SecretAccessKey: cred,
 				}}
+				if cmd.Flags().Changed("purge-versions") {
+					st.GetS3().PurgeVersions = &f.purge
+				}
 			default:
 				return fault.New(fault.Invalid, fmt.Sprintf("--type %q is not a storage type; use dir or s3", output.Clean(f.typ)))
 			}
@@ -222,6 +227,15 @@ func capacityText(n int64) string {
 	return output.Bytes(n)
 }
 
+// olderVersionsText words what a purge does with the older versions of an
+// object on a bucket that keeps versions; purge_versions absent means true.
+func olderVersionsText(s *v1.S3Storage) string {
+	if s.PurgeVersions != nil && !s.GetPurgeVersions() {
+		return "kept by a purge (--purge-versions=false)"
+	}
+	return "deleted by a purge"
+}
+
 // storageDetails writes one storage as labeled lines. A secret is never one
 // of them: the server answers only whether one is held.
 func (a *app) storageDetails(w io.Writer, st *v1.Storage) error {
@@ -249,6 +263,7 @@ func (a *app) storageDetails(w io.Writer, st *v1.Storage) error {
 			output.Pair{Label: "Bucket", Value: t.S3.GetBucket()},
 			output.Pair{Label: "Prefix", Value: output.Dash(t.S3.GetPrefix())},
 			output.Pair{Label: "Addressing", Value: style},
+			output.Pair{Label: "Older versions", Value: olderVersionsText(t.S3)},
 			output.Pair{Label: "Access key id", Value: t.S3.GetAccessKeyId()},
 			output.Pair{Label: "Secret access key", Value: held})
 	}
@@ -350,7 +365,9 @@ say where its files are (--root, --path, --endpoint, --bucket, --prefix) cannot
 change. --access-key-id and its secret change together: give both, the secret
 from --credential-env or --credential-file. So does a change of --endpoint:
 credentials given for one store are never sent to another, so it is given with
---access-key-id and its secret, and the server refuses it otherwise.`,
+--access-key-id and its secret, and the server refuses it otherwise.
+--purge-versions changes only what later purges do with older versions on a
+bucket that keeps them, so it may change at any time.`,
 		Example: `  nopacs storage set lab1 main --capacity 1TiB
   nopacs storage set lab1 cold --access-key-id AKIANEW --credential-file /etc/nopacs/new.s3`,
 		Args: exactArgs(2),
@@ -380,6 +397,7 @@ credentials given for one store are never sent to another, so it is given with
 				{"bucket", "s3.bucket", func() { s3.Bucket = f.bucket }},
 				{"prefix", "s3.prefix", func() { s3.Prefix = f.prefix }},
 				{"path-style", "s3.path_style", func() { s3.PathStyle = f.pathStyle }},
+				{"purge-versions", "s3.purge_versions", func() { s3.PurgeVersions = &f.purge }},
 			} {
 				if cmd.Flags().Changed(p.flag) {
 					p.set()

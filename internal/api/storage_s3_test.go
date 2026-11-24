@@ -3,11 +3,13 @@ package api_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	connect "connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/proto"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/core/settings"
@@ -118,6 +120,65 @@ func TestSetStorageS3Refusals(t *testing.T) {
 	got := mustCall[*v1.GetStorageResponse](t, "get", call(f.as(local).storages.GetStorage, &v1.GetStorageRequest{Tenant: "lab1", Name: "cold"}))
 	if got.GetStorage().GetS3().GetEndpoint() != "https://s3.example.com" || !got.GetStorage().GetS3().GetSecretAccessKeySet() {
 		t.Errorf("a refused change was stored: %v", got.GetStorage())
+	}
+}
+
+// TestPurgeVersionsRoundTrip guards S3Storage.purge_versions through the
+// API: absent in AddStorage is answered true, the contract's default;
+// false is kept and answered false by AddStorage, GetStorage and
+// ListStorages; SetStorage changes it both ways when its mask names it,
+// and keeps it when the mask names another field; absent in a SetStorage
+// whose mask names it is true again; and a directory storage refuses it.
+func TestPurgeVersionsRoundTrip(t *testing.T) {
+	f := newPlaceFixture(t)
+	f.setSetting(installation(), settings.StorageS3Endpoints, "https://s3.example.com")
+	pv := func(s *v1.Storage) string {
+		if s.GetS3().PurgeVersions == nil {
+			return "absent"
+		}
+		return strconv.FormatBool(s.GetS3().GetPurgeVersions())
+	}
+	get := func(name string) *v1.Storage {
+		return mustCall[*v1.GetStorageResponse](t, "get", call(f.as(f.lab1Admin).storages.GetStorage, &v1.GetStorageRequest{Tenant: "lab1", Name: name})).GetStorage()
+	}
+	add := mustCall[*v1.AddStorageResponse](t, "add by default", addStorage("lab1", s3Storage("purging", "https://s3.example.com", "the-secret"))(f.as(f.lab1Admin)))
+	if pv(add.GetStorage()) != "true" || pv(get("purging")) != "true" {
+		t.Errorf("a storage added without purge_versions answers %s, reads %s; want true", pv(add.GetStorage()), pv(get("purging")))
+	}
+	keeping := s3Storage("keeping", "https://s3.example.com", "the-secret")
+	keeping.GetS3().Prefix, keeping.GetS3().PurgeVersions = "keep/", proto.Bool(false)
+	add = mustCall[*v1.AddStorageResponse](t, "add keeping", addStorage("lab1", keeping)(f.as(f.lab1Admin)))
+	if pv(add.GetStorage()) != "false" || pv(get("keeping")) != "false" {
+		t.Errorf("a storage added with purge_versions false answers %s, reads %s", pv(add.GetStorage()), pv(get("keeping")))
+	}
+	list := mustCall[*v1.ListStoragesResponse](t, "list", call(f.as(f.lab1Admin).storages.ListStorages, &v1.ListStoragesRequest{Tenant: "lab1"}))
+	for _, s := range list.GetStorages() {
+		if want := map[string]string{"purging": "true", "keeping": "false"}[s.GetName()]; want != "" && pv(s) != want {
+			t.Errorf("ListStorages answers %s's purge_versions %s, want %s", s.GetName(), pv(s), want)
+		}
+	}
+	set := func(name string, value *bool, paths ...string) *v1.Storage {
+		s := &v1.Storage{Name: name, CapacityBytes: 1 << 30, Type: &v1.Storage_S3{S3: &v1.S3Storage{PurgeVersions: value}}}
+		return mustCall[*v1.SetStorageResponse](t, "set "+strings.Join(paths, ","), call(f.as(f.lab1Admin).storages.SetStorage,
+			&v1.SetStorageRequest{Tenant: "lab1", Storage: s, UpdateMask: mask(paths...)})).GetStorage()
+	}
+	if got := set("keeping", proto.Bool(true), "capacity_bytes"); pv(got) != "false" || got.GetCapacityBytes() != 1<<30 {
+		t.Errorf("a mask that does not name purge_versions changed it: %s", pv(got))
+	}
+	if got := set("keeping", proto.Bool(true), "s3.purge_versions"); pv(got) != "true" || pv(get("keeping")) != "true" || !got.GetS3().GetSecretAccessKeySet() {
+		t.Errorf("SetStorage purge_versions true answers %s, reads %s", pv(got), pv(get("keeping")))
+	}
+	if got := set("keeping", proto.Bool(false), "s3.purge_versions"); pv(got) != "false" || pv(get("keeping")) != "false" {
+		t.Errorf("SetStorage purge_versions false answers %s, reads %s", pv(got), pv(get("keeping")))
+	}
+	if got := set("keeping", nil, "s3.purge_versions"); pv(got) != "true" {
+		t.Errorf("SetStorage naming purge_versions without a value answers %s, want true (absent means true)", pv(got))
+	}
+	mustCall[*v1.AddStorageResponse](t, "add main", addStorage("lab1", dirStorage("main", "fast", "mri"))(f.as(local)))
+	o := call(f.as(f.lab1Admin).storages.SetStorage, &v1.SetStorageRequest{Tenant: "lab1",
+		Storage: &v1.Storage{Name: "main", Type: &v1.Storage_S3{S3: &v1.S3Storage{PurgeVersions: proto.Bool(false)}}}, UpdateMask: mask("s3.purge_versions")})
+	if o.code() != connect.CodeInvalidArgument {
+		t.Errorf("purge_versions of a directory storage: %v %q, want invalid", o.code(), o.message())
 	}
 }
 

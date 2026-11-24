@@ -183,6 +183,10 @@ CREATE TABLE storages (
     s3_path_style    boolean     NOT NULL,
     s3_access_key_id text        NOT NULL,
     s3_secret        bytea,
+    -- true when a purge leaves the older versions of an object on a
+    -- versioned bucket (S3Storage.purge_versions off); false, the default,
+    -- deletes them.
+    s3_keep_versions boolean     NOT NULL DEFAULT false,
     capacity_bytes   bigint      NOT NULL,
     created          timestamptz NOT NULL,
     updated          timestamptz NOT NULL,

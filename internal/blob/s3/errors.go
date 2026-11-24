@@ -9,6 +9,7 @@ import (
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/smithy-go"
 
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/fault"
 )
 
@@ -78,6 +79,7 @@ var knownCodes = map[string]bool{
 	"RequestTimeTooSkewed": true, "RequestTimeout": true, "ServiceUnavailable": true, "SignatureDoesNotMatch": true,
 	"SlowDown": true, "TemporaryRedirect": true, "XAmzContentSHA256Mismatch": true, "InvalidBucketName": true,
 	"Conflict": true, "OperationAborted": true, "KeyTooLongError": true,
+	"InvalidObjectState": true,
 }
 
 // closedError is what every call gives once the store is closed.
@@ -148,6 +150,14 @@ func failCode(code string, status int, what string) error {
 		return fault.Wrap(fault.Unavailable, inClass(ErrWrongAnswer, errRedirected), what+" failed: the storage answered with a redirect, which is not followed")
 	case code == "NoSuchKey" || code == "NotFound" || (code == "" && status == http.StatusNotFound):
 		return fault.Wrap(fault.NotFound, cause, "the storage holds no object under that key")
+	case code == "InvalidObjectState":
+		// S3 answers a GET of an object in an archive storage class, one
+		// not restored, with 403 InvalidObjectState
+		// (docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html,
+		// API_GetObject.html). The object is there and whole: it must
+		// neither read as refused credentials, which a scrub would retry
+		// without end, nor as missing. Tested before the 403 below.
+		return fault.Wrap(fault.Unavailable, inClass(blob.ErrNotOnline, cause), what+" failed: the object is held in a tier the storage cannot read at once")
 	case code == "NoSuchBucket":
 		return fault.Wrap(fault.Unavailable, inClass(ErrBucketMissing, cause), what+" failed: the bucket does not exist")
 	case code == "AccessDenied", code == "AccountProblem", code == "AllAccessDisabled", code == "ExpiredToken",

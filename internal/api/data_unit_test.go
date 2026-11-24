@@ -6,9 +6,15 @@ import (
 	"errors"
 	"io"
 	"slices"
+	"strings"
 	"testing"
 
+	connect "connectrpc.com/connect/v2"
+
+	"github.com/amrshadid/nopacs/internal/api/codes"
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/checkedread"
+	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
 )
 
@@ -127,6 +133,39 @@ func (f *fakeSender) SendTo(w io.Writer, n int64) (int64, error) {
 	k, err := w.Write(f.data[:n])
 	f.data = f.data[k:]
 	return int64(k), err
+}
+
+// TestNotOnlineAnswer guards what every read path answers for an object its
+// storage holds in a tier it cannot read at once (blob.ErrNotOnline, as the
+// S3 driver gives it for InvalidObjectState): unavailable, never data loss
+// or not found, with a message that starts with the reason NOT_ONLINE and
+// carries the word not_online, through instanceFailure (a download, a
+// retrieve, a stream of files, a frame) and storageFailure (a scan's
+// metadata file) alike; and that a storage that does not answer keeps its
+// plain unavailable answer, without the reason.
+func TestNotOnlineAnswer(t *testing.T) {
+	cold := fault.Wrap(fault.Unavailable, errors.Join(errors.New("the storage answered with the error code InvalidObjectState"), blob.ErrNotOnline),
+		"the read failed: the object is held in a tier the storage cannot read at once")
+	p := label.Path{Subject: "s1", Session: "a", Scan: "b"}
+	for name, err := range map[string]error{
+		"instance": instanceFailure(cold, p),
+		"metadata": storageFailure(cold, "the scan's metadata file cannot be read"),
+	} {
+		msg := fault.Message(err)
+		if k := fault.KindOf(err); k != fault.Unavailable || codes.Code(k) != connect.CodeUnavailable {
+			t.Errorf("%s not online: kind %v, want Unavailable", name, k)
+		}
+		if !strings.HasPrefix(msg, "NOT_ONLINE: ") || !strings.Contains(msg, "not_online") || !errors.Is(err, blob.ErrNotOnline) {
+			t.Errorf("%s not online answers %q", name, msg)
+		}
+	}
+	if !strings.Contains(fault.Message(instanceFailure(cold, p)), "s1/a/b") {
+		t.Errorf("an instance not online does not name its scan: %q", fault.Message(instanceFailure(cold, p)))
+	}
+	down := fault.New(fault.Unavailable, "the read failed: the storage could not be reached")
+	if msg := fault.Message(instanceFailure(down, p)); strings.Contains(msg, "NOT_ONLINE") || fault.KindOf(instanceFailure(down, p)) != fault.Unavailable {
+		t.Errorf("a storage that does not answer: %q", msg)
+	}
 }
 
 // TestSendRange guards the part of a range a storage's stream writes

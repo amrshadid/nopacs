@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -147,5 +150,61 @@ func TestOpensForReadingNeverFailBesideWrites(t *testing.T) {
 	}
 	if err := r.Delete(ctx, "a/obj"); err == nil {
 		t.Error("a store opened for reading took a Delete")
+	}
+}
+
+// versionedS3 is listingS3 in front of a bucket that keeps versions and has
+// no object lock, so what a purge will do there depends only on the
+// storage's own purge_versions.
+type versionedS3 struct{ listingS3 }
+
+func (f *versionedS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	switch {
+	case r.Method == http.MethodGet && q.Has("versioning"):
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>`))
+	case r.Method == http.MethodGet && q.Has("object-lock"):
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>ObjectLockConfigurationNotFoundError</Code><Message>none</Message></Error>`))
+	default:
+		f.listingS3.ServeHTTP(w, r)
+	}
+}
+
+// TestOpenCarriesPurgeVersions guards that Open hands an S3 storage's
+// purge_versions to the driver: on a versioned bucket, a storage set to
+// keep older versions expects its purges to hide an object behind a delete
+// marker ("purge_versions off"), and one left at the default expects every
+// version deleted. Without it a purge deleted versions a person asked to
+// keep.
+func TestOpenCarriesPurgeVersions(t *testing.T) {
+	srv := httptest.NewServer(&versionedS3{})
+	t.Cleanup(srv.Close)
+	o := Opener{Values: fixedValues{endpoints: settings.S3Endpoints{{URL: srv.URL, PlainHTTP: true, PrivateAddress: true}}}, Keys: plainKeys{}, StaleUploadAge: -1}
+	lab := Tenant{ID: "t1", Name: "lab", Secrets: oneSecret{}}
+	for _, c := range []struct {
+		keep bool
+		want blob.Disposition
+		why  string
+	}{
+		{false, blob.Removed, "versioned bucket, every version deleted"},
+		{true, blob.Hidden, "versioned bucket, purge_versions off"},
+	} {
+		s := tenant.Storage{Name: "cold", Type: tenant.StorageS3, S3: tenant.S3Storage{Endpoint: srv.URL, Region: "us-east-1", Bucket: "cold-bucket",
+			AccessKeyID: "a", PathStyle: true, KeepVersions: c.keep}}
+		bs, err := o.Open(context.Background(), lab, s)
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		pe, ok := bs.(blob.PurgeExpecter)
+		if !ok {
+			t.Fatal("an S3 store says nothing of what its purge will do")
+		}
+		if got, why := pe.PurgeExpected(context.Background()); got != c.want || why != c.why {
+			t.Errorf("keep versions %v: a purge is expected %s (%s), want %s (%s)", c.keep, got, why, c.want, c.why)
+		}
+		_ = bs.Close()
 	}
 }

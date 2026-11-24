@@ -182,6 +182,13 @@ the code before this release is in github.com/amrshadid/coria.
   backup or export at a time, the audit's sealing pass paused meanwhile,
   bounded as a whole by the setting `backup.max-duration` (6h by default, 1m
   to 7d), audited before the first read and when it ends.
+- S3 storages keep `purge_versions`: AddStorage, GetStorage, ListStorages and
+  SetStorage carry it (absent means true), `nopacs storage add|set
+  --purge-versions=false` sets it, and a purge on a versioned bucket then
+  leaves older versions and reports them hidden instead of deleting them. An
+  object a store answers `InvalidObjectState` (an archive storage class)
+  reads as unavailable `NOT_ONLINE`, never as refused credentials, and a
+  scrub tallies it `unreadable|not_online` once and moves on.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

@@ -3,6 +3,7 @@ package cli_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -31,7 +32,7 @@ func TestStorageCommands(t *testing.T) {
 			"Created:  2026-11-17 15:00:00 +03:00\nUpdated:  2026-11-17 15:00:00 +03:00\n", "")
 	expect(t, r.run(s3Args...), 0,
 		"Name:              cold\nType:              s3\nEndpoint:          https://s3.example\nRegion:            eu-central-1\n"+
-			"Bucket:            lab1-archive\nPrefix:            nopacs/\nAddressing:        host name\nAccess key id:     AKIAEXAMPLE\n"+
+			"Bucket:            lab1-archive\nPrefix:            nopacs/\nAddressing:        host name\nOlder versions:    deleted by a purge\nAccess key id:     AKIAEXAMPLE\n"+
 			"Secret access key: set\nCapacity:          2TiB\nCreated:           2026-11-17 15:00:00 +03:00\nUpdated:           2026-11-17 15:00:00 +03:00\n", "")
 
 	expect(t, r.run("storage", "list", "lab1"), 0,
@@ -70,6 +71,25 @@ func TestStorageCommands(t *testing.T) {
 		t.Errorf("set --path-style=false: %+v", set)
 	}
 	document(t, r.run("storage", "set", "lab1", "main", "--path", "elsewhere", "--json"))
+	// What a purge does with older versions: kept, then deleted again, and
+	// the request names s3.purge_versions with the value given.
+	if set := r.run("storage", "set", "lab1", "cold", "--purge-versions=false"); set.code != 0 || !strings.Contains(set.stdout, "Older versions:    kept by a purge (--purge-versions=false)\n") {
+		t.Errorf("set --purge-versions=false: %+v", set)
+	}
+	if pv := document(t, r.run("storage", "show", "lab1", "cold", "--json"))["storage"].(map[string]any)["s3"].(map[string]any)["purgeVersions"]; pv != false {
+		t.Errorf("show --json after --purge-versions=false: purgeVersions %v", pv)
+	}
+	if set := r.run("storage", "set", "lab1", "cold", "--purge-versions"); set.code != 0 || !strings.Contains(set.stdout, "Older versions:    deleted by a purge\n") {
+		t.Errorf("set --purge-versions: %+v", set)
+	}
+	if set := r.run("storage", "set", "lab1", "main", "--purge-versions=false"); set.code == 0 {
+		t.Errorf("--purge-versions on a directory storage was taken: %+v", set)
+	}
+	keeping := append(slices.Clone(s3Args[:len(s3Args)-2]), "--purge-versions=false")
+	keeping[3], keeping[11] = "kept", "lab1-kept"
+	if add := r.run(keeping...); add.code != 0 || !strings.Contains(add.stdout, "Older versions:    kept by a purge (--purge-versions=false)\n") {
+		t.Errorf("add --purge-versions=false: %+v", add)
+	}
 
 	expect(t, r.run("storage", "test", "lab1", "main"), 0,
 		"STEP     OUTCOME  TOOK  FAULT\nwrite    passed   12ms  -\nread     passed   12ms  -\ncompare  passed   12ms  -\nremove   passed   12ms  -\n", "")

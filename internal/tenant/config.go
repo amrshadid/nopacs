@@ -96,6 +96,14 @@ type S3Storage struct {
 	// SecretSet says whether a secret is held. Answered by a store; ignored
 	// in a change.
 	SecretSet bool
+	// KeepVersions leaves, on a versioned bucket, the older versions of an
+	// object a purge removes, so the bytes are hidden behind a delete
+	// marker rather than gone: the contract's purge_versions off. False,
+	// the zero value, is the contract's default (purge_versions absent
+	// means true), so a storage made without saying deletes them. It says
+	// nothing about where the files are, so it may change at any time: it
+	// changes only what later purges do.
+	KeepVersions bool
 }
 
 // StorageField names one field of a storage a partial change sets, as the
@@ -114,7 +122,8 @@ const (
 	FieldS3PathStyle     StorageField = "s3.path_style"
 	FieldS3AccessKeyID   StorageField = "s3.access_key_id"
 	FieldS3SecretKey     StorageField = "s3.secret_access_key"
-	maxStorageFieldCount              = 10
+	FieldS3PurgeVersions StorageField = "s3.purge_versions"
+	maxStorageFieldCount              = 11
 )
 
 // storageFields says, for each field, the type it belongs to (empty for
@@ -133,6 +142,8 @@ var storageFields = map[StorageField]struct {
 	FieldS3PathStyle:   {StorageS3, false},
 	FieldS3AccessKeyID: {StorageS3, false},
 	FieldS3SecretKey:   {StorageS3, false},
+	// What a purge does with older versions, not where the files are.
+	FieldS3PurgeVersions: {StorageS3, false},
 }
 
 // Validate returns an Invalid error unless s can be stored as a new
@@ -179,7 +190,7 @@ func (s Storage) validate() error {
 // not comparable with ==.
 func (c S3Storage) isZero() bool {
 	return c.Endpoint == "" && c.Region == "" && c.Bucket == "" && c.Prefix == "" && !c.PathStyle &&
-		c.AccessKeyID == "" && len(c.SealedSecret) == 0 && !c.SecretSet
+		c.AccessKeyID == "" && len(c.SealedSecret) == 0 && !c.SecretSet && !c.KeepVersions
 }
 
 func (c S3Storage) validate() error {
@@ -424,6 +435,8 @@ func ApplyStorage(stored, change Storage, fields []StorageField) (Storage, bool,
 			out.S3.AccessKeyID = change.S3.AccessKeyID
 		case FieldS3SecretKey:
 			out.S3.SealedSecret = change.S3.SealedSecret
+		case FieldS3PurgeVersions:
+			out.S3.KeepVersions = change.S3.KeepVersions
 		}
 	}
 	if slices.Contains(fields, FieldS3AccessKeyID) != slices.Contains(fields, FieldS3SecretKey) {

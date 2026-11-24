@@ -23,6 +23,10 @@ func withoutSecret(st *v1.Storage, held bool) *v1.Storage {
 	if s3 := out.GetS3(); s3 != nil {
 		s3.SecretAccessKey = ""
 		s3.SecretAccessKeySet = held
+		if s3.PurgeVersions == nil {
+			// Absent means true, and the server always answers it.
+			s3.PurgeVersions = proto.Bool(true)
+		}
 	}
 	return out
 }
@@ -168,7 +172,7 @@ func (h storageHandler) SetStorage(_ context.Context, req *v1.SetStorageRequest)
 			} else {
 				next.GetDirectory().Path = in.GetDirectory().GetPath()
 			}
-		case "s3.endpoint", "s3.region", "s3.bucket", "s3.prefix", "s3.path_style", "s3.access_key_id", "s3.secret_access_key":
+		case "s3.endpoint", "s3.region", "s3.bucket", "s3.prefix", "s3.path_style", "s3.access_key_id", "s3.secret_access_key", "s3.purge_versions":
 			d := next.GetS3()
 			if d == nil {
 				return nil, fault.New(fault.Invalid, "update_mask: "+p+" is a field of the other type")
@@ -186,6 +190,9 @@ func (h storageHandler) SetStorage(_ context.Context, req *v1.SetStorageRequest)
 				d.PathStyle = in.GetS3().GetPathStyle()
 			case "s3.access_key_id":
 				d.AccessKeyId = in.GetS3().GetAccessKeyId()
+			case "s3.purge_versions":
+				// Absent means true, as the server reads it.
+				d.PurgeVersions = proto.Bool(in.GetS3().PurgeVersions == nil || in.GetS3().GetPurgeVersions())
 			case "s3.secret_access_key":
 				if in.GetS3().GetSecretAccessKey() == "" {
 					return nil, fault.New(fault.Invalid, "storage.s3.secret_access_key: must not be empty")

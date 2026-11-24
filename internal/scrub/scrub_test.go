@@ -3,6 +3,7 @@ package scrub
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"maps"
 	"slices"
@@ -222,10 +223,17 @@ type coldStore struct {
 	key string
 }
 
-// Read answers the key not online.
+// errServerAnswer stands for the cause an S3 driver keeps of a store's
+// answer beside its class, so the error is shaped as the driver's is: one
+// cause with two errors under it.
+var errServerAnswer = errors.New("the storage answered with the error code InvalidObjectState")
+
+// Read answers the key not online, as the S3 driver does for a GET a store
+// answers InvalidObjectState: Unavailable, with blob.ErrNotOnline among
+// the causes rather than the only one.
 func (n coldStore) Read(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
 	if key == n.key {
-		return nil, fault.Wrap(fault.Unavailable, blob.ErrNotOnline, "the object is in an archive tier")
+		return nil, fault.Wrap(fault.Unavailable, errors.Join(errServerAnswer, blob.ErrNotOnline), "the object is in an archive tier")
 	}
 	return n.Store.Read(ctx, key, offset, length)
 }
@@ -233,14 +241,30 @@ func (n coldStore) Read(ctx context.Context, key string, offset, length int64) (
 // TestScrubTalliesAnObjectNotOnline guards that an object the storage
 // answers as not online is tallied and refused as not online, never a
 // finding and never a mark: not readable now is not missing or damaged.
+// It is read once: neither a second read, which a difference earns, nor a
+// retry of the unit, which a storage that does not answer earns, so a
+// scrub of an object in a cold tier ends.
 func TestScrubTalliesAnObjectNotOnline(t *testing.T) {
 	f := newFixture(t)
 	a, b := corpus(t, "MR_small.dcm"), corpus(t, "ct2n-6293.dcm")
 	p := f.archive("scan-a", a, b)
 	_, _, ua := uidsOf(t, a)
-	cfg := f.config()
+	var mu sync.Mutex
+	coldReads := 0
+	cfg := withRead(f.config(), func(key string, _ int) {
+		if key == f.keys[ua] {
+			mu.Lock()
+			coldReads++
+			mu.Unlock()
+		}
+	})
 	cfg.OpenStorages = func(string, tenant.Pipeline) Storages { return storages{s: coldStore{Store: f.store, key: f.keys[ua]}} }
 	j := f.scrub(cfg)
+	mu.Lock()
+	if coldReads != 1 {
+		t.Errorf("the object not online was read %d times, want once", coldReads)
+	}
+	mu.Unlock()
 	if got := f.findings(true); len(got) != 0 || f.marked(p, ua) {
 		t.Errorf("an object not online made findings %v, marked %v", got, f.marked(p, ua))
 	}

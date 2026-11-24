@@ -148,6 +148,9 @@ CREATE TABLE storages (
     s3_path_style    INTEGER NOT NULL CHECK (s3_path_style IN (0, 1)),
     s3_access_key_id TEXT    NOT NULL,
     s3_secret        BLOB,
+    -- 1 when a purge leaves the older versions of an object on a versioned
+    -- bucket (S3Storage.purge_versions off); 0, the default, deletes them.
+    s3_keep_versions INTEGER NOT NULL DEFAULT 0 CHECK (s3_keep_versions IN (0, 1)),
     capacity_bytes   INTEGER NOT NULL CHECK (capacity_bytes >= 0),
     created          INTEGER NOT NULL,
     updated          INTEGER NOT NULL

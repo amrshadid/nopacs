@@ -1324,6 +1324,7 @@ Usage: `nopacs storage add <tenant> <name> --type dir --root ROOT [--path PATH] 
 | `--path` | string |  | dir: the directory below the tenant's directory in the root, segments joined by "/"; empty for the tenant's directory itself |
 | `--path-style` | bool |  | s3: address the bucket in the URL's path rather than its host name; most stores other than AWS need it, and the server requires it at an endpoint the installation allows private addresses at |
 | `--prefix` | string |  | s3: the prefix every key is written under, ending in "/", such as nopacs/lab-a/; empty for the whole bucket |
+| `--purge-versions` | bool | `true` | s3: on a bucket that keeps versions, a purge of a correction deletes every older version of each object it removes, so the bytes are gone; --purge-versions=false leaves them, hidden behind a delete marker |
 | `--region` | string |  | s3: the region the bucket is in, such as eu-central-1 |
 | `--root` | string |  | dir: the name of the root, as the setting storage.directory-roots names it |
 | `--type` | string |  | the storage's type: dir (a directory on the server) or s3 (a bucket) (required) |
@@ -1366,6 +1367,7 @@ Usage: `nopacs storage set <tenant> <name> [--capacity SIZE] [directory or S3 fl
 | `--path` | string |  | dir: the directory below the tenant's directory in the root, segments joined by "/"; empty for the tenant's directory itself |
 | `--path-style` | bool |  | s3: address the bucket in the URL's path rather than its host name; most stores other than AWS need it, and the server requires it at an endpoint the installation allows private addresses at |
 | `--prefix` | string |  | s3: the prefix every key is written under, ending in "/", such as nopacs/lab-a/; empty for the whole bucket |
+| `--purge-versions` | bool | `true` | s3: on a bucket that keeps versions, a purge of a correction deletes every older version of each object it removes, so the bytes are gone; --purge-versions=false leaves them, hidden behind a delete marker |
 | `--region` | string |  | s3: the region the bucket is in, such as eu-central-1 |
 | `--root` | string |  | dir: the name of the root, as the setting storage.directory-roots names it |
 

@@ -218,7 +218,7 @@ func (o Opener) openAt(ctx context.Context, t Tenant, s tenant.Storage, at resol
 		Endpoint: ep.URL, Region: s.S3.Region, Bucket: s.S3.Bucket, Prefix: s.S3.Prefix, PathStyle: s.S3.PathStyle,
 		AccessKeyID: s3.NewSecret(s.S3.AccessKeyID), SecretAccessKey: s3.NewSecret(string(plain)),
 		AllowHTTP: ep.Entry.PlainHTTP, AllowAddress: ep.AllowAddress(),
-		StaleUploadAge: stale, ForReading: forReading,
+		StaleUploadAge: stale, ForReading: forReading, KeepVersions: s.S3.KeepVersions,
 	})
 }
 

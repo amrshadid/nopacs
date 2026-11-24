@@ -22,7 +22,7 @@ import (
 // storageColumns are a storage's columns as a read returns them: the secret
 // only as whether one is set, so no read can carry it out.
 const storageColumns = `name, type, dir_root, dir_path, s3_endpoint, s3_region, s3_bucket, s3_prefix,
-	s3_path_style, s3_access_key_id, s3_secret IS NOT NULL, capacity_bytes, created, updated`
+	s3_path_style, s3_access_key_id, s3_secret IS NOT NULL, s3_keep_versions, capacity_bytes, created, updated`
 
 // scanStorage reads one row of storageColumns.
 func scanStorage(row scanner) (tenant.Storage, error) {
@@ -30,7 +30,7 @@ func scanStorage(row scanner) (tenant.Storage, error) {
 	var typ string
 	var created, updated time.Time
 	err := row.Scan(&s.Name, &typ, &s.Directory.Root, &s.Directory.Path, &s.S3.Endpoint, &s.S3.Region, &s.S3.Bucket,
-		&s.S3.Prefix, &s.S3.PathStyle, &s.S3.AccessKeyID, &s.S3.SecretSet, &s.CapacityBytes, &created, &updated)
+		&s.S3.Prefix, &s.S3.PathStyle, &s.S3.AccessKeyID, &s.S3.SecretSet, &s.S3.KeepVersions, &s.CapacityBytes, &created, &updated)
 	s.Type = tenant.StorageType(typ)
 	s.Created, s.Updated = created.UTC(), updated.UTC()
 	return s, err
@@ -108,10 +108,10 @@ func (t *Tenant) AddStorage(ctx context.Context, s tenant.Storage, now time.Time
 			return err
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO storages (name, type, dir_root, dir_path, s3_endpoint, s3_region, s3_bucket,
-			s3_prefix, s3_path_style, s3_access_key_id, s3_secret, capacity_bytes, created, updated)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
+			s3_prefix, s3_path_style, s3_access_key_id, s3_secret, s3_keep_versions, capacity_bytes, created, updated)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)`,
 			s.Name, string(s.Type), s.Directory.Root, s.Directory.Path, s.S3.Endpoint, s.S3.Region, s.S3.Bucket,
-			s.S3.Prefix, s.S3.PathStyle, s.S3.AccessKeyID, secretArg(s), s.CapacityBytes, micros(now))
+			s.S3.Prefix, s.S3.PathStyle, s.S3.AccessKeyID, secretArg(s), s.S3.KeepVersions, s.CapacityBytes, micros(now))
 		if constraintViolation(err, "storages_pkey") {
 			return fault.Wrap(fault.Conflict, t.red.scrub(err), "the tenant has a storage named "+s.Name)
 		}
@@ -214,9 +214,9 @@ func (t *Tenant) SetStorage(ctx context.Context, s tenant.Storage, fields []tena
 		// keeps the stored one otherwise).
 		if _, err := tx.Exec(ctx, `UPDATE storages SET dir_root = $1, dir_path = $2, s3_endpoint = $3, s3_region = $4,
 			s3_bucket = $5, s3_prefix = $6, s3_path_style = $7, s3_access_key_id = $8, s3_secret = coalesce($9, s3_secret),
-			capacity_bytes = $10, updated = $11 WHERE name = $12`,
+			s3_keep_versions = $10, capacity_bytes = $11, updated = $12 WHERE name = $13`,
 			next.Directory.Root, next.Directory.Path, next.S3.Endpoint, next.S3.Region, next.S3.Bucket, next.S3.Prefix,
-			next.S3.PathStyle, next.S3.AccessKeyID, secretArg(next), next.CapacityBytes, micros(now), s.Name); err != nil {
+			next.S3.PathStyle, next.S3.AccessKeyID, secretArg(next), next.S3.KeepVersions, next.CapacityBytes, micros(now), s.Name); err != nil {
 			return err
 		}
 		if out, err = storageInTx(ctx, tx, s.Name, ""); err != nil {

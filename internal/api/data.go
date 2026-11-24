@@ -9,6 +9,7 @@ import (
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
 	"github.com/amrshadid/nopacs/internal/access"
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -403,6 +404,8 @@ func (r *fileReader) instance(ctx context.Context, path label.Path, in tenant.Sc
 func instanceFailure(err error, path label.Path) error {
 	scan := path.Subject + "/" + path.Session + "/" + path.Scan
 	switch {
+	case errors.Is(err, blob.ErrNotOnline):
+		return notOnline(err, "an instance of the scan "+scan+" cannot be read")
 	case fault.KindOf(err) == fault.NotFound:
 		return fault.Wrap(fault.DataLoss, err, "an instance of the scan "+scan+" is missing from its storage")
 	case errors.Is(err, checkedread.ErrMarked):
@@ -413,6 +416,24 @@ func instanceFailure(err error, path label.Path) error {
 		return storageFailure(err, "an instance of the scan "+scan+" cannot be read; resume after the last instance received whole")
 	}
 	return err
+}
+
+// reasonNotOnline is the reason of an object its storage holds in a tier
+// it cannot read at once (access.proto, the unavailable kind): the
+// message starts with it, so a client that reads only the message, a
+// plain HTTP download's among them, can tell it from a storage that does
+// not answer.
+const reasonNotOnline = "NOT_ONLINE"
+
+// notOnline is a read of an object its storage cannot read at once (an S3
+// object in an archive storage class, blob.ErrNotOnline): unavailable,
+// never not found or data loss, since the bytes are neither missing nor
+// damaged; waiting brings nothing back until the object is recalled, so
+// the message says so rather than asking for a retry. "not_online" is the
+// word the scrub's tally and a job's failure use for the same case.
+func notOnline(err error, message string) error {
+	return fault.Wrap(fault.Unavailable, err, reasonNotOnline+": "+message+
+		": its storage holds it in a tier it cannot read at once (not_online); it is neither missing nor damaged, and reads again once it is back online")
 }
 
 // isFault reports whether err carries a fault kind: an error of this

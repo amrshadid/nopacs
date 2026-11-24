@@ -9,6 +9,7 @@ import (
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
 	"github.com/amrshadid/nopacs/internal/access"
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/layout"
@@ -371,6 +372,9 @@ func nextInstance(rd *sidecar.Reader, uid string) (sidecar.Instance, error) {
 // storage does not classify is the storage not answering, never an
 // internal fault, which only the server's own code makes.
 func storageFailure(err error, message string) error {
+	if errors.Is(err, blob.ErrNotOnline) {
+		return notOnline(err, message)
+	}
 	k := fault.KindOf(err)
 	if k == fault.Internal {
 		k = fault.Unavailable

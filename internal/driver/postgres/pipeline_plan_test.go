@@ -122,7 +122,7 @@ func TestScalePipelinePlans(t *testing.T) {
 	start := time.Now()
 	mustExec(t, conn,
 		`SET maintenance_work_mem = '256MB'`,
-		`INSERT INTO storages SELECT 'store', 'directory', 'fast', '', '', '', '', '', false, '', NULL, 0, now(), now()`,
+		`INSERT INTO storages SELECT 'store', 'directory', 'fast', '', '', '', '', '', false, '', NULL, false, 0, now(), now()`,
 		`INSERT INTO receivers SELECT 'r' || n, 'dimse', true, 'store', 11000 + n, '', '{}', '', 60000000, 3600000000, 1024, now(), now()
 		 FROM generate_series(1, 3) n`,
 		`INSERT INTO receptions SELECT 'rc' || i, CASE WHEN i % 100 = 0 THEN 'other' ELSE 'busy' END, '2.25.1.' || (i / 4), i % 4 + 1,

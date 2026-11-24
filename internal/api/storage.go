@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	connect "connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/proto"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
@@ -38,7 +39,7 @@ var storageMask = maskRules{
 		string(tenant.FieldCapacityBytes), string(tenant.FieldDirectoryRoot), string(tenant.FieldDirectoryPath),
 		string(tenant.FieldS3Endpoint), string(tenant.FieldS3Region), string(tenant.FieldS3Bucket),
 		string(tenant.FieldS3Prefix), string(tenant.FieldS3PathStyle), string(tenant.FieldS3AccessKeyID),
-		string(tenant.FieldS3SecretKey),
+		string(tenant.FieldS3SecretKey), string(tenant.FieldS3PurgeVersions),
 	},
 	refused: map[string]string{
 		"directory":                "names a type's whole message: name its fields one by one",
@@ -144,7 +145,8 @@ func storageFromRequest(field string, m *v1.Storage) (tenant.Storage, string, er
 	case *v1.Storage_S3:
 		s.Type = tenant.StorageS3
 		x := t.S3
-		s.S3 = tenant.S3Storage{Endpoint: x.GetEndpoint(), Region: x.GetRegion(), Bucket: x.GetBucket(), Prefix: x.GetPrefix(), PathStyle: x.GetPathStyle(), AccessKeyID: x.GetAccessKeyId()}
+		s.S3 = tenant.S3Storage{Endpoint: x.GetEndpoint(), Region: x.GetRegion(), Bucket: x.GetBucket(), Prefix: x.GetPrefix(), PathStyle: x.GetPathStyle(),
+			AccessKeyID: x.GetAccessKeyId(), KeepVersions: keepVersions(x)}
 		secret = x.GetSecretAccessKey()
 		if err := secretAccessKey(field+".s3.secret_access_key", secret); err != nil {
 			return tenant.Storage{}, "", err
@@ -192,9 +194,18 @@ func storageChange(m *v1.Storage) (tenant.Storage, string) {
 		Directory:     tenant.DirectoryStorage{Root: d.GetRoot(), Path: d.GetPath()},
 		S3: tenant.S3Storage{
 			Endpoint: x.GetEndpoint(), Region: x.GetRegion(), Bucket: x.GetBucket(), Prefix: x.GetPrefix(),
-			PathStyle: x.GetPathStyle(), AccessKeyID: x.GetAccessKeyId(),
+			PathStyle: x.GetPathStyle(), AccessKeyID: x.GetAccessKeyId(), KeepVersions: keepVersions(x),
 		},
 	}, x.GetSecretAccessKey()
+}
+
+// keepVersions reads S3Storage.purge_versions as the store keeps it: only
+// false, given, keeps older versions; absent means true (storage.proto), so
+// a request that leaves it out, an AddStorage or a SetStorage whose mask
+// names it alike, has a purge delete them. GetPurgeVersions alone would
+// read absent as false.
+func keepVersions(x *v1.S3Storage) bool {
+	return x != nil && x.PurgeVersions != nil && !*x.PurgeVersions
 }
 
 // storageMessage returns a storage as the contract writes it: never its
@@ -210,6 +221,9 @@ func storageMessage(s tenant.Storage) *v1.Storage {
 		m.Type = &v1.Storage_S3{S3: &v1.S3Storage{
 			Endpoint: s.S3.Endpoint, Region: s.S3.Region, Bucket: s.S3.Bucket, Prefix: s.S3.Prefix,
 			PathStyle: s.S3.PathStyle, AccessKeyId: s.S3.AccessKeyID, SecretAccessKeySet: s.S3.SecretSet,
+			// Always answered, true or false, so a reader never has to know
+			// that absent means true.
+			PurgeVersions: proto.Bool(!s.S3.KeepVersions),
 		}}
 	}
 	return m

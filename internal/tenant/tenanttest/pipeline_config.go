@@ -140,6 +140,59 @@ func testStorageSetPartial(e *penv) {
 	e.ok("SetStorage", err)
 	_, err = e.p.SetStorage(e.ctx, tenant.Storage{Name: "missing"}, []tenant.StorageField{tenant.FieldCapacityBytes}, at(5), e.audit(), nil)
 	e.wantKind("SetStorage of a storage not there", err, fault.NotFound)
+	testStorageKeepVersions(e)
+}
+
+// testStorageKeepVersions guards what a purge does with older versions on
+// a versioned bucket (the contract's purge_versions): a storage added
+// without saying deletes them (KeepVersions false, the default); one added
+// to keep them reads back so, in a read and a listing; SetStorage changes it
+// both ways and nothing else, and leaves it alone when its mask does not
+// name it; a directory storage has no such field.
+func testStorageKeepVersions(e *penv) {
+	read := func(name string) tenant.S3Storage {
+		s, err := e.p.Storage(e.ctx, name)
+		e.ok("Storage "+name, err)
+		return s.S3
+	}
+	if read("bucket").KeepVersions {
+		e.Error("a storage added without saying keeps older versions; the default deletes them")
+	}
+	kept := s3Storage("kept", "q/")
+	kept.S3.KeepVersions = true
+	got, err := e.p.AddStorage(e.ctx, kept, at(6), e.audit(), nil)
+	e.ok("AddStorage keeping older versions", err)
+	if !got.S3.KeepVersions || !read("kept").KeepVersions {
+		e.Errorf("AddStorage keeping older versions answered %v, read back %v", got.S3.KeepVersions, read("kept").KeepVersions)
+	}
+	for _, s := range allPages(e, 10, func(p master.Page) ([]tenant.Storage, string, error) { return e.p.ListStorages(e.ctx, p) }) {
+		if s.Name == "kept" && !s.S3.KeepVersions {
+			e.Error("ListStorages lost that kept keeps older versions")
+		}
+	}
+	_, err = e.p.SetStorage(e.ctx, tenant.Storage{Name: "kept", CapacityBytes: 7}, []tenant.StorageField{tenant.FieldCapacityBytes}, at(7), e.audit(), nil)
+	e.ok("SetStorage capacity of kept", err)
+	if !read("kept").KeepVersions {
+		e.Error("a SetStorage whose mask does not name purge_versions changed it")
+	}
+	got, err = e.p.SetStorage(e.ctx, tenant.Storage{Name: "kept"}, []tenant.StorageField{tenant.FieldS3PurgeVersions}, at(8), e.audit(), nil)
+	e.ok("SetStorage purge_versions on", err)
+	if got.S3.KeepVersions || read("kept").KeepVersions || got.CapacityBytes != 7 || got.S3.Prefix != "q/" || !got.S3.SecretSet {
+		e.Errorf("SetStorage purge_versions on answered %+v", got)
+	}
+	got, err = e.p.SetStorage(e.ctx, tenant.Storage{Name: "kept", S3: tenant.S3Storage{KeepVersions: true}}, []tenant.StorageField{tenant.FieldS3PurgeVersions}, at(9), e.audit(), nil)
+	e.ok("SetStorage purge_versions off", err)
+	if !got.S3.KeepVersions || !read("kept").KeepVersions || !got.Updated.Equal(at(9)) {
+		e.Errorf("SetStorage purge_versions off answered %+v", got)
+	}
+	dir := dirStorage("plain-dir", "keep/none")
+	_, err = e.p.AddStorage(e.ctx, dir, at(10), e.audit(), nil)
+	e.ok("AddStorage directory", err)
+	_, err = e.p.SetStorage(e.ctx, tenant.Storage{Name: "plain-dir", S3: tenant.S3Storage{KeepVersions: true}}, []tenant.StorageField{tenant.FieldS3PurgeVersions}, at(11), e.audit(), nil)
+	e.wantKind("SetStorage purge_versions of a directory storage", err, fault.Invalid)
+	dir.Name, dir.Directory.Path, dir.S3.KeepVersions = "dir-keeping", "keep/some", true
+	_, err = e.p.AddStorage(e.ctx, dir, at(12), e.audit(), nil)
+	e.wantKind("AddStorage of a directory storage that keeps versions", err, fault.Invalid)
 }
 
 // testStorageInUse guards the rules that keep a storage's data where the

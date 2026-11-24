@@ -25,7 +25,7 @@ func fillPipeline(tb testing.TB, path string) {
 	defer func() { _ = db.Close() }()
 	for _, stmt := range []string{
 		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 200)
-		 INSERT INTO storages SELECT 'store' || i, 'directory', 'fast', 'd' || i, '', '', '', '', 0, '', NULL, 0, 0, 0 FROM n`,
+		 INSERT INTO storages SELECT 'store' || i, 'directory', 'fast', 'd' || i, '', '', '', '', 0, '', NULL, 0, 0, 0, 0 FROM n`,
 		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 200)
 		 INSERT INTO receivers SELECT 'recv' || i, 'dimse', 1, 'store' || i, 11000 + i, '', '{}', '', 60000000, 3600000000, 4294967296, 0, 0 FROM n`,
 		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 10000)

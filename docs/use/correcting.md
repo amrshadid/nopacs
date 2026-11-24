@@ -100,11 +100,17 @@ objects it purged, never more strongly than the storage said it:
 | Disposition | What it means |
 |---|---|
 | removed | the bytes are gone from this storage: a file removed from a directory, an object deleted from an unversioned bucket, or every version deleted by its version id |
-| hidden | the key answers not found, but older versions remain (a versioned bucket the server was not allowed to delete versions in) |
+| hidden | the key answers not found, but older versions remain: a versioned bucket whose storage keeps them (`nopacs storage set --purge-versions=false`), or one the server was not allowed to delete versions in |
 | retained | the storage refused, under its object lock, until the time it states |
 | unknown | the server could not learn what the storage did |
 
 A withdrawal is complete on a storage only where every object is removed.
+
+On a bucket that keeps versions, an S3 storage deletes every older version
+and delete marker of each object it purges, by its version id, unless it was
+added or set with `--purge-versions=false` (`S3Storage.purge_versions` in the
+API; absent means true). It may change at any time and changes only what
+later purges do; `nopacs storage show` says which applies.
 
 ### What is kept
 
