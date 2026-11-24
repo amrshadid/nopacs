@@ -41,6 +41,46 @@ says how each is run and what it needs:
 | `make outside` | Every outside check that needs a tool that is not Go |
 | `make ci` | Every job of the CI workflow on one machine |
 
+## The scripts
+
+The outside checks and the proof are Python and shell under `scripts/`. The
+Python is one library of plain functions with a thin file in front of each
+use, so a helper is written once:
+
+```
+scripts/
+  lib/
+    nopacs_scripts/     the Python library; functions only
+      report.py entry.py  a check that cannot go on raises Failure; the entry prints it and sets the exit status
+      paths.py keys.py net.py proc.py db.py digest.py dicom.py proof.py
+                          the repository's paths, the key file and HKDF, free ports, building the two
+                          binaries, a catalog read by SQLite, SHA-256, pydicom readings, the result
+                          lines and server handling every proof shares
+      formats/            the audit chain and backup file formats, written from their descriptions
+      deid.py read.py send.py importing.py whole.py
+                          what each proof builds its studies, trees and installation from
+      checks/             the body of each file under scripts/check
+      tools/              the auditor's tools (audit_verify, backup_open, catalog_dump) and their self-tests
+      sections/           the body of each proof under scripts/prove, and the steps it is made of
+    sh/                 check.sh, psql.sh, sqlite.sh: the shell the database checks share
+  check/                one entry per outside check (Python, or shell for a database)
+  prove/                run.sh (the order of the proof of this version, the shell sections beside it),
+                        one entry per Python proof, viewer_driver.py (which runs inside a browser
+                        container and so stands alone)
+  requirements/ tools/  pinned requirements; the checked installers of buf and grpcurl
+```
+
+An entry is a few lines: it puts `scripts/lib` on `sys.path` (so it works
+also under `python -I`, which leaves the script's own folder off it), calls the
+module's `main(argv)` and exits with what it returns. A function in the library
+takes what it needs as arguments and returns data; it reads no command line and
+does not end the process. A failure that must stop a run is a `Failure` the
+entry prints. What several scripts share for processes, sockets and databases
+is in `proc`, `net` and `db`; a check or a proof step still runs its own tools
+where only it needs them. The make
+targets are the way to run a script; their names and arguments are the same
+as the entries' paths.
+
 ## What `-short` means
 
 `-short` means "start no process and take under a second". A test that starts a
@@ -146,8 +186,8 @@ itself reads are listed first.
 | `NOPACS_CHECK_J2K_OPENJPEG` | The directory holding OpenJPEG's `opj_compress`, `opj_decompress` and `opj_dump` (2.5 or later, for HTJ2K), the outside check of the JPEG 2000 walk: over the codestreams of `internal/deid/engine/testdata/j2k`, the frames of the JPEG 2000 and HTJ2K files (with `NOPACS_PYDICOM_CORPUS`, pydicom's too) and eight codestreams `opj_compress` writes with a name in a comment (tiles and tile-parts with PLT and TLM, SOP and EPH, precincts, a progression change, an upshifted component, irreversible and lossy, no decomposition), a comment holding a name is planted in the main header and in every tile-part header; OpenJPEG must decode the planted codestream as the one received (or the check is not sound), and decode what the walk leaves to the very same samples, a PGX file a component, with `opj_dump` reading its header. With `NOPACS_CHECK_DEID_PYTHON` also set, the eight images are wrapped as DICOM files and de-identified, and `scripts/check/deid-j2k-pydicom.py` has pydicom (with pylibjpeg-openjpeg or Pillow) decode each result to the samples of its input and find no name in it; a pydicom without a JPEG 2000 decoder fails. | unset: the test skips | `internal/deid/engine` (`TestJ2KRewriteDecodesAlikeWithOpenJPEG`, `TestJ2KFreeWordsDecodeAlikeWithOpenJPEG`: a CPF and a CRG holding a name planted after SIZ, removed, and decoded alike) |
 | `NOPACS_CHECK_DICOMWEB_PYTHON` | The Python, with dicomweb-client and pydicom, that checks a tenant's DICOMweb services from a client that is not NoPACs' (`scripts/check/dicomweb-client.py`): it searches every study, series and instance of an archive made by reception (QIDO-RS, paging through the results), retrieves each instance as stored, its metadata, its bulk data and its first and last frame (WADO-RS), and compares each with pydicom's reading of the file received. The key reaches the script in its environment, never its command line. dicomweb-client is not in the base environment; install it into a virtual environment (`python3 -m venv`, then `pip install dicomweb-client pydicom`). Set, even to nothing, it means the check was asked for and a missing interpreter fails. `NOPACS_PYDICOM_CORPUS` adds files to the archive. | unset: the test skips | `internal/api` (`TestDICOMwebWithDicomwebClient`); set by `make check-dicomweb` |
 | `NOPACS_CHECK_STOW_PYTHON` | The Python, with dicomweb-client and pydicom, that checks the STOW-RS receiver from a client that is not NoPACs' (`scripts/check/stow-dicomweb-client.py`), in a real server process: it stores the public CT study with dicomweb-client and checks the answer (each instance with its WADO-RS Retrieve URL; an instance of another study refused 409 with A900H), then, once the reception is done, compares each archived file with the bytes sent, with hashlib against its scan's manifest and as a data set with pydicom. The key reaches the script in its environment, never its command line. Install dicomweb-client into a virtual environment as for `NOPACS_CHECK_DICOMWEB_PYTHON`. Set, even to nothing, it means the check was asked for and a missing interpreter fails. | unset: the test skips | `internal/servecmd` (`TestSTOWWithDicomwebClient`); set by `make check-stow` |
-| `NOPACS_DICOMWEB_KEY` | The key `scripts/check/dicomweb-client.py` sends, as `Authorization: Bearer`; given in the script's environment so it never appears on a command line. | none: the script fails without it | set by `internal/api` (`TestDICOMwebWithDicomwebClient`) and `scripts/prove/reading_web.py`; read by `scripts/check/dicomweb-client.py` |
-| `NOPACS_STOW_KEY` | The key `scripts/check/stow-dicomweb-client.py` stores with, given the same way. | none: the script fails without it | set by `internal/servecmd` (`TestSTOWWithDicomwebClient`) and `scripts/prove/reading_web.py`; read by `scripts/check/stow-dicomweb-client.py` |
+| `NOPACS_DICOMWEB_KEY` | The key `scripts/check/dicomweb-client.py` sends, as `Authorization: Bearer`; given in the script's environment so it never appears on a command line. | none: the script fails without it | set by `internal/api` (`TestDICOMwebWithDicomwebClient`) and `nopacs_scripts/sections/reading_web.py` (under `scripts/lib`); read by `scripts/check/dicomweb-client.py` |
+| `NOPACS_STOW_KEY` | The key `scripts/check/stow-dicomweb-client.py` stores with, given the same way. | none: the script fails without it | set by `internal/servecmd` (`TestSTOWWithDicomwebClient`) and `nopacs_scripts/sections/reading_web.py` (under `scripts/lib`); read by `scripts/check/stow-dicomweb-client.py` |
 | `NOPACS_PYDICOM_CORPUS` | pydicom's `test_files` directory, from which the metadata comparison also receives implicit VR, big endian, padded, JPEG-LS and explicit big endian files, and whose files with pixel data the frame table comparison adds. | unset: only the files of `internal/receive/testdata` | `internal/api` (`TestMetadataEqualsPydicom`, `TestCatalogEqualsPydicom`, `TestDICOMwebWithDicomwebClient`), `internal/receive/frames` (`TestTableEqualsPydicom`), `internal/deid/engine` (`TestCorpusFilesAreDeidentified`), `internal/deid/check` (`TestAgreesWithPydicom`), `internal/receive` (`TestCorpusThroughADeidentifyingReceiver`); set from `PYDICOM_CORPUS=` by `make check-metadata`, `make check-catalog`, `make check-dicomweb` and `make check-frames` |
 | `NOPACS_CHECK_TENANTS` | `1` when the server under check is the real program, which makes the server check go on to tenants and receptions. | unset | `scripts/check/server.sh` sets it, `scripts/check/server.py` reads it |
 | `NOPACS_CHECK_ROOT` | The directory root the real server was given as `fast`, for the reception calls of the server check. | none; required with `NOPACS_CHECK_TENANTS=1` | `scripts/check/server.sh`, `scripts/check/server.py` |

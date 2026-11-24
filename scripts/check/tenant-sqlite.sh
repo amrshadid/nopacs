@@ -19,11 +19,11 @@ set -euo pipefail
 SQLITE3="${SQLITE3:-sqlite3}"
 GO="${GO:-go}"
 
-# fail and want (scripts/lib/check.sh); q and show for sqlite3 (scripts/lib/sqlite.sh).
-# shellcheck source=../lib/check.sh
-. "$(dirname "$0")/../lib/check.sh"
-# shellcheck source=../lib/sqlite.sh
-. "$(dirname "$0")/../lib/sqlite.sh"
+# fail and want (scripts/lib/sh/check.sh); q and show for sqlite3 (scripts/lib/sh/sqlite.sh).
+# shellcheck source=../lib/sh/check.sh
+. "$(dirname "$0")/../lib/sh/check.sh"
+# shellcheck source=../lib/sh/sqlite.sh
+. "$(dirname "$0")/../lib/sh/sqlite.sh"
 
 # The migrations the driver ships, read from its directory, so that this check
 # follows the schema instead of repeating it: "<version> <name> ..." in order.

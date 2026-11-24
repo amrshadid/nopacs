@@ -104,6 +104,8 @@ missing_of() { # the names given after $1 that $1 lacks
 	done
 	printf '%s' "$out"
 }
+# These lists follow the baseline schema (migrations/*/0001_baseline.sql) and
+# the migration record the migrator keeps; a table added later is added here.
 master_want=(api_keys audit audit_anchors audit_checkpoints grants schema_migrations settings tenants)
 tenant_want=(subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles)
 lite_alone=$(comm -23 <(printf '%s\n' $lite_tables | sort) <(printf '%s\n' $pg_tables | sort) | tr '\n' ' ')

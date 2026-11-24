@@ -29,11 +29,11 @@ GO="${GO:-go}"
 : "${NOPACS_TEST_POSTGRES:?set NOPACS_TEST_POSTGRES to the URL of a scratch database}"
 PSQL_URL="${PSQL_URL:-$NOPACS_TEST_POSTGRES}"
 
-# fail and want (scripts/lib/check.sh); q and show for psql (scripts/lib/psql.sh).
-# shellcheck source=../lib/check.sh
-. "$(dirname "$0")/../lib/check.sh"
-# shellcheck source=../lib/psql.sh
-. "$(dirname "$0")/../lib/psql.sh"
+# fail and want (scripts/lib/sh/check.sh); q and show for psql (scripts/lib/sh/psql.sh).
+# shellcheck source=../lib/sh/check.sh
+. "$(dirname "$0")/../lib/sh/check.sh"
+# shellcheck source=../lib/sh/psql.sh
+. "$(dirname "$0")/../lib/sh/psql.sh"
 
 # The migrations the driver ships, read from its directory, so that this check
 # follows the schema instead of repeating it: "<version> <name> ..." in order.
@@ -98,18 +98,18 @@ want "constraints that are not valid" 0 \
 want "the audit indexes" "audit_by_key audit_by_outcome audit_by_seq audit_by_tenant audit_by_time audit_pkey audit_unsealed" \
 	"$(q "SELECT string_agg(indexname, ' ' ORDER BY indexname COLLATE \"C\") FROM pg_indexes WHERE schemaname = '$schema' AND tablename = 'audit'")"
 # The columns that name or key something are compared bytewise, whatever the
-# database's locale. A migration adds columns, so this holds at least the
-# number the first migrations made.
+# database's locale. The baseline schema has at least this many; a later
+# migration only adds columns.
 want "columns with the C collation (at least 90)" t \
 	"$(q "SELECT count(*) >= 90 FROM information_schema.columns WHERE table_schema = '$schema' AND collation_name = 'C'")"
 want "at is timestamptz and details jsonb" "timestamp with time zone jsonb" \
 	"$(q "SELECT (SELECT data_type FROM information_schema.columns WHERE table_schema = '$schema' AND table_name = 'audit' AND column_name = 'at') || ' ' || (SELECT data_type FROM information_schema.columns WHERE table_schema = '$schema' AND table_name = 'audit' AND column_name = 'details')")"
-# The reception pipeline's tables (migrations/tenant/0002_pipeline.sql):
+# The reception pipeline's tables (migrations/tenant/0001_baseline.sql):
 # their constraints and indexes as Postgres lists them, the running totals'
 # one row each, and the rules the code relies on held by the database.
 show "the pipeline's constraints" "SELECT c.conrelid::regclass AS table_name, c.conname, pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace WHERE n.nspname = '$schema' AND c.conrelid::regclass::text NOT IN ('audit', 'settings', 'tenant_identity', 'schema_migrations') ORDER BY 1, 2"
 show "the pipeline's indexes" "SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = '$schema' AND tablename NOT IN ('audit', 'settings', 'tenant_identity', 'schema_migrations') ORDER BY 1, 2"
-want "the pipeline's indexes (at least the 78 the first migrations made)" t \
+want "the pipeline's indexes (at least the 78 the baseline schema has)" t \
 	"$(q "SELECT count(*) >= 78 FROM pg_indexes WHERE schemaname = '$schema' AND tablename NOT IN ('audit', 'settings', 'tenant_identity', 'schema_migrations')")"
 want "the instances' indexes" "instances_by_scan instances_pkey" \
 	"$(q "SELECT string_agg(indexname, ' ' ORDER BY indexname COLLATE \"C\") FROM pg_indexes WHERE schemaname = '$schema' AND tablename = 'instances'")"
