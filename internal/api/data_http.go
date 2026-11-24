@@ -338,7 +338,14 @@ func downloadInstance(ctx context.Context, p tenant.Pipeline, r *http.Request) (
 	}
 	in, err := p.HeldInstance(ctx, path, id)
 	if fault.KindOf(err) == fault.NotFound {
-		return in, path, fault.Wrap(fault.NotFound, err, messageNoDownload)
+		err = fault.Wrap(fault.NotFound, err, messageNoDownload)
+		// Only a scan the tenant does not hold under these labels is
+		// pointed to where a relabel took it; an instance missing from a
+		// scan held is a bare not found.
+		if _, serr := p.CatalogScan(ctx, path); fault.KindOf(serr) == fault.NotFound {
+			err = relabeled(ctx, p, path, err)
+		}
+		return in, path, err
 	}
 	return in, path, err
 }

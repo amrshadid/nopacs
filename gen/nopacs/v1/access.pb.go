@@ -50,9 +50,12 @@
 //   - not found: NOT_FOUND (HTTP 404). The thing named does not exist, and
 //     the caller may know that it does not. A subject, session or scan
 //     asked for by a label a relabel moved (CorrectionService.Relabel) is
-//     answered so with the reason RELABELED, its metadata "correction" (the
-//     relabel's id) and "to_label" (the label it has now), so a client
-//     that holds old labels finds the data.
+//     answered so, to a caller with operator or more on the tenant (who
+//     may read its corrections), with the reason RELABELED, its metadata
+//     "correction" (the relabel's id) and "to_label" (the label it has
+//     now), so a client that holds old labels finds the data. A reader is
+//     answered as for a label never used: a relabel may have taken an
+//     identifying label out of use.
 //   - conflict: ALREADY_EXISTS (HTTP 409). The change would collide with what
 //     exists, such as a second tenant with the same name.
 //   - precondition: FAILED_PRECONDITION (HTTP 400). What the request names

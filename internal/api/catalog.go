@@ -150,7 +150,7 @@ func (s catalogService) GetSubject(ctx context.Context, req *v1.GetSubjectReques
 	}
 	got, err := p.CatalogSubject(ctx, req.GetSubjectLabel())
 	if err != nil {
-		return nil, c.failIn(d, st, err)
+		return nil, c.failIn(d, st, relabeled(ctx, st, label.Path{Subject: req.GetSubjectLabel()}, err))
 	}
 	c.done(d, st)
 	return &v1.GetSubjectResponse{Subject: subjectMessage(got)}, nil
@@ -187,7 +187,7 @@ func (s catalogService) ListSessions(ctx context.Context, req *v1.ListSessionsRe
 	}
 	got, err := p.ListSessions(ctx, f, page)
 	if err != nil {
-		return nil, c.failIn(d, st, listError(err, page.Cursor))
+		return nil, c.failIn(d, st, relabeled(ctx, st, filterPath(f.SubjectLabel, ""), listError(err, page.Cursor)))
 	}
 	c.done(d, st)
 	out := &v1.ListSessionsResponse{Sessions: make([]*v1.Session, 0, len(got.Items)), NextPageToken: got.Next, TotalCount: got.Total}
@@ -216,7 +216,7 @@ func (s catalogService) GetSession(ctx context.Context, req *v1.GetSessionReques
 	}
 	got, err := p.CatalogSession(ctx, req.GetSubjectLabel(), req.GetSessionLabel())
 	if err != nil {
-		return nil, c.failIn(d, st, err)
+		return nil, c.failIn(d, st, relabeled(ctx, st, label.Path{Subject: req.GetSubjectLabel(), Session: req.GetSessionLabel()}, err))
 	}
 	c.done(d, st)
 	return &v1.GetSessionResponse{Session: sessionMessage(got)}, nil
@@ -253,7 +253,7 @@ func (s catalogService) ListScans(ctx context.Context, req *v1.ListScansRequest)
 	}
 	got, err := p.ListScans(ctx, f, page)
 	if err != nil {
-		return nil, c.failIn(d, st, listError(err, page.Cursor))
+		return nil, c.failIn(d, st, relabeled(ctx, st, filterPath(f.SubjectLabel, f.SessionLabel), listError(err, page.Cursor)))
 	}
 	c.done(d, st)
 	out := &v1.ListScansResponse{Scans: make([]*v1.Scan, 0, len(got.Items)), NextPageToken: got.Next, TotalCount: got.Total}
@@ -280,7 +280,7 @@ func (s catalogService) GetScan(ctx context.Context, req *v1.GetScanRequest) (*v
 	}
 	got, err := p.CatalogScan(ctx, path)
 	if err != nil {
-		return nil, c.failIn(d, st, err)
+		return nil, c.failIn(d, st, relabeled(ctx, st, path, err))
 	}
 	c.done(d, st)
 	return &v1.GetScanResponse{Scan: scanMessage(got)}, nil

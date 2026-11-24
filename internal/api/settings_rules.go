@@ -243,7 +243,10 @@ func (c *core) portsTakenAway(ctx context.Context, name, value string) error {
 // lists, in order of name, and stops at its first error. A tenant removed
 // meanwhile is passed over; one that is not ready fails the walk as
 // Unavailable, naming it: the caller is an admin on the installation, who
-// may list every tenant.
+// may list every tenant. A moved or fenced tenant is read and checked like
+// a ready one (registry.Reader): a reclaim may bring it back with what it
+// holds, so a value it conflicts with is refused still, and its being read
+// only does not freeze every installation setting such a walk checks.
 func (c *core) eachTenant(ctx context.Context, fn func(name string, p tenant.Pipeline) error) error {
 	page := master.Page{Limit: master.MaxPageLimit}
 	for i := 0; ; i++ {
@@ -255,7 +258,7 @@ func (c *core) eachTenant(ctx context.Context, fn func(name string, p tenant.Pip
 			return err
 		}
 		for _, row := range rows {
-			st, err := c.reg.Store(row.Name)
+			st, err := c.reg.Reader(row.Name)
 			switch kind := fault.KindOf(err); {
 			case kind == fault.NotFound:
 				continue

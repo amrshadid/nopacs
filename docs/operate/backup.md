@@ -430,6 +430,13 @@ state is `fenced` and the reason names the storage and why. What to do:
   target's installation log.
 - **Keys and grants do not travel.** The target needs its own keys and grants for
   the tenant.
+- **The source keeps serving reads with what it had.** On the old installation
+  a moved or fenced tenant keeps the network rule (`access.tenant-networks`),
+  keys and grants it had at the export, and serves reads to them; tightening
+  them on the new owner does not reach it, and the old installation cannot
+  change the tenant's own rule any more. Revoke the old installation's keys for
+  the tenant, or remove the tenant there (`nopacs tenant remove NAME --yes`),
+  once the move is done.
 - **Job units in flight** during a drain stop with their place kept; they are not
   finished. A sender's work that must not be cut should be stopped first.
 - **Incoming bytes are not carried.** After a restore or a move, files a sender

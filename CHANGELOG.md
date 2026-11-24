@@ -189,6 +189,19 @@ the code before this release is in github.com/amrshadid/coria.
   object a store answers `InvalidObjectState` (an archive storage class)
   reads as unavailable `NOT_ONLINE`, never as refused credentials, and a
   scrub tallies it `unreadable|not_online` once and moves on.
+- A key's reads of a tenant handed to another installation (moved or fenced)
+  are served (catalog, metadata, downloads, DICOMweb, ReadFiles): the tenant's
+  network rule was read as if for a change, so every keyed request answered
+  500; the rule still applies, and a change is refused FAILED_PRECONDITION with
+  TENANT_MOVED or TENANT_FENCED. An installation setting whose check visits
+  every tenant is checked against such a tenant like a ready one, not refused
+  outright.
+- A subject, session or scan asked for by a label a committed relabel moved
+  answers NOT_FOUND with a message starting "RELABELED:" that names the relabel
+  and the labels the data has now, to callers with operator or more on the
+  tenant (who may read corrections); a reader gets the same not found as for a
+  label never used, so a relabel made to remove an identifying label stays
+  done.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

@@ -65,7 +65,7 @@ func scanPath(subject, session, scan string) (label.Path, error) {
 func lookupScan(ctx context.Context, p tenant.Pipeline, path label.Path) (tenant.CatalogScan, error) {
 	scan, err := p.CatalogScan(ctx, path)
 	if fault.KindOf(err) == fault.NotFound {
-		return scan, fault.Wrap(fault.NotFound, err, messageNoScan)
+		return scan, relabeled(ctx, p, path, fault.Wrap(fault.NotFound, err, messageNoScan))
 	}
 	return scan, err
 }

@@ -226,6 +226,7 @@ type Corrections interface {
 	HeldByCorrection(ctx context.Context, p label.Path, studyUID, seriesUID string) (CorrectionHold, error)
 	// ResolveInstances answers each pair, in the order given.
 	ResolveInstances(ctx context.Context, refs []InstanceRef) ([]ResolvedInstance, error)
+	RelabelPointers
 }
 
 // The bounds of corrections.

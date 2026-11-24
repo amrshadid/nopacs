@@ -152,3 +152,8 @@ func (t *Tenant) DeletedMatches(ctx context.Context, p tenant.DeletedProbe) (ten
 func (t *Tenant) ResolveInstances(ctx context.Context, refs []tenant.InstanceRef) ([]tenant.ResolvedInstance, error) {
 	return t.sending().ResolveInstances(ctx, refs)
 }
+
+// RelabeledTo implements tenant.Corrections.
+func (t *Tenant) RelabeledTo(ctx context.Context, p label.Path) (tenant.Relabeled, bool, error) {
+	return t.sending().RelabeledTo(ctx, p)
+}

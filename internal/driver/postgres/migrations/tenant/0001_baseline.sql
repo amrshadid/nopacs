@@ -1578,6 +1578,11 @@ CREATE TABLE relabels (
     CONSTRAINT relabels_level_check CHECK (level IN ('subject', 'session', 'scan'))
 );
 
+-- A lookup by labels that finds nothing asks which relabel gave them up
+-- (the old subject's relabels after a given one, in order): served by this
+-- index, so a not found stays as cheap as the read it follows.
+CREATE INDEX relabels_by_old_subject ON relabels (old_subject, correction_id);
+
 -- The catalog's rows a committed delete hides, as they were: a delete's
 -- publishing transaction moves them here, each with the same columns as its
 -- catalog table and the correction's id, so no read of the catalog sees

@@ -156,13 +156,13 @@ func (q readQuery) exists(ctx context.Context, p tenant.Pipeline) error {
 	case q.session != "":
 		_, err := p.CatalogSession(ctx, q.subject, q.session)
 		if fault.KindOf(err) == fault.NotFound {
-			return fault.Wrap(fault.NotFound, err, messageNoReadSession)
+			return relabeled(ctx, p, label.Path{Subject: q.subject, Session: q.session}, fault.Wrap(fault.NotFound, err, messageNoReadSession))
 		}
 		return err
 	}
 	_, err := p.CatalogSubject(ctx, q.subject)
 	if fault.KindOf(err) == fault.NotFound {
-		return fault.Wrap(fault.NotFound, err, messageNoReadSubject)
+		return relabeled(ctx, p, label.Path{Subject: q.subject}, fault.Wrap(fault.NotFound, err, messageNoReadSubject))
 	}
 	return err
 }

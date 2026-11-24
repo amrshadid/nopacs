@@ -150,7 +150,13 @@ nopacs correction relabel lab1 sub-3f9a --to sub-0042 --reason "wrong subject id
 Labels are part of every stored object's key, so a relabel copies each object
 to its key under the new label, reads it back and compares its SHA-256, in the
 background; readers see the old label until the whole target switches at once.
-A lookup by the old label then answers not found. The old objects stay,
+A lookup by the old label then answers not found. To a key with operator or
+more on the tenant (the role that reads corrections), its message starts
+`RELABELED:` and names the relabel and the labels the data has now (a catalog
+read, metadata, `ReadFiles` or a download, for a subject, a session or a scan
+under it); a reader is answered as for a label never used, since a relabel may
+have taken an identifying label out of use. Once a later delete has hidden the
+data, the old label answers a bare not found to everyone. The old objects stay,
 unserved, until the correction's purge after the grace period. A relabel still
 copying is stopped with `correction undo`, which removes its copies. A relabel
 of the same target to the same label asked again answers the same correction.

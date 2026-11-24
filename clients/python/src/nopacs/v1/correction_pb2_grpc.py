@@ -165,7 +165,9 @@ class CorrectionServiceStub:
     one publishing transaction switches the whole target: no reader ever
     sees part of a subject under one label and part under the other. The
     old tree is purged after the grace period. A lookup by an old label
-    answers not found with the reason RELABELED, naming the new label. An
+    answers not found; to a caller with operator or more on the tenant, with
+    the reason RELABELED, naming the new label (a reader is answered as for a
+    label never used). An
     object of the target that cannot be read whole stops the copy: the
     relabel is abandoned, its copies removed, and nothing changed for any
     reader.
@@ -453,7 +455,9 @@ class CorrectionServiceServicer:
     one publishing transaction switches the whole target: no reader ever
     sees part of a subject under one label and part under the other. The
     old tree is purged after the grace period. A lookup by an old label
-    answers not found with the reason RELABELED, naming the new label. An
+    answers not found; to a caller with operator or more on the tenant, with
+    the reason RELABELED, naming the new label (a reader is answered as for a
+    label never used). An
     object of the target that cannot be read whole stops the copy: the
     relabel is abandoned, its copies removed, and nothing changed for any
     reader.
@@ -1010,7 +1014,9 @@ class CorrectionService:
     one publishing transaction switches the whole target: no reader ever
     sees part of a subject under one label and part under the other. The
     old tree is purged after the grace period. A lookup by an old label
-    answers not found with the reason RELABELED, naming the new label. An
+    answers not found; to a caller with operator or more on the tenant, with
+    the reason RELABELED, naming the new label (a reader is answered as for a
+    label never used). An
     object of the target that cannot be read whole stops the copy: the
     relabel is abandoned, its copies removed, and nothing changed for any
     reader.

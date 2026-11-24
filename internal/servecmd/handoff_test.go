@@ -87,7 +87,11 @@ func sendRefused(t *testing.T, scu string, port int, file string) {
 // holding a CT and an MR file archived by dcmtk's storescu and a delete of
 // the MR subject, is exported (nopacs tenant export): A shows it moved, a
 // storescu C-STORE to its receiver is refused, its catalog is still read, a
-// change is refused naming TENANT_MOVED. With A stopped, the export is
+// change is refused naming TENANT_MOVED; over the network, an admin key of
+// the tenant reads everything (checkReadOnly), is refused from outside the
+// tenant's networks, and its change is FAILED_PRECONDITION naming
+// TENANT_MOVED, never INTERNAL; the same holds fenced, naming
+// TENANT_FENCED. With A stopped, the export is
 // imported into installation B over the same directory storage (nopacs
 // tenant import), and the storage's owner record names B, one generation
 // past the one the export took it to. A started again
@@ -115,10 +119,11 @@ func TestHandoffThroughServe(t *testing.T) {
 	}
 	const tn = "lab1"
 	port := freePort(t)
+	listen := "127.0.0.1:" + strconv.Itoa(freePort(t))
 
 	// Installation A: the tenant, its storage and receiver, two files and a
 	// delete.
-	a := startChildEnv(t, []string{childRealEnv + "=1"}, "serve", "--data-dir", dirA)
+	a := startChildEnv(t, []string{childRealEnv + "=1"}, "serve", "--data-dir", dirA, "--listen", listen)
 	waitServing(t, dirA, a)
 	hcA := socketClient(dirA)
 	post(t, hcA, "/nopacs.v1.SettingsService/SetSetting", `{"setting":{"name":"storage.directory-roots","scope":{"installation":{}},"value":`+quoted("fast="+roots)+`}}`)
@@ -135,6 +140,7 @@ func TestHandoffThroughServe(t *testing.T) {
 		}
 	}
 	waitWithin(t, "A's receiver to be up", 10*time.Second, receiverUp(hcA))
+	key := newReadOnlyKey(t, hcA, listen, tn)
 	// The CT first, so its subject is the one archived alone.
 	sendFiles(t, scu, port, ct)
 	var ctSubject, mrSubject string
@@ -182,6 +188,8 @@ func TestHandoffThroughServe(t *testing.T) {
 		`{"setting":{"name":"delete.grace","scope":{"tenant":"`+tn+`"},"value":"3s"}}`); status != http.StatusBadRequest || !bytes.Contains(body, []byte("TENANT_MOVED")) {
 		t.Fatalf("a change into the moved tenant answered %d %s", status, body)
 	}
+	inst := instanceUnder(t, filepath.Join(roots, tn, "main"), ctSubject)
+	checkReadOnly(t, key, tn, inst, "TENANT_MOVED")
 	hcA.CloseIdleConnections()
 	stopServer(t, a)
 
@@ -215,7 +223,7 @@ func TestHandoffThroughServe(t *testing.T) {
 	}
 
 	// A again, with its old database: fenced.
-	a = startChildEnv(t, []string{childRealEnv + "=1"}, "serve", "--data-dir", dirA)
+	a = startChildEnv(t, []string{childRealEnv + "=1"}, "serve", "--data-dir", dirA, "--listen", listen)
 	waitServing(t, dirA, a)
 	hcA = socketClient(dirA)
 	st, reason := tenantOf(t, hcA, tn)
@@ -227,6 +235,7 @@ func TestHandoffThroughServe(t *testing.T) {
 		`{"tenant":"`+tn+`","id":"`+delID+`"}`); status != http.StatusBadRequest || !bytes.Contains(body, []byte("TENANT_FENCED")) {
 		t.Fatalf("a purge in the fenced tenant answered %d %s", status, body)
 	}
+	checkReadOnly(t, key, tn, inst, "TENANT_FENCED")
 	hcA.CloseIdleConnections()
 	stopServer(t, a)
 

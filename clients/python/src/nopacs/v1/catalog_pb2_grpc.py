@@ -43,9 +43,10 @@ class CatalogServiceStub:
     level never differ only in the case of their letters, so a label asked
     for in another case is not found rather than taken as another's. A
     label can change, by a relabel (CorrectionService.Relabel); the UIDs
-    never do. A Get by a label a relabel moved is answered not found with
-    the reason RELABELED, naming the relabel and the label the data has now
-    (access.proto, the error kinds).
+    never do. A Get by a label a relabel moved is answered not found; to a
+    caller with operator or more on the tenant, with the reason RELABELED,
+    naming the relabel and the label the data has now (access.proto, the
+    error kinds).
 
     What a reader reads. Until a later version de-identifies files at
     reception, the archive holds what the senders sent, and a reader of a
@@ -135,9 +136,10 @@ class CatalogServiceServicer:
     level never differ only in the case of their letters, so a label asked
     for in another case is not found rather than taken as another's. A
     label can change, by a relabel (CorrectionService.Relabel); the UIDs
-    never do. A Get by a label a relabel moved is answered not found with
-    the reason RELABELED, naming the relabel and the label the data has now
-    (access.proto, the error kinds).
+    never do. A Get by a label a relabel moved is answered not found; to a
+    caller with operator or more on the tenant, with the reason RELABELED,
+    naming the relabel and the label the data has now (access.proto, the
+    error kinds).
 
     What a reader reads. Until a later version de-identifies files at
     reception, the archive holds what the senders sent, and a reader of a
@@ -343,9 +345,10 @@ class CatalogService:
     level never differ only in the case of their letters, so a label asked
     for in another case is not found rather than taken as another's. A
     label can change, by a relabel (CorrectionService.Relabel); the UIDs
-    never do. A Get by a label a relabel moved is answered not found with
-    the reason RELABELED, naming the relabel and the label the data has now
-    (access.proto, the error kinds).
+    never do. A Get by a label a relabel moved is answered not found; to a
+    caller with operator or more on the tenant, with the reason RELABELED,
+    naming the relabel and the label the data has now (access.proto, the
+    error kinds).
 
     What a reader reads. Until a later version de-identifies files at
     reception, the archive holds what the senders sent, and a reader of a
