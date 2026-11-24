@@ -209,6 +209,56 @@ func TestRestoreRefusesUnknownSchemaVersion(t *testing.T) {
 	}
 }
 
+// TestRestoreRefusesAnotherBaseline guards the baseline's fingerprint in a
+// backup: each section records the fingerprint of the baseline schema its
+// database was made from, and a section whose fingerprint is not this
+// binary's (another baseline, or none, as a file of an earlier development
+// build carries) is refused, master's or tenant's, with a plain message,
+// before anything is written, even when its schema version is one this
+// binary knows.
+func TestRestoreRefusesAnotherBaseline(t *testing.T) {
+	r := newRig(t, false)
+	path, sum := r.backup()
+	masterSchema, tenantSchema, err := driver.SchemaFingerprints()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, s := range sum.Sections {
+		want := tenantSchema
+		if i == 0 {
+			want = masterSchema
+		}
+		if s.Point.Schema != want || len(want) != 64 {
+			t.Fatalf("section %d records the baseline %q, want this binary's %q", i, s.Point.Schema, want)
+		}
+	}
+	for _, c := range []struct {
+		name    string
+		section int
+		schema  string
+	}{
+		{"the master's, of another baseline", 0, strings.Repeat("0", 64)},
+		{"a tenant's, of another baseline", 1, strings.Repeat("f", 64)},
+		{"a tenant's, of a file that records none", 1, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			plain := editEnds(t, r.plainOf(path), func(e *SectionEnd) {
+				if e.Index == c.section {
+					e.Point.Schema = c.schema
+				}
+			})
+			target := filepath.Join(t.TempDir(), "restored")
+			_, err := Restore(r.ctx, RestoreConfig{File: r.crafted(plain), Keys: r.keys, KeyFile: r.keyPath, DataDir: target,
+				MasterAddress: driver.SQLiteScheme + filepath.Join(target, "master.db")})
+			if fault.KindOf(err) != fault.Invalid || !strings.Contains(fault.Message(err), "made by an earlier development build") {
+				t.Fatalf("the restore answered %v, want Invalid saying an earlier development build made it", err)
+			}
+			t.Logf("refused: %s", fault.Message(err))
+			wantNothingWritten(t, target)
+		})
+	}
+}
+
 // TestLoadChecksEachSectionBeforeItCommits guards that a section read in
 // the load whose digest is not the one the check found fails before its
 // load commits: the master's database is left with none of the section's

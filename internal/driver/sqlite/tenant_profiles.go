@@ -11,7 +11,7 @@ import (
 
 // The tenant's de-identification profiles and lookup tables
 // (tenant.Deidentification), on the tables of
-// migrations/tenant/0012_profiles_and_lookups.sql: package sqlkit's one
+// migrations/tenant/0001_baseline.sql: package sqlkit's one
 // implementation, run here in SQLite's transactions. One writer runs at a
 // time, so no row lock is taken and the clauses that would take one are
 // empty.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -30,11 +31,19 @@ var ErrChecksum = errors.New("an applied migration was changed")
 // upgraded it.
 var ErrNewerSchema = errors.New("the database is at a newer schema version")
 
+// ErrEarlierBuild is in the chain of the error Migrate returns when the
+// database's first recorded migration, the baseline schema it was made
+// from, differs from this binary's by name or SHA-256. The baseline is
+// edited in place until a first release, so such a database was made by
+// another development build: it is refused whole, never migrated across a
+// schema no file describes, and is made again.
+var ErrEarlierBuild = errors.New("the database was made by an earlier development build")
+
 // Migration is one forward-only schema change.
 type Migration struct {
 	// Version is the file's number, from 1.
 	Version int
-	// Name is the file's name, such as "0001_init.sql".
+	// Name is the file's name, such as "0001_baseline.sql".
 	Name string
 	// SQL is the file's text, with line endings as LF.
 	SQL string
@@ -97,6 +106,21 @@ func Load(fsys fs.FS, dir string) ([]Migration, error) {
 	return out, nil
 }
 
+// Fingerprint returns the fingerprint of the baseline schema of one
+// database (the master, or a tenant) across database types: the SHA-256, in
+// lowercase hexadecimal, of the SHA-256s of baselines, each driver's first
+// migration of that database, in the order given. A file that carries a
+// database's rows from one installation to another (a backup, a tenant's
+// export) records it, so a reader whose baseline differs refuses the file
+// before it writes anything, whichever database type either side runs.
+func Fingerprint(baselines ...Migration) string {
+	h := sha256.New()
+	for _, b := range baselines {
+		h.Write(b.Sum[:])
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // Dialect is what Migrate needs to know about one database type.
 type Dialect struct {
 	// HasTable returns one row and column: 1 when the table of applied
@@ -129,9 +153,11 @@ type applied struct {
 // Migrate applies the migrations db lacks, in order, and returns the schema
 // version db is then at. Each time, under the lock and before it applies
 // anything, it checks that every migration db records matches one of
-// migrations by version, name and checksum. It refuses with ErrChecksum
-// (Internal: the schema is not what it was) or ErrNewerSchema (Conflict: a
-// newer binary was here) in the chain when one does not.
+// migrations by version, name and checksum. It refuses with ErrEarlierBuild
+// (Conflict: the database was made from another baseline schema),
+// ErrChecksum (Internal: a later migration is not what it was) or
+// ErrNewerSchema (Conflict: a newer binary was here) in the chain when one
+// does not.
 //
 // Each file is applied in its own locked transaction that re-reads the
 // applied table first: a process that waited for the lock while another
@@ -255,6 +281,40 @@ func Version(ctx context.Context, db *sql.DB, d Dialect) (int, error) {
 	return len(rows), nil
 }
 
+// CheckApplied refuses db unless the migrations it records are a prefix of
+// migrations, by version, name and checksum, as Migrate checks before it
+// applies anything, without taking the migration lock or applying
+// anything: a database made from another baseline (ErrEarlierBuild), one
+// whose later file changed (ErrChecksum), one a newer binary upgraded
+// (ErrNewerSchema), and one never migrated. What reads a database without
+// migrating it first (a backup made with the server stopped) asks it, so
+// it never copies rows of a schema this binary's files do not describe.
+func CheckApplied(ctx context.Context, db *sql.DB, d Dialect, migrations []Migration) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return unavailable(err, "the schema version cannot be read")
+	}
+	defer func() { _ = tx.Rollback() }() // Read only: nothing to keep.
+	var tables int
+	if err := tx.QueryRowContext(ctx, d.HasTable).Scan(&tables); err != nil {
+		return unavailable(err, "the schema version cannot be read")
+	}
+	if tables == 0 {
+		return fault.New(fault.Invalid, "the database records no migration: it was never made by this binary's migrations")
+	}
+	rows, err := readApplied(ctx, tx, d)
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return fault.New(fault.Invalid, "the database records no migration: it was never made by this binary's migrations")
+	}
+	if len(migrations) == 0 {
+		return fault.New(fault.Internal, "this binary has no migrations to check a database against")
+	}
+	return check(rows, migrations)
+}
+
 // readApplied reads the table of applied migrations.
 func readApplied(ctx context.Context, tx *sql.Tx, d Dialect) ([]applied, error) {
 	rs, err := tx.QueryContext(ctx, d.SelectApplied)
@@ -279,6 +339,12 @@ func readApplied(ctx context.Context, tx *sql.Tx, d Dialect) ([]applied, error) 
 // check refuses a database whose applied migrations are not a prefix of
 // migrations, by version, name and checksum. With migrations nil it checks
 // only that the applied rows are numbered 1, 2, 3 with no gap.
+//
+// The first row is checked before any other and alone: a database whose
+// baseline differs from this binary's is refused as made by an earlier
+// build, whatever it records after it, so a database made by a chain of
+// files the baseline has since replaced gets that one plain answer, not one
+// about a later file.
 func check(rows []applied, migrations []Migration) error {
 	for i, a := range rows {
 		if a.version != i+1 {
@@ -286,6 +352,18 @@ func check(rows []applied, migrations []Migration) error {
 		}
 		if migrations == nil {
 			continue
+		}
+		if len(migrations) == 0 {
+			// A binary with no files knows no schema: every recorded
+			// migration is one a newer binary applied.
+			return fault.Wrap(fault.Conflict, ErrNewerSchema, fmt.Sprintf(
+				"the database is at schema version %d and this binary knows none", rows[len(rows)-1].version))
+		}
+		if i == 0 && (a.name != migrations[0].Name || !bytes.Equal(a.sum, migrations[0].Sum[:])) {
+			return fault.Wrap(fault.Conflict, ErrEarlierBuild, fmt.Sprintf(
+				"the database was made by an earlier development build (or is another kind of database): its schema began from %s (SHA-256 %x), and this binary's "+
+					"begins from %s (SHA-256 %x); a database made from another baseline schema is never migrated: make it again",
+				a.name, a.sum, migrations[0].Name, migrations[0].Sum[:]))
 		}
 		if i >= len(migrations) {
 			return fault.Wrap(fault.Conflict, ErrNewerSchema, fmt.Sprintf(

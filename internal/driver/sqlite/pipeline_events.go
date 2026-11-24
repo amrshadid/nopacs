@@ -15,7 +15,7 @@ import (
 )
 
 // The tenant's event feed (tenant.Events), on the events and event_marks
-// tables of migrations/tenant/0002_pipeline.sql.
+// tables of migrations/tenant/0001_baseline.sql.
 //
 // Commit order. Every change runs on the one write connection, one
 // transaction at a time (write.go), and an event's id is taken by

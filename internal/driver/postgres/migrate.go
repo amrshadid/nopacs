@@ -123,6 +123,17 @@ func (b *base) migrate(ctx context.Context, migrations []sqlkit.Migration) (int,
 	return version, b.runnerErr(ctx, err, "the "+b.name+" cannot be migrated")
 }
 
+// checkApplied refuses the database unless the migrations it records are a
+// prefix of migrations (sqlkit.CheckApplied); it takes no lock and applies
+// nothing.
+func (b *base) checkApplied(ctx context.Context, migrations []sqlkit.Migration) error {
+	if err := b.open(); err != nil {
+		return err
+	}
+	err := sqlkit.CheckApplied(ctx, b.mig, dialect, migrations)
+	return b.runnerErr(ctx, err, "the "+b.short+"'s schema cannot be checked")
+}
+
 // version returns the schema version the database is at.
 func (b *base) version(ctx context.Context) (int, error) {
 	if err := b.open(); err != nil {

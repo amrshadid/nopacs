@@ -440,7 +440,7 @@ func (t *Tenant) ReceptionsWithoutWork(ctx context.Context, page master.Page) ([
 
 // receptionsQuery returns the statement and arguments of one page of
 // ListReceptions. It is put together from fixed fragments by which filters
-// are set, so each reads the index named for it in 0002_pipeline.sql; every
+// are set, so each reads the index named for it in migrations/tenant/0001_baseline.sql; every
 // value is a parameter. after is the (started, id) of the last row
 // returned, or nil. The empty statement means no reception can match.
 func receptionsQuery(filter tenant.ReceptionFilter, after []any, limit int) (string, []any) {

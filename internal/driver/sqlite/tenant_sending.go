@@ -12,7 +12,7 @@ import (
 )
 
 // The tenant's senders and jobs (tenant.Sending), on the tables of
-// migrations/tenant/0011_senders_and_jobs.sql: package sqlkit's one
+// migrations/tenant/0001_baseline.sql: package sqlkit's one
 // implementation, run here in SQLite's transactions. One writer runs at a
 // time, so no row lock is taken and the clauses that would take one are
 // empty.

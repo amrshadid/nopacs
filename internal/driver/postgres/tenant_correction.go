@@ -11,7 +11,7 @@ import (
 )
 
 // The tenant's corrections (tenant.Corrections), on the tables of
-// migrations/tenant/0022_corrections.sql: package sqlkit's one
+// migrations/tenant/0001_baseline.sql: package sqlkit's one
 // implementation, run here in Postgres's transactions, each change through
 // Tenant.pipe, as the scrubs' are. Every change locks the tenant's
 // configuration first, so two corrections never move catalog rows at once.

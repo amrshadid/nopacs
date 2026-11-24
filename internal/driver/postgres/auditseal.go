@@ -11,8 +11,8 @@ import (
 )
 
 // The audit seal (master.AuditSeals) of the master and of every tenant, on
-// the tables of migrations/master/0004_audit_seal.sql and
-// migrations/tenant/0017_audit_seal.sql, which have the same shape. The
+// the audit tables of migrations/master/0001_baseline.sql and
+// migrations/tenant/0001_baseline.sql, which have the same shape. The
 // methods are on base, which Master and Tenant both embed, so the one
 // implementation serves both and the two cannot drift.
 

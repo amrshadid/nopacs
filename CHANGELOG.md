@@ -23,6 +23,13 @@ the code before this release is in github.com/amrshadid/coria.
   where the user running the server is its operator without a key.
 - Tenants, each with its own database. The master and every tenant database
   live in SQLite or in Postgres; both drivers pass the same contract suites.
+- One baseline schema per database (the master, a tenant) and driver,
+  `0001_baseline.sql`, each table written once with what it holds and why.
+  A database whose recorded baseline differs from the binary's is refused at
+  open ("made by an earlier development build ... make it again") and never
+  migrated across; a backup and a tenant's export record the fingerprint of
+  their baselines, and a restore or an import refuses one made from other
+  baselines before it writes anything.
 - Settings with defaults, bounds and per-tenant overrides where a setting
   allows one (`nopacs setting`), read again while the server runs.
 

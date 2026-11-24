@@ -11,7 +11,7 @@ import (
 
 // The tenant's de-identification profiles and lookup tables
 // (tenant.Deidentification), on the tables of
-// migrations/tenant/0012_profiles_and_lookups.sql: package sqlkit's one
+// migrations/tenant/0001_baseline.sql: package sqlkit's one
 // implementation, run here in Postgres's transactions at read committed,
 // each change through Tenant.pipe, so a deadlock or a serialization failure
 // runs it again. A profile version is stored under the tenant's lock of

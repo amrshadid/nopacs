@@ -265,26 +265,35 @@ func onlyLock(run string) bool {
 	return err == nil && len(entries) == 1 && entries[0].Name() == server.LockName
 }
 
-// CheckVersions refuses a backup with a section of a schema version this
-// binary does not migrate to; a restore asks it before anything is
-// written, so a backup of a newer server is refused whole rather than
-// after its master is loaded.
+// CheckVersions refuses a backup with a section made from another baseline
+// schema than this binary's, or of a schema version this binary does not
+// migrate to; a restore and an import ask it before anything is written,
+// so such a file is refused whole rather than after its master is loaded.
+// The baseline is compared first: a schema version counts migrations after
+// one baseline, so the same number after another baseline names another
+// schema, and a file written before sections recorded their baseline
+// (Schema empty) was made by an earlier development build.
 func (v Verified) CheckVersions() error {
 	masterVersion, tenantVersion, err := driver.SchemaVersions()
 	if err != nil {
 		return err
 	}
+	masterSchema, tenantSchema, err := driver.SchemaFingerprints()
+	if err != nil {
+		return err
+	}
 	for i, s := range v.Starts {
-		known := tenantVersion
+		known, schema := tenantVersion, tenantSchema
+		name := "the section of tenant " + output.Clean(s.Tenant)
 		if s.Database == DatabaseMaster {
-			known = masterVersion
+			known, schema, name = masterVersion, masterSchema, "the master's section"
 		}
-		got := v.Ends[i].Point.SchemaVersion
-		if got < 1 || got > known {
-			name := "the master's section"
-			if s.Tenant != "" {
-				name = "the section of tenant " + output.Clean(s.Tenant)
-			}
+		p := v.Ends[i].Point
+		if p.Schema != schema {
+			return fault.New(fault.Invalid, "backup: "+name+" was made by an earlier development build of nopacs, from another baseline "+
+				"schema than this version's; it cannot be restored or imported here: restore it with the build that made it, or make it again")
+		}
+		if got := p.SchemaVersion; got < 1 || got > known {
 			return fault.New(fault.Invalid, "backup: "+name+" is of schema version "+strconv.Itoa(got)+", and this version of nopacs knows "+
 				"versions 1 to "+strconv.Itoa(known)+"; restore it with the version of nopacs that made it, or a later one")
 		}

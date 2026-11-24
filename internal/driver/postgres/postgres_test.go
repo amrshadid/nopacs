@@ -23,12 +23,16 @@ import (
 )
 
 // TestShippedMigrationsUnchanged guards the master's migration files against
-// an edit after release: an applied file that changes makes every database
-// that applied it refuse to start (sqlkit.ErrChecksum). A new file is added
-// to the list; a listed checksum is never changed.
+// an edit nobody meant: a changed baseline makes every database made from it
+// refuse to open (sqlkit.ErrEarlierBuild), a changed later file every
+// database that applied it (sqlkit.ErrChecksum). Until a first release the
+// baseline is edited in place and its checksum here with it, on purpose,
+// since every database made before is then made again; from the first
+// release on a listed checksum is never changed, and a new file is added
+// to the list.
 func TestShippedMigrationsUnchanged(t *testing.T) {
 	want := []string{
-		"0001_init.sql " + shippedInit,
+		"0001_baseline.sql " + shippedBaseline,
 	}
 	if masterMigrationsErr != nil {
 		t.Fatal(masterMigrationsErr)
@@ -44,8 +48,9 @@ func TestShippedMigrationsUnchanged(t *testing.T) {
 	}
 }
 
-// shippedInit is the SHA-256 of 0001_init.sql as this change ships it.
-const shippedInit = "0929aba62fc03e2588556d2886e81ff228d5b19d45cb20c4472dbc03c3ae7ade"
+// shippedBaseline is the SHA-256 of migrations/master/0001_baseline.sql as
+// this change ships it.
+const shippedBaseline = "999e34e5889b9f08bff9c54862869ad743daf33f9315ce9fc180f0647737b4fb"
 
 // TestNotMigrated guards that a store used before Migrate fails as
 // Unavailable with a message that says so, instead of a SQL error.

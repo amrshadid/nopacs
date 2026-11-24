@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/driver"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/secret"
@@ -127,6 +128,23 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// checkSchemas refuses the first of dbs whose recorded migrations are not
+// this binary's (snapshot.Database's CheckSchema), naming it.
+func checkSchemas(ctx context.Context, dbs []Database) error {
+	for _, d := range dbs {
+		if d.DB == nil {
+			continue
+		}
+		if err := d.DB.CheckSchema(ctx); err != nil {
+			if d.Tenant != "" {
+				return fault.Wrap(fault.KindOf(err), err, "backup: the tenant "+d.Tenant+"'s database cannot be backed up: "+fault.Message(err))
+			}
+			return fault.Wrap(fault.KindOf(err), err, "backup: the master database cannot be backed up: "+fault.Message(err))
+		}
+	}
+	return nil
+}
+
 // Create writes a backup of the master and every tenant's database to
 // cfg.Out, each read in its own read transaction, encrypted as it is
 // written, so memory stays bounded whatever the databases hold. A database
@@ -142,6 +160,16 @@ func Create(ctx context.Context, cfg CreateConfig) (Summary, error) {
 	}
 	now := cfg.Now().UTC().Truncate(time.Microsecond)
 	keyVersion := int64(cfg.Keys.SealVersion())
+	masterSchema, tenantSchema, err := driver.SchemaFingerprints()
+	if err != nil {
+		return Summary{}, err
+	}
+	// Each section is stamped with this binary's baseline, so every
+	// database must hold this binary's schema: one made by another build
+	// is refused before a byte is written.
+	if err := checkSchemas(ctx, append([]Database{{DB: cfg.Master}}, cfg.Tenants...)); err != nil {
+		return Summary{}, err
+	}
 	out := &countingWriter{w: cfg.Out, h: sha256.New()}
 	bw, err := secret.NewBackupWriter(out, cfg.Keys)
 	if err != nil {
@@ -171,7 +199,11 @@ func Create(ctx context.Context, cfg CreateConfig) (Summary, error) {
 			}
 			return Summary{}, err
 		}
-		point := pointOf(p, keyVersion)
+		schema := masterSchema
+		if i > 0 {
+			schema = tenantSchema
+		}
+		point := pointOf(p, schema, keyVersion)
 		f, err := pw.end(point)
 		if err != nil {
 			return Summary{}, err

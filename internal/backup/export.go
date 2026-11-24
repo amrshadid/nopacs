@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/driver"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/place"
 	"github.com/amrshadid/nopacs/internal/registry"
@@ -208,6 +209,12 @@ func ExportTenant(ctx context.Context, cfg ExportConfig) (Summary, []byte, error
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
+	// The export is stamped with this binary's baseline: a tenant database
+	// made by another build is refused before its owner records move or a
+	// byte is written.
+	if err := checkSchemas(ctx, []Database{{Tenant: cfg.Tenant, DB: cfg.DB}}); err != nil {
+		return Summary{}, nil, err
+	}
 	if _, err := cfg.Owners.Advance(ctx, cfg.TenantID, cfg.Tenant, cfg.Store); err != nil {
 		return Summary{}, nil, fault.Wrap(fault.KindOf(err), err, "the owner records of the tenant "+cfg.Tenant+" cannot be taken further: "+fault.Message(err))
 	}
@@ -226,6 +233,10 @@ func ExportTenant(ctx context.Context, cfg ExportConfig) (Summary, []byte, error
 // exportUnder writes the export under the transfer key tk.
 func exportUnder(ctx context.Context, cfg ExportConfig, tk *secret.Keys) (Summary, error) {
 	now := cfg.Now().UTC().Truncate(time.Microsecond)
+	_, tenantSchema, err := driver.SchemaFingerprints()
+	if err != nil {
+		return Summary{}, err
+	}
 	out := &countingWriter{w: cfg.Out, h: sha256.New()}
 	bw, err := secret.NewBackupWriter(out, tk)
 	if err != nil {
@@ -243,7 +254,7 @@ func exportUnder(ctx context.Context, cfg ExportConfig, tk *secret.Keys) (Summar
 	if err != nil {
 		return Summary{}, fault.Wrap(fault.KindOf(err), err, "backup: the tenant "+cfg.Tenant+"'s database cannot be read: "+fault.Message(err))
 	}
-	point := pointOf(p, int64(cfg.Keys.SealVersion()))
+	point := pointOf(p, tenantSchema, int64(cfg.Keys.SealVersion()))
 	f, err := pw.end(point)
 	if err != nil {
 		return Summary{}, err

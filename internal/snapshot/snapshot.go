@@ -151,6 +151,13 @@ type Source interface {
 // Database is a database a backup reads and a restore writes: the master
 // or a tenant's. A driver implements it beside its store.
 type Database interface {
+	// CheckSchema refuses a database whose recorded migrations are not this
+	// binary's: made from another baseline schema, changed, newer, or never
+	// migrated. A backup asks it of every database before it writes
+	// anything, since a backup made with the server stopped reads databases
+	// nothing has migrated, and a file stamped with this binary's schema
+	// must hold rows of that schema.
+	CheckSchema(ctx context.Context) error
 	// Snapshot reads every table but the catalog's in one read
 	// transaction, in an order that loads (a table before any that refers
 	// to it), into sink, and returns the recovery point.

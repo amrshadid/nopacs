@@ -35,11 +35,14 @@
 //
 // POINT is the section's recovery point, the moment it stands for:
 //
-//	{"snapshot_time":T,"schema_version":V,"event_history":H,"last_correction":C,"last_reception":R,
+//	{"snapshot_time":T,"schema_version":V,"schema":F,"event_history":H,"last_correction":C,"last_reception":R,
 //	 "owners":[{"storage":S,"generation":G},...],"key_version":N}
 //
 // with event_history, last_correction, last_reception and owners empty for
-// the master. A section's SHA-256 is that of its bytes from the first byte
+// the master. F is the fingerprint of the baseline schema the database was
+// made from (64 lowercase hexadecimal digits, driver.SchemaFingerprints)
+// and V the migrations applied after it, the baseline being 1: a reader
+// refuses a section whose F is not its own, or whose V it does not know. A section's SHA-256 is that of its bytes from the first byte
 // of its "section" line to the "\n" that ends its "end" line; the footer
 // lists every section's, and the file ends after the footer's "\n". A
 // reader refuses a line out of this order, a count or a digest that does

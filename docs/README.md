@@ -41,7 +41,7 @@ The contract itself is `api/proto/nopacs/v1`; the generated clients are in
 | [A database driver](guides/database-driver.md) | Implement the master and tenant ports for another database |
 | [A storage driver](guides/storage-driver.md) | Implement `blob.Store` for another kind of storage |
 | [An API method](guides/api-method.md) | From the contract to the handler, the command and the proof |
-| [A migration](guides/migration.md) | Change a schema, forward only |
+| [A migration](guides/migration.md) | Change a schema: the baseline until the first release, a forward migration after |
 | [An event type](guides/event-type.md) | Report a new change on the live feed |
 
 ## Conventions

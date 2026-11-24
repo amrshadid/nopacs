@@ -17,8 +17,7 @@ import (
 )
 
 // The pipeline's operations on a tenant's database (tenant.Pipeline), in
-// pipeline_*.go, on the tables of migrations/tenant/0002_pipeline.sql (and
-// the index 0003_released_places.sql adds). The
+// pipeline_*.go, on the tables of migrations/tenant/0001_baseline.sql. The
 // package documentation lists the row locks each change takes, in which
 // order, and why; every change goes through Tenant.pipe, which retries a
 // transaction Postgres ended as a deadlock or a serialization failure, so

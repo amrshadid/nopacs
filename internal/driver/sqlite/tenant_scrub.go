@@ -10,7 +10,7 @@ import (
 )
 
 // The tenant's scrubs (tenant.Scrubbing), on the tables of
-// migrations/tenant/0019_scrub.sql: package sqlkit's one implementation,
+// migrations/tenant/0001_baseline.sql: package sqlkit's one implementation,
 // run here in SQLite's transactions, as the senders' and jobs' are.
 
 // RecordScrubFinding implements tenant.Scrubbing.

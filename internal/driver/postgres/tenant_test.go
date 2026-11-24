@@ -75,14 +75,15 @@ func TestTenantContract(t *testing.T) {
 }
 
 // TestShippedTenantMigrationsUnchanged guards a tenant's migration files
-// against an edit after release: an applied file that changes makes every
-// database that applied it refuse to start (sqlkit.ErrChecksum). A new file
-// is added to the list; a listed checksum is never changed.
+// against an edit nobody meant: a changed baseline makes every tenant
+// database made from it refuse to open (sqlkit.ErrEarlierBuild), a changed
+// later file every database that applied it (sqlkit.ErrChecksum). Until a
+// first release the baseline is edited in place and its checksum here with
+// it, on purpose, since every database made before is then made again; from
+// the first release on a listed checksum is never changed, and a new file
+// is added to the list.
 func TestShippedTenantMigrationsUnchanged(t *testing.T) {
-	want := []string{"0001_init.sql " + shippedTenantInit, "0002_pipeline.sql " + shippedTenantPipeline,
-		"0003_released_places.sql " + shippedTenantReleasedPlaces, "0004_release_reason_and_scans.sql " + shippedTenantReleaseReason,
-		"0005_tenant_secrets.sql " + shippedTenantSealedKeys, "0006_events.sql " + shippedTenantEvents,
-		"0007_storage_totals.sql " + shippedTenantStorageTotals, "0008_catalog_reads.sql " + shippedTenantCatalogReads}
+	want := []string{"0001_baseline.sql " + shippedTenantBaseline}
 	if tenantMigrationsErr != nil {
 		t.Fatal(tenantMigrationsErr)
 	}
@@ -97,30 +98,9 @@ func TestShippedTenantMigrationsUnchanged(t *testing.T) {
 	}
 }
 
-// shippedTenantInit is the SHA-256 of migrations/tenant/0001_init.sql as this
-// change ships it.
-const shippedTenantInit = "c8f7a87846954df3589281ee46a4a0a288261f57c3ebb07f3cdaba713ded1a2d"
-
-// shippedTenantPipeline is the SHA-256 of
-// migrations/tenant/0002_pipeline.sql as this change ships it.
-const shippedTenantPipeline = "243bc62ba80845ae699c432d2c861f014a9f3fe49742865cf9059b6555e2884e"
-
-// shippedTenantReleasedPlaces is the SHA-256 of
-// migrations/tenant/0003_released_places.sql as this change ships it.
-const shippedTenantReleasedPlaces = "2641f017ef90b5c528e6544c0f4986f555b72ca8974adc7aaab998e9530ead50"
-
-// shippedTenantReleaseReason is the SHA-256 of
-// migrations/tenant/0004_release_reason_and_scans.sql as this change ships
-// it.
-const shippedTenantReleaseReason = "f84dae32c505f8a7906f943df9de7c5c038abb6e5b1bccdfced258365c2a7387"
-
-// shippedTenantSealedKeys is the SHA-256 of migrations/tenant/0005_tenant_secrets.sql,
+// shippedTenantBaseline is the SHA-256 of migrations/tenant/0001_baseline.sql
 // as this change ships it.
-const shippedTenantSealedKeys = "27207793ac1f3d6b83c43b973c0ba0e25a67d51dc0b933df3c28a52595745c34"
-
-// shippedTenantEvents is the SHA-256 of migrations/tenant/0006_events.sql as
-// this change ships it.
-const shippedTenantEvents = "bc7f35408ed54ff8af387fc76be115cc414db8045660a080320d9980d6df510f"
+const shippedTenantBaseline = "dcc3e78eed01c28670597d15b617425c39d6024fde0f5c665fb409e4cf958627"
 
 // TestTenantNotMigrated guards that a tenant store used before Migrate fails
 // as Unavailable with a message that says so, instead of a SQL error, and
@@ -765,11 +745,3 @@ func TestTenantFailuresHideSecrets(t *testing.T) {
 		}
 	}
 }
-
-// shippedTenantStorageTotals is the SHA-256 of
-// migrations/tenant/0007_storage_totals.sql as this change ships it.
-const shippedTenantStorageTotals = "cd66926d9d00044ea5e1a17a003234181906ee4c692e8295686abea151b34159"
-
-// shippedTenantCatalogReads is the SHA-256 of
-// migrations/tenant/0008_catalog_reads.sql as this change ships it.
-const shippedTenantCatalogReads = "4454de633a5f4d540904c74bcdcfebb7fa04aaf09408b82a56cda1e084b070bf"

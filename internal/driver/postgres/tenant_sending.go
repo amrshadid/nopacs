@@ -12,7 +12,7 @@ import (
 )
 
 // The tenant's senders and jobs (tenant.Sending), on the tables of
-// migrations/tenant/0011_senders_and_jobs.sql: package sqlkit's one
+// migrations/tenant/0001_baseline.sql: package sqlkit's one
 // implementation, run here in Postgres's transactions at read committed,
 // each change through Tenant.pipe, so a deadlock or a serialization failure
 // runs it again. The rows are locked in the package's order (doc.go): a
@@ -33,7 +33,7 @@ var sendingDialect = sqlkit.SendingDialect{
 	// A rebuild's shadow is tables in a scratch schema of the tenant's
 	// database, which the job names.
 	ScratchRequired: true,
-	// The catalog's ids are identities always generated (0002_pipeline.sql).
+	// The catalog's ids are identities always generated (the tenant's baseline schema).
 	Overriding: " OVERRIDING SYSTEM VALUE",
 }
 

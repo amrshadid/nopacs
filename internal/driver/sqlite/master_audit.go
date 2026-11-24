@@ -88,7 +88,7 @@ func auditBinding(f master.AuditFilter) string {
 // auditQuery returns the statement and arguments of one page of ListAudit.
 // The statement is put together from fixed fragments according to which
 // filters are set, so that each combination reads the index named for it in
-// 0001_init.sql instead of testing "parameter is empty OR column =
+// migrations/master/0001_baseline.sql instead of testing "parameter is empty OR column =
 // parameter", which SQLite cannot answer from an index. No value is ever
 // written into the text; every one is a parameter. The cursor, when there is
 // one, is the (at, id) of the last row returned.

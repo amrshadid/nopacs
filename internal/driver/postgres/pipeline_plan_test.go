@@ -396,7 +396,8 @@ func TestScalePipelinePlans(t *testing.T) {
 	t.Logf("%d combinations of filters checked", n)
 }
 
-// pipelineTables are the tables of migrations/tenant/0002_pipeline.sql.
+// pipelineTables are the reception pipeline's tables of
+// migrations/tenant/0001_baseline.sql.
 var pipelineTables = []string{"catalog_totals", "instances", "quarantine", "quarantine_totals", "received_files", "reception_associations",
 	"receivers", "receptions", "scans", "sessions", "storages", "subjects", "work"}
 

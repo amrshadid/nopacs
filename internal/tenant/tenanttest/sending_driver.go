@@ -1,10 +1,17 @@
 package tenanttest
 
 import (
+	"context"
 	"testing"
 
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
+
+// sendingEnv returns a sending test's helpers on a store a driver's own
+// test opened, its ids made from seq on.
+func sendingEnv(t *testing.T, p tenant.Pipeline, seq int) *senv {
+	return &senv{eenv: &eenv{penv: &penv{env: &env{T: t, s: p, ctx: context.Background(), seq: seq}, p: p}}}
+}
 
 // StartedJobUnit sets up, through the port, a job "j1" of a session of one
 // scan of two instances to a sender "orthanc", lists it, claims its scan's

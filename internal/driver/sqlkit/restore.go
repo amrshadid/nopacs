@@ -12,7 +12,8 @@ import (
 )
 
 // What a restore asks of a tenant's database (tenant.Restoring), on the
-// tables of 0022_corrections.sql and 0023_storage_owners.sql.
+// corrections and storage_owners tables of each driver's tenant baseline
+// schema (migrations/tenant/0001_baseline.sql).
 
 // StorageOwners implements tenant.Restoring.
 func (k Sending) StorageOwners(ctx context.Context) ([]tenant.StorageOwner, error) {

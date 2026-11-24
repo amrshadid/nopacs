@@ -11,7 +11,7 @@ import (
 )
 
 // The tenant's import jobs (tenant.Importing), on the tables of
-// migrations/tenant/0018_import.sql: package sqlkit's one implementation,
+// migrations/tenant/0001_baseline.sql: package sqlkit's one implementation,
 // run here in SQLite's transactions, as the senders' and jobs' are. What
 // the pipeline decides of an import's files is written by the pipeline's
 // own methods, in their transactions, through importInTx; the events of

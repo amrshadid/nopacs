@@ -360,7 +360,8 @@ func (t *Tenant) QuarantineTotals(ctx context.Context) (int64, int64, error) {
 
 // quarantineQuery returns the statement and arguments of one page of
 // ListQuarantined, put together from fixed fragments by which filters are
-// set, so each reads its index in 0002_pipeline.sql; every value is a
+// set, so each reads its index in migrations/tenant/0001_baseline.sql;
+// every value is a
 // parameter.
 func quarantineQuery(filter tenant.QuarantineFilter, after *sqlkit.TimePosition, limit int) (string, []any) {
 	var where []string

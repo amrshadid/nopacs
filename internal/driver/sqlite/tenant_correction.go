@@ -11,7 +11,7 @@ import (
 )
 
 // The tenant's corrections (tenant.Corrections), on the tables of
-// migrations/tenant/0022_corrections.sql: package sqlkit's one
+// migrations/tenant/0001_baseline.sql: package sqlkit's one
 // implementation, run here in SQLite's transactions, as the scrubs' are.
 
 // PreviewDelete implements tenant.Corrections.

@@ -10,7 +10,7 @@ import (
 )
 
 // The tenant's import jobs (tenant.Importing), on the tables of
-// migrations/tenant/0018_import.sql: package sqlkit's one implementation,
+// migrations/tenant/0001_baseline.sql: package sqlkit's one implementation,
 // run here in Postgres's transactions at read committed, each change
 // through Tenant.pipe, as the senders' and jobs' are. The rows are locked
 // in the package's order (doc.go): a unit of work's row (its fence), a

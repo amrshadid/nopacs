@@ -15,7 +15,7 @@ import (
 )
 
 // The tenant's event feed (tenant.Events), on the events, event_marks and
-// event_checkpoints tables of migrations/tenant/0006_events.sql.
+// event_checkpoints tables of migrations/tenant/0001_baseline.sql.
 //
 // Commit order. Changes run at once on Postgres, so an id taken by one
 // transaction can commit after an id another took later, and a reader could

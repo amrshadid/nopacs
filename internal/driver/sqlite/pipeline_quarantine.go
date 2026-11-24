@@ -262,7 +262,7 @@ func (t *Tenant) QuarantineTotals(ctx context.Context) (int64, int64, error) {
 
 // quarantineQuery returns the statement and arguments of one page of
 // ListQuarantined, put together as receptionsQuery's is, so each equality
-// filter reads its index in 0002_pipeline.sql.
+// filter reads its index in migrations/tenant/0001_baseline.sql.
 func quarantineQuery(filter tenant.QuarantineFilter, after []any, limit int) (string, []any) {
 	var where []string
 	var args []any

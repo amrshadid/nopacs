@@ -78,10 +78,14 @@ type Owner struct {
 	Generation int64  `json:"generation"`
 }
 
-// Point is a section's recovery point as the file writes it.
+// Point is a section's recovery point as the file writes it. Schema is the
+// fingerprint of the baseline schema its database was made from
+// (driver.SchemaFingerprints): a schema version numbers migrations after
+// one baseline, so a reader compares both.
 type Point struct {
 	SnapshotTime   time.Time `json:"snapshot_time"`
 	SchemaVersion  int       `json:"schema_version"`
+	Schema         string    `json:"schema"`
 	EventHistory   string    `json:"event_history"`
 	LastCorrection string    `json:"last_correction"`
 	LastReception  string    `json:"last_reception"`
@@ -131,9 +135,10 @@ type nonUTF8 struct {
 	Bytes string `json:"bytes"`
 }
 
-// pointOf returns a recovery point as the file writes it.
-func pointOf(p snapshot.Point, keyVersion int64) Point {
-	out := Point{SnapshotTime: p.Time, SchemaVersion: p.Version, EventHistory: p.EventHistory, LastCorrection: p.LastCorrection,
+// pointOf returns a recovery point as the file writes it, of a database
+// made from the baseline schema whose fingerprint is schema.
+func pointOf(p snapshot.Point, schema string, keyVersion int64) Point {
+	out := Point{SnapshotTime: p.Time, SchemaVersion: p.Version, Schema: schema, EventHistory: p.EventHistory, LastCorrection: p.LastCorrection,
 		LastReception: p.LastReception, Owners: []Owner{}, KeyVersion: keyVersion}
 	for _, o := range p.Owners {
 		out.Owners = append(out.Owners, Owner{Storage: o.Storage, Generation: o.Generation})

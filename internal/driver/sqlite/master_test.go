@@ -42,12 +42,16 @@ func TestMasterContract(t *testing.T) {
 }
 
 // TestShippedMigrationsUnchanged guards the master's migration files against
-// an edit after release: an applied file that changes makes every database
-// that applied it refuse to start (sqlkit.ErrChecksum). A new file is added
-// to the list; a listed checksum is never changed.
+// an edit nobody meant: a changed baseline makes every database made from it
+// refuse to open (sqlkit.ErrEarlierBuild), a changed later file every
+// database that applied it (sqlkit.ErrChecksum). Until a first release the
+// baseline is edited in place and its checksum here with it, on purpose,
+// since every database made before is then made again; from the first
+// release on a listed checksum is never changed, and a new file is added
+// to the list.
 func TestShippedMigrationsUnchanged(t *testing.T) {
 	want := []string{
-		"0001_init.sql " + shippedInit,
+		"0001_baseline.sql " + shippedBaseline,
 	}
 	if masterMigrationsErr != nil {
 		t.Fatal(masterMigrationsErr)
@@ -63,8 +67,9 @@ func TestShippedMigrationsUnchanged(t *testing.T) {
 	}
 }
 
-// shippedInit is the SHA-256 of 0001_init.sql as this change ships it.
-const shippedInit = "855c5c3249782315f249013266c36749c608d407b4189d596901658270e5353d"
+// shippedBaseline is the SHA-256 of migrations/master/0001_baseline.sql as
+// this change ships it.
+const shippedBaseline = "ab555b2ae64feac32d21248729a69d4e9b86c13b9e2be48dad04827e77836925"
 
 // openPair opens two stores on one fresh, migrated file, as two processes
 // would, for the suite's tests across instances.

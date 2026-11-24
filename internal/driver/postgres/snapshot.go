@@ -163,9 +163,18 @@ var (
 	_ snapshot.Database = (*Tenant)(nil)
 )
 
-// Snapshot implements snapshot.Database.
+// CheckSchema implements snapshot.Database.
+func (m *Master) CheckSchema(ctx context.Context) error {
+	if masterMigrationsErr != nil {
+		return fault.Wrap(fault.Internal, masterMigrationsErr, "the master's migrations cannot be read")
+	}
+	return m.checkApplied(ctx, masterMigrations)
+}
+
+// Snapshot implements snapshot.Database. It refuses first what CheckSchema
+// refuses, so no caller reads rows of a schema this binary does not know.
 func (m *Master) Snapshot(ctx context.Context, sink snapshot.Sink) (snapshot.Point, error) {
-	if err := m.open(); err != nil {
+	if err := m.CheckSchema(ctx); err != nil {
 		return snapshot.Point{}, err
 	}
 	p, err := sqlkit.Snapshot(ctx, snapshotDialect(&m.base), false, sink)
@@ -185,6 +194,16 @@ func SchemaVersions() (masterVersion, tenantVersion int, err error) {
 	return len(masterMigrations), len(tenantMigrations), nil
 }
 
+// Baselines returns the first migration of the master's and of a tenant's
+// chain, the baseline schemas a database is made from, whose SHA-256s a
+// backup's fingerprint is made of.
+func Baselines() (masterBaseline, tenantBaseline sqlkit.Migration, err error) {
+	if _, _, err := SchemaVersions(); err != nil {
+		return sqlkit.Migration{}, sqlkit.Migration{}, err
+	}
+	return masterMigrations[0], tenantMigrations[0], nil
+}
+
 // MigrateTo implements snapshot.Database.
 func (m *Master) MigrateTo(ctx context.Context, version int) error {
 	if masterMigrationsErr != nil {
@@ -201,9 +220,18 @@ func (m *Master) Load(ctx context.Context, version int, src snapshot.Source) err
 	return m.runnerErr(ctx, sqlkit.LoadSnapshot(ctx, snapshotDialect(&m.base), version, src), "the master database cannot be loaded")
 }
 
-// Snapshot implements snapshot.Database.
+// CheckSchema implements snapshot.Database.
+func (t *Tenant) CheckSchema(ctx context.Context) error {
+	if tenantMigrationsErr != nil {
+		return fault.Wrap(fault.Internal, tenantMigrationsErr, "a tenant's migrations cannot be read")
+	}
+	return t.checkApplied(ctx, tenantMigrations)
+}
+
+// Snapshot implements snapshot.Database. It refuses first what CheckSchema
+// refuses, so no caller reads rows of a schema this binary does not know.
 func (t *Tenant) Snapshot(ctx context.Context, sink snapshot.Sink) (snapshot.Point, error) {
-	if err := t.open(); err != nil {
+	if err := t.CheckSchema(ctx); err != nil {
 		return snapshot.Point{}, err
 	}
 	p, err := sqlkit.Snapshot(ctx, snapshotDialect(&t.base), true, sink)

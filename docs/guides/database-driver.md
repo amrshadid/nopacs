@@ -13,9 +13,11 @@ have the same files.
    `master.go` and `master_*.go`, `tenant.go` and `pipeline_*.go`,
    `values.go`, `shared.go`, and the embedded `migrations/master/*.sql` and
    `migrations/tenant/*.sql`.
-2. **Write the schema as forward-only migrations**, numbered from `0001`, run
-   by `internal/driver/sqlkit`'s migration runner, one transaction each under
-   a lock that holds across processes. See [a migration](migration.md). The contract of each port is in [master](../../internal/master/doc.go) and [tenant](../../internal/tenant/doc.go).
+2. **Write the schema as a baseline**, `0001_baseline.sql` for the master and
+   for a tenant, the same tables, columns and constraints as the other
+   drivers' in this database's types, run by `internal/driver/sqlkit`'s
+   migration runner under a lock that holds across processes; later changes
+   are forward-only files after it. See [changing a schema](migration.md). The contract of each port is in [master](../../internal/master/doc.go) and [tenant](../../internal/tenant/doc.go).
 3. **Keep the domain out of the driver.** A rule of what may be stored
    (a label's form, a state's moves, a bound) belongs in the port
    (`internal/master`, `internal/tenant`); a helper both SQL drivers need goes

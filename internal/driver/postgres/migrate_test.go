@@ -17,19 +17,19 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/driver/sqlkit"
 	"github.com/amrshadid/nopacs/internal/fault"
-	"github.com/amrshadid/nopacs/internal/tenant/tenanttest"
 )
 
 // testMigrations are migrations that fail if run twice: the first makes a
 // table without IF NOT EXISTS, and each logs its version into it, so a file
 // applied twice either fails or leaves two log rows. The first three sleep
 // inside their transaction, holding what they hold, so that processes that
-// start together are inside each other's windows.
-func testMigrations(t *testing.T, change string) []sqlkit.Migration {
+// start together are inside each other's windows. first is added to the
+// first file, second to the second.
+func testMigrations(t *testing.T, first, second string) []sqlkit.Migration {
 	t.Helper()
 	fsys := fstest.MapFS{
-		"m/0001_log.sql":   {Data: []byte("CREATE TABLE log (version integer NOT NULL);\n" + slowInsert(1) + change)},
-		"m/0002_more.sql":  {Data: []byte(slowInsert(2))},
+		"m/0001_log.sql":   {Data: []byte("CREATE TABLE log (version integer NOT NULL);\n" + slowInsert(1) + first)},
+		"m/0002_more.sql":  {Data: []byte(slowInsert(2) + second)},
 		"m/0003_slow.sql":  {Data: []byte(slowInsert(3))},
 		"m/0004_notx.sql":  {Data: []byte(sqlkit.NoTransactionMark + "\nCREATE INDEX IF NOT EXISTS log_by_version ON log (version);\n")},
 		"m/0005_after.sql": {Data: []byte("INSERT INTO log VALUES (5);\n")},
@@ -111,7 +111,7 @@ func holdLock(t *testing.T, conn *pgx.Conn) {
 func TestMigrateAppliesOnce(t *testing.T) {
 	ctx := context.Background()
 	address := newSchema(t)
-	ms := testMigrations(t, "")
+	ms := testMigrations(t, "", "")
 	for run := range 2 {
 		v, err := migrateAt(ctx, address, ms, time.Time{})
 		if err != nil || v != 5 {
@@ -127,25 +127,53 @@ func TestMigrateAppliesOnce(t *testing.T) {
 	}
 }
 
-// TestMigrateRefusesChangedFile guards the checksum: a database that applied
-// a file refuses to start with a binary whose copy of that file differs,
-// names the file, and applies nothing further.
+// TestMigrateRefusesChangedFile guards the checksum of a migration after the
+// baseline: a database that applied a file refuses to start with a binary
+// whose copy of that file differs, names the file, and applies nothing
+// further.
 func TestMigrateRefusesChangedFile(t *testing.T) {
 	ctx := context.Background()
 	address := newSchema(t)
-	if _, err := migrateAt(ctx, address, testMigrations(t, "")[:2], time.Time{}); err != nil {
+	if _, err := migrateAt(ctx, address, testMigrations(t, "", "")[:2], time.Time{}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := migrateAt(ctx, address, testMigrations(t, "-- edited after release\n"), time.Time{})
+	_, err := migrateAt(ctx, address, testMigrations(t, "", "-- edited after release\n"), time.Time{})
 	if !errors.Is(err, sqlkit.ErrChecksum) {
 		t.Fatalf("Migrate with a changed file = %v, want ErrChecksum", err)
 	}
-	if !strings.Contains(fault.Message(err), "0001_log.sql") {
+	if !strings.Contains(fault.Message(err), "0002_more.sql") {
 		t.Errorf("message %q does not name the file", fault.Message(err))
 	}
 	t.Logf("refused: %s", fault.Message(err))
 	if got := fmt.Sprint(logRows(t, address)); got != "[1 2]" {
 		t.Errorf("log = %s after the refusal, want [1 2]: nothing more is applied", got)
+	}
+}
+
+// TestMigrateRefusesEarlierBaseline guards the baseline's fingerprint: a
+// database made from another version of the first file (the baseline
+// schema, edited in place until a first release) is refused as made by an
+// earlier development build, with a message that says to make it again,
+// before anything is applied, even when it records files this binary has
+// no more.
+func TestMigrateRefusesEarlierBaseline(t *testing.T) {
+	ctx := context.Background()
+	address := newSchema(t)
+	if _, err := migrateAt(ctx, address, testMigrations(t, "", ""), time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := migrateAt(ctx, address, testMigrations(t, "-- the baseline edited\n", "")[:1], time.Time{})
+	if !errors.Is(err, sqlkit.ErrEarlierBuild) || fault.KindOf(err) != fault.Conflict {
+		t.Fatalf("Migrate with another baseline = %v, want ErrEarlierBuild as Conflict", err)
+	}
+	for _, want := range []string{"earlier development build", "0001_log.sql", "make it again"} {
+		if !strings.Contains(fault.Message(err), want) {
+			t.Errorf("message %q does not say %q", fault.Message(err), want)
+		}
+	}
+	t.Logf("refused: %s", fault.Message(err))
+	if got := fmt.Sprint(logRows(t, address)); got != "[1 2 3 5]" {
+		t.Errorf("log = %s after the refusal, want [1 2 3 5]: nothing is applied", got)
 	}
 }
 
@@ -155,7 +183,7 @@ func TestMigrateRefusesChangedFile(t *testing.T) {
 func TestMigrateRefusesNewerDatabase(t *testing.T) {
 	ctx := context.Background()
 	address := newSchema(t)
-	ms := testMigrations(t, "")
+	ms := testMigrations(t, "", "")
 	if _, err := migrateAt(ctx, address, ms, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +209,61 @@ func TestMasterMigrateRefusesNewerDatabase(t *testing.T) {
 	}
 	if err := m.Migrate(ctx); !errors.Is(err, sqlkit.ErrNewerSchema) {
 		t.Errorf("Migrate = %v, want ErrNewerSchema", err)
+	}
+}
+
+// earlierBuilds are the records of schema_migrations an earlier development
+// build left: its baseline of another SHA-256, and the chain of files the
+// baseline replaced, whose first was named 0001_init.sql.
+var earlierBuilds = map[string]string{
+	"another baseline":   `UPDATE schema_migrations SET checksum = '\x00'::bytea WHERE version = 1`,
+	"the replaced chain": `UPDATE schema_migrations SET name = '0001_init.sql' WHERE version = 1`,
+}
+
+// TestStoresRefuseEarlierBuilds guards the baseline's fingerprint through
+// both ports, with their real baselines: a master or a tenant schema whose
+// recorded baseline is not this binary's (another SHA-256, or the first file
+// of the chain the baseline replaced, with later files recorded after it)
+// is refused by Migrate with the plain message, and is left as it was.
+func TestStoresRefuseEarlierBuilds(t *testing.T) {
+	ctx := context.Background()
+	type store interface {
+		Migrate(context.Context) error
+		Close() error
+	}
+	open := map[string]func(address string) store{
+		"master": func(address string) store { return openAt(t, address) },
+		"tenant": func(address string) store {
+			s, err := OpenTenant(ctx, address, "t1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = s.Close() })
+			return s
+		},
+	}
+	for kind, opener := range open {
+		for name, change := range earlierBuilds {
+			t.Run(kind+"/"+name, func(t *testing.T) {
+				address := newSchema(t)
+				s := opener(address)
+				if err := s.Migrate(ctx); err != nil {
+					t.Fatal(err)
+				}
+				conn := admin(t, address)
+				mustExec(t, conn, change, `INSERT INTO schema_migrations VALUES (2, '0002_pipeline.sql', '\x00'::bytea, now())`)
+				err := s.Migrate(ctx)
+				if !errors.Is(err, sqlkit.ErrEarlierBuild) || !strings.Contains(fault.Message(err), "made by an earlier development build") ||
+					!strings.Contains(fault.Message(err), "make it again") {
+					t.Fatalf("Migrate of an earlier build's %s = %v, want ErrEarlierBuild saying to make it again", kind, err)
+				}
+				t.Logf("refused: %s", fault.Message(err))
+				var rows int
+				if err := conn.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&rows); err != nil || rows != 2 {
+					t.Errorf("schema_migrations holds %d rows after the refusal (%v), want the 2 it had", rows, err)
+				}
+			})
+		}
 	}
 }
 
@@ -246,7 +329,7 @@ func TestMigrationLockIsPerSchema(t *testing.T) {
 }
 
 // TestMigrationLockReleased guards that the lock is let go on every path:
-// success, a failed file, a refused checksum, and a request that ends while
+// success, a failed file, a refused baseline, and a request that ends while
 // it waits. After each, another session can take it at once, and the pool has
 // no connection out.
 func TestMigrationLockReleased(t *testing.T) {
@@ -286,10 +369,10 @@ func TestMigrationLockReleased(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.migrate(ctx, changedMigrations); !errors.Is(err, sqlkit.ErrChecksum) {
-		t.Fatalf("a changed file: %v, want ErrChecksum", err)
+	if _, err := m.migrate(ctx, changedMigrations); !errors.Is(err, sqlkit.ErrEarlierBuild) {
+		t.Fatalf("another baseline: %v, want ErrEarlierBuild", err)
 	}
-	check("a refused checksum")
+	check("a refused baseline")
 
 	holder := admin(t, address)
 	holdLock(t, holder)
@@ -316,7 +399,7 @@ func TestMigrateAcrossStores(t *testing.T) {
 	const stores = 6
 	for round := range 3 {
 		address := newSchema(t)
-		ms := testMigrations(t, "")
+		ms := testMigrations(t, "", "")
 		start := time.Now().Add(500 * time.Millisecond)
 		errs := make([]error, stores)
 		var wg sync.WaitGroup
@@ -394,353 +477,8 @@ func TestMigrateHelperProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := migrateAt(context.Background(), address, testMigrations(t, ""), time.Unix(0, startNano))
+	v, err := migrateAt(context.Background(), address, testMigrations(t, "", ""), time.Unix(0, startNano))
 	if err != nil || v != 5 {
 		t.Fatalf("Migrate = %d, %v; want 5", v, err)
 	}
-}
-
-// TestCatalogReadsMigrationFillsRows guards the migration that gives the
-// catalog what its reads need, on a database that holds a catalog already
-// (the rows tenanttest.CheckMigratedCatalog describes): each session and
-// scan gets its parents' labels and its storage, the receiver of the
-// reception that confirmed its first instance, and running totals equal to
-// a count of the instances its scans hold; each subject its sessions,
-// instances, bytes and last update; and the lists by label, which read
-// those columns, answer the rows in their order.
-func TestCatalogReadsMigrationFillsRows(t *testing.T) {
-	ctx := context.Background()
-	address := newSchema(t)
-	s, err := OpenTenant(ctx, address, "t1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	if _, err := s.migrate(ctx, tenantMigrations[:7]); err != nil {
-		t.Fatal(err)
-	}
-	at := func(us int) string { return fmt.Sprintf(`timestamptz 'epoch' + %d * interval '1 microsecond'`, us) }
-	reception := func(id, receiver, study string, arrival int) string {
-		return fmt.Sprintf(`INSERT INTO receptions VALUES ('%s', '%s', '%s', %d, 'done', true, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-			'', '', 'store', '', now(), now(), now(), now(), 0, '[]', false, '', '', '', NULL)`, id, receiver, study, arrival)
-	}
-	held := func(uid, study, series, rc string, scan, size, us int) string {
-		return fmt.Sprintf(`INSERT INTO instances VALUES ('%s', '%s', '%s', 'held', sha256('%s'::bytea), '%s', %d, 'store', 'k/%s', 0, %d, %d,
-			sha256('%s'::bytea), %s, %s)`, uid, study, series, uid, rc, scan, uid, size, size, uid, at(us), at(us))
-	}
-	mustExec(t, admin(t, address),
-		reception("rc1", "recv-x", "2.25.1.1", 1), reception("rc2", "recv-y", "2.25.1.2", 1), reception("rc3", "recv-y", "2.25.1.3", 1),
-		reception("rc4", "recv-z", "2.25.1.1", 2),
-		`INSERT INTO subjects (id, label, folded, created) OVERRIDING SYSTEM VALUE VALUES (1, 'Sub-A', 'sub-a', `+at(100)+`),
-			(2, 'sub-b', 'sub-b', `+at(200)+`), (3, 'sub-c', 'sub-c', `+at(300)+`)`,
-		`INSERT INTO sessions (id, study_uid, subject_id, label, folded, storage, created) OVERRIDING SYSTEM VALUE VALUES
-			(1, '2.25.1.1', 1, 'ses-1', 'ses-1', 'store', `+at(100)+`), (2, '2.25.1.2', 1, 'ses-2', 'ses-2', 'store', `+at(150)+`),
-			(3, '2.25.1.3', 2, 'ses-1', 'ses-1', 'store', `+at(200)+`)`,
-		`INSERT INTO scans (id, session_id, series_uid, label, folded, instances, bytes, manifest_sha256, created, updated)
-			OVERRIDING SYSTEM VALUE VALUES (1, 1, '2.25.2.1', 'scan-1', 'scan-1', 2, 30, NULL, `+at(100)+`, `+at(120)+`),
-			(2, 1, '2.25.2.2', 'scan-2', 'scan-2', 1, 5, NULL, `+at(110)+`, `+at(110)+`),
-			(3, 2, '2.25.2.3', 'scan-1', 'scan-1', 1, 7, NULL, `+at(150)+`, `+at(160)+`),
-			(4, 3, '2.25.2.4', 'scan-1', 'scan-1', 1, 9, NULL, `+at(200)+`, `+at(200)+`)`,
-		held("2.25.3.2", "2.25.1.1", "2.25.2.1", "rc4", 1, 20, 120), held("2.25.3.1", "2.25.1.1", "2.25.2.1", "rc1", 1, 10, 100),
-		held("2.25.3.3", "2.25.1.1", "2.25.2.2", "rc1", 2, 5, 110), held("2.25.3.4", "2.25.1.2", "2.25.2.3", "rc2", 3, 7, 150),
-		held("2.25.3.5", "2.25.1.3", "2.25.2.4", "rc3", 4, 9, 200),
-		`INSERT INTO instances VALUES ('2.25.3.9', '2.25.1.1', '2.25.2.1', 'claimed', sha256('x'::bytea), 'rc4', NULL, '', '', 0, 0, 0,
-			NULL, now(), NULL)`)
-	if err := s.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	tenanttest.CheckMigratedCatalog(t, s, microsTime)
-}
-
-// TestLeanCatalogMigrationKeepsRows guards the migration that moves claims
-// into their own table, writes held instances once without the key and
-// checksum other rows give, counts each reception's scans, and removes the
-// received files of receptions that ended done or quarantined, on a
-// database that holds each kind of row already (tenanttest.CheckLeanCatalog
-// describes them and reads them back).
-func TestLeanCatalogMigrationKeepsRows(t *testing.T) {
-	ctx := context.Background()
-	address := newSchema(t)
-	s, err := OpenTenant(ctx, address, "t1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	if _, err := s.migrate(ctx, tenantMigrations[:8]); err != nil {
-		t.Fatal(err)
-	}
-	reception := func(id string, arrival int, state string, ended bool) string {
-		return fmt.Sprintf(`INSERT INTO receptions VALUES ('%s', 'recv', '%s', %d, '%s', %t, 1, 10, 0, 0, 0, 0, 0, 0, 0,
-			'Sub-A', 'ses-1', 'store', '', now(), now(), now(), %s, 0, '[]', false, '', '', '', NULL)`,
-			id, tenanttest.LeanStudy, arrival, state, ended, map[bool]string{true: "now()", false: "NULL"}[ended])
-	}
-	sum := func(uid string) string { return fmt.Sprintf("sha256('%s'::bytea)", uid) }
-	received := func(id string) string {
-		return fmt.Sprintf(`INSERT INTO received_files VALUES ('%s', '%s', %s, '%s', '%s', '1.2.840.10008.5.1.4.1.1.4', '1.2.840.10008.1.2.1',
-			10, 'in/%s', '', '', '', '', false, now())`, id, tenanttest.LeanReceivedUID, sum(tenanttest.LeanReceivedUID), tenanttest.LeanSeries,
-			tenanttest.LeanStudy, id)
-	}
-	mustExec(t, admin(t, address),
-		reception(tenanttest.LeanDone, 1, "done", true), reception(tenanttest.LeanQuarantined, 2, "quarantined", true),
-		reception(tenanttest.LeanFailed, 3, "failed", true), reception(tenanttest.LeanOpen, 4, "identified", false),
-		`INSERT INTO subjects (id, label, folded, created) OVERRIDING SYSTEM VALUE VALUES (1, 'Sub-A', 'sub-a', now())`,
-		`INSERT INTO sessions (id, study_uid, subject_id, label, folded, storage, created, subject_label, subject_folded)
-			OVERRIDING SYSTEM VALUE VALUES (1, '`+tenanttest.LeanStudy+`', 1, 'ses-1', 'ses-1', 'store', now(), 'Sub-A', 'sub-a')`,
-		`INSERT INTO scans (id, session_id, series_uid, label, folded, instances, bytes, manifest_sha256, created, updated,
-			subject_label, subject_folded, session_label, session_folded, storage)
-			OVERRIDING SYSTEM VALUE VALUES (1, 1, '`+tenanttest.LeanSeries+`', 'scan-1', 'scan-1', 2, 30, NULL, now(), now(),
-			'Sub-A', 'sub-a', 'ses-1', 'ses-1', 'store')`,
-		fmt.Sprintf(`INSERT INTO instances VALUES ('%s', '%s', '%s', 'held', %s, '%s', 1, 'store', 'data/Sub-A/ses-1/scan-1/%s.dcm', 0, 10, 10,
-			%s, now(), now())`, tenanttest.LeanLayoutUID, tenanttest.LeanStudy, tenanttest.LeanSeries, sum(tenanttest.LeanLayoutUID),
-			tenanttest.LeanDone, tenanttest.LeanLayoutUID, sum(tenanttest.LeanLayoutUID)),
-		fmt.Sprintf(`INSERT INTO instances VALUES ('%s', '%s', '%s', 'held', %s, '%s', 1, 'store', '%s', 0, 20, 20, %s, now(), now())`,
-			tenanttest.LeanKeptUID, tenanttest.LeanStudy, tenanttest.LeanSeries, sum(tenanttest.LeanKeptUID), tenanttest.LeanDone,
-			tenanttest.LeanKeptKey, sum(tenanttest.LeanKeptUID+"x")),
-		fmt.Sprintf(`INSERT INTO instances VALUES ('%s', '%s', '%s', 'claimed', %s, '%s', NULL, '', '', 0, 0, 0, NULL, now(), NULL)`,
-			tenanttest.LeanClaimedUID, tenanttest.LeanStudy, tenanttest.LeanSeries, sum(tenanttest.LeanClaimedUID), tenanttest.LeanOpen),
-		received(tenanttest.LeanDone), received(tenanttest.LeanQuarantined), received(tenanttest.LeanFailed), received(tenanttest.LeanOpen))
-	if err := s.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	tenanttest.CheckLeanCatalog(t, s)
-	var kept string
-	if err := admin(t, address).QueryRow(ctx, `SELECT string_agg(sop_instance_uid || ':' || storage_key || ':' ||
-		(archived_sha256 IS NULL), ' ' ORDER BY sop_instance_uid) FROM instances`).Scan(&kept); err != nil {
-		t.Fatal(err)
-	}
-	if want := tenanttest.LeanLayoutUID + "::true " + tenanttest.LeanKeptUID + ":" + tenanttest.LeanKeptKey + ":false"; kept != want {
-		t.Errorf("the migrated rows keep %q, want %q: only a key and a checksum no other row gives", kept, want)
-	}
-}
-
-// TestLeanCatalogMigrationRefusesAMismatchedStorage guards the migration
-// that drops each instance's own storage and reads its scan's: a database
-// at the schema before it, where a held instance is on another storage
-// than its scan, is refused with a message that says why, and is left at
-// the schema it was at, with its rows as they were.
-func TestLeanCatalogMigrationRefusesAMismatchedStorage(t *testing.T) {
-	ctx := context.Background()
-	address := newSchema(t)
-	s, err := OpenTenant(ctx, address, "t1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	if _, err := s.migrate(ctx, tenantMigrations[:8]); err != nil {
-		t.Fatal(err)
-	}
-	conn := admin(t, address)
-	mustExec(t, conn,
-		`INSERT INTO subjects (id, label, folded, created) OVERRIDING SYSTEM VALUE VALUES (1, 'sub-a', 'sub-a', now())`,
-		`INSERT INTO sessions (id, study_uid, subject_id, label, folded, storage, created) OVERRIDING SYSTEM VALUE
-			VALUES (1, '2.25.1.1', 1, 'ses-1', 'ses-1', 'store', now())`,
-		`INSERT INTO scans (id, session_id, series_uid, label, folded, instances, bytes, manifest_sha256, created, updated, storage)
-			OVERRIDING SYSTEM VALUE VALUES (1, 1, '2.25.2.1', 'scan-1', 'scan-1', 1, 10, NULL, now(), now(), 'store')`,
-		`INSERT INTO instances VALUES ('2.25.3.1', '2.25.1.1', '2.25.2.1', 'held', sha256('a'::bytea), 'rc', 1, 'elsewhere', 'k', 0, 10, 10,
-			sha256('a'::bytea), now(), now())`)
-	err = s.Migrate(ctx)
-	if err == nil || !strings.Contains(err.Error(), "a held instance is on a different storage than its scan") {
-		t.Fatalf("migrating with a mismatched storage: %v, want a refusal that names it", err)
-	}
-	var version, held int
-	if err := conn.QueryRow(ctx, `SELECT (SELECT max(version) FROM schema_migrations),
-		(SELECT count(*) FROM instances WHERE state = 'held' AND storage = 'elsewhere')`).Scan(&version, &held); err != nil {
-		t.Fatal(err)
-	}
-	if version != 8 || held != 1 {
-		t.Errorf("after the refusal the schema is at %d with %d rows on the other storage, want 8 and 1", version, held)
-	}
-}
-
-// lendImportArrivals lends a schema before the import's the table every
-// deciding transaction of the port probes for an import's files (empty, so
-// it finds none), and the table AddReceiver probes for a name an import job
-// still holds, for a fill that writes through the port.
-func lendImportArrivals(t *testing.T, s *Tenant) {
-	t.Helper()
-	for _, q := range []string{`CREATE TABLE import_arrivals (reception_id text)`, `CREATE TABLE import_jobs (receiver text)`} {
-		if _, err := s.pool.Exec(context.Background(), q); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-// takeBackImportArrivals drops the tables lendImportArrivals lent, before
-// the migrations run.
-func takeBackImportArrivals(t *testing.T, s *Tenant) {
-	t.Helper()
-	for _, q := range []string{`DROP TABLE import_arrivals`, `DROP TABLE import_jobs`} {
-		if _, err := s.pool.Exec(context.Background(), q); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-// correctionHoldTables are, empty, the tables a scan's commit looks in for
-// labels and UIDs a correction holds, in the columns it reads.
-var correctionHoldTables = []string{
-	`hidden_subjects (correction_id text, folded text)`,
-	`hidden_sessions (correction_id text, study_uid text, subject_folded text, folded text)`,
-	`hidden_scans (correction_id text, series_uid text, subject_folded text, session_folded text, folded text)`,
-	`hidden_instances (correction_id text, sop_instance_uid text)`,
-	`correction_scans (correction_id text, subject_label text, session_label text, scan_label text, new_subject text, new_session text, new_scan text)`,
-	`corrections (id text, kind text, level text, state text)`,
-}
-
-// lendCorrectionHolds lends a schema before the corrections' the tables a
-// scan's commit looks in for what a correction holds (empty, so it finds
-// none), for a fill that commits through the port.
-func lendCorrectionHolds(t *testing.T, s *Tenant) {
-	t.Helper()
-	for _, q := range correctionHoldTables {
-		if _, err := s.pool.Exec(context.Background(), `CREATE TABLE `+q); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-// takeBackCorrectionHolds drops the tables lendCorrectionHolds lent, before
-// the migrations run.
-func takeBackCorrectionHolds(t *testing.T, s *Tenant) {
-	t.Helper()
-	for _, q := range correctionHoldTables {
-		if _, err := s.pool.Exec(context.Background(), `DROP TABLE `+strings.Fields(q)[0]); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-// lendInstanceDamage lends a schema before the scrub's the table every read
-// of a job's stream probes for a scrub's marks (empty, so it finds none),
-// for a fill that reads through the port.
-func lendInstanceDamage(t *testing.T, s *Tenant) {
-	t.Helper()
-	if _, err := s.pool.Exec(context.Background(), `CREATE TABLE instance_damage (sop_instance_uid text, finding_id text)`); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// takeBackInstanceDamage drops the table lendInstanceDamage lent, before
-// the migrations run.
-func takeBackInstanceDamage(t *testing.T, s *Tenant) {
-	t.Helper()
-	if _, err := s.pool.Exec(context.Background(), `DROP TABLE instance_damage`); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestSendingMigrationKeepsData guards the migration that adds senders and
-// jobs on a database that holds data: a tenant filled through the port at
-// the schema before it (tenanttest.FillBeforeSending) reads the same after
-// it, and a job over that data lists and sends every instance
-// (tenanttest.CheckAfterSending).
-func TestSendingMigrationKeepsData(t *testing.T) {
-	ctx := context.Background()
-	s, err := OpenTenant(ctx, newSchema(t), "t1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	if _, err := s.migrate(ctx, tenantMigrations[:10]); err != nil {
-		t.Fatal(err)
-	}
-	// The port of this version reads and writes columns a later migration
-	// adds (a reception's and a session's route, a release's storage);
-	// they are lent for the fill, which writes through the port, and taken
-	// back before the migrations run.
-	lent := []string{"receptions ADD COLUMN route", "sessions ADD COLUMN route", "quarantine ADD COLUMN release_storage",
-		"quarantine ADD COLUMN release_profile", "quarantine ADD COLUMN import_job", "quarantine ADD COLUMN import_path"}
-	for _, c := range lent {
-		if _, err := s.pool.Exec(ctx, `ALTER TABLE `+c+` text NOT NULL DEFAULT ''`); err != nil {
-			t.Fatal(err)
-		}
-	}
-	lendImportArrivals(t, s)
-	lendCorrectionHolds(t, s)
-	tenanttest.FillBeforeSending(t, s)
-	for _, c := range lent {
-		if _, err := s.pool.Exec(ctx, `ALTER TABLE `+strings.Replace(c, "ADD", "DROP", 1)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	takeBackCorrectionHolds(t, s)
-	takeBackImportArrivals(t, s)
-	if err := s.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	// The pool's connections keep the plans of statements the fill ran on
-	// the lent table and columns; a server migrates before it serves, so
-	// they are dropped here as a new start would have none.
-	s.pool.Reset()
-	if v, err := s.Version(ctx); err != nil || v != len(tenantMigrations) {
-		t.Fatalf("the version after the migration = %d, %v", v, err)
-	}
-	tenanttest.CheckAfterSending(t, s)
-}
-
-// TestDeidJobsMigrationKeepsJobs guards the migration that lets a job be
-// of the kind deid: send jobs written through the port at the schema
-// before it (tenanttest.FillBeforeDeidJobs, the new columns lent for the
-// port and taken back) read exactly as before and go on working after it
-// (tenanttest.CheckAfterDeidJobs); the indexes of jobs are as they were;
-// and the checks hold: a kind other than send or deid, and a send job with
-// a mode, are refused.
-func TestDeidJobsMigrationKeepsJobs(t *testing.T) {
-	ctx := context.Background()
-	s, err := OpenTenant(ctx, newSchema(t), "t1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	if _, err := s.migrate(ctx, tenantMigrations[:14]); err != nil {
-		t.Fatal(err)
-	}
-	lent := []string{"deid_mode text NOT NULL DEFAULT ''", "profile_name text NOT NULL DEFAULT ''", "profile_version integer NOT NULL DEFAULT 0"}
-	for _, c := range lent {
-		if _, err := s.pool.Exec(ctx, `ALTER TABLE jobs ADD COLUMN `+c); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := s.pool.Exec(ctx, `CREATE TABLE job_tallies (job_id text, tally text, count bigint)`); err != nil {
-		t.Fatal(err)
-	}
-	lendImportArrivals(t, s)
-	lendInstanceDamage(t, s)
-	lendCorrectionHolds(t, s)
-	before := tenanttest.FillBeforeDeidJobs(t, s)
-	takeBackCorrectionHolds(t, s)
-	takeBackInstanceDamage(t, s)
-	takeBackImportArrivals(t, s)
-	for _, c := range lent {
-		if _, err := s.pool.Exec(ctx, `ALTER TABLE jobs DROP COLUMN `+strings.Fields(c)[0]); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := s.pool.Exec(ctx, `DROP TABLE job_tallies`); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	// The pool's connections keep the plans of statements the fill ran on
-	// the lent columns; a server migrates before it serves, so they are
-	// dropped here as a new start would have none.
-	s.pool.Reset()
-	var indexes string
-	if err := s.pool.QueryRow(ctx, `SELECT string_agg(indexname, ',' ORDER BY indexname) FROM pg_indexes
-		WHERE schemaname = current_schema() AND tablename = 'jobs'`).Scan(&indexes); err != nil {
-		t.Fatal(err)
-	}
-	if indexes != "jobs_by_created,jobs_by_sender,jobs_by_state,jobs_in_progress,jobs_key,jobs_of_sender_in_progress,jobs_pkey" {
-		t.Errorf("the indexes of jobs after the migration: %s", indexes)
-	}
-	for _, stmt := range []string{
-		`UPDATE jobs SET kind = 'other' WHERE id = 'j-queued'`,
-		`UPDATE jobs SET deid_mode = 'check' WHERE id = 'j-queued'`,
-	} {
-		if _, err := s.pool.Exec(ctx, stmt); err == nil {
-			t.Errorf("the migrated jobs take %s", stmt)
-		}
-	}
-	tenanttest.CheckAfterDeidJobs(t, s, before)
 }

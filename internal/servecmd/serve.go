@@ -246,8 +246,12 @@ const notOurs = "the master database is not the one this installation was made w
 // server on a foreign master as if nothing were wrong. It reads a setting,
 // which needs the master's statements, and a driver may prepare every
 // statement on its first read, naming columns only the latest schema has;
-// so it runs after the migration, and an installation made by an older
-// version starts.
+// so it must run after the migration, or an installation made by an older
+// release would exit as "not ready; has it been migrated?". While the
+// schema is one baseline and nothing else, there is no older schema to
+// start and no test can show the order: it matters, and needs a test of an
+// installation made by the release before, from the first migration after
+// the baseline on.
 func checkIdentity(ctx context.Context, m master.Store, dir string) error {
 	want, err := server.ReadInstallationID(dir)
 	if err != nil {

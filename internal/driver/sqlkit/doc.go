@@ -19,6 +19,17 @@
 // not what this binary's queries were written against, and going on would
 // corrupt data or fail later in a place harder to understand.
 //
+// The first file, 0001_baseline.sql, is the whole schema of its database
+// (the master, or a tenant), each table written once. Until a first
+// release a schema change edits it in place, so the SHA-256 recorded for it
+// is the fingerprint of the schema a database was made from: one that
+// differs, by name or checksum, is refused as made by an earlier
+// development build (ErrEarlierBuild), with a message saying to make it
+// again, before the checks of later files; it is never migrated across.
+// From a first release on the baseline is fixed and later changes are files
+// after it. Fingerprint combines the drivers' baselines of one database, for
+// the files that carry its rows between installations.
+//
 // A file whose first line is exactly
 //
 //	-- nopacs:no-transaction
