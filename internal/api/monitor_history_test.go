@@ -85,16 +85,37 @@ func (f *fixture) statusHistory(t *testing.T) (string, string) {
 	return res.GetTenants()[0].GetEventCursor(), res.GetTenants()[0].GetEventHistory()
 }
 
+// lab1Feed returns lab1's event feed, which reads the history a cursor
+// names.
+func (f *fixture) lab1Feed(t *testing.T) tenant.Events {
+	t.Helper()
+	st, err := f.registry.Store("lab1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed, ok := st.(tenant.Events)
+	if !ok {
+		t.Fatal("lab1's database keeps no event feed")
+	}
+	return feed
+}
+
 // endsWithHistoryChanged receives from s until it ends, and fails the test
 // unless it ends with OUT_OF_RANGE and a message that begins with the
-// reason EVENT_HISTORY_CHANGED and holds want.
-func endsWithHistoryChanged(t *testing.T, what string, s nopacsv1connect.MonitorServiceWatchClientStream, want string) {
+// reason EVENT_HISTORY_CHANGED and holds want, or if an event of lab1 it
+// carries before that is of a history other than old. Events of the old
+// history may come first: the rebuild job's own steps are written to the
+// old history before the activation, and a stream that reads between the
+// two delivers them, rightly.
+func endsWithHistoryChanged(t *testing.T, what string, s nopacsv1connect.MonitorServiceWatchClientStream, feed tenant.Events, old, want string) {
 	t.Helper()
 	for {
 		m, err := s.Receive()
 		if err == nil {
 			if e := m.GetEvent(); e != nil && e.GetTenant() == "lab1" {
-				t.Fatalf("%s: an event of the new history reached a stream of the old: %v", what, e)
+				if h, err := feed.EventCursorHistory(e.GetCursor()); err != nil || h != old {
+					t.Fatalf("%s: an event of the history %q (%v) reached a stream of the history %q: %v", what, h, err, old, e)
+				}
 			}
 			continue
 		}
@@ -157,8 +178,9 @@ func TestWatchAcrossANewHistory(t *testing.T) {
 	if len(newHistory) != 32 || newHistory == oldHistory {
 		t.Fatalf("after the rebuild the status names the history %q, before %q", newHistory, oldHistory)
 	}
-	endsWithHistoryChanged(t, "a stream of one tenant open across the rebuild", one, "")
-	endsWithHistoryChanged(t, "a stream of every tenant open across the rebuild", all, "(tenant lab1)")
+	feed := f.lab1Feed(t)
+	endsWithHistoryChanged(t, "a stream of one tenant open across the rebuild", one, feed, oldHistory, "")
+	endsWithHistoryChanged(t, "a stream of every tenant open across the rebuild", all, feed, oldHistory, "(tenant lab1)")
 	if o := watchOnce(f.as(f.lab1Reader), &v1.WatchRequest{Scope: tenantScope("lab1"), Cursor: oldCursor}); o.code() != connect.CodeOutOfRange ||
 		!strings.Contains(o.err.Error(), tenant.ReasonHistoryChanged+":") {
 		t.Errorf("a stream opened from a cursor of the old history: %v, want OUT_OF_RANGE with %s", o.err, tenant.ReasonHistoryChanged)
