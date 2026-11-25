@@ -61,8 +61,17 @@ type Config struct {
 	// event.
 	Events tenant.Events
 	// OpenStorage opens one of the tenant's storages by name. The store is
-	// the caller's: the pass never closes it.
+	// the caller's: the pass never closes it. It is asked again for each
+	// scan, and again once Enter has admitted a rewrite, so a storage
+	// whose place changed meanwhile (switched to its replica) is written on
+	// the place its name names then.
 	OpenStorage func(ctx context.Context, name string) (blob.Store, error)
+	// Enter asks the gate every write to a storage asks before it lands
+	// bytes there, before a scan's sidecar is rewritten, and returns its
+	// release, called once the rewrite has ended. An error writes nothing
+	// and stops the pass, which is run again later from the first scan not
+	// done. Nil admits every rewrite.
+	Enter func(ctx context.Context, storage string) (release func(), err error)
 	// Lock takes the lock the archive step holds while it writes a scan's
 	// metadata and manifest on a storage, and returns its release.
 	Lock func(storage string, path label.Path) (unlock func())
@@ -118,7 +127,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
-	r := &runner{cfg: cfg, stores: map[string]blob.Store{}}
+	r := &runner{cfg: cfg}
 	cursor := ""
 	for {
 		page, err := cfg.Catalog.ListScans(ctx, tenant.ScanFilter{Order: tenant.OrderLabel}, master.Page{Limit: scanPage, Cursor: cursor})
@@ -151,21 +160,33 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 type runner struct {
 	cfg Config
 	rep Report
-	// stores are the storages opened so far, by name.
-	stores map[string]blob.Store
 }
 
-// storage returns the storage of that name, opened once a pass.
+// storage returns the storage of that name, opened for one scan's reads: a
+// store kept for the whole pass would go on naming the place a switch of
+// the storage left.
 func (r *runner) storage(ctx context.Context, name string) (blob.Store, error) {
-	if s, ok := r.stores[name]; ok {
-		return s, nil
+	return r.cfg.OpenStorage(ctx, name)
+}
+
+// admit asks the gate of writes to the storage named and, once it admits
+// the write, opens the storage, so the write lands on the place the name
+// names after any switch the gate held it through. It returns the store
+// and the gate's release, which the caller calls once its write has ended.
+func (r *runner) admit(ctx context.Context, name string) (blob.Store, func(), error) {
+	release := func() {}
+	if r.cfg.Enter != nil {
+		var err error
+		if release, err = r.cfg.Enter(ctx, name); err != nil {
+			return nil, nil, err
+		}
 	}
-	s, err := r.cfg.OpenStorage(ctx, name)
+	store, err := r.cfg.OpenStorage(ctx, name)
 	if err != nil {
-		return nil, err
+		release()
+		return nil, nil, err
 	}
-	r.stores[name] = s
-	return s, nil
+	return store, release, nil
 }
 
 // pause waits after a piece of work that took worked: as long again, or

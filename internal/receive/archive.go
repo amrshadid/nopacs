@@ -60,6 +60,17 @@ func (p *Pipeline) archive(ctx context.Context, w tenant.Work) error {
 	case r.State != reception.Identified:
 		return fault.New(fault.Internal, "an archive unit names a reception that is not identified")
 	}
+	if p.cfg.Pause != nil {
+		// Entered before the storage is opened and held to the step's end:
+		// a switch of the storage waits for this step's puts and commit, or
+		// this step waits for the switch and opens the place it leaves.
+		release, err := p.cfg.Pause.Enter(ctx, r.Storage)
+		if err != nil {
+			return err
+		}
+		defer release()
+		p.at("archive.entered")
+	}
 	store, err := p.cfg.OpenStorage(ctx, r.Storage)
 	if err != nil {
 		return err

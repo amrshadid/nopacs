@@ -120,6 +120,8 @@ type envOptions struct {
 	// pipeline starts, with the storages and senders it names added
 	// (route_test.go).
 	routing *tenant.Routing
+	// pause, when set, is the pipeline's Config.Pause (pause_test.go).
+	pause WritePause
 }
 
 // newEnv makes a tenant, its storage and receiver, and a started pipeline.
@@ -204,7 +206,7 @@ func newEnvAt(t testing.TB, dataDir string, start time.Time, opts envOptions) *e
 		},
 		IncomingRoot: filepath.Join(e.dataDir, "incoming"), Workers: workers, Lease: 30 * time.Second,
 		PollInterval: 2 * time.Second, BatchInterval: 5 * time.Second, RetryInterval: 20 * time.Second,
-		Forwarded: opts.forwarded,
+		Forwarded: opts.forwarded, Pause: opts.pause,
 	}
 	if opts.deid != nil {
 		e.setUpDeid(opts.deid)

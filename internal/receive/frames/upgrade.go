@@ -43,8 +43,12 @@ type UpgradeConfig struct {
 	// Catalog is the tenant's database.
 	Catalog UpgradeCatalog
 	// OpenStorage opens one of the tenant's storages by name. The store is
-	// the caller's: the pass never closes it.
+	// the caller's: the pass never closes it. It is asked again for each
+	// scan, and again once Enter has admitted a rewrite (Config.OpenStorage).
 	OpenStorage func(ctx context.Context, name string) (blob.Store, error)
+	// Enter asks the gate of writes to a storage before a scan's sidecar is
+	// rewritten there, as Config.Enter does. Nil admits every rewrite.
+	Enter func(ctx context.Context, storage string) (release func(), err error)
 	// Lock takes the lock the archive step holds while it writes a scan's
 	// metadata and manifest on a storage, and returns its release.
 	Lock func(storage string, path label.Path) (unlock func())
@@ -99,7 +103,8 @@ func Upgrade(ctx context.Context, cfg UpgradeConfig) (UpgradeReport, error) {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
 	u := &upgrader{
-		runner:   &runner{cfg: Config{OpenStorage: cfg.OpenStorage, Lock: cfg.Lock, Busy: cfg.Busy, Clock: cfg.Clock, Logger: cfg.Logger}, stores: map[string]blob.Store{}},
+		runner: &runner{cfg: Config{OpenStorage: cfg.OpenStorage, Enter: cfg.Enter, Lock: cfg.Lock, Busy: cfg.Busy, Clock: cfg.Clock,
+			Logger: cfg.Logger}},
 		cat:      cfg.Catalog,
 		profiles: map[string]map[int32]string{},
 	}
@@ -169,7 +174,7 @@ func (u *upgrader) scan(ctx context.Context, sc tenant.CatalogScan) error {
 			"subject", path.Subject, "session", path.Session, "scan", path.Scan)
 		return nil
 	}
-	n, err := u.rewrite(ctx, store, sc.Storage, path, key)
+	n, err := u.rewrite(ctx, sc.Storage, path, key)
 	switch {
 	case errors.Is(err, errDisagree) || errors.Is(err, sidecar.ErrFormat) || errors.Is(err, sidecar.ErrOrder) || errors.Is(err, sidecar.ErrIncomplete):
 		u.rep.ScansLeft++
@@ -185,11 +190,18 @@ func (u *upgrader) scan(ctx context.Context, sc tenant.CatalogScan) error {
 	return nil
 }
 
-// rewrite replaces the scan's sidecar of version 2 by one of version 3, under
-// the scan's lock so no reception writes the scan meanwhile and the rows read
-// are the ones its lines were written for. It returns how many lines it
-// wrote, 0 when the sidecar was not of version 2 under the lock.
-func (u *upgrader) rewrite(ctx context.Context, store blob.Store, storage string, path label.Path, key string) (int64, error) {
+// rewrite replaces the scan's sidecar of version 2 by one of version 3,
+// admitted by the gate of writes to the storage, on the place the storage
+// names once admitted, and under the scan's lock so no reception writes the
+// scan meanwhile and the rows read are the ones its lines were written for.
+// It returns how many lines it wrote, 0 when the sidecar was not of version
+// 2 under the lock.
+func (u *upgrader) rewrite(ctx context.Context, storage string, path label.Path, key string) (int64, error) {
+	store, release, err := u.admit(ctx, storage)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	unlock := u.cfg.Lock(storage, path)
 	defer unlock()
 	head, ok, err := readHead(ctx, store, key, sidecar.HeadLength)

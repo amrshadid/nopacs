@@ -126,9 +126,12 @@ func TestArchiveRecordsFrameTables(t *testing.T) {
 // archive whose sidecars were written before frame tables (version 1, no
 // line with a table) has every scan's sidecar rewritten to this version
 // with the tables the archive step would have written, and the feed holds
-// one frames event a scan and one for the pass's end.
+// one frames event a scan and one for the pass's end. Each rewrite, of
+// both passes, asks the pipeline's write gate of the scan's storage first
+// and releases it.
 func TestStartGivesOldSidecarsTheirTables(t *testing.T) {
-	e := newEnv(t, envOptions{})
+	pause := &fakePause{}
+	e := newEnv(t, envOptions{pause: pause})
 	e.send(framedFiles...)
 	rs := e.settle(3)
 	paths := scanPaths(t, e, rs)
@@ -161,6 +164,7 @@ func TestStartGivesOldSidecarsTheirTables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, enteredBefore, _ := pause.counts()
 	e.start()
 	var got []tenant.Event
 	e.waitFor("the pass's end", 10*time.Millisecond, func() bool {
@@ -185,6 +189,13 @@ func TestStartGivesOldSidecarsTheirTables(t *testing.T) {
 		return true
 	})
 	checkTables(t, e, paths, sentMap(t, framedFiles...))
+	e.waitFor("every entry of the gate released", 10*time.Millisecond, func() bool {
+		_, entered, released := pause.counts()
+		return entered == released
+	})
+	if _, entered, _ := pause.counts(); entered-enteredBefore < 2*len(paths) {
+		t.Errorf("the passes entered the write gate %d times for %d scans; want at least once a scan in each pass", entered-enteredBefore, len(paths))
+	}
 }
 
 // withoutV3 returns a line without the fields only the current version of

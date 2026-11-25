@@ -72,7 +72,7 @@ func (r *runner) scan(ctx context.Context, storage string, path label.Path) erro
 		if err != nil {
 			return r.leave(path, err)
 		}
-		n, err := r.rewrite(ctx, store, storage, path, key, tables, last)
+		n, err := r.rewrite(ctx, storage, path, key, tables, last)
 		if err != nil {
 			return r.leave(path, err)
 		}
@@ -232,16 +232,24 @@ func (c *countReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// rewrite gives the lines of the scan's sidecar the tables found, under the
-// scan's lock: through sidecar.Complete when the tables are the last batch,
-// which makes the sidecar complete, and through sidecar.Merge otherwise,
-// which keeps it at version 1 with this batch's lines done. It returns how
-// many lines took a table. The sidecar is read as it is under the lock, so
-// a line a reception replaced meanwhile, which has its own table, is kept
-// as the reception wrote it, and a table is given only to a line that
-// still names the file it was read from.
-func (r *runner) rewrite(ctx context.Context, store blob.Store, storage string, path label.Path, key string,
+// rewrite gives the lines of the scan's sidecar the tables found, admitted
+// by the gate of writes to the storage and under the scan's lock: through
+// sidecar.Complete when the tables are the last batch, which makes the
+// sidecar complete, and through sidecar.Merge otherwise, which keeps it at
+// version 1 with this batch's lines done. It returns how many lines took a
+// table. The storage is opened once the gate admits the rewrite, and the
+// sidecar is read as it is there under the lock, so a line a reception
+// replaced meanwhile, which has its own table, is kept as the reception
+// wrote it, and a table is given only to a line that still names the file
+// it was read from (its key, size and checksum: the same bytes on whichever
+// place they were read from).
+func (r *runner) rewrite(ctx context.Context, storage string, path label.Path, key string,
 	tables map[string]found, last bool) (int64, error) {
+	store, release, err := r.admit(ctx, storage)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	unlock := r.cfg.Lock(storage, path)
 	defer unlock()
 	head, ok, err := readHead(ctx, store, key, sidecar.HeadLength)

@@ -47,6 +47,7 @@ func (p *Pipeline) frameTables(ctx context.Context) {
 		OpenStorage: func(ctx context.Context, name string) (blob.Store, error) {
 			return p.cfg.OpenStorage(ctx, name)
 		},
+		Enter:       p.enterWrite,
 		Lock:        p.passLock,
 		HeaderLimit: p.headerLimit,
 		Busy:        p.busy,
@@ -81,6 +82,17 @@ func (p *Pipeline) frameTables(ctx context.Context) {
 	}
 }
 
+// enterWrite asks the pipeline's write gate (Config.Pause) before a pass
+// rewrites a scan's sidecar on storage, as the archive step asks it before
+// it writes: a switch of the storage to its replica then waits for the
+// rewrite, or the rewrite for the switch. No gate admits every write.
+func (p *Pipeline) enterWrite(ctx context.Context, storage string) (func(), error) {
+	if p.cfg.Pause == nil {
+		return func() {}, nil
+	}
+	return p.cfg.Pause.Enter(ctx, storage)
+}
+
 // passLock takes the lock the archive step holds while it writes the scan's
 // metadata and manifest on a storage, and returns its release.
 func (p *Pipeline) passLock(storage string, path label.Path) func() {
@@ -108,6 +120,7 @@ func (p *Pipeline) upgradePass(ctx context.Context) {
 		OpenStorage: func(ctx context.Context, name string) (blob.Store, error) {
 			return p.cfg.OpenStorage(ctx, name)
 		},
+		Enter:  p.enterWrite,
 		Lock:   p.passLock,
 		Busy:   p.busy,
 		Clock:  p.cfg.Clock,

@@ -45,6 +45,18 @@ type Limit func(ctx context.Context) (int64, error)
 // bytes, or the disk below its reserve.
 type Check func(ctx context.Context) (bool, error)
 
+// WritePause is the gate every write to a tenant's storage asks before it
+// lands bytes there (storageswitch.Gate). Enter waits while the storage is
+// paused, then admits the write and returns its release, or answers why
+// not: a switch of the storage to its replica holds new writes, waits for
+// those admitted to release, and swaps the storage's place only then, so a
+// write never lands on a place its storage's name no longer names.
+type WritePause interface {
+	// Enter admits a write to the storage named and returns its release,
+	// called once after the write's last effect; an error refuses it.
+	Enter(ctx context.Context, storage string) (func(), error)
+}
+
 // The defaults of a Config.
 const (
 	DefaultWorkers       = 4
@@ -156,6 +168,16 @@ type Config struct {
 	// longer keep the next pipeline from the same scan. Nil gives the
 	// pipeline locks of its own.
 	ScanLocks *ScanLocks
+	// Pause, when not nil, is asked by the archive step before it opens
+	// the reception's storage, and released after its last put and its
+	// commit: a reception admitted finishes on the place it opened, and one
+	// that comes while the storage is switched waits, or fails its step
+	// with the pause's refusal and is tried again after its retry delay.
+	// Every reception, release and import hand-off archives through this
+	// one step. The passes a start runs over older sidecars ask it too,
+	// before each rewrite of a scan's sidecar, and open the storage once
+	// admitted. Nil admits every write.
+	Pause WritePause
 }
 
 // withDefaults returns c with every zero field given its default, or an

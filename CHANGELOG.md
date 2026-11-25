@@ -324,6 +324,16 @@ scan, keeps it whole, and serves it through an API with keys.
   back, polls until it reads, and records the answer in the tenant's shared
   recall row (online until a time, or failed with a fixed reason, never the
   store's text). Not yet started by the server.
+- The storage switch runs a primary's move onto its replica on the server's
+  own goroutine: a preview names its blockers (a clean scrub of the replica
+  and an empty compare from it, each the newest of its kind) and gives a
+  confirm token bound to the tenant, both storages and the generation; once
+  accepted it pauses every archive step and sidecar rewrite on the primary at
+  one gate (UNAVAILABLE `STORAGE_SWITCHING`, reads go on), waits for writers in
+  flight, drains until every scan is in step, takes the owner record, seals
+  moved S3 secrets again for their new names and swaps both places in one
+  transaction; a restart refuses an accepted switch and finishes a swapped one.
+  Not yet started by the server.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.
