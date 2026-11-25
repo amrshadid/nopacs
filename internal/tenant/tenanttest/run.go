@@ -70,6 +70,9 @@ func Run(t *testing.T, d Driver) {
 	t.Run("Corrections", func(t *testing.T) {
 		runCorrections(t, func(tb testing.TB, id string) EventStore { return d.Open(tb, id) })
 	})
+	t.Run("Restoring", func(t *testing.T) {
+		runRestoring(t, func(tb testing.TB, id string) EventStore { return d.Open(tb, id) }, d.Scratch)
+	})
 	t.Run("ImportingShared", func(t *testing.T) {
 		runImportingShared(t, func(tb testing.TB, id string) (EventStore, EventStore) { return d.OpenPair(tb, id) })
 	})

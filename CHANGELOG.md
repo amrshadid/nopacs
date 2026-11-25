@@ -254,6 +254,25 @@ the code before this release is in github.com/amrshadid/coria.
   visible. A moved tenant serves reads while its storages' owner records still
   name this installation; after an import the next owner-record check (within
   30 seconds, or at start) fences it.
+- `nopacs-server backup restore --reconcile-only` reconciles an installation
+  whose databases the site brought back by its own means (a Postgres
+  point-in-time recovery, a copy of the SQLite files, a volume snapshot), in
+  place, through the restore's own reconcile: every key suspended, each
+  tenant's correction records newer than its rows applied, its catalog rebuilt
+  from the storages under a new event history; a held quarantined file whose
+  bytes are still in incoming stays held. It refuses a data directory a server
+  holds, an empty database, another baseline and a master of another
+  installation, each before anything is written; interrupted, it is run again.
+- A restore and a reconcile read every storage's owner record before writing
+  anything: a tenant handed to another installation is left fenced, serving no
+  data, and the others are restored or reconciled; any other refusal stops the
+  run before any key is suspended or storage taken; `--take-over` is offered
+  for another installation's record only when its claim is known to be stale.
+  A subject's delete brought back from its record holds data arriving under
+  every label the subject had before a relabel made before the delete. A
+  rebuild job a server had not ended no longer blocks a restore, a reconcile or
+  an import: it is canceled and its shadow removed. `serve`, `backup create` and
+  `tenant import` check the restore and reconcile markers again under the lock.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

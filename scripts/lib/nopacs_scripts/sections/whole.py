@@ -486,9 +486,9 @@ GROUPS = {"rebuild": group_rebuild, "scrub": group_scrub, "delete": group_delete
 def all_groups():
     """The groups of this module and those of the modules beside it, which
     import this one for the scene, so they are joined here at run time."""
-    from nopacs_scripts.sections import whole_client, whole_host, whole_jobs, whole_refs, whole_room, whole_versions
+    from nopacs_scripts.sections import whole_client, whole_host, whole_jobs, whole_reconcile, whole_refs, whole_room, whole_versions
     out = dict(GROUPS)
-    for m in (whole_versions, whole_host, whole_jobs, whole_refs, whole_client, whole_room):
+    for m in (whole_versions, whole_host, whole_jobs, whole_refs, whole_client, whole_room, whole_reconcile):
         out.update(m.GROUPS)
     return out
 

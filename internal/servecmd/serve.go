@@ -176,6 +176,12 @@ func runServe(ctx context.Context, opts Options, f serveFlags) error {
 	if err != nil {
 		return err
 	}
+	// Again under the lock: a restore or a reconcile that held it at the
+	// first look may have written its marker and died since.
+	if err := backup.CheckNotInterrupted(dir); err != nil {
+		_ = lock.Release()
+		return err
+	}
 	srv, reception, err := open(ctx, opts, f, dir, keyPath, lock, log)
 	if err != nil {
 		_ = lock.Release()
@@ -196,11 +202,8 @@ func exists(path string) bool {
 // master in another database (--master-env) is checked by checkIdentity
 // once it is open.
 func checkMade(dir, masterEnv string) error {
-	// A restore leaves its marker until the installation's id is written. The
-	// advice for an interrupted init below says to remove the key file, which
-	// after a restore may be the only copy of the key its backup opens with.
-	if backup.Interrupted(dir) {
-		return fault.New(fault.Invalid, "the data directory "+dir+": "+backup.InterruptedAdvice)
+	if err := backup.CheckNotInterrupted(dir); err != nil {
+		return err
 	}
 	key := exists(filepath.Join(dir, KeyFileName))
 	id := exists(filepath.Join(dir, server.IDFileName))

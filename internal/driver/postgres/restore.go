@@ -84,6 +84,16 @@ func (t *Tenant) HoldCommittedDeletes(ctx context.Context) (int64, error) {
 }
 
 // MarkQuarantineLost implements tenant.Restoring.
-func (t *Tenant) MarkQuarantineLost(ctx context.Context) (int64, error) {
-	return t.sending().MarkQuarantineLost(ctx)
+func (t *Tenant) MarkQuarantineLost(ctx context.Context, keep []string) (int64, error) {
+	return t.sending().MarkQuarantineLost(ctx, keep)
+}
+
+// HoldEarlierSubjectLabels implements tenant.Restoring.
+func (t *Tenant) HoldEarlierSubjectLabels(ctx context.Context) (int64, error) {
+	return t.sending().HoldEarlierSubjectLabels(ctx)
+}
+
+// EndRebuilds implements tenant.Restoring.
+func (t *Tenant) EndRebuilds(ctx context.Context, now time.Time) ([]string, error) {
+	return t.sending().EndRebuilds(ctx, now)
 }

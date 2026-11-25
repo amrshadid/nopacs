@@ -411,7 +411,7 @@ func writeDeletedTargets(ctx context.Context, tx SendingTx, id string, t tenant.
 		return add("instance", r.instance.uid)
 	}
 	if t.Level() == corr.LevelSubject {
-		labels, err := subjectLabels(ctx, tx, t.Subject)
+		labels, err := subjectLabels(ctx, tx, t.Subject, "")
 		if err != nil {
 			return err
 		}
@@ -440,20 +440,33 @@ const maxEarlierLabels = 64
 // subjectLabels returns a subject's label, then each label it had before a
 // relabel published since, newest first: a scanner or a peer that still
 // knows the subject by an earlier label would bring its data back under
-// that label, which a withdrawal must hold as well.
-func subjectLabels(ctx context.Context, tx SendingTx, subject string) ([]string, error) {
+// that label, which a withdrawal must hold as well. before, when not
+// empty, is the id of the delete the labels are for: only relabels whose
+// ids sort before it are followed, those a delete prepared then found
+// published (an id is made from the time its correction began, and a
+// subject with a relabel not yet purged cannot be deleted), so a relabel
+// that later gave the label to another subject is not taken for one.
+func subjectLabels(ctx context.Context, tx SendingTx, subject, before string) ([]string, error) {
 	out := []string{subject}
 	seen := map[string]bool{label.Fold(subject): true}
+	query := `SELECT r.old_subject FROM relabels AS r JOIN corrections AS c ON c.id = r.correction_id
+			WHERE r.level = 'subject' AND lower(r.new_label) = ? AND c.state IN ('committed', 'purging', 'purged')`
+	if before != "" {
+		query += ` AND r.correction_id < ?`
+	}
+	query += ` ORDER BY r.correction_id DESC`
 	for i := 0; i < len(out) && len(out) < maxEarlierLabels; i++ {
 		var earlier []string
-		err := tx.Query(ctx, `SELECT r.old_subject FROM relabels AS r JOIN corrections AS c ON c.id = r.correction_id
-			WHERE r.level = 'subject' AND lower(r.new_label) = ? AND c.state IN ('committed', 'purging', 'purged') ORDER BY r.correction_id DESC`,
-			[]any{label.Fold(out[i])}, func(row Row) error {
-				var s string
-				err := row.Scan(&s)
-				earlier = append(earlier, s)
-				return err
-			})
+		args := []any{label.Fold(out[i])}
+		if before != "" {
+			args = append(args, before)
+		}
+		err := tx.Query(ctx, query, args, func(row Row) error {
+			var s string
+			err := row.Scan(&s)
+			earlier = append(earlier, s)
+			return err
+		})
 		if err != nil {
 			return nil, err
 		}

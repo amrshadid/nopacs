@@ -12,7 +12,6 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/checkedread"
-	"github.com/amrshadid/nopacs/internal/cli/output"
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -53,7 +52,13 @@ func reconcile(ctx context.Context, cfg RestoreConfig, m master.Store, installat
 	if res.Credentials, err = missingCredentials(ctx, p, cfg.DataDir, t.row.Name); err != nil {
 		return res, err
 	}
-	if res.QuarantineMarked, err = rs.MarkQuarantineLost(ctx); err != nil {
+	var keep []string
+	if cfg.reconcileOnly {
+		if keep, err = keptQuarantine(ctx, p, cfg.incoming, t.row.Name); err != nil {
+			return res, err
+		}
+	}
+	if res.QuarantineMarked, err = rs.MarkQuarantineLost(ctx, keep); err != nil {
 		return res, err
 	}
 	opener := place.Opener{Values: settingvalue.Reader{Master: m}, Keys: cfg.Keys, StaleUploadAge: -1}
@@ -73,10 +78,9 @@ func reconcile(ctx context.Context, cfg RestoreConfig, m master.Store, installat
 	for _, s := range storages {
 		st, err := opener.Open(ctx, pt, s)
 		if err != nil {
-			return res, fault.Wrap(fault.KindOf(err), err, "the storage "+s.Name+" cannot be opened: "+fault.Message(err))
+			return res, prefixed(err, "the storage "+s.Name+" cannot be opened: ")
 		}
-		gen, err := takeOwner(ctx, st, ownerClaim{installation: installation, tenantID: t.row.ID, storage: s.Name,
-			held: generations[s.Name], takeOver: cfg.TakeOver, keys: cfg.Keys}, now)
+		gen, err := takeOwner(ctx, st, restoreClaim(cfg, installation, t.row.ID, s.Name, generations[s.Name]), now)
 		if err == nil {
 			err = rs.SetStorageOwner(ctx, s.Name, gen, now)
 		}
@@ -93,6 +97,13 @@ func reconcile(ctx context.Context, cfg RestoreConfig, m master.Store, installat
 	// confirms it: a record lagging an undo made after the backup cannot
 	// be told apart from one that did not, and a purge cannot be undone.
 	if res.Held, err = rs.HoldCommittedDeletes(ctx); err != nil {
+		return res, err
+	}
+	// Once every record is adopted, a relabel's among them: a subject's
+	// delete made from its record names only the label its record holds,
+	// and data arriving under a label the subject had before would be
+	// archived again, though the delete withdrew it.
+	if _, err := rs.HoldEarlierSubjectLabels(ctx); err != nil {
 		return res, err
 	}
 	// The deletes made committed from their records hide nothing yet: the
@@ -112,6 +123,9 @@ func reconcile(ctx context.Context, cfg RestoreConfig, m master.Store, installat
 		return nil, fault.New(fault.NotFound, "the tenant has no storage "+name)
 	})
 	if err != nil {
+		return res, err
+	}
+	if err := endRebuilds(ctx, rs, p, now); err != nil {
 		return res, err
 	}
 	cfg.catalogFirst = unhidden
@@ -223,53 +237,33 @@ type ownerClaim struct {
 	what string
 	// again says how to run the command again to take the storage over.
 	again string
+	// command names the command, for the refusal of a record naming
+	// another installation: "the restore" when empty.
+	command string
+}
+
+// restoreClaim is the claim a restore's, or a reconcile's, reconcile makes
+// on the storage named storage of the tenant whose id is tenantID.
+func restoreClaim(cfg RestoreConfig, installation, tenantID, storage string, held int64) ownerClaim {
+	c := ownerClaim{installation: installation, tenantID: tenantID, storage: storage, held: held, takeOver: cfg.TakeOver, keys: cfg.Keys}
+	if cfg.reconcileOnly {
+		c.what, c.command = "the restored database", "the reconcile"
+		c.again = "run the reconcile again with --take-over, so this installation owns it (a reconcile interrupted after it took the " +
+			"storage over is run again the same way)"
+	}
+	return c
 }
 
 // takeOwner writes the storage's owner record naming this installation, at
 // one generation past both the record there and the one held, and returns
-// it. A record there that names another installation or tenant than the
-// claim expects, or a generation past the one held, says someone took the
-// storage over after the file was made (another installation it was handed
-// to, or a restore since, which may still be writing to it); so does a
-// record naming this installation whose MAC does not verify under its key
-// file, which this installation did not write. Either is refused unless the
-// claim says to take it over, since two installations writing one storage
-// each hide the other's writes.
+// it, unless the record there refuses the claim (ownerClaim.judge).
 func takeOwner(ctx context.Context, st blob.Store, c ownerClaim, now time.Time) (int64, error) {
-	gen := c.held
-	from, what, again := c.from, c.what, c.again
-	if from == "" {
-		from = c.installation
+	r, err := readOwner(ctx, st, c.storage)
+	if err != nil {
+		return 0, err
 	}
-	if what == "" {
-		what = "the backup"
-	}
-	if again == "" {
-		again = "run the restore again with --take-over, so this installation owns it (a restore interrupted after it took the storage " +
-			"over is run again the same way)"
-	}
-	rc, err := st.Read(ctx, layout.OwnerKey, 0, -1)
-	switch {
-	case err == nil:
-		o, derr := record.DecodeOwner(rc)
-		_ = rc.Close()
-		if derr != nil && !c.takeOver {
-			return 0, fault.Wrap(fault.Invalid, derr, "the storage "+c.storage+"'s owner record cannot be read; "+again)
-		}
-		if derr == nil {
-			forged := ""
-			if o.Installation == c.installation && record.VerifyOwner(o, c.keys) != nil {
-				forged = " (its MAC does not verify under this key file: this installation did not write it)"
-			}
-			if !c.takeOver && (o.Installation != from || o.Tenant != c.tenantID || o.Generation > c.held || forged != "") {
-				return 0, fault.New(fault.Conflict, "the storage "+c.storage+"'s owner record names installation "+output.Clean(o.Installation)+
-					", tenant "+output.Clean(o.Tenant)+", at owner generation "+strconv.FormatInt(o.Generation, 10)+forged+", and "+what+" holds generation "+
-					strconv.FormatInt(c.held, 10)+" for installation "+from+", tenant "+c.tenantID+
-					": another installation, or a restore made since, took it over. Stop whatever uses it now, then "+again)
-			}
-			gen = max(gen, o.Generation)
-		}
-	case fault.KindOf(err) != fault.NotFound:
+	gen, _, err := c.judge(r)
+	if err != nil {
 		return 0, err
 	}
 	gen, err = nextGeneration(c.storage, gen)
@@ -413,9 +407,12 @@ func rebuildCatalog(ctx context.Context, cfg RestoreConfig, m master.Store, t op
 	if _, err := rand.Read(id); err != nil {
 		return tenant.Job{}, nil, fault.Wrap(fault.Internal, err, "no random id could be made")
 	}
-	method, user, after := restoreMethod, "restore", "a restore"
-	if cfg.method != "" {
+	method, user, after := restoreMethod, restoreUser, "a restore"
+	switch {
+	case cfg.method != "":
 		method, user, after = cfg.method, cfg.localUser, "an import"
+	case cfg.reconcileOnly:
+		method, user, after = reconcileMethod, reconcileUser, "a restore by the site's own point-in-time recovery"
 	}
 	job, err := p.CreateJob(ctx, tenant.NewJob{ID: user + hex.EncodeToString(id), Kind: tenant.JobRebuild, Rebuild: rj, Created: now},
 		master.AuditEntry{ID: server.NewID(), Time: now, LocalUser: user, Method: method, TenantName: t.row.Name,

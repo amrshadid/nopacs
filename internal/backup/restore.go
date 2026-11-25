@@ -51,8 +51,9 @@ type RestoreConfig struct {
 	RebuildTimeout time.Duration
 	// TakeOver lets the restore write a storage's owner record over one
 	// that names another installation or tenant, or a generation past the
-	// backup's; without it such a storage fails the restore, since someone
-	// took it over after the backup.
+	// backup's; without it a storage another installation's record names
+	// leaves its tenant fenced, and any other such storage fails the
+	// restore, since someone took it over after the backup.
 	TakeOver bool
 
 	// method and localUser name the audit entries the reconcile writes:
@@ -61,6 +62,13 @@ type RestoreConfig struct {
 	// catalogFirst are the deletes whose data the rebuild catalogs, for
 	// the reconcile to hide after it (tenant.Restoring.HideDeletes).
 	catalogFirst []string
+	// reconcileOnly says the databases were not loaded from a backup but
+	// restored by the site's own point-in-time recovery (ReconcileOnly):
+	// it names the audit entries and the refusals the reconcile writes.
+	reconcileOnly bool
+	// incoming is the root of the incoming areas of a reconcile in place,
+	// whose quarantined files' bytes are there (keptQuarantine).
+	incoming string
 }
 
 // DefaultRebuildTimeout bounds one tenant's rebuild at restore.
@@ -73,6 +81,10 @@ const keyFileName = "key"
 type Report struct {
 	// Installation is the restored installation's id.
 	Installation string
+	// ReconcileOnly says no backup was loaded: the databases are those the
+	// site restored by its own point-in-time recovery, each reconciled from
+	// the newest rows it holds (ReconcileOnly). BackupTime is then zero.
+	ReconcileOnly bool
 	// BackupTime is when the backup was made.
 	BackupTime time.Time
 	// Sections are the databases restored, the master first.
@@ -87,6 +99,12 @@ type Report struct {
 type TenantResult struct {
 	// Tenant is its name.
 	Tenant string
+	// Fenced is why the tenant was not reconciled: an owner record on one
+	// of its storages names another installation, which writes it now. A
+	// restore and a reconcile in place leave such a tenant fenced (read
+	// only, serving no data) in the master, its storages as they were;
+	// empty for a tenant reconciled.
+	Fenced string
 	// QuarantineMarked counts the quarantined files held whose bytes were
 	// kept, marked incoming lost (tenant.Restoring.MarkQuarantineLost).
 	QuarantineMarked int64
@@ -126,8 +144,10 @@ type TenantResult struct {
 
 // Restore restores the backup in cfg.File into an empty data directory, with
 // no server running (package doc): it checks the whole file first, then
-// loads every database, suspends every key, reconciles each tenant with its
-// storages, and writes the installation's id file last.
+// loads every database, reads every storage's owner record, suspends every
+// key, reconciles each tenant with its storages but one another
+// installation writes, which it leaves fenced, and writes the
+// installation's id file last.
 func Restore(ctx context.Context, cfg RestoreConfig) (Report, error) {
 	if cfg.Keys == nil || cfg.File == "" || cfg.DataDir == "" || cfg.MasterAddress == "" {
 		return Report{}, fault.New(fault.Internal, "backup: a restore needs the file, the key file, the data directory and the master's address")
@@ -184,20 +204,41 @@ func Restore(ctx context.Context, cfg RestoreConfig) (Report, error) {
 	if err != nil {
 		return rep, err
 	}
+	// Every owner record is judged before any is written: a storage refused
+	// after others were taken over would leave those taken from whoever
+	// writes them now. A tenant a storage of which another installation's
+	// record names (handed off by an export, imported there) is left to
+	// it, fenced, as a reconcile in place leaves it: a backup the source
+	// made between the hand-off and the tenant's removal must still restore
+	// the other tenants, and refusing it would leave only --take-over,
+	// which takes every storage and fences the new owner's live tenant. A
+	// fenced tenant serves no data, so its catalog the backup does not hold
+	// is never read.
+	others, err := claimsOf(ctx, cfg, l.master, v.Header.Installation, l.tenants)
+	if err != nil {
+		return rep, err
+	}
 	now := cfg.Now().UTC().Truncate(time.Microsecond)
-	if rep.KeysSuspended, err = suspendKeys(ctx, l.master, v, now); err != nil {
+	if rep.KeysSuspended, err = suspendKeys(ctx, l.master, restoreMethod, restoreUser, now); err != nil {
 		return rep, err
 	}
 	lost := map[string]TenantLoss{}
 	for _, x := range v.Lost {
 		lost[x.Tenant] = x
 	}
-	for _, t := range l.tenants {
+	for i, t := range l.tenants {
+		if others[i] != "" {
+			rep.Tenants = append(rep.Tenants, TenantResult{Tenant: t.row.Name, Fenced: others[i], Loss: lost[t.row.Name]})
+			if err := fenceTenant(ctx, cfg, l.master, t.row, others[i], now); err != nil {
+				return rep, prefixed(err, "backup: the tenant "+t.row.Name+" cannot be left fenced: ")
+			}
+			continue
+		}
 		res, err := reconcile(ctx, cfg, l.master, v.Header.Installation, t, now)
 		res.Loss = lost[t.row.Name]
 		rep.Tenants = append(rep.Tenants, res)
 		if err != nil {
-			return rep, fault.Wrap(fault.KindOf(err), err, "backup: the tenant "+t.row.Name+" cannot be reconciled with its storages: "+fault.Message(err))
+			return rep, prefixed(err, "backup: the tenant "+t.row.Name+" cannot be reconciled with its storages: ")
 		}
 	}
 	if err := appendRestoreAudit(ctx, l.master, rep, now); err != nil {
@@ -324,8 +365,7 @@ func lockDir(dir, keyFile string) (*server.Lock, error) {
 	}
 	lock, err := server.TakeLock(dir)
 	if fault.KindOf(err) == fault.Conflict {
-		return nil, fault.Wrap(fault.Conflict, err, "backup: the data directory "+dir+" is locked by another process, a server or another "+
-			"restore: "+fault.Message(err))
+		return nil, prefixed(err, "backup: the data directory "+dir+" is locked by another process, a server or another restore: ")
 	}
 	if err != nil {
 		return nil, err
@@ -436,7 +476,7 @@ func load(ctx context.Context, cfg RestoreConfig, f io.Reader, v Verified) (*loa
 		}
 		l.tenants = append(l.tenants, openedTenant{row: row, store: st})
 		if err := loadSection(ctx, rd, st, v, i); err != nil {
-			return l, fault.Wrap(fault.KindOf(err), err, "backup: the tenant "+s.Tenant+"'s database cannot be loaded: "+fault.Message(err))
+			return l, prefixed(err, "backup: the tenant "+s.Tenant+"'s database cannot be loaded: ")
 		}
 		if err := st.Migrate(ctx); err != nil {
 			return l, err
@@ -560,37 +600,4 @@ func OpenTenant(ctx context.Context, keys *secret.Keys, dataDir string, row mast
 		return driver.PostgresTenants{}.Open(ctx, row.ID, row.Name, address)
 	}
 	return nil, fault.New(fault.Invalid, "backup: the tenant "+row.Name+" is on a database type this server does not know")
-}
-
-// restoreMethod is the method of the audit entries a restore writes.
-const restoreMethod = "nopacs backup restore"
-
-// suspendKeys suspends every key the master holds.
-func suspendKeys(ctx context.Context, m master.Store, v Verified, now time.Time) (int64, error) {
-	ks, ok := m.(master.KeySuspension)
-	if !ok {
-		return 0, fault.New(fault.Internal, "backup: this database type cannot suspend keys")
-	}
-	return ks.SuspendKeys(ctx, now, master.AuditEntry{ID: server.NewID(), Time: now, LocalUser: "restore", Method: restoreMethod,
-		Object: "keys", Outcome: master.OutcomeDone,
-		Reason: "every key a restore brings back is suspended, since a key revoked after the backup would work again; the local operator rotates each key to be used again"})
-}
-
-// appendRestoreAudit writes the restore's own entry, with what it lost, in
-// the master's log.
-func appendRestoreAudit(ctx context.Context, m master.Store, rep Report, now time.Time) error {
-	e := master.AuditEntry{ID: server.NewID(), Time: now, LocalUser: "restore", Method: restoreMethod, Object: rep.Installation,
-		Outcome: master.OutcomeDone, Reason: "the installation restored from a backup made at " + rep.BackupTime.Format(time.RFC3339)}
-	pairs := []string{"backup_time", rep.BackupTime.Format(time.RFC3339Nano), "keys_suspended", strconv.FormatInt(rep.KeysSuspended, 10)}
-	for _, t := range rep.Tenants {
-		var files, receptions int64
-		for _, r := range t.Loss.Receptions {
-			files += r.Files
-			receptions += r.Receptions
-		}
-		pairs = append(pairs, "lost_receptions."+t.Tenant, strconv.FormatInt(receptions, 10),
-			"lost_files."+t.Tenant, strconv.FormatInt(files, 10),
-			"lost_quarantine_files."+t.Tenant, strconv.FormatInt(t.Loss.QuarantineFiles, 10))
-	}
-	return m.AppendAudit(ctx, e.WithDetails(pairs...))
 }

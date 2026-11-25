@@ -113,6 +113,10 @@ func ImportTenant(ctx context.Context, cfg ImportConfig) (ImportReport, error) {
 	if cfg.RebuildTimeout <= 0 {
 		cfg.RebuildTimeout = DefaultRebuildTimeout
 	}
+	// The caller holds the lock, so no restore or reconcile can begin now.
+	if err := CheckNotInterrupted(cfg.DataDir); err != nil {
+		return rep, err
+	}
 	tk, err := secret.TransferKeys(cfg.TransferKey)
 	if err != nil {
 		return rep, err
@@ -269,7 +273,7 @@ func reconcileImport(ctx context.Context, cfg ImportConfig, row master.Tenant, s
 	if res.Credentials, err = missingCredentials(ctx, p, cfg.DataDir, row.Name); err != nil {
 		return res, 0, err
 	}
-	if res.QuarantineMarked, err = rs.MarkQuarantineLost(ctx); err != nil {
+	if res.QuarantineMarked, err = rs.MarkQuarantineLost(ctx, nil); err != nil {
 		return res, 0, err
 	}
 	opener := place.Opener{Values: settingvalue.Reader{Master: cfg.Master}, Keys: cfg.Keys, StaleUploadAge: -1}
@@ -310,8 +314,19 @@ func reconcileImport(ctx context.Context, cfg ImportConfig, row master.Tenant, s
 		}
 		res.Owners = append(res.Owners, Owner{Storage: s.Name, Generation: gen})
 	}
+	// The export's database may hold a rebuild its server was working, which
+	// would refuse the import's own (endRebuilds).
+	if err := endRebuilds(ctx, rs, p, now); err != nil {
+		return res, 0, err
+	}
 	rewritten, err := rewriteRecords(ctx, cfg, row, cs, open)
 	if err != nil {
+		return res, rewritten, err
+	}
+	// As a restore's reconcile does: the export's rows were written by the
+	// exporting installation, which may itself have made a delete from its
+	// record.
+	if _, err := rs.HoldEarlierSubjectLabels(ctx); err != nil {
 		return res, rewritten, err
 	}
 	rcfg := RestoreConfig{Keys: cfg.Keys, Scratch: cfg.Scratch, Log: cfg.Log, RebuildTimeout: cfg.RebuildTimeout, method: ImportMethod, localUser: importUser}

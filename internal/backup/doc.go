@@ -59,14 +59,20 @@
 // ends; then it takes the data directory's lock (the server's), writes its
 // marker (MarkerPath), loads each database at its own schema version from
 // the same open file, each section's digest checked before its load
-// commits, and migrates it; suspends every key, whatever its row held; and
+// commits, and migrates it; reads every storage's owner record, writing
+// nothing (claimsOf), leaving fenced and not reconciled a tenant another
+// installation's record names, and refusing before anything else is
+// written on any other record that refuses the restore; suspends every
+// key, whatever its row held; and
 // reconciles each tenant with its storages: its quarantined files whose
 // bytes were in incoming marked incoming lost, its storages' owner records
 // taken at the next generation (one naming another owner, or a later
 // generation, refused unless RestoreConfig.TakeOver), the correction
 // records adopted (tenant.Restoring: a record is not authenticated, so it
 // never moves a row the backup holds, and one with no row becomes an
-// unresolved correction an admin decides), the catalog rebuilt from the
+// unresolved correction an admin decides; a subject's delete then holds
+// every earlier label of its subject), any rebuild left not ended
+// canceled, the catalog rebuilt from the
 // storages through a rebuild job of replace mode (package rebuild; safe
 // with nothing running), each record applied as its row says, which begins
 // a new event history. The installation's id file, which the server needs
@@ -74,6 +80,15 @@
 // stopped half way leaves a data directory the server refuses, with the
 // marker saying a restore was interrupted, rather than one with part of an
 // archive.
+//
+// ReconcileOnly runs the same reconcile on databases a site restored by its
+// own point-in-time recovery, in place, with no backup read: each
+// database's recovery point is the newest rows it holds, and it keeps its
+// own marker (ReconcileMarkerPath) while it runs, since the advice for an
+// interrupted restore, to empty the data directory, would destroy the
+// site's only copy. A tenant a storage of which another installation's
+// owner record names is not reconciled there but left fenced, and a
+// quarantined file whose bytes are still in incoming is kept.
 //
 // # What this package must never do
 //

@@ -81,7 +81,7 @@ func (k Sending) previewClears(ctx context.Context, tx SendingTx, r targetRows, 
 	var labels []string
 	if r.level == corr.LevelSubject {
 		var err error
-		if labels, err = subjectLabels(ctx, tx, target.Subject); err != nil {
+		if labels, err = subjectLabels(ctx, tx, target.Subject, ""); err != nil {
 			return err
 		}
 		p.HeldAfterPurge = labels

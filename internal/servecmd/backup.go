@@ -167,6 +167,12 @@ func runBackupCreate(ctx context.Context, opts Options, dir, masterEnv, out stri
 		return err
 	}
 	defer func() { _ = lock.Release() }()
+	// Again under the lock: a restore or a reconcile interrupted since the
+	// first look left its marker, and a backup of its databases would copy
+	// them loaded or reconciled part way.
+	if err := backup.CheckNotInterrupted(dir); err != nil {
+		return err
+	}
 	keys, err := secret.LoadKeyFile(filepath.Join(dir, KeyFileName))
 	if err != nil {
 		return err
@@ -255,10 +261,10 @@ func printSummary(opts Options, out string, sum backup.Summary) error {
 // backupRestore returns "backup restore".
 func backupRestore(opts Options) *cobra.Command {
 	var keyFile, masterEnv, scratch string
-	var takeOver bool
+	var takeOver, reconcileOnly bool
 	cmd := &cobra.Command{
-		Use:   "restore FILE",
-		Short: "Restore a backup into an empty data directory",
+		Use:   "restore FILE | --reconcile-only",
+		Short: "Restore a backup into an empty data directory, or reconcile databases a site restored itself",
 		Long: `Restore the backup FILE into the data directory, which must be absent, empty,
 or hold only the key file. The server must not run: the restore takes the
 data directory's lock, so neither a server nor a second restore runs on it.
@@ -279,9 +285,17 @@ holds its data, never purged nor undone by its record), and one that
 disagrees with the backup's row leaves the row as it is and is reported.
 What could not be brought back is printed, per tenant.
 
-A storage whose owner record names another installation or tenant, or a
-later generation than the backup's, was taken over after the backup; the
-restore refuses it unless --take-over is given. Stop whatever uses it first.
+Every storage's owner record is read before anything of the restore's own
+is written. One that names another installation was taken over by it (a
+hand-off, or a restore of its own), which writes it now: that tenant is left
+fenced (read only, serving no data), not reconciled, and the report names
+it; the others are restored. --take-over, which takes every storage, is for
+a claim known to be stale only. One that names another tenant, or this
+installation at a later generation than the backup's, says a restore since
+took the storage over: the restore refuses before writing anything; stop
+whatever uses it, then give --take-over. A tenant moved or fenced in the
+backup stays so after --take-over until nopacs tenant reclaim. A rebuild the
+backup holds not ended is canceled.
 
 The installation's id is written last. A restore stopped half way leaves a
 data directory the server refuses to start on, with a marker saying a restore
@@ -292,22 +306,81 @@ The key file is --key-file, or the data directory's key. A tenant on Postgres
 is restored into the database its address names, which must be empty, and its
 catalog is rebuilt in --scratch-schema, which must exist.
 
+With --reconcile-only, no FILE is read: the site has restored the databases
+itself, by its own point-in-time recovery (a Postgres recovery to a moment, a
+copy of the SQLite files, a volume snapshot), into the installation in
+place: its key file in the data directory (or --key-file), the master where
+the data directory or --master-env says, each tenant's database at the
+address the master holds. Each is brought to this version's schema, and the
+same reconcile as after a restore runs: every key suspended, each tenant's
+storages taken over, the correction records newer than the restored rows
+applied, the catalog rebuilt from the storages, a new event history begun.
+It refuses a data directory a server or a restore runs on (the lock), an
+empty database, a master with no installation id or whose key check the key
+file does not open (before anything is migrated), and one made from another
+baseline schema. A tenant one of whose storages another installation's
+owner record names is not reconciled: it is left fenced (read only), its
+storages untouched, and the report names it; the others are reconciled. A
+quarantined file whose bytes are in incoming whole is kept. A reconcile
+stopped half way leaves a marker the server refuses to start on; run it
+again.
+
 The data directory is --data-dir, or NOPACS_DATA_DIR.`,
-		Example: `  nopacs-server backup restore /backups/nopacs-2026-11-22.backup --data-dir /var/lib/nopacs --key-file /safe/nopacs.key`,
-		Args:    cobra.ExactArgs(1),
+		Example: `  nopacs-server backup restore /backups/nopacs-2026-11-22.backup --data-dir /var/lib/nopacs --key-file /safe/nopacs.key
+  MASTER_DB='postgres://...' nopacs-server backup restore --reconcile-only --data-dir /var/lib/nopacs --master-env MASTER_DB --scratch-schema rebuild`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := dataDir(cmd, opts.Getenv)
 			if err != nil {
 				return err
 			}
+			if reconcileOnly {
+				if len(args) != 0 {
+					return fault.New(fault.Invalid, "--reconcile-only reads no backup: give no FILE, or leave out --reconcile-only to restore FILE")
+				}
+				return runReconcileOnly(cmd.Context(), opts, dir, keyFile, masterEnv, scratch, takeOver)
+			}
+			if len(args) != 1 {
+				return fault.New(fault.Invalid, "give the backup FILE to restore, or --reconcile-only for databases the site restored itself")
+			}
 			return runBackupRestore(cmd.Context(), opts, dir, args[0], keyFile, masterEnv, scratch, takeOver)
 		},
 	}
 	cmd.Flags().StringVar(&keyFile, "key-file", "", "the installation key file the backup was made with; default the data directory's")
-	cmd.Flags().StringVar(&masterEnv, "master-env", "", "the name of an environment variable holding the address of the empty database to restore the master into, when it is not SQLite in the data directory")
+	cmd.Flags().StringVar(&masterEnv, "master-env", "", "the name of an environment variable holding the address of the empty database to restore the master into (with --reconcile-only, of the master the site restored), when it is not SQLite in the data directory")
 	cmd.Flags().StringVar(&scratch, "scratch-schema", "", "the Postgres schema the catalog of a tenant on Postgres is rebuilt in")
-	cmd.Flags().BoolVar(&takeOver, "take-over", false, "take a storage over even when its owner record names another installation or tenant, or a later generation than the backup's")
+	cmd.Flags().BoolVar(&takeOver, "take-over", false, "take a storage over even when its owner record names another installation or tenant, or a later generation than the backup's (or the restored database's); for another installation's, only when its claim is known to be stale")
+	cmd.Flags().BoolVar(&reconcileOnly, "reconcile-only", false, "read no backup: reconcile the databases the site restored itself, in place, with the storages")
 	return cmd
+}
+
+// runReconcileOnly reconciles the installation in dir, whose databases the
+// site restored by its own point-in-time recovery, with its storages.
+func runReconcileOnly(ctx context.Context, opts Options, dir, keyFile, masterEnv, scratch string, takeOver bool) error {
+	if keyFile == "" {
+		keyFile = filepath.Join(dir, KeyFileName)
+	}
+	keys, err := secret.LoadKeyFile(keyFile)
+	if err != nil {
+		return err
+	}
+	address, _, err := masterAddress(dir, masterEnv, opts.Getenv)
+	if err != nil {
+		return err
+	}
+	rep, err := backup.ReconcileOnly(ctx, backup.ReconcileConfig{Keys: keys, DataDir: dir, MasterAddress: address, Scratch: scratch, TakeOver: takeOver,
+		IncomingRoot: filepath.Join(dir, IncomingDirName)})
+	if err != nil {
+		if rep.Installation != "" {
+			_ = rep.Print(opts.Stderr)
+		}
+		return err
+	}
+	if err := rep.Print(opts.Stdout); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(opts.Stdout, "\nStart the server with:\n  nopacs-server serve --data-dir %s\n", dir)
+	return err
 }
 
 // runBackupRestore restores file into dir.

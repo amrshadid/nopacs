@@ -55,12 +55,41 @@ type Restoring interface {
 	// not (StateReasonRestoreHeld), so none is purged until an admin
 	// confirms it, and answers how many it marked.
 	HoldCommittedDeletes(ctx context.Context) (int64, error)
+	// HoldEarlierSubjectLabels makes every delete of a subject that is
+	// committed name, beside each subject label it names, every label that
+	// subject had before a relabel published before the delete began, as a
+	// delete's publish names them, so data arriving under a label a scanner
+	// still knows the subject by is held; a relabel that began after the
+	// delete (one that gave its label to another subject once the delete
+	// was purged) is not followed. A delete AdoptCorrection made from its record
+	// names only the label its record holds, and the relabel that gave up
+	// an earlier label may be adopted after it (the records are read in
+	// their storages' listing order), so a restore runs this once every
+	// record is adopted. A delete purged is left as it is: an admin may
+	// have allowed arrivals under one of its labels since
+	// (Corrections.AllowArrivals). It answers how many labels it added.
+	HoldEarlierSubjectLabels(ctx context.Context) (int64, error)
+	// EndRebuilds ends every rebuild job not ended as canceled, with the
+	// reason JobReasonEndedByRestore and its event, and answers their ids.
+	// A database brought back may hold a rebuild a server was working when
+	// it was copied, whose worker is gone; while it is not ended, the
+	// rebuild a restore makes is refused (Jobs.CreateJob), so the restore
+	// could never end. Each one's unit is left as a cancel leaves it, for
+	// a worker that meets the job ended; its shadow is left for
+	// Rebuilding.DropShadow.
+	EndRebuilds(ctx context.Context, now time.Time) ([]string, error)
 	// MarkQuarantineLost marks every quarantined file held whose bytes were
 	// kept as incoming lost (QuarantineIncomingLost, no details, no bytes
-	// kept): those bytes lived in the server's incoming directory, which a
-	// backup does not hold. It answers how many it marked.
-	MarkQuarantineLost(ctx context.Context) (int64, error)
+	// kept), but those whose ids keep names: those bytes lived in the
+	// server's incoming directory, which a backup does not hold; a
+	// reconcile of databases restored in place keeps the files whose bytes
+	// it found there, with their recorded checksum. It answers how many it
+	// marked.
+	MarkQuarantineLost(ctx context.Context, keep []string) (int64, error)
 }
+
+// JobReasonEndedByRestore is the reason of a rebuild job EndRebuilds ended.
+const JobReasonEndedByRestore = "canceled: ended by a restore or a reconcile"
 
 // StorageOwner is the owner generation a tenant's database holds for one
 // storage.

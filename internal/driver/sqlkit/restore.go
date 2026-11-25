@@ -569,29 +569,3 @@ func (k Sending) RelinkHidden(ctx context.Context) (int64, error) {
 	})
 	return n, err
 }
-
-// MarkQuarantineLost implements tenant.Restoring: every record held whose
-// bytes were kept becomes incoming lost, with no details and no bytes kept
-// (the reason's own rules: tenant.QuarantinedFile.Validate), and the
-// quarantine's totals stop counting the bytes kept for them.
-func (k Sending) MarkQuarantineLost(ctx context.Context) (int64, error) {
-	var n int64
-	err := k.Host.Write(ctx, "the quarantined files whose bytes are gone cannot be marked", func(tx SendingTx) error {
-		var bytes int64
-		if _, err := tx.QueryRow(ctx, `SELECT count(*), CAST(coalesce(sum(size), 0) AS BIGINT) FROM quarantine WHERE state = ? AND content_kept = ?`,
-			[]any{string(tenant.QuarantineHeld), k.D.Bool(true)}, &n, &bytes); err != nil {
-			return err
-		}
-		if n == 0 {
-			return nil
-		}
-		if _, err := tx.Exec(ctx, `UPDATE quarantine SET reason = ?, details = '{}', content_kept = ?, incoming = '', kept_sha256 = NULL
-			WHERE state = ? AND content_kept = ?`, string(tenant.QuarantineIncomingLost), k.D.Bool(false), string(tenant.QuarantineHeld),
-			k.D.Bool(true)); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `UPDATE quarantine_totals SET bytes = CASE WHEN bytes > ? THEN bytes - ? ELSE 0 END`, bytes, bytes)
-		return err
-	})
-	return n, err
-}

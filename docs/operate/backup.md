@@ -3,8 +3,9 @@
 [Documentation index](../README.md) · [The command line](../use/command-line.md) · [Running NoPACs](running.md) · [Correcting archived data](../use/correcting.md)
 
 Three jobs share this page: a **backup** of a whole installation, a **restore**
-of it onto an empty data directory, and the **move** of one tenant to another
-installation. A backup is made either over the API while the server runs
+of it onto an empty data directory (or the reconcile of databases a site
+restored by its own point-in-time recovery), and the **move** of one tenant to
+another installation. A backup is made either over the API while the server runs
 (`nopacs backup create`, by an installation admin from any machine that reaches
 the server) or on the machine itself with the server stopped (`nopacs-server
 backup create`); both write the same file. A restore runs on the machine, with
@@ -179,8 +180,17 @@ What it does, in order:
    section's SHA-256, every schema version. A file that fails changes nothing.
 2. **Loads each database** at its own schema version and brings it to this
    build's.
-3. **Suspends every key** (below).
-4. **Reconciles each tenant with its storages**, one tenant at a time:
+3. **Reads every storage's owner record** of every tenant, writing nothing
+   ([When `--take-over` is needed](#when---take-over-is-needed)). A tenant one
+   of whose storages carries another installation's record (handed off by an
+   export and imported there after the backup) is not reconciled: it is left
+   *fenced* in the master, with the record's words as its reason, serving no
+   data, its storages untouched, and the report names it; the other tenants are
+   restored. Any other refusal stops the whole restore before any key is
+   suspended or any storage taken: a storage refused after others were taken
+   over would leave those taken from whoever writes them now.
+4. **Suspends every key** (below).
+5. **Reconciles each tenant with its storages**, one tenant at a time:
    - the owner record on each storage is taken one generation further, so no
      other installation still writing the storage goes unnoticed (see
      [Fenced](#fenced));
@@ -201,9 +211,16 @@ What it does, in order:
      committed whose record says undone is undone, its data shown: the record
      is written only once the undo has committed, and the delete kept would be
      purged after its grace. A delete whose row the backup holds prepared and
-     whose record still says prepared (published, its record not rewritten)
-     is taken as committed and unresolved. A record of a purge over a row the
-     backup holds committed leaves the row as it is, and is reported;
+     whose record still says prepared (published and answered, its record's
+     rewrite failed; or never published, which the record cannot tell apart)
+     is taken as committed, its data hidden, and held unresolved until an admin
+     undoes or purges it: shown, a withdrawn subject would be served again. A
+     record of a purge over a row the backup holds committed leaves the row as
+     it is, and is reported;
+   - a delete of a subject made from its record holds, like the delete itself,
+     data arriving under every label the subject had before a relabel, not only
+     the label its record names, once every record (a relabel's among them) is
+     read;
    - every delete the backup holds committed that the restore keeps is left
      *unresolved*, and none is purged until an admin confirms it: an undo made
      after the backup whose record was not rewritten looks the same as no
@@ -213,6 +230,12 @@ What it does, in order:
      `nopacs correction undo`, and confirm one with `nopacs correction purge`,
      which purges it now (there is no way to confirm one and let its grace
      period run on);
+   - a rebuild job the backup holds queued or running (one a server was working
+     when the backup was made, whose worker is gone) is canceled, with the
+     reason `canceled: ended by a restore or a reconcile`, and its shadow
+     removed (its file beside a SQLite tenant's database, or its tables in the
+     scratch schema), since the restore's own rebuild is refused while another
+     is not ended;
    - the catalog is rebuilt from the storages; a delete made committed from its
      record then hides its data in the rebuilt catalog as its publish would, so
      an admin's undo shows it again and a purge removes all of it, the scans'
@@ -220,7 +243,7 @@ What it does, in order:
      owns the revision it superseded, so its purge removes it;
    - a new event history begins, which tells every consumer of the feed to start
      again.
-5. **Writes the installation's id last.** A restore stopped half way leaves a data
+6. **Writes the installation's id last.** A restore stopped half way leaves a data
    directory the server refuses to start on, with a marker saying a restore was
    interrupted. Remove the contents of the data directory except the key file
    (and empty the Postgres schemas it filled), then run the restore again.
@@ -271,15 +294,103 @@ back: the successor is shown once, holds the same grants, holder, networks and
 client certificate, and is not suspended, while the old key stays refused. Use
 it for a key whose secret may have leaked while the installation was down.
 
+## Reconcile a site's own point-in-time recovery
+
+A site may bring its databases back by its own means instead of a backup file:
+a Postgres point-in-time recovery to a moment, a copy of the SQLite files (taken
+with the server stopped, or online with SQLite's backup API, such as the
+`sqlite3` program's `.backup`), a snapshot of the volume. Such a copy is
+older than the storages: a delete, a relabel or a replace made after it is on
+the storages and not in the databases, and a key revoked after it works again.
+Before the server starts on it, reconcile it:
+
+```sh
+nopacs-server backup restore --reconcile-only --data-dir /var/lib/nopacs
+MASTER_DB='postgres://...' nopacs-server backup restore --reconcile-only \
+  --data-dir /var/lib/nopacs --master-env MASTER_DB --scratch-schema rebuild
+```
+
+No backup file is read. The installation must be in place: the key file in the
+data directory (or `--key-file`), the master where the data directory or
+`--master-env` says, and each tenant's database at the address the master holds
+for it. The flags are those of a restore, without the file.
+
+It refuses, changing nothing:
+
+- a data directory a server or a restore runs on (it takes the same lock), and
+  one a restore was interrupted in;
+- an empty database (a recovery that did not restore it, or a mistyped address:
+  it never fills one);
+- a master with no installation id, one whose key check the key file does not
+  open, or one of another installation than the data directory's id file names,
+  each before anything is migrated, so a mistyped address that reaches another
+  installation's master leaves it as it was;
+- a database made from another baseline schema than this build's;
+- an owner record that refuses the reconcile, other than another
+  installation's (below): every storage's record is read before anything is
+  written, so no key is suspended and no storage taken.
+
+Then it does what a restore does after loading a backup, by the same code:
+each database is brought to this build's schema; **every key is suspended**
+([as after a restore](#keys-come-back-suspended)); and each tenant is
+reconciled with its storages: owner records taken one generation further
+(`--take-over` as for a restore), the correction records read against the rows
+by the same rules (a record with no row, made after the copy, becomes a
+correction as it says, a delete held hidden and unresolved for an admin; a
+delete whose row stayed prepared is taken as committed and held unresolved
+until an admin acts), every delete the database holds committed held
+unresolved, a rebuild left queued or running canceled, the catalog rebuilt from
+the storages, and a new event history begun, so a consumer's cursor from before
+is refused with `EVENT_HISTORY_CHANGED` and starts again.
+
+A tenant one of whose storages carries an owner record naming **another
+installation** (handed to it by an export after the copy, and imported there)
+is not reconciled: that installation writes the storage now. The tenant is left
+*fenced* (read only) in the master, with the record's words as its reason, its
+storages untouched and its rows and catalog as the copy holds them; the report
+names it, and the other tenants are reconciled. Run the reconcile again with
+`--take-over` only if you know that installation's claim is stale.
+
+There is no backup to say when the copy was taken: each database's *recovery
+point* is the newest rows it holds, and the report prints, per tenant, its
+newest correction and newest reception, then what is lost as a restore's report
+does: configuration changed after the point, receptions unfinished at it, events
+and audit entries after it. The incoming area is in place, so a held
+quarantined file whose bytes are there, of the recorded size and SHA-256, stays
+held and can still be released; one whose bytes are missing or different is
+marked incoming lost. The data directory's id file is written if it is missing.
+
+A reconcile stopped half way leaves a marker the server refuses to start on, as
+do `backup create` and `tenant import`. Run the reconcile again: each step reads
+what the last one left, and the catalog is rebuilt whole again. If it says a
+storage's owner record is ahead, the first run had taken it: run it with
+`--take-over`.
+
 ### When `--take-over` is needed
 
 On each storage a tenant writes there is an *owner record* naming the
-installation, the tenant and a generation. The restore refuses a storage whose
-record names another installation or tenant, or a later generation than the
-backup holds: something took that storage over after the backup, and two
-installations must not write one storage. Stop whatever else uses it, then run
-the restore again with `--take-over` if the storage is yours to take back. Do not
-use it to get past the refusal without knowing why it came.
+installation, the tenant and a generation. Two installations must not write one
+storage, so the restore refuses a storage whose record:
+
+- names **another installation**: that installation took the storage over (a
+  hand-off, or a restore of its own) and writes it now. The restore, and a
+  reconcile in place, leave that tenant fenced and go on with the others. Leave
+  the storage to it. Give `--take-over` only if you know its claim is stale:
+  that installation is gone and will never write the storage again, since
+  `--take-over` takes every storage, and the other installation's live tenant
+  would be fenced in its turn;
+- names another tenant, or this installation at a later generation than the
+  backup (or the restored database) holds: a restore or a reconcile since took
+  it over. Stop whatever else uses it, then run again with `--take-over` if the
+  storage is yours to take back.
+
+Do not use it to get past the refusal without knowing why it came.
+
+`--take-over` writes the owner records; it does not change a tenant's state in
+the master. A tenant that was *moved* (handed off by an export) or *fenced* at
+the recovery point, restored or reconciled with `--take-over`, stays moved or
+fenced and serves no data until `nopacs tenant reclaim <tenant>` takes it back,
+which then passes, since its storages' owner records name this installation.
 
 ## Moving a tenant to another installation
 
@@ -309,7 +420,8 @@ nopacs tenant export lab1 --out lab1.export --key-out lab1.key
 Both files must be new; neither is ever written over one that is there. The
 server then:
 
-1. makes the tenant **moved**: its reads are served, every change is refused
+1. makes the tenant **moved**: its reads are served while the storages' owner
+   records still name this installation, every change is refused
    (FAILED_PRECONDITION, reason `TENANT_MOVED`), and its receivers refuse new
    files;
 2. **drains** it: the reception pipeline stops (what it holds is archived or
@@ -368,8 +480,9 @@ written if that fails. Then:
   remapped UIDs and date shifts stay what they were. The tenant keeps its name
   and its id;
 - each storage's owner record is written naming the target, **one generation
-  past the export's**. The source, if started again against the same storages,
-  fences the tenant instead of writing beside the target;
+  past the export's**. The source, at its next check of the records (within 30
+  seconds if it is running, at once when it starts), fences the tenant: it
+  writes nothing beside the target and serves none of the tenant's data;
 - every correction record is **written again under the target's key**;
 - the catalog is rebuilt from the storages and a new event history begins;
 - the tenant is registered last, with an audit entry, so a tenant the server
@@ -410,9 +523,19 @@ A tenant is *fenced* when the owner record on one of its storages names another
 installation, another tenant, a later generation than the tenant's database
 holds, or names this installation but does not verify under its key file. That
 means another installation has taken the storage over (an import or a restore),
-or the record is not one this installation wrote. A fenced tenant is read only,
-like a moved one: reads are served, every change is refused (FAILED_PRECONDITION,
-reason `TENANT_FENCED`), and no other tenant is affected.
+or the record is not one this installation wrote. A fenced tenant **serves no
+data and writes nothing**: every request into it, a read of its catalog,
+metadata, files (download, DICOMweb, `ReadFiles`), settings, audit or events as
+well as a change, is refused as FAILED_PRECONDITION with a message that begins
+`TENANT_FENCED` and names the storage and the installation that owns it. Only
+its state and reason stay visible (`nopacs tenant show`, `tenant list`,
+`nopacs status`). No other tenant is affected.
+
+Why reads stop too: once another installation owns the storage, a delete, a
+relabel or a replace made there never reaches this installation's catalog.
+Serving from it would keep handing out what the new owner withdrew (the files
+stay on the storage until its purge, after the grace), to keys the new owner
+cannot revoke.
 
 The server checks the owner records when a tenant starts, every 30 seconds, and
 before each purge, relabel and replace step. A fence is kept in the master
@@ -440,13 +563,18 @@ state is `fenced` and the reason names the storage and why. What to do:
   target's installation log.
 - **Keys and grants do not travel.** The target needs its own keys and grants for
   the tenant.
-- **The source keeps serving reads with what it had.** On the old installation
-  a moved or fenced tenant keeps the network rule (`access.tenant-networks`),
-  keys and grants it had at the export, and serves reads to them; tightening
+- **The source serves reads with what it had until the import is seen.** On the
+  old installation a moved tenant keeps the network rule
+  (`access.tenant-networks`), keys and grants it had at the export, and serves
+  reads to them while the storages' owner records still name it; tightening
   them on the new owner does not reach it, and the old installation cannot
-  change the tenant's own rule any more. Revoke the old installation's keys for
-  the tenant, or remove the tenant there (`nopacs tenant remove NAME --yes`),
-  once the move is done.
+  change the tenant's own rule any more. Once the import writes its own owner
+  record, the source's next check (within 30 seconds; at once when it starts)
+  fences the tenant and its reads stop; in that window, reads are still served
+  from the catalog as it stood at the export. A stream already open (a
+  `ReadFiles`, a download, a `Watch` of the tenant) is not cut by the fence.
+  Revoke the old installation's keys for the tenant, or remove the tenant there
+  (`nopacs tenant remove NAME --yes`), once the move is done.
 - **Job units in flight** during a drain stop with their place kept; they are not
   finished. A sender's work that must not be cut should be stopped first.
 - **Incoming bytes are not carried.** After a restore or a move, files a sender
@@ -470,5 +598,11 @@ state is `fenced` and the reason names the storage and why. What to do:
   entries written during a long backup stay unsealed (removable without a
   trace) until the first pass after it.
 - Restore and import are local commands by design.
+- **A reconcile of a site's own copy knows no time.** Its recovery point is the
+  newest rows each database holds; when the copy was taken is the site's to
+  know. Files left in the incoming area are not taken back: held quarantined
+  files are marked incoming lost even when their bytes are still on the disk,
+  since the incoming area is not part of the copy and may hold another
+  moment's files.
 - **Storages are not part of a backup.** What a backup cannot bring back, the
   storages' own backups must.

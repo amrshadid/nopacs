@@ -1514,16 +1514,17 @@ Usage: `nopacs-server backup create [flags]`
 
 #### `nopacs-server backup restore`
 
-Restore a backup into an empty data directory
+Restore a backup into an empty data directory, or reconcile databases a site restored itself
 
-Usage: `nopacs-server backup restore FILE [flags]`
+Usage: `nopacs-server backup restore FILE | --reconcile-only [flags]`
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
 | `--key-file` | string |  | the installation key file the backup was made with; default the data directory's |
-| `--master-env` | string |  | the name of an environment variable holding the address of the empty database to restore the master into, when it is not SQLite in the data directory |
+| `--master-env` | string |  | the name of an environment variable holding the address of the empty database to restore the master into (with --reconcile-only, of the master the site restored), when it is not SQLite in the data directory |
+| `--reconcile-only` | bool |  | read no backup: reconcile the databases the site restored itself, in place, with the storages |
 | `--scratch-schema` | string |  | the Postgres schema the catalog of a tenant on Postgres is rebuilt in |
-| `--take-over` | bool |  | take a storage over even when its owner record names another installation or tenant, or a later generation than the backup's |
+| `--take-over` | bool |  | take a storage over even when its owner record names another installation or tenant, or a later generation than the backup's (or the restored database's); for another installation's, only when its claim is known to be stale |
 
 #### `nopacs-server backup verify`
 

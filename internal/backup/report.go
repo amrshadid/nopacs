@@ -19,44 +19,75 @@ func (r Report) Print(w io.Writer) error {
 	var b strings.Builder
 	c := output.Clean
 	ts := func(t time.Time) string { return t.UTC().Format(time.RFC3339) }
-	fmt.Fprintf(&b, "Restored installation %s from a backup made at %s.\n\n", c(r.Installation), ts(r.BackupTime))
-	b.WriteString("What came back, each database as of its recovery point:\n")
-	for _, s := range r.Sections {
-		name := "master"
-		if s.Tenant != "" {
+	// src names where the rows came from: a backup's file, or the databases
+	// a site restored by its own point-in-time recovery.
+	src := "the backup"
+	if r.ReconcileOnly {
+		src = "the restored database"
+		fmt.Fprintf(&b, "Reconciled installation %s, whose databases the site restored by its own point-in-time recovery,\n"+
+			"with its storages. No backup was read: each database's recovery point is the newest rows it holds.\n\n", c(r.Installation))
+		b.WriteString("What the restored databases hold:\n")
+		for _, s := range r.Sections {
+			name := "master"
+			if s.Tenant == "" {
+				fmt.Fprintf(&b, "  %-24s %d tables, %d rows (schema version %d)\n", name, s.Tables, s.Rows, s.Point.SchemaVersion)
+				continue
+			}
 			name = "tenant " + c(s.Tenant)
+			fmt.Fprintf(&b, "  %-24s %d tables, %d rows (schema version %d); newest correction %s, newest reception %s\n", name, s.Tables, s.Rows,
+				s.Point.SchemaVersion, orNone(c(s.Point.LastCorrection)), orNone(c(s.Point.LastReception)))
 		}
-		fmt.Fprintf(&b, "  %-24s as of %s: %d tables, %d rows (schema version %d)\n", name, ts(s.Point.SnapshotTime), s.Tables, s.Rows,
-			s.Point.SchemaVersion)
+	} else {
+		fmt.Fprintf(&b, "Restored installation %s from a backup made at %s.\n\n", c(r.Installation), ts(r.BackupTime))
+		b.WriteString("What came back, each database as of its recovery point:\n")
+		for _, s := range r.Sections {
+			name := "master"
+			if s.Tenant != "" {
+				name = "tenant " + c(s.Tenant)
+			}
+			fmt.Fprintf(&b, "  %-24s as of %s: %d tables, %d rows (schema version %d)\n", name, ts(s.Point.SnapshotTime), s.Tables, s.Rows,
+				s.Point.SchemaVersion)
+		}
 	}
-	fmt.Fprintf(&b, "\nKeys: all %d suspended. A key revoked, or a grant removed, after the backup would otherwise work\n", r.KeysSuspended)
+	since := "after the backup"
+	if r.ReconcileOnly {
+		since = "after the recovery point"
+	}
+	fmt.Fprintf(&b, "\nKeys: all %d suspended. A key revoked, or a grant removed, %s would otherwise work\n", r.KeysSuspended, since)
 	b.WriteString("again. Each stays refused until the local operator, on this machine's socket, reviews the keys\n")
 	b.WriteString("(nopacs key list) and reinstates those that should work (nopacs key reinstate ID... or --all).\n")
 	for _, t := range r.Tenants {
 		fmt.Fprintf(&b, "\nTenant %s:\n", c(t.Tenant))
+		if t.Fenced != "" {
+			// The reason says what to do: leave the storage to the
+			// installation that writes it, --take-over only for a stale claim.
+			fmt.Fprintf(&b, "  NOT reconciled, and left fenced (read only, serving no data): %s.\n"+
+				"    Its rows are as %s holds them; nothing was written to its storages.\n", strings.TrimSuffix(c(t.Fenced), "."), src)
+			continue
+		}
 		for _, o := range t.Owners {
 			fmt.Fprintf(&b, "  storage %s taken over at owner generation %d\n", c(o.Storage), o.Generation)
 		}
 		fmt.Fprintf(&b, "  correction records read: %d\n", t.Records)
 		if t.Added > 0 {
-			fmt.Fprintf(&b, "    %d with no row in the backup: each made a correction as its record says (a delete abandoned\n"+
+			fmt.Fprintf(&b, "    %d with no row in %s: each made a correction as its record says (a delete abandoned\n"+
 				"      or undone shows its data; any other holds its data hidden, and its arrivals held, unresolved until an\n"+
-				"      admin undoes or purges it: a record is not trusted to have purged anything)\n", t.Added)
+				"      admin undoes or purges it: a record is not trusted to have purged anything)\n", t.Added, src)
 		}
 		if t.Moved > 0 {
-			fmt.Fprintf(&b, "    %d whose row the backup holds behind its record: each row was moved to the state its record says\n"+
+			fmt.Fprintf(&b, "    %d whose row %s holds behind its record: each row was moved to the state its record says\n"+
 				"      (one prepared before its request was answered and published since is unresolved, its purge left to\n"+
-				"      an admin; a delete undone since is undone, its data shown)\n", t.Moved)
+				"      an admin; a delete undone since is undone, its data shown)\n", t.Moved, src)
 		}
 		if t.Held > 0 {
-			fmt.Fprintf(&b, "  %d deletes the backup holds committed are kept, each unresolved: none is purged until an admin\n"+
-				"    confirms it, since an undo made after the backup whose record was not rewritten cannot be told\n"+
+			fmt.Fprintf(&b, "  %d deletes %s holds committed are kept, each unresolved: none is purged until an admin\n"+
+				"    confirms it, since an undo made %s whose record was not rewritten cannot be told\n"+
 				"    apart. Review each (nopacs correction list <tenant> --kind delete); undo one that was undone\n"+
-				"    (nopacs correction undo), or confirm one by purging it now (nopacs correction purge)\n", t.Held)
+				"    (nopacs correction undo), or confirm one by purging it now (nopacs correction purge)\n", t.Held, src, since)
 		}
 		if t.Disagreed > 0 {
-			fmt.Fprintf(&b, "    %d that disagree with the backup's row: the row was kept as the backup holds it, and the\n"+
-				"      server writes those records again from it at its start: %s", t.Disagreed, strings.Join(cleanAll(t.Disagreements), ", "))
+			fmt.Fprintf(&b, "    %d that disagree with %s's row: the row was kept as %s holds it, and the\n"+
+				"      server writes those records again from it at its start: %s", t.Disagreed, src, src, strings.Join(cleanAll(t.Disagreements), ", "))
 			if t.Disagreed > len(t.Disagreements) {
 				fmt.Fprintf(&b, " and %d more", t.Disagreed-len(t.Disagreements))
 			}
@@ -88,16 +119,27 @@ func (r Report) Print(w io.Writer) error {
 		}
 		for _, x := range t.Loss.Receptions {
 			fmt.Fprintf(&b, "    receiver %s: %d receptions unfinished, %d files (%d bytes) acknowledged and not archived;\n"+
-				"      they were in incoming and are gone: the sender must send them again\n", c(x.Receiver), x.Receptions, x.Files, x.Bytes)
+				"      they were in incoming at the recovery point and are not taken back: the sender must send them again\n",
+				c(x.Receiver), x.Receptions, x.Files, x.Bytes)
 		}
-		fmt.Fprintf(&b, "    quarantine: %d held files (%d bytes) whose bytes were in incoming; their records came back,\n"+
-			"      %d of them marked incoming lost\n", t.Loss.QuarantineFiles, t.Loss.QuarantineBytes, t.QuarantineMarked)
+		if r.ReconcileOnly {
+			fmt.Fprintf(&b, "    quarantine: %d held files (%d bytes) whose bytes were in incoming; %d of them marked incoming lost,\n"+
+				"      their bytes missing there or not the recorded ones; the others' are there whole and can still be released\n",
+				t.Loss.QuarantineFiles, t.Loss.QuarantineBytes, t.QuarantineMarked)
+		} else {
+			fmt.Fprintf(&b, "    quarantine: %d held files (%d bytes) whose bytes were in incoming; their records came back,\n"+
+				"      %d of them marked incoming lost\n", t.Loss.QuarantineFiles, t.Loss.QuarantineBytes, t.QuarantineMarked)
+		}
 		b.WriteString("    events after its recovery point; the feed begins a new history, which tells every consumer\n")
 		b.WriteString(CredentialsText(t.Credentials))
 	}
-	b.WriteString("\nAudit entries written after each recovery point are gone; the restore's own entry is in the master's log.\n")
-	b.WriteString("The network listener's certificate and key are files named when the server starts, not in a backup:\n" +
-		"give them again if they were in the data directory.\n")
+	if r.ReconcileOnly {
+		b.WriteString("\nAudit entries written after each recovery point are gone; the reconcile's own entry is in the master's log.\n")
+	} else {
+		b.WriteString("\nAudit entries written after each recovery point are gone; the restore's own entry is in the master's log.\n")
+		b.WriteString("The network listener's certificate and key are files named when the server starts, not in a backup:\n" +
+			"give them again if they were in the data directory.\n")
+	}
 	_, err := io.WriteString(w, b.String())
 	return err
 }
@@ -117,6 +159,14 @@ func CredentialsText(creds []Credential) string {
 		fmt.Fprintf(&b, "    %s %s: %s\n", x.Kind, c(x.Name), strings.Join(cleanAll(x.Files), ", "))
 	}
 	return b.String()
+}
+
+// orNone returns s, or "none" when it is empty.
+func orNone(s string) string {
+	if s == "" {
+		return "none"
+	}
+	return s
 }
 
 // cleanAll returns each of s cleaned (output.Clean).
