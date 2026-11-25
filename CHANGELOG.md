@@ -293,6 +293,14 @@ scan, keeps it whole, and serves it through an API with keys.
   again for its new name. Storages gain a tier, recall days and speed, a
   directory's declared encryption at rest and a switch generation. Both
   database drivers; nothing is served yet.
+- The replicator copies each queued scan of a primary to its replicas: every
+  object the committed manifest names is streamed through a put checked
+  against its SHA-256 and read back when the replica cannot confirm it; an
+  object already there counts only when the replica's own verified manifest
+  lists it; the sidecar and the manifest go last and are checked again on the
+  primary; the lease is renewed on a timer and a lost lease writes nothing;
+  a scan is recorded in step only at the manifest it copied. Not yet started
+  by the server.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.
