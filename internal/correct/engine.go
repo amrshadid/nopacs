@@ -101,10 +101,9 @@ type seams struct {
 	// at is called after each durable step, by name; an error stops the
 	// engine there as a crash would, nothing after it run.
 	at func(step string) error
-	// held answers whether a purge must wait before an object: what
-	// retention rules and legal holds will answer. Neither exists yet, so
-	// it is always false outside a test; the purge asks it before every
-	// object, so they plug in here.
+	// held answers whether a purge must wait before an object, on any of
+	// its copies: an active hold covers the correction. New sets it to ask
+	// the store when it answers holds (holdAsker), false otherwise.
 	held func(ctx context.Context, c tenant.Correction) bool
 }
 
@@ -201,10 +200,26 @@ func New(cfg Config) (*Engine, error) {
 	if cfg.ConfirmKey != nil && cfg.ConfirmKey.Purpose() != secret.ConfirmToken {
 		return nil, fault.New(fault.Internal, "a corrections engine's confirm key is derived for confirm tokens")
 	}
-	return &Engine{cfg: cfg, copying: map[string]bool{}, usedTokens: map[string]usedToken{}, seams: seams{
+	e := &Engine{cfg: cfg, copying: map[string]bool{}, usedTokens: map[string]usedToken{}, seams: seams{
 		at:   func(string) error { return nil },
 		held: func(context.Context, tenant.Correction) bool { return false },
-	}}, nil
+	}}
+	if h, ok := cfg.Store.(holdAsker); ok {
+		e.seams.held = func(ctx context.Context, c tenant.Correction) bool {
+			id, err := h.CorrectionHeld(ctx, c.ID)
+			// A hold that cannot be read is taken as one: the purge stops
+			// and is run again, rather than remove what a hold may cover.
+			return err != nil || id != ""
+		}
+	}
+	return e, nil
+}
+
+// holdAsker is the part of the tenant's database that answers whether an
+// active hold covers a correction (tenant.Holds.CorrectionHeld): a store
+// that has it is asked before each object a purge removes, on every copy.
+type holdAsker interface {
+	CorrectionHeld(ctx context.Context, id string) (string, error)
 }
 
 // now is the server's clock, in UTC to the microsecond, as the stores keep
@@ -236,9 +251,10 @@ const (
 // whole.
 var errCopy = errors.New("an object could not be read whole")
 
-// recordOf returns the record of c on one storage, naming that storage's
-// scans.
-func recordOf(c tenant.Correction, scans []tenant.CorrectionScan) record.Correction {
+// recordOf returns the record of c on the storage named, naming the scans
+// given (a replica's are its primary's) and, for a purge, what that storage
+// did.
+func recordOf(c tenant.Correction, scans []tenant.CorrectionScan, storage string) record.Correction {
 	r := record.Correction{Format: record.Format, ID: c.ID, Kind: c.Kind, State: c.State, ReasonSHA256: record.ReasonDigest(c.Reason),
 		Created: c.Created}
 	if c.State.Published() || c.State == record.StateUndone {
@@ -264,12 +280,10 @@ func recordOf(c tenant.Correction, scans []tenant.CorrectionScan) record.Correct
 	}
 	if c.State == record.StatePurging || c.State == record.StatePurged {
 		r.Purge = &record.Purge{}
-		if len(scans) > 0 {
-			for _, d := range c.Dispositions {
-				if d.Storage == scans[0].Storage {
-					r.Purge = &record.Purge{Removed: d.Removed, Hidden: d.Hidden, Retained: d.Retained, Unknown: d.Unknown,
-						RetainUntil: d.RetainUntil}
-				}
+		for _, d := range c.Dispositions {
+			if storage != "" && d.Storage == storage {
+				r.Purge = &record.Purge{Removed: d.Removed, Hidden: d.Hidden, Retained: d.Retained, Unknown: d.Unknown,
+					RetainUntil: d.RetainUntil}
 			}
 		}
 	}
@@ -291,8 +305,10 @@ func byStorage(scans []tenant.CorrectionScan) ([]string, map[string][]tenant.Cor
 
 // writeRecords puts c's record, as its row says now and authenticated for
 // the tenant, on every storage it touches, then records that they are
-// written. A start rewrites the records that lag their rows through here
-// too, so every record on a storage carries a MAC this installation made.
+// written; then on each replica of those storages, where a replica that
+// does not take it is owed it (writeReplicaRecords). A start rewrites the
+// records that lag their rows through here too, so every record on a
+// storage carries a MAC this installation made.
 func (e *Engine) writeRecords(ctx context.Context, c tenant.Correction) error {
 	scans, err := e.cfg.Store.CorrectionScans(ctx, c.ID)
 	if err != nil {
@@ -300,23 +316,32 @@ func (e *Engine) writeRecords(ctx context.Context, c tenant.Correction) error {
 	}
 	names, groups := byStorage(scans)
 	for _, name := range names {
-		b, err := record.EncodeCorrection(recordOf(c, groups[name]), e.cfg.TenantID, e.cfg.Keys)
-		if err != nil {
-			return fault.Wrap(fault.Internal, err, "a correction record cannot be made")
-		}
-		st, err := e.cfg.OpenStorage(ctx, name)
-		if err != nil {
-			return err
-		}
-		key, err := recordOf(c, nil).Key()
-		if err != nil {
-			return fault.Wrap(fault.Internal, err, "a correction record's key cannot be made")
-		}
-		if _, err := st.Put(ctx, key, bytes.NewReader(b)); err != nil {
+		if err := e.putRecord(ctx, c, groups[name], name); err != nil {
 			return err
 		}
 	}
-	return e.cfg.Store.MarkRecords(ctx, c.ID, c.State)
+	if err := e.cfg.Store.MarkRecords(ctx, c.ID, c.State); err != nil {
+		return err
+	}
+	return e.writeReplicaRecords(ctx, c, groups)
+}
+
+// putRecord puts c's record on the storage named, naming scans.
+func (e *Engine) putRecord(ctx context.Context, c tenant.Correction, scans []tenant.CorrectionScan, storage string) error {
+	b, err := record.EncodeCorrection(recordOf(c, scans, storage), e.cfg.TenantID, e.cfg.Keys)
+	if err != nil {
+		return fault.Wrap(fault.Internal, err, "a correction record cannot be made")
+	}
+	st, err := e.cfg.OpenStorage(ctx, storage)
+	if err != nil {
+		return err
+	}
+	key, err := recordOf(c, nil, "").Key()
+	if err != nil {
+		return fault.Wrap(fault.Internal, err, "a correction record's key cannot be made")
+	}
+	_, err = st.Put(ctx, key, bytes.NewReader(b))
+	return err
 }
 
 // settle rewrites c's records after a step whose row is committed; a

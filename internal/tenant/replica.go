@@ -80,13 +80,16 @@ type Replication interface {
 	// says.
 	AttachReplica(ctx context.Context, replica, primary string, now time.Time, audit master.AuditEntry, guard Guard) (Storage, int64, bool, error)
 	// DetachReplica makes a replica an ordinary storage again under
-	// CheckDetach's rules: its rows, its damage and its counts are dropped
-	// and ReplicaOf cleared, in one transaction with its audit entry, and
-	// nothing on any storage is touched. It answers the storage as stored
-	// and the ids, in order, of the committed or purging corrections whose
+	// CheckDetach's rules: its rows, its damage, its counts and the
+	// correction records owed to it are dropped and ReplicaOf cleared, in
+	// one transaction with its audit entry, and nothing on any storage is
+	// touched. With an abandon, each committed or purging correction whose
 	// scans are on its primary (those that count the replica among their
-	// copies), which an abandon leaves, so the caller records them
-	// abandoned. A storage that is not a replica is a precondition failure.
+	// copies) names the replica in its CopiesAbandoned, and each object it
+	// owns whose removal from the replica is not recorded is recorded
+	// unknown there, in the same transaction. It answers the storage as
+	// stored and those corrections' ids, in order. A storage that is not a
+	// replica is a precondition failure.
 	DetachReplica(ctx context.Context, d ReplicaDetach, audit master.AuditEntry, guard Guard) (Storage, []string, error)
 	// BackfillReplica makes every scan of the replica's primary pending for
 	// it, marked as its backfill: those with no row, and those in step,
@@ -258,6 +261,11 @@ type ReplicaClaim struct {
 	// put again.
 	Damaged   []ReplicaDamage
 	RecopyAll bool
+	// Purging are the SOP Instance UIDs of the scan a correction in state
+	// purging hides, in order: the copy skips their objects. The purge
+	// removes them from every copy and took its copies when it began, so
+	// an object put on the replica now would outlive the purge.
+	Purging []string
 }
 
 // ReplicaDamage is one object of a replica found missing or wrong.

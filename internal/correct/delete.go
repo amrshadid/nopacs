@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/hmac"
 	"errors"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/blob"
@@ -33,6 +35,8 @@ type StoragePurge struct {
 	// Expected is the disposition expected; Why a short phrase why.
 	Expected blob.Disposition
 	Why      string
+	// ReplicaOf names, for a replica, its primary; empty for a primary.
+	ReplicaOf string
 }
 
 // Preview is what a delete would remove, the token it must carry, when its
@@ -67,9 +71,19 @@ func (e *Engine) Preview(ctx context.Context, target tenant.CorrectionTarget) (P
 		p.Confirm = tenant.KeyedConfirm(p.Confirm, mac)
 	}
 	out := Preview{DeletePreview: p, PurgeAfter: now.Add(g)}
+	purges := make([]StoragePurge, 0, len(p.Storages)+len(p.Replicas))
 	for _, name := range p.Storages {
-		sp := StoragePurge{Storage: name, Expected: blob.Unknown, Why: "the storage does not say"}
-		st, err := e.cfg.OpenStorage(ctx, name)
+		purges = append(purges, StoragePurge{Storage: name})
+	}
+	for _, r := range p.Replicas {
+		purges = append(purges, StoragePurge{Storage: r.Replica, ReplicaOf: r.Primary})
+	}
+	// Ordered by storage name, primaries and replicas alike, as the
+	// contract lists them.
+	slices.SortFunc(purges, func(a, b StoragePurge) int { return strings.Compare(a.Storage, b.Storage) })
+	for _, sp := range purges {
+		sp.Expected, sp.Why = blob.Unknown, "the storage does not say"
+		st, err := e.cfg.OpenStorage(ctx, sp.Storage)
 		if err != nil {
 			sp.Why = reasonStorage
 		} else if x, ok := st.(blob.PurgeExpecter); ok {
@@ -233,12 +247,19 @@ func (e *Engine) snapshots(ctx context.Context, id string) (map[string]tenant.Sc
 // rewrites its records.
 func (e *Engine) publish(ctx context.Context, c tenant.Correction, manifests map[string]tenant.SHA256,
 	snapshots map[string]tenant.ScanSnapshot) (tenant.Correction, error) {
+	return e.publishWith(ctx, c, manifests, snapshots, nil)
+}
+
+// publishWith is publish with, for a relabel, the manifests it wrote on
+// replicas in step (tenant.CorrectionCommit.ReplicaManifests).
+func (e *Engine) publishWith(ctx context.Context, c tenant.Correction, manifests map[string]tenant.SHA256,
+	snapshots map[string]tenant.ScanSnapshot, replicas map[string]map[string]tenant.SHA256) (tenant.Correction, error) {
 	g, err := e.grace(ctx)
 	if err != nil {
 		return e.abandon(ctx, c, reasonStopped, err)
 	}
 	pc, err := e.cfg.Store.CommitCorrection(ctx, tenant.CorrectionCommit{ID: c.ID, Now: e.now(), Grace: g, Manifests: manifests,
-		Snapshots: snapshots})
+		Snapshots: snapshots, ReplicaManifests: replicas})
 	if err != nil {
 		why := reasonPublish
 		if errors.Is(err, tenant.ErrTargetChanged) {

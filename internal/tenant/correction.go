@@ -85,6 +85,18 @@ import (
 // quarantined file released. Both give each scan they touch the SHA-256 of
 // the manifest written for it.
 //
+// # Every copy
+//
+// A correction reaches the replicas of its scans' storages too
+// (correction_copies.go): its record is owed to each in its publishing
+// transaction, in its purge's start and end and in a later attach, until
+// the replica holds it, and an owed record keeps the purge from every
+// copy; the purge removes each object from the primary and from each
+// replica at the same key, records what each did, and checks every
+// removed key absent on every copy before it ends. A purge and a switch of
+// its storages exclude each other, and no replica is attached to a
+// primary while a correction on it is purging.
+//
 // # Overlap
 //
 // A correction is refused (precondition) while another not yet ended
@@ -161,8 +173,20 @@ type Corrections interface {
 	// removed does not stop that page. A caller therefore asks
 	// CorrectionHeld again before removing each object (a read of the few
 	// active holds, no write) and stops, leaving the rest unsettled, when
-	// it answers a hold.
+	// it answers a hold. While a switch of the storage of one of the
+	// correction's scans runs (accepted or swapped) it is a precondition
+	// failure, retried later: a switch and a purge exclude each other.
+	// A target's Done names the copies whose removal is recorded at the
+	// switch generation each copy is at now; when one copy's generation
+	// moved since, Done is empty, and every copy is asked again.
 	PurgeTargets(ctx context.Context, id string, limit int) ([]PurgeTarget, error)
+	// PurgedTargets returns, in PurgeTargets' order and after the target
+	// given (the zero PurgeTarget for the first page), at most limit
+	// objects of a purging correction settled as purged: what the purge's
+	// last pass checks absent on every copy before the correction is
+	// purged. While a switch of the storage of one of the correction's
+	// scans runs it is a precondition failure, as PurgeTargets is.
+	PurgedTargets(ctx context.Context, id string, after PurgeTarget, limit int) ([]PurgeTarget, error)
 	// AddPurgeTargets records objects a purging correction owns that its
 	// publish did not fix (a correction known only from its record, after a
 	// restore); one recorded already is left as it is.
@@ -170,12 +194,17 @@ type Corrections interface {
 	// SettlePurgeTargets records, in one transaction, what became of each
 	// of at most MaxPurgeTargets objects of a purging correction, and what
 	// its storage did with each version of those purged; one settled
-	// already, or a version recorded already, is left as it is.
+	// already, or a version recorded already, is left as it is. Each
+	// removal is recorded at its storage's switch generation now, the one
+	// it was made at: a switch is not begun while a purge of its storages
+	// has an object not settled, and this is refused, as PurgeTargets is,
+	// while one runs.
 	SettlePurgeTargets(ctx context.Context, id string, settled []PurgeSettled) error
 	// RecordPurgedObject records one object of a purging correction removed
 	// from a storage, and what the storage did; recording the same object
 	// and version again changes nothing. For a purged correction it records
-	// what a later pass did with a version the storage retained.
+	// what a later pass did with a version the storage retained. For a
+	// purging one it is refused, as PurgeTargets is, while a switch runs.
 	RecordPurgedObject(ctx context.Context, o PurgedObject) error
 	// RetainedDue returns at most limit versions purged corrections
 	// recorded retained whose retention has ended by now.
@@ -196,8 +225,38 @@ type Corrections interface {
 	// RecordCopied sets how many objects a prepared relabel has copied.
 	RecordCopied(ctx context.Context, id string, copied int64) error
 	// MarkRecords records that every correction record of the correction
-	// was written with state.
+	// was written with state on the storages of its scans.
 	MarkRecords(ctx context.Context, id string, state record.State) error
+	// CorrectionCopies answers the copies a correction reaches besides the
+	// storages of its scans: each replica of those storages now, by
+	// primary then name, with the correction's scans it is in step for at
+	// the catalog's manifest digest. A replica attached after the
+	// correction was made is among them; one detached is not.
+	CorrectionCopies(ctx context.Context, id string) ([]CorrectionCopy, error)
+	// OweRecord records that the replica could not take the correction's
+	// record as its row says now, at now; one owed already is left as it
+	// is. The transaction that publishes a correction owes its record to
+	// every replica of its scans' storages itself.
+	OweRecord(ctx context.Context, id, replica string, now time.Time) error
+	// MarkRecordWritten records that the replica holds the correction's
+	// record written with state: what the replica was owed is cleared when
+	// state is the correction's state now, and left otherwise (the
+	// correction moved on since, and its record is owed at its new state).
+	MarkRecordWritten(ctx context.Context, id, replica string, state record.State) error
+	// RecordsOwed answers at most limit records owed, in order of
+	// correction then replica, after the pair given (the zero RecordOwed
+	// for the first page).
+	RecordsOwed(ctx context.Context, after RecordOwed, limit int) ([]RecordOwed, error)
+	// DropRecordOwed removes the record of the correction owed to the
+	// storage named when that storage is not a replica of the storage of
+	// any of the correction's scans now, and answers whether it did; one
+	// still a copy keeps what it is owed. Nothing is written to a storage
+	// that is not a copy, so its row would stay owed for ever.
+	DropRecordOwed(ctx context.Context, id, storage string) (bool, error)
+	// NotePurge sets the state reason of a purging correction to why it
+	// waits (StateReasonStorage, StateReasonHeld), or clears it with "";
+	// a correction that is not purging is left as it is.
+	NotePurge(ctx context.Context, id, why string) error
 	// Correction returns the correction of that id, or NotFound.
 	Correction(ctx context.Context, id string) (Correction, error)
 	// ListCorrections returns a page of the corrections the filter keeps,
@@ -353,6 +412,9 @@ type DeletePreview struct {
 	Counts CorrectionCounts
 	// Storages are the storages that hold any of it, by name.
 	Storages []string
+	// Replicas are the replicas of those storages, by primary then name:
+	// the purge removes the data from each of them too.
+	Replicas []ReplicaCopy
 	// SentTo are the senders any of it was sent to, by name: for one
 	// instance, those its scan was sent to.
 	SentTo []PeerCopy
@@ -434,6 +496,14 @@ type CorrectionCommit struct {
 	// before the publish: the objects its purge may remove, and only while
 	// their bytes are these.
 	Snapshots map[string]ScanSnapshot
+	// ReplicaManifests are, by replica then Series Instance UID, the
+	// SHA-256 of the manifest a relabel wrote under the new labels on a
+	// replica it found in step for the scan and copied to before the
+	// publish. A replica's row of such a scan stays in step, at this
+	// digest, when it is the scan's new manifest digest and the row is in
+	// step still; every other replica's row is queued (the replicator
+	// copies the scan under its new labels).
+	ReplicaManifests map[string]map[string]SHA256
 }
 
 // CorrectionScan is a scan a correction touches.
@@ -496,10 +566,16 @@ type PurgeFinish struct {
 }
 
 // StorageDisposition sums what one storage did with a correction's purged
-// objects.
+// objects, at one place: a purge that spans a switch has one per storage
+// and switch generation.
 type StorageDisposition struct {
 	// Storage is its name.
 	Storage string
+	// SwitchGeneration is the storage's switch generation when the purge
+	// acted on it; ReplicaOf names the primary it was a replica of then,
+	// empty for a primary.
+	SwitchGeneration int64
+	ReplicaOf        string
 	// Removed, Hidden, Retained and Unknown count objects by disposition.
 	Removed, Hidden, Retained, Unknown int64
 	// VersionsRemoved counts versions deleted by version id.
@@ -544,7 +620,13 @@ type Correction struct {
 	Counts                      CorrectionCounts
 	Storages                    []string
 	Dispositions                []StorageDisposition
-	RestoreLine                 []byte
+	// CopiesAbandoned are the replicas detached with abandon_purges while
+	// the correction counted them among its copies, by name: their objects
+	// not removed by then are recorded unknown, and the bytes may be there.
+	CopiesAbandoned []string
+	// RecordsOwed are the replicas still owed its record, by name.
+	RecordsOwed []string
+	RestoreLine []byte
 	// Swept says an abandoned relabel's copies were removed.
 	Swept bool
 	// Holds are the values a delete holds arrivals by, read with one

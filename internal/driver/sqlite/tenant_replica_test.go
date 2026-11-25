@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -73,6 +74,74 @@ func TestSwapRefusesChangesSinceBegin(t *testing.T) {
 				t.Errorf("a switch whose swap was refused reads %+v, %v", sw, err)
 			}
 		})
+	}
+}
+
+// TestCopiesDoneAtAnotherGeneration guards that a copy's removal of an
+// object not yet settled stands only at the switch generation it was
+// recorded at: once the storage's generation moved (its name now holds
+// another place), the object is asked again on every copy, and the copies
+// done are recorded again at the generation now. The port keeps a switch
+// from swapping while such an object stands, so the test raises the
+// generation in the database, as a swap would.
+func TestCopiesDoneAtAnotherGeneration(t *testing.T) {
+	ctx := context.Background()
+	ts := openTenantTest(t, "T0000000000001").(*Tenant)
+	for _, s := range []tenant.Storage{
+		{Name: "store", Type: tenant.StorageDirectory, Directory: tenant.DirectoryStorage{Root: "fast", Path: "store"}},
+		{Name: "copy", Type: tenant.StorageDirectory, Directory: tenant.DirectoryStorage{Root: "fast", Path: "copy"}, ReplicaOf: "store"},
+	} {
+		if _, err := ts.AddStorage(ctx, s, swapT0, swapAudit("a-"+s.Name), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const id = "01arz3ndektsv4rrffq69g5fav"
+	mustExecTenant(t, ts, `INSERT INTO corrections (id, kind, level, state, records_state, origin, subject_label, session_label,
+		scan_label, instance_uid, to_label, quarantine_id, reason, key_id, confirm_token, created, committed_at, purge_after, ended_at,
+		state_reason, old_revision, new_revision, old_sha256, new_sha256, received_sha256, new_size, instance_key, instance_size,
+		restore_line, arrivals_allowed, undo_reason, unresolved, subjects, sessions, scans, instances, bytes, objects_copied,
+		objects_superseded) VALUES ('`+id+`', 'delete', 'scan', 'purging', 'purging', 'person', 'sub-01', 'ses-1',
+		'scan-1', '', '', '', 'consent withdrawn', '', NULL, 0, 0, 0, NULL, '', 0, 0, NULL, NULL, NULL, 0, '', 0, NULL, 0, '',
+		0, 0, 0, 1, 1, 10, 0, 0)`,
+		`INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label, sop_instance_uid,
+		storage_key, size, sha256, outcome) VALUES ('`+id+`', 1, 'store', 'sub-01', 'ses-1', 'scan-1', '2.25.3.1', '', 10, NULL, '')`)
+	targets, err := ts.PurgeTargets(ctx, id, 10)
+	if err != nil || len(targets) != 1 {
+		t.Fatalf("PurgeTargets = %+v, %v", targets, err)
+	}
+	removed := func(storage string) tenant.PurgedObject {
+		key, _ := targets[0].Key()
+		return tenant.PurgedObject{ID: id, Storage: storage, Key: key, Size: 10, Disposition: tenant.DispositionRemoved, Now: swapT0}
+	}
+	if err := ts.SettlePurgeTargets(ctx, id, []tenant.PurgeSettled{{Target: targets[0], Outcome: tenant.OutcomePending,
+		Removals: []tenant.PurgedObject{removed("store")}}}); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := ts.PurgeTargets(ctx, id, 10); err != nil || len(again) != 1 || !slices.Equal(again[0].Done, []string{"store"}) {
+		t.Fatalf("after the primary removed the object the target is %+v, %v; want it done on store", again, err)
+	}
+	mustExecTenant(t, ts, `INSERT INTO storage_generations (storage, generation) VALUES ('store', 1), ('copy', 1)`)
+	again, err := ts.PurgeTargets(ctx, id, 10)
+	if err != nil || len(again) != 1 || len(again[0].Done) != 0 {
+		t.Fatalf("after the generation moved the target is %+v, %v; want it asked again on every copy", again, err)
+	}
+	if err := ts.SettlePurgeTargets(ctx, id, []tenant.PurgeSettled{{Target: again[0], Outcome: tenant.OutcomePending,
+		Removals: []tenant.PurgedObject{removed("copy")}}}); err != nil {
+		t.Fatal(err)
+	}
+	if last, err := ts.PurgeTargets(ctx, id, 10); err != nil || len(last) != 1 || !slices.Equal(last[0].Done, []string{"copy"}) {
+		t.Fatalf("after the replica removed the object at the new generation the target is %+v, %v; want it done on copy alone", last, err)
+	}
+	c, err := ts.Correction(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gens []int64
+	for _, d := range c.Dispositions {
+		gens = append(gens, d.SwitchGeneration)
+	}
+	if len(c.Dispositions) != 2 || c.Dispositions[0].Storage != "copy" || !slices.Equal(gens, []int64{1, 0}) {
+		t.Errorf("the dispositions are %+v, want copy at generation 1 and store at generation 0", c.Dispositions)
 	}
 }
 

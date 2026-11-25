@@ -21,7 +21,15 @@ import (
 // former place, still a replica of the primary: so no catalog row changes.
 // SwapStorages does it in one transaction, which also refuses it unless
 // every scan of the primary is in step on the replica at the catalog's
-// manifest digest and no finding holds on the replica; moves with each place
+// manifest digest, no finding holds on the replica and no correction's
+// record is owed to it (a precondition failure whose message is
+// RefusalRecordsOwed: the drain writes the records owed, and refuses the
+// switch with that phrase when they are still owed at its end), and no
+// purge of either storage has an object not settled
+// (BlockerPurgeUnfinished, which BeginSwitch refuses too: a purge records
+// each copy's removal by storage name, and a swap points the name at the
+// other place; while a switch runs, a purge's targets are neither read nor
+// settled, Corrections.PurgeTargets); moves with each place
 // what belongs to the place (its owner record's generation, its open scrub
 // findings, the marks those findings set on instances, which are lifted,
 // since reads now go to the place the switch's checks read whole); raises
@@ -266,9 +274,19 @@ type SwitchFacts struct {
 	ScansNotInStep int64
 	// ReplicaFindings counts the scrub findings holding on the replica.
 	ReplicaFindings int64
+	// RecordsOwed counts the correction records owed to the replica
+	// (Corrections.OweRecord). Like a scan not in step, it does not stop a
+	// switch being accepted, since the drain writes them, but it refuses
+	// the swap (RefusalRecordsOwed): the replica's place, which becomes the
+	// primary's, would not hold every correction's record.
+	RecordsOwed int64
 	// CorrectionPrepared says a correction with a scan on the primary is
 	// prepared.
 	CorrectionPrepared bool
+	// PurgeUnfinished says a correction with a scan on either storage is
+	// purging with an object not settled: its removals are recorded by
+	// storage name, which a swap would point at the other place.
+	PurgeUnfinished bool
 	// RebuildRunning says a rebuild is queued or running.
 	RebuildRunning bool
 	// Running is the switch of the tenant accepted or swapped, if any.
@@ -292,6 +310,7 @@ const (
 	BlockerRebuild            = "a rebuild is queued or running"
 	BlockerSwitch             = "another switch is running"
 	BlockerFinding            = "a scrub finding holds on the replica"
+	BlockerPurgeUnfinished    = "a purge on the storage is unfinished"
 )
 
 // BlockerNotInStep returns the blocker of n scans not in step.
@@ -319,6 +338,9 @@ func SwitchBlockers(f SwitchFacts) []string {
 	}
 	if f.CorrectionPrepared {
 		out = append(out, BlockerCorrectionPrepared)
+	}
+	if f.PurgeUnfinished {
+		out = append(out, BlockerPurgeUnfinished)
 	}
 	if f.RebuildRunning {
 		out = append(out, BlockerRebuild)

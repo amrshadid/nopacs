@@ -21,7 +21,9 @@
 //     primary: nothing is copied, and the scan is tried again.
 //  2. Every object the manifest names is copied, an instance a delete hid
 //     among them: a replica is a faithful copy of its storage, and a hidden
-//     instance's object stays on the primary until its purge. A manifest
+//     instance's object stays on the primary until its purge. Once its
+//     correction is purging, its object is skipped (the claim's Purging):
+//     the purge removes it from the copies it took when it began. A manifest
 //     line of an instance the catalog holds must agree with the catalog's
 //     row of it, or the scan changed under the copy.
 //  3. Each object the replica does not hold verified, every object the

@@ -1381,7 +1381,13 @@ CREATE INDEX correction_scans_by_new_subject ON correction_scans (lower(new_subj
 -- scan's metadata (ord 2) and manifest (ord 3) with the SHA-256 read before
 -- the publish. A purge removes these and nothing else: an object a live
 -- row resolves to is kept (kept_shared), a manifest or metadata whose bytes
--- are no longer the ones read is kept (kept_changed).
+-- are no longer the ones read is kept (kept_changed). storage is the
+-- primary; the purge removes the object from it and from each of its
+-- replicas at the same key. copies_done names, separated by spaces, the
+-- copies whose removal of an object not yet settled is recorded already
+-- (another copy did not answer), each as name@generation, its switch
+-- generation then, so the purge run again asks only the rest; once one
+-- copy's generation moved, it asks every copy again.
 CREATE TABLE correction_keys (
     correction_id    TEXT    NOT NULL,
     ord              INTEGER NOT NULL CHECK (ord IN (1, 2, 3)),
@@ -1394,6 +1400,7 @@ CREATE TABLE correction_keys (
     size             INTEGER NOT NULL CHECK (size >= 0),
     sha256           BLOB CHECK (sha256 IS NULL OR length(sha256) = 32),
     outcome          TEXT    NOT NULL CHECK (outcome IN ('', 'purged', 'kept_shared', 'kept_changed')),
+    copies_done      TEXT    NOT NULL DEFAULT '',
     PRIMARY KEY (correction_id, ord, storage, subject_label, session_label, scan_label, sop_instance_uid)
 ) STRICT, WITHOUT ROWID;
 
@@ -1410,13 +1417,18 @@ CREATE TABLE correction_clock (
 ) STRICT;
 INSERT INTO correction_clock (one, trusted) VALUES (1, NULL);
 
--- Each object a purge removed, by storage and key, and its version on a
+-- Each object a purge removed, by storage, the storage's switch generation
+-- when it acted (the place it acted at), and key, and its version on a
 -- versioned bucket ('' for none): its size and SHA-256 as the manifest or
--- the catalog held them, and what the storage did (removed, hidden,
--- retained, unknown).
+-- the catalog held them, what the storage did (removed, hidden, retained,
+-- unknown), and the primary the storage was a replica of then ('' for a
+-- primary). A replica detached with abandon_purges has its objects not
+-- yet removed recorded unknown.
 CREATE TABLE correction_objects (
     correction_id TEXT    NOT NULL,
     storage       TEXT    NOT NULL,
+    generation    INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+    replica_of    TEXT    NOT NULL DEFAULT '',
     object_key    TEXT    NOT NULL CHECK (object_key <> ''),
     version       TEXT    NOT NULL,
     size          INTEGER NOT NULL CHECK (size >= 0),
@@ -1424,7 +1436,37 @@ CREATE TABLE correction_objects (
     disposition   TEXT    NOT NULL CHECK (disposition IN ('removed', 'hidden', 'retained', 'unknown')),
     retain_until  INTEGER,
     purged_at     INTEGER NOT NULL,
-    PRIMARY KEY (correction_id, storage, object_key, version)
+    PRIMARY KEY (correction_id, storage, generation, object_key, version)
+) STRICT, WITHOUT ROWID;
+
+-- A correction's record owed to a replica of its target's storages: one
+-- row per replica made in the transactions that publish the correction
+-- and that start and end its purge, and in the one that attaches a
+-- replica, and one made again when a replica could not take a record
+-- rewritten later; removed once the replica holds the record at the correction's
+-- state. While a row stands, the correction's purge leaves every copy as
+-- it is, and a switch to that replica does not swap: a rebuild or a switch
+-- reading the replica alone would not know the correction.
+CREATE TABLE correction_records_owed (
+    correction_id TEXT    NOT NULL,
+    storage       TEXT    NOT NULL,
+    owed_at       INTEGER NOT NULL,
+    PRIMARY KEY (correction_id, storage)
+) STRICT, WITHOUT ROWID;
+
+-- The records owed to one replica, which a switch to it and its detach
+-- read.
+CREATE INDEX correction_records_owed_by_storage ON correction_records_owed (storage, correction_id);
+
+-- A replica detached with abandon_purges while a correction counted it
+-- among its copies: the person's reason and when. Its objects not yet
+-- removed are recorded unknown (correction_objects).
+CREATE TABLE correction_copies_abandoned (
+    correction_id TEXT    NOT NULL,
+    storage       TEXT    NOT NULL,
+    reason        TEXT    NOT NULL,
+    abandoned_at  INTEGER NOT NULL,
+    PRIMARY KEY (correction_id, storage)
 ) STRICT, WITHOUT ROWID;
 
 -- What names a delete's data (a subject's label, a session's Study Instance

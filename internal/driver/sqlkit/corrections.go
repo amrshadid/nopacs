@@ -133,18 +133,21 @@ func (k Sending) fillCorrection(ctx context.Context, tx SendingTx, c *tenant.Cor
 	}
 	rank := map[tenant.Disposition]int{tenant.DispositionRemoved: 0, tenant.DispositionHidden: 1, tenant.DispositionUnknown: 2,
 		tenant.DispositionRetained: 3}
-	err = tx.Query(ctx, `SELECT storage, object_key, disposition, version, size, retain_until FROM correction_objects
-		WHERE correction_id = ? ORDER BY storage, object_key, version`, []any{c.ID}, func(r Row) error {
-		var storage, objectKey, disposition, version string
-		var n int64
+	// One disposition per storage and switch generation: a purge that spans
+	// a switch says what each place did.
+	err = tx.Query(ctx, `SELECT storage, generation, replica_of, object_key, disposition, version, size, retain_until
+		FROM correction_objects WHERE correction_id = ? ORDER BY storage, generation, object_key, version`, []any{c.ID}, func(r Row) error {
+		var storage, replicaOf, objectKey, disposition, version string
+		var generation, n int64
 		var until DBTime
-		if err := r.Scan(&storage, &objectKey, &disposition, &version, &n, &until); err != nil {
+		if err := r.Scan(&storage, &generation, &replicaOf, &objectKey, &disposition, &version, &n, &until); err != nil {
 			return err
 		}
-		if n := len(c.Dispositions); n == 0 || c.Dispositions[n-1].Storage != storage {
+		if n := len(c.Dispositions); n == 0 || c.Dispositions[n-1].Storage != storage || c.Dispositions[n-1].SwitchGeneration != generation {
 			flush()
 			key = ""
-			c.Dispositions = append(c.Dispositions, tenant.StorageDisposition{Storage: storage})
+			c.Dispositions = append(c.Dispositions, tenant.StorageDisposition{Storage: storage, SwitchGeneration: generation,
+				ReplicaOf: replicaOf})
 		}
 		if objectKey != key {
 			flush()
@@ -163,7 +166,10 @@ func (k Sending) fillCorrection(ctx context.Context, tx SendingTx, c *tenant.Cor
 		return nil
 	})
 	flush()
-	return err
+	if err != nil {
+		return err
+	}
+	return fillCopies(ctx, tx, c)
 }
 
 // Correction implements tenant.Corrections.

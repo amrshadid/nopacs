@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -67,8 +68,14 @@ func (e *Engine) ContinuePurge(ctx context.Context, id string) (tenant.Correctio
 // a storage retained whose retention has ended; it returns how many
 // corrections it purged.
 func (e *Engine) PurgeDue(ctx context.Context) (int, error) {
+	// The records owed to replicas first: a purge waits for its own, and a
+	// switch to a replica waits for every one.
+	_, owedErr := e.WriteOwedRecords(ctx)
 	now := e.now()
 	if err := e.cfg.Store.CheckPurgeClock(ctx, now); err != nil {
+		if owedErr != nil {
+			return 0, errors.Join(err, owedErr)
+		}
 		return 0, err
 	}
 	due, err := e.cfg.Store.DueCorrections(ctx, now, maxDue)
@@ -76,7 +83,7 @@ func (e *Engine) PurgeDue(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	n := 0
-	var errs []error
+	errs := []error{owedErr}
 	for _, d := range due {
 		c := d
 		if c.State == record.StateCommitted {
@@ -115,6 +122,13 @@ func (e *Engine) purge(ctx context.Context, c tenant.Correction) (tenant.Correct
 	if err := e.reached(c, "purge-started"); err != nil {
 		return c, err
 	}
+	// The copies are taken now: the primary of each scan and each replica
+	// attached to it, every one of which holds the correction's record
+	// before any object leaves any copy.
+	copies, err := e.purgeCopies(ctx, c)
+	if err != nil {
+		return c, err
+	}
 	scans, err := e.cfg.Store.CorrectionScans(ctx, c.ID)
 	if err != nil {
 		return c, err
@@ -123,19 +137,23 @@ func (e *Engine) purge(ctx context.Context, c tenant.Correction) (tenant.Correct
 		return c, err
 	}
 	if c.Kind == record.KindDelete && c.Level == record.LevelInstance {
-		return e.purgeInstance(ctx, c, scans[0])
+		return e.purgeInstance(ctx, c, scans[0], copies)
 	}
-	if err := e.purgeTargets(ctx, c); err != nil {
+	if err := e.purgeTargets(ctx, c, copies); err != nil {
 		return c, err
 	}
 	if c.Kind == record.KindReplace {
-		if err := e.purgeOlderMeta(ctx, c, scans[0].Storage, scans[0].Path); err != nil {
-			return c, err
+		for _, name := range copies.of(scans[0].Storage) {
+			if err := e.purgeOlderMeta(ctx, c, name, scans[0].Path); err != nil {
+				return c, e.waitStorage(ctx, c, err)
+			}
 		}
 	} else {
 		for _, s := range scans {
-			if st, err := e.cfg.OpenStorage(ctx, s.Storage); err == nil {
-				e.pruneDirs(ctx, st, s.Path)
+			for _, name := range copies.of(s.Storage) {
+				if st, err := e.cfg.OpenStorage(ctx, name); err == nil {
+					e.pruneDirs(ctx, st, s.Path)
+				}
 			}
 		}
 	}
@@ -143,29 +161,42 @@ func (e *Engine) purge(ctx context.Context, c tenant.Correction) (tenant.Correct
 }
 
 // purgeInstance purges one instance's delete under its scan's lock: its
-// object, then the scan's manifest and metadata written again without it
-// and their older versions removed, then the end, which gives the scan the
-// new manifest's checksum while the lock still keeps a reception of the
-// scan from writing another.
-func (e *Engine) purgeInstance(ctx context.Context, c tenant.Correction, s tenant.CorrectionScan) (tenant.Correction, error) {
+// object from every copy, then the scan's manifest and metadata written
+// again without it on every copy and their older versions removed, then
+// the end, which gives the scan the new manifest's checksum while the lock
+// still keeps a reception of the scan from writing another. A replica's
+// manifest and metadata name the instance and its header as the primary's
+// did, so they are written again there too, from the replica's own (a
+// replica that holds none of the scan yet has nothing to write); the end
+// queues the scan for the replicas, which check them against the new
+// manifest.
+func (e *Engine) purgeInstance(ctx context.Context, c tenant.Correction, s tenant.CorrectionScan, copies copySet) (tenant.Correction, error) {
 	mk, err := layout.ManifestKey(s.Path)
 	if err != nil {
 		return c, fault.Wrap(fault.Internal, err, "a manifest's key cannot be made")
 	}
 	unlock := e.lockScan(s.Storage, mk)
 	defer unlock()
-	if err := e.purgeTargets(ctx, c); err != nil {
+	if err := e.purgeTargets(ctx, c, copies); err != nil {
 		return c, err
 	}
 	before, after, err := e.rewriteMetaLocked(ctx, s.Storage, s.Path, c.Target.Instance, nil, nil)
 	if err != nil {
 		return c, err
 	}
+	for _, name := range copies.replicas(s.Storage) {
+		_, _, err := e.rewriteMetaLocked(ctx, name, s.Path, c.Target.Instance, nil, nil)
+		if err != nil && fault.KindOf(err) != fault.NotFound {
+			return c, e.waitStorage(ctx, c, err)
+		}
+	}
 	if err := e.reached(c, "purge-meta"); err != nil {
 		return c, err
 	}
-	if err := e.purgeOlderMeta(ctx, c, s.Storage, s.Path); err != nil {
-		return c, err
+	for _, name := range copies.of(s.Storage) {
+		if err := e.purgeOlderMeta(ctx, c, name, s.Path); err != nil {
+			return c, e.waitStorage(ctx, c, err)
+		}
 	}
 	if before == after {
 		// Run again after a stop: the manifest was already written without
@@ -177,9 +208,13 @@ func (e *Engine) purgeInstance(ctx context.Context, c tenant.Correction, s tenan
 	return e.finish(ctx, c, after, before)
 }
 
-// finish clears what else names a delete's data, ends the purge and
+// finish checks every key the purge removed absent on every copy
+// (checkGone), clears what else names a delete's data, ends the purge and
 // rewrites its records.
 func (e *Engine) finish(ctx context.Context, c tenant.Correction, manifestSum, before tenant.SHA256) (tenant.Correction, error) {
+	if err := e.checkGone(ctx, c); err != nil {
+		return c, err
+	}
 	if err := e.reached(c, "purge-objects"); err != nil {
 		return c, err
 	}
@@ -220,10 +255,20 @@ func (e *Engine) finish(ctx context.Context, c tenant.Correction, manifestSum, b
 // before it leaves its objects unsettled, and the purge run again asks the
 // storage of each again, which answers what it knows of a key already
 // purged (purgeKey).
-func (e *Engine) purgeTargets(ctx context.Context, c tenant.Correction) error {
+//
+// Each object is removed from every copy (the primary, then each replica
+// of it): a copy that does not answer, or a hold seen before the next
+// copy, stops the purge there, and what the copies before it did is
+// recorded with the object left to settle (OutcomePending), so the purge
+// run again asks only the copies left and never claims an object purged
+// while one copy may still hold it.
+func (e *Engine) purgeTargets(ctx context.Context, c tenant.Correction, copies copySet) error {
 	for {
 		targets, err := e.cfg.Store.PurgeTargets(ctx, c.ID, targetPage)
 		if err != nil {
+			if errors.Is(err, tenant.ErrHeld) {
+				e.note(ctx, c, tenant.StateReasonHeld)
+			}
 			return err
 		}
 		if len(targets) == 0 {
@@ -232,8 +277,11 @@ func (e *Engine) purgeTargets(ctx context.Context, c tenant.Correction) error {
 		settled := make([]tenant.PurgeSettled, 0, len(targets))
 		var stop error
 		for _, t := range targets {
-			s, err := e.purgeTarget(ctx, c, t)
+			s, err := e.purgeTarget(ctx, c, t, copies)
 			if err != nil {
+				if s.Outcome == tenant.OutcomePending && len(s.Removals) > 0 {
+					settled = append(settled, s)
+				}
 				stop = err
 				break
 			}
@@ -245,7 +293,7 @@ func (e *Engine) purgeTargets(ctx context.Context, c tenant.Correction) error {
 			}
 		}
 		if stop != nil {
-			return stop
+			return e.waitStorage(ctx, c, stop)
 		}
 	}
 }
@@ -254,10 +302,17 @@ func (e *Engine) purgeTargets(ctx context.Context, c tenant.Correction) error {
 // it settles what it purged, as a crash would.
 var errStopHere = errors.New("the purge stopped before it settled its page")
 
-// purgeTarget purges one object and answers what became of it.
-func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.PurgeTarget) (tenant.PurgeSettled, error) {
+// purgeTarget purges one object from each of its copies and answers what
+// became of it. Whether it is kept is decided on the primary, which the
+// catalog reads: a replica holds the primary's keys, and follows. A copy
+// whose removal is recorded already (t.Done) is not asked again. A hold is
+// asked before each copy; a hold seen, or a copy that does not answer,
+// after another copy removed the object answers OutcomePending with what
+// was removed, and the error.
+func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.PurgeTarget, copies copySet) (tenant.PurgeSettled, error) {
 	out := tenant.PurgeSettled{Target: t}
 	if e.seams.held(ctx, c) {
+		e.note(ctx, c, tenant.StateReasonHeld)
 		return out, fault.New(fault.Precondition, "the purge is held")
 	}
 	if t.Shared {
@@ -268,11 +323,11 @@ func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.
 	if err != nil {
 		return out, fault.Wrap(fault.Internal, err, "a correction's object names no key")
 	}
-	st, err := e.cfg.OpenStorage(ctx, t.Storage)
-	if err != nil {
-		return out, err
-	}
-	if t.Ord != tenant.TargetInstance {
+	if t.Ord != tenant.TargetInstance && !slices.Contains(t.Done, t.Storage) {
+		st, err := e.cfg.OpenStorage(ctx, t.Storage)
+		if err != nil {
+			return out, err
+		}
 		_, sum, err := hashOf(ctx, st, key)
 		switch {
 		case fault.KindOf(err) == fault.NotFound:
@@ -285,20 +340,45 @@ func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.
 			return out, nil
 		}
 	}
-	removals, err := e.purgeKey(ctx, st, key)
-	if err != nil {
-		return out, err
+	now := e.now()
+	for i, name := range copies.of(t.Storage) {
+		if slices.Contains(t.Done, name) {
+			continue
+		}
+		if i > 0 && e.seams.held(ctx, c) {
+			e.note(ctx, c, tenant.StateReasonHeld)
+			return pending(out), fault.New(fault.Precondition, "the purge is held")
+		}
+		st, err := e.cfg.OpenStorage(ctx, name)
+		if err != nil {
+			return pending(out), err
+		}
+		removals, err := e.purgeKey(ctx, st, key)
+		if err != nil {
+			return pending(out), err
+		}
+		for _, r := range removals {
+			out.Removals = append(out.Removals, tenant.PurgedObject{ID: c.ID, Storage: name, Key: key, Version: r.Version, Size: t.Size,
+				SHA256: t.SHA256, Disposition: tenant.Disposition(r.Disposition), RetainUntil: r.RetainUntil, Now: now})
+		}
 	}
 	out.Outcome = tenant.OutcomePurged
-	now := e.now()
-	for _, r := range removals {
-		out.Removals = append(out.Removals, tenant.PurgedObject{ID: c.ID, Storage: t.Storage, Key: key, Version: r.Version, Size: t.Size,
-			SHA256: t.SHA256, Disposition: tenant.Disposition(r.Disposition), RetainUntil: r.RetainUntil, Now: now})
+	if len(out.Removals) == 0 {
+		// Every copy's removal was recorded before a stop: the object is
+		// settled now, its removals already counted.
+		return out, nil
 	}
 	if err := e.reached(c, "purge-object"); err != nil {
 		return out, errors.Join(errStopHere, err)
 	}
 	return out, nil
+}
+
+// pending answers a target some of whose copies removed it, to settle
+// later: OutcomePending, with the removals they answered.
+func pending(s tenant.PurgeSettled) tenant.PurgeSettled {
+	s.Outcome = tenant.OutcomePending
+	return s
 }
 
 // purgeKey removes one key through its storage's Purge and answers what

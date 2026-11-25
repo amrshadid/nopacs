@@ -117,7 +117,11 @@ func (k Sending) attachFacts(ctx context.Context, tx SendingTx, r, p tenant.Stor
 	if f.ReplicaNamedBy, err = receiverNaming(ctx, tx, r.Name); err != nil {
 		return f, err
 	}
-	f.Switching, err = switchRunning(ctx, tx, p.Name)
+	if f.Switching, err = switchRunning(ctx, tx, p.Name); err != nil {
+		return f, err
+	}
+	f.Purging, err = exists(ctx, tx, `SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
+		WHERE c.state = 'purging' AND cs.storage = ?`, p.Name)
 	return f, err
 }
 

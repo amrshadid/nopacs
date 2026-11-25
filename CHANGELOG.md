@@ -334,6 +334,16 @@ scan, keeps it whole, and serves it through an API with keys.
   moved S3 secrets again for their new names and swaps both places in one
   transaction; a restart refuses an accepted switch and finishes a swapped one.
   Not yet started by the server.
+- Corrections reach every replica: a correction's record goes on each replica
+  (owed and retried when one does not answer, and owed to a replica attached
+  later); the purge removes each object from the primary and every replica,
+  records one disposition per storage and switch generation, checks every
+  removed key absent on every copy before it says purged, and stays purging
+  while a copy does not answer or is owed its record; a purge and a switch
+  exclude each other, and no replica is attached while its primary's purge
+  runs; a relabel copies to replicas in step before its publish; detaching
+  with `abandon_purges` records the replica's objects unknown; the delete
+  preview lists replicas.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

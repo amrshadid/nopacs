@@ -49,4 +49,15 @@
 // What a purge removes is answered per storage and never more strongly
 // than the storage said it (blob.Removal): removed, hidden behind older
 // versions, retained by object lock, or unknown.
+//
+// A correction reaches every copy (copies.go): its record goes on each
+// replica of its scans' storages too, owed through the tenant's database
+// to a replica that does not take it and written later (WriteOwedRecords);
+// a relabel copies to the new keys on each replica in step before the
+// publish; the purge removes each object from the primary, then from each
+// replica, records what each did, and waits, purging, while a replica does
+// not answer, is owed the record, or a switch of its storages runs; before
+// it ends, every key it removed is checked absent on every copy attached
+// then, and one found again is removed. A replica detached with abandon_purges
+// is no longer reached.
 package correct

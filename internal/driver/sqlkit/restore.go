@@ -377,7 +377,7 @@ func (k Sending) HideDeletes(ctx context.Context, deletes []tenant.DeleteToHide)
 			// replicas' rows, one an instance delete changed is queued
 			// again. The restore's step carries no time; a replica's
 			// backfill is recorded done at the clock's.
-			if err := k.QueueCorrectionCopies(ctx, tx, id, time.Now().UTC().Truncate(time.Microsecond)); err != nil {
+			if err := k.QueueCorrectionCopies(ctx, tx, id, time.Now().UTC().Truncate(time.Microsecond), nil); err != nil {
 				return err
 			}
 			var whole, part int64

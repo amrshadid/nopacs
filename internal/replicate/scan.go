@@ -264,10 +264,19 @@ var errScanGone = errors.New("the catalog no longer holds the scan")
 // also agree with the catalog's row of it: one that does not is a change
 // of the scan published since the manifest was read, and fails the plan as
 // a change, so the scan is tried again soon.
+//
+// An object whose every file is an instance a purging correction hides
+// (the claim's Purging) is not copied: the purge removes it from every
+// copy it took when it began, so one put now would outlive the purge, and
+// the purge then writes the scan's manifest again without it.
 func plan(m manifest.Manifest, held map[string]tenant.ScanInstance, c tenant.ReplicaClaim) ([]object, error) {
 	damaged := make(map[string]bool, len(c.Damaged))
 	for _, d := range c.Damaged {
 		damaged[d.SOPInstanceUID] = true
+	}
+	purging := make(map[string]bool, len(c.Purging))
+	for _, uid := range c.Purging {
+		purging[uid] = true
 	}
 	var out []object
 	contradicted := 0
@@ -279,7 +288,11 @@ func plan(m manifest.Manifest, held map[string]tenant.ScanInstance, c tenant.Rep
 		lines := m.Files[i:j]
 		i = j
 		o := object{key: lines[0].Key, size: lines[0].Size, lines: lines, force: c.RecopyAll}
+		hidden := 0
 		for _, f := range lines {
+			if purging[f.SOPInstanceUID] {
+				hidden++
+			}
 			if f.Size != o.size {
 				return nil, &copyError{fault: tenant.FaultWrongAnswer, reason: "the primary's manifest gives one object two sizes"}
 			}
@@ -291,6 +304,9 @@ func plan(m manifest.Manifest, held map[string]tenant.ScanInstance, c tenant.Rep
 			if damaged[f.SOPInstanceUID] {
 				o.force = true
 			}
+		}
+		if hidden == len(lines) {
+			continue
 		}
 		if len(lines) == 1 && lines[0].Offset == 0 && lines[0].Length == lines[0].Size {
 			sum, err := hex.DecodeString(lines[0].SHA256)

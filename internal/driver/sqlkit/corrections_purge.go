@@ -90,11 +90,18 @@ func (k Sending) PurgeTargets(ctx context.Context, id string, limit int) ([]tena
 		if hold != "" {
 			return tenant.HoldRefusalError(hold)
 		}
+		// A switch of its storages pauses the purge: the copies it removes
+		// from are named, and a swap points the names at other places.
+		if err := checkNoSwitch(ctx, tx, id); err != nil {
+			return err
+		}
+		gens := &generations{tx: tx}
+		var dones []string
 		// An instance's object is shared when a live row resolves to its
 		// key: the same UID on the same storage, by the key the catalog
 		// holds whole, or by the layout's key under the same labels.
 		err = tx.Query(ctx, `SELECT ck.ord, ck.storage, ck.subject_label, ck.session_label, ck.scan_label, ck.sop_instance_uid,
-			ck.storage_key, ck.size, ck.sha256,
+			ck.storage_key, ck.size, ck.sha256, ck.copies_done,
 			EXISTS (SELECT 1 FROM instances AS i JOIN scans AS s ON s.id = i.scan_id WHERE ck.ord = 1
 				AND i.sop_instance_uid = ck.sop_instance_uid AND s.storage = ck.storage
 				AND ((ck.storage_key <> '' AND i.storage_key = ck.storage_key)
@@ -105,16 +112,24 @@ func (k Sending) PurgeTargets(ctx context.Context, id string, limit int) ([]tena
 			[]any{id, limit}, func(r Row) error {
 				var t tenant.PurgeTarget
 				var sum []byte
+				var done string
 				if err := r.Scan(&t.Ord, &t.Storage, &t.Path.Subject, &t.Path.Session, &t.Path.Scan, &t.UID, &t.StorageKey, &t.Size,
-					&sum, &t.Shared); err != nil {
+					&sum, &done, &t.Shared); err != nil {
 					return err
 				}
 				t.SHA256 = ToSHA256(sum)
-				out = append(out, t)
+				out, dones = append(out, t), append(dones, done)
 				return nil
 			})
 		if err != nil {
 			return err
+		}
+		// A copy's removal stands only at the generation it was made at:
+		// once a name points at another place, every copy is asked again.
+		for i := range out {
+			if out[i].Done, err = tenant.CurrentCopiesDone(tenant.ParseCopiesDone(dones[i]), gens.of(ctx)); err != nil {
+				return err
+			}
 		}
 		// A scan's manifest or metadata is shared when a live scan is at
 		// its labels on its storage.
@@ -148,6 +163,11 @@ func (k Sending) AddPurgeTargets(ctx context.Context, id string, targets []tenan
 	return k.stepRow(ctx, id, "the correction's objects cannot be recorded", func(tx SendingTx, c *tenant.Correction) error {
 		if c.State != corr.StatePurging {
 			return tenant.Precondition("the correction is " + string(c.State) + ", not purging")
+		}
+		// An object not settled stops a switch's swap: none is added while
+		// one runs, so the swap is not refused for it.
+		if err := checkNoSwitch(ctx, tx, id); err != nil {
+			return err
 		}
 		for _, t := range targets {
 			var sum any
@@ -185,16 +205,60 @@ func (k Sending) SettlePurgeTargets(ctx context.Context, id string, settled []te
 		if err := k.checkNoRebuild(ctx, tx); err != nil {
 			return err
 		}
+		// Nor while a switch of its storages runs: a removal is recorded at
+		// its storage's generation now, which is the one it was made at
+		// only because a switch neither begins while an object is not
+		// settled nor lets one be settled while it runs.
+		if err := checkNoSwitch(ctx, tx, id); err != nil {
+			return err
+		}
+		places := map[string]purgePlace{}
+		gens := &generations{tx: tx}
+		const where = ` WHERE correction_id = ? AND ord = ? AND storage = ? AND subject_label = ? AND session_label = ? AND scan_label = ?
+			AND sop_instance_uid = ? AND outcome = ''`
 		for _, s := range settled {
 			for _, o := range s.Removals {
-				if err := k.insertPurged(ctx, tx, o); err != nil {
+				if err := k.insertPurged(ctx, tx, o, places); err != nil {
 					return err
 				}
 			}
 			t := s.Target
-			if _, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = ? WHERE correction_id = ? AND ord = ? AND storage = ?
-				AND subject_label = ? AND session_label = ? AND scan_label = ? AND sop_instance_uid = ? AND outcome = ''`,
-				string(s.Outcome), id, t.Ord, t.Storage, t.Path.Subject, t.Path.Session, t.Path.Scan, t.UID); err != nil {
+			key := []any{id, t.Ord, t.Storage, t.Path.Subject, t.Path.Session, t.Path.Scan, t.UID}
+			if s.Outcome != tenant.OutcomePending {
+				if _, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = ?`+where, append([]any{string(s.Outcome)}, key...)...); err != nil {
+					return err
+				}
+				continue
+			}
+			// A target some of whose copies answered stays to settle, the
+			// copies that did named with their generation now, so the purge
+			// run again asks only the rest and records each copy's answer
+			// once. The copies recorded before are read from the row, not
+			// taken from the caller: those whose generation moved since are
+			// dropped with the rest, and every copy is asked again.
+			var stored string
+			found, err := tx.QueryRow(ctx, `SELECT copies_done FROM correction_keys`+where, key, &stored)
+			if err != nil || !found {
+				return err
+			}
+			before := tenant.ParseCopiesDone(stored)
+			current, err := tenant.CurrentCopiesDone(before, gens.of(ctx))
+			if err != nil {
+				return err
+			}
+			var done []tenant.CopyDone
+			if len(current) == len(before) {
+				done = before
+			}
+			for _, o := range s.Removals {
+				g, err := gens.of(ctx)(o.Storage)
+				if err != nil {
+					return err
+				}
+				done = append(done, tenant.CopyDone{Storage: o.Storage, Generation: g})
+			}
+			if _, err := tx.Exec(ctx, `UPDATE correction_keys SET copies_done = ?`+where,
+				append([]any{tenant.JoinCopiesDone(done...)}, key...)...); err != nil {
 				return err
 			}
 		}
@@ -202,17 +266,67 @@ func (k Sending) SettlePurgeTargets(ctx context.Context, id string, settled []te
 	})
 }
 
-// insertPurged records one version a purge removed; one recorded already
-// is left as it is.
-func (k Sending) insertPurged(ctx context.Context, tx SendingTx, o tenant.PurgedObject) error {
+// generations reads storages' switch generations in a transaction, each
+// once.
+type generations struct {
+	tx SendingTx
+	by map[string]int64
+}
+
+// of answers the function that reads a storage's generation, 0 for a name
+// no swap has raised.
+func (g *generations) of(ctx context.Context) func(storage string) (int64, error) {
+	return func(storage string) (int64, error) {
+		if n, ok := g.by[storage]; ok {
+			return n, nil
+		}
+		var n int64
+		if _, err := g.tx.QueryRow(ctx, `SELECT coalesce((SELECT generation FROM storage_generations WHERE storage = ?), 0)`,
+			[]any{storage}, &n); err != nil {
+			return 0, err
+		}
+		if g.by == nil {
+			g.by = map[string]int64{}
+		}
+		g.by[storage] = n
+		return n, nil
+	}
+}
+
+// insertPurged records one version a purge removed, at the storage's switch
+// generation now and naming the primary it is a replica of now; one
+// recorded already is left as it is. A switch pauses every purge of its
+// storages (a switch is not begun nor swapped while a purge of them has an
+// object not settled, and while one runs a purge's targets are neither
+// read nor settled, nor its removals recorded), so the generation now is
+// the one the purge acted at.
+// places, read once per storage in a transaction, are read again for
+// none of a page's other objects.
+func (k Sending) insertPurged(ctx context.Context, tx SendingTx, o tenant.PurgedObject, places map[string]purgePlace) error {
 	var sum any
 	if !o.SHA256.IsZero() {
 		sum = o.SHA256[:]
 	}
-	_, err := tx.Exec(ctx, `INSERT INTO correction_objects (correction_id, storage, object_key, version, size, sha256, disposition,
-		retain_until, purged_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`, o.ID, o.Storage, o.Key, o.Version,
-		o.Size, sum, string(o.Disposition), k.nullTime(o.RetainUntil), k.D.Time(o.Now))
+	p, ok := places[o.Storage]
+	if !ok {
+		if _, err := tx.QueryRow(ctx, `SELECT coalesce((SELECT generation FROM storage_generations WHERE storage = ?), 0),
+			coalesce((SELECT replica_of FROM storages WHERE name = ?), '')`, []any{o.Storage, o.Storage}, &p.generation,
+			&p.replicaOf); err != nil {
+			return err
+		}
+		places[o.Storage] = p
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO correction_objects (correction_id, storage, generation, replica_of, object_key, version, size,
+		sha256, disposition, retain_until, purged_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`, o.ID, o.Storage,
+		p.generation, p.replicaOf, o.Key, o.Version, o.Size, sum, string(o.Disposition), k.nullTime(o.RetainUntil), k.D.Time(o.Now))
 	return err
+}
+
+// purgePlace is where a storage's name points while a purge records what
+// it did: its switch generation and the primary it is a replica of.
+type purgePlace struct {
+	generation int64
+	replicaOf  string
 }
 
 // RetainedDue implements tenant.Corrections.

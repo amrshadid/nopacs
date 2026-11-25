@@ -143,8 +143,15 @@ func (k Sending) DetachReplica(ctx context.Context, d tenant.ReplicaDetach, audi
 		if err := tenant.CheckDetach(r, len(abandoned), d.Abandon, switching); err != nil {
 			return err
 		}
+		// Each correction that counted the replica no longer reaches it:
+		// its objects not removed there are recorded unknown, and it names
+		// the replica among its copies abandoned. What the replica was owed
+		// goes with it: nothing writes to a storage that is not a copy.
+		if err := k.abandonCopies(ctx, tx, r, abandoned, d.Reason, d.Now); err != nil {
+			return err
+		}
 		for _, q := range []string{`DELETE FROM replica_damage WHERE replica = ?`, `DELETE FROM replica_scans WHERE replica = ?`,
-			`DELETE FROM replica_totals WHERE replica = ?`} {
+			`DELETE FROM replica_totals WHERE replica = ?`, `DELETE FROM correction_records_owed WHERE storage = ?`} {
 			if _, err := tx.Exec(ctx, q, d.Replica); err != nil {
 				return err
 			}
@@ -456,9 +463,23 @@ func (k Sending) claimOne(ctx context.Context, tx SendingTx, replica, series, ow
 			c.Damaged = append(c.Damaged, d)
 			return nil
 		})
+	if err != nil {
+		return c, true, err
+	}
 	if len(c.Damaged) > tenant.MaxReplicaDamage {
 		c.Damaged, c.RecopyAll = c.Damaged[:tenant.MaxReplicaDamage], true
 	}
+	// An instance a purging correction hides is not copied: the purge took
+	// its copies when it began, and StartPurge counted a change on every
+	// row of its scans being copied, so a claim made before ends again.
+	err = tx.Query(ctx, `SELECT h.sop_instance_uid FROM hidden_instances AS h JOIN corrections AS c ON c.id = h.correction_id
+		JOIN scans AS s ON s.id = h.scan_id WHERE c.state = 'purging' AND s.series_uid = ? ORDER BY h.sop_instance_uid`,
+		[]any{series}, func(r Row) error {
+			var uid string
+			err := r.Scan(&uid)
+			c.Purging = append(c.Purging, uid)
+			return err
+		})
 	return c, true, err
 }
 

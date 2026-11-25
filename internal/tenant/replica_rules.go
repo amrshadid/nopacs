@@ -126,15 +126,24 @@ type AttachFacts struct {
 	ReplicaNamedBy string
 	// Switching says a switch of the primary is in progress.
 	Switching bool
+	// Purging says a correction with a scan on the primary is purging.
+	Purging bool
 }
+
+// RefusalAttachPurging is the precondition failure of an attach while a
+// correction with a scan on the primary is purging: the purge took the
+// copies it removes from when it began, so a replica attached since would
+// be backfilled with what the correction hid and keep it after the purge.
+const RefusalAttachPurging = "a purge on the primary is unfinished"
 
 // CheckAttach returns a precondition failure, saying which rule, unless the
 // facts allow the replica to be attached to the primary: the primary is not
 // itself a replica and is online, with fewer than MaxReplicas replicas; the
 // replica is not a replica of another storage, has no replicas of its own,
 // holds no data, is named by no receiver or route, and does not overlap its
-// primary; no switch of the primary is in progress. A replica already of
-// this primary is the caller's to answer as it stands, before this.
+// primary; no switch of the primary is in progress, and no correction on
+// it is purging (RefusalAttachPurging). A replica already of this primary
+// is the caller's to answer as it stands, before this.
 func CheckAttach(f AttachFacts) error {
 	r, p := f.Replica, f.Primary
 	switch {
@@ -156,6 +165,8 @@ func CheckAttach(f AttachFacts) error {
 		return Precondition("the receiver " + f.ReplicaNamedBy + " archives to the storage " + r.Name + "; nothing is archived to a replica first")
 	case f.Switching:
 		return Precondition("a switch of the primary " + p.Name + " is in progress")
+	case f.Purging:
+		return Precondition(RefusalAttachPurging)
 	case StoragesOverlap(r, p):
 		return Precondition("the storage " + r.Name + " would overlap its primary " + p.Name)
 	}

@@ -133,8 +133,13 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 			return err
 		}
 		// The publish changes what each scan's replicas must hold: a scan
-		// kept is queued again, one hidden whole is dropped from them.
-		if err := k.QueueCorrectionCopies(ctx, tx, c.ID, cc.Now); err != nil {
+		// kept is queued again (but on a replica a relabel copied to in
+		// step), one hidden whole is dropped from them. Each replica is owed
+		// the record of the correction committed until it holds it.
+		if err := k.QueueCorrectionCopies(ctx, tx, c.ID, cc.Now, cc.ReplicaManifests); err != nil {
+			return err
+		}
+		if err := k.oweAllRecords(ctx, tx, c.ID, cc.Now); err != nil {
 			return err
 		}
 		// A delete of some of a session's scans changes what its scans
@@ -465,7 +470,7 @@ func (k Sending) undoDeleteIn(ctx context.Context, tx SendingTx, c *tenant.Corre
 		return err
 	}
 	// What was shown again is the replicas' to hold again.
-	if err := k.QueueCorrectionCopies(ctx, tx, c.ID, now); err != nil {
+	if err := k.QueueCorrectionCopies(ctx, tx, c.ID, now, nil); err != nil {
 		return err
 	}
 	// Its sessions' times are stored again from the scans shown, and a
@@ -520,6 +525,22 @@ func (k Sending) StartPurge(ctx context.Context, id string, now time.Time, audit
 			if err := k.setState(ctx, tx, c, corr.StatePurging, now, ""); err != nil {
 				return err
 			}
+			// A copy of one of its scans claimed before now may have planned
+			// an object the purge is about to remove, and put it after the
+			// purge removed it from the replica: a change counted on its row
+			// keeps it from ending in step, and the next claim skips what a
+			// purging correction hides.
+			if _, err := tx.Exec(ctx, `UPDATE replica_scans SET seq = seq + 1 WHERE state = 'copying'
+				AND series_uid IN (SELECT series_uid FROM correction_scans WHERE correction_id = ?)`, c.ID); err != nil {
+				return err
+			}
+			// The record at its new state is owed to every replica until it
+			// is written there: a stop after the primary's record is written
+			// and before a replica's would otherwise leave the replica's
+			// record committed, with nothing to write it again.
+			if err := k.oweAllRecords(ctx, tx, c.ID, now); err != nil {
+				return err
+			}
 		default:
 			return tenant.Precondition("the correction is " + string(c.State) + ", not committed")
 		}
@@ -554,7 +575,12 @@ func (k Sending) RecordPurgedObject(ctx context.Context, o tenant.PurgedObject) 
 		if err := k.checkNoRebuild(ctx, tx); err != nil {
 			return err
 		}
-		return k.insertPurged(ctx, tx, o)
+		// Recorded at its storage's generation now: refused while a switch
+		// of the correction's storages runs, so that is the one it acted at.
+		if err := checkNoSwitch(ctx, tx, c.ID); err != nil {
+			return err
+		}
+		return k.insertPurged(ctx, tx, o, map[string]purgePlace{})
 	})
 	return err
 }

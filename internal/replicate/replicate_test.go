@@ -285,6 +285,31 @@ func TestPlanRecopiesEverythingWhenAsked(t *testing.T) {
 	}
 }
 
+// TestPlanSkipsWhatAPurgeHides guards a claim naming an instance a purging
+// correction hides (one the catalog no longer holds): its object is left
+// out of the plan, and every other object of the manifest is in it.
+func TestPlanSkipsWhatAPurgeHides(t *testing.T) {
+	f := newFixture(t)
+	s := f.archive(1, "scan-a", synthetic(1, 1, 3, 100))
+	held := map[string]tenant.ScanInstance{}
+	for _, c := range s.confirmed[1:] {
+		held[c.SOPInstanceUID] = tenant.ScanInstance{SOPInstanceUID: c.SOPInstanceUID, Key: c.Key, Length: c.Length, Size: c.Size,
+			ArchivedSHA256: c.ArchivedSHA256}
+	}
+	m := manifest.Manifest{Files: s.lines}
+	objects, err := plan(m, held, tenant.ReplicaClaim{Purging: []string{s.confirmed[0].SOPInstanceUID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, o := range objects {
+		keys = append(keys, o.key)
+	}
+	if !slices.Equal(keys, []string{s.confirmed[1].Key, s.confirmed[2].Key}) {
+		t.Errorf("the plan with one instance being purged copies %v, want the other two", keys)
+	}
+}
+
 // TestFlippedSourceByteIsRefused guards the put against the catalog's
 // checksum on a replica that confirms checksums itself (so nothing is read
 // back): a byte flipped on the way from the primary fails the put, the

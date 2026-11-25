@@ -96,8 +96,17 @@ func (k Sending) switchFactsIn(ctx context.Context, tx SendingTx, primary, repli
 		&f.ReplicaFindings); err != nil {
 		return f, err
 	}
+	if _, err := tx.QueryRow(ctx, `SELECT count(*) FROM correction_records_owed WHERE storage = ?`, []any{replica},
+		&f.RecordsOwed); err != nil {
+		return f, err
+	}
 	if f.CorrectionPrepared, err = exists(ctx, tx, `SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
 		WHERE c.state = 'prepared' AND cs.storage = ?`, primary); err != nil {
+		return f, err
+	}
+	if f.PurgeUnfinished, err = exists(ctx, tx, `SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
+		WHERE c.state = 'purging' AND cs.storage IN (?, ?)
+		AND EXISTS (SELECT 1 FROM correction_keys AS ck WHERE ck.correction_id = c.id AND ck.outcome = '')`, primary, replica); err != nil {
 		return f, err
 	}
 	if f.RebuildRunning, err = exists(ctx, tx, rebuildNotEnded+k.D.NotEnded); err != nil {
@@ -291,12 +300,23 @@ func (k Sending) SwapStorages(ctx context.Context, sw tenant.SwitchSwap, audit m
 			return tenant.Precondition(tenant.BlockerNotInStep(f.ScansNotInStep))
 		case f.ReplicaFindings > 0:
 			return tenant.Precondition(tenant.BlockerFinding)
+		// The replica's place becomes the primary's: a correction whose
+		// record it lacks would be unknown to a rebuild or a restore that
+		// reads it, and its purge would find what it hid with no record.
+		case f.RecordsOwed > 0:
+			return tenant.Precondition(tenant.RefusalRecordsOwed)
 		// A correction or a rebuild made after the switch began would write
 		// to the primary's old place, or a catalog read from it, once the
 		// swap moved the name; the begin refuses one already there, this
 		// one made since.
 		case f.CorrectionPrepared:
 			return tenant.Precondition(tenant.BlockerCorrectionPrepared)
+		// A purge records each copy's removal by storage name: one with an
+		// object not settled, its removals on some copies recorded, would
+		// ask the rest again by names the swap points at other places.
+		// PurgeTargets refuses while the switch runs, so none starts now.
+		case f.PurgeUnfinished:
+			return tenant.Precondition(tenant.BlockerPurgeUnfinished)
 		case f.RebuildRunning:
 			return tenant.Precondition(tenant.BlockerRebuild)
 		}

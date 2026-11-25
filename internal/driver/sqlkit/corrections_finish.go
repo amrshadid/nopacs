@@ -54,6 +54,12 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 		if err := k.setState(ctx, tx, c, corr.StatePurged, f.Now, ""); err != nil {
 			return err
 		}
+		// The record at purged is owed to every replica until it is written
+		// there, as the start's was: a stop before the replicas' records are
+		// rewritten would otherwise leave them purging for good.
+		if err := k.oweAllRecords(ctx, tx, c.ID, f.Now); err != nil {
+			return err
+		}
 		if err := changedEvent(ctx, tx, *c, f.Now); err != nil {
 			return err
 		}

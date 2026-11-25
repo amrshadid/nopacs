@@ -74,6 +74,41 @@ func (t *Tenant) MarkRecords(ctx context.Context, id string, state record.State)
 	return t.sending().MarkRecords(ctx, id, state)
 }
 
+// CorrectionCopies implements tenant.Corrections.
+func (t *Tenant) CorrectionCopies(ctx context.Context, id string) ([]tenant.CorrectionCopy, error) {
+	return t.sending().CorrectionCopies(ctx, id)
+}
+
+// OweRecord implements tenant.Corrections.
+func (t *Tenant) OweRecord(ctx context.Context, id, replica string, now time.Time) error {
+	return t.sending().OweRecord(ctx, id, replica, now)
+}
+
+// MarkRecordWritten implements tenant.Corrections.
+func (t *Tenant) MarkRecordWritten(ctx context.Context, id, replica string, state record.State) error {
+	return t.sending().MarkRecordWritten(ctx, id, replica, state)
+}
+
+// RecordsOwed implements tenant.Corrections.
+func (t *Tenant) RecordsOwed(ctx context.Context, after tenant.RecordOwed, limit int) ([]tenant.RecordOwed, error) {
+	return t.sending().RecordsOwed(ctx, after, limit)
+}
+
+// DropRecordOwed implements tenant.Corrections.
+func (t *Tenant) DropRecordOwed(ctx context.Context, id, storage string) (bool, error) {
+	return t.sending().DropRecordOwed(ctx, id, storage)
+}
+
+// PurgedTargets implements tenant.Corrections.
+func (t *Tenant) PurgedTargets(ctx context.Context, id string, after tenant.PurgeTarget, limit int) ([]tenant.PurgeTarget, error) {
+	return t.sending().PurgedTargets(ctx, id, after, limit)
+}
+
+// NotePurge implements tenant.Corrections.
+func (t *Tenant) NotePurge(ctx context.Context, id, why string) error {
+	return t.sending().NotePurge(ctx, id, why)
+}
+
 // Correction implements tenant.Corrections.
 func (t *Tenant) Correction(ctx context.Context, id string) (tenant.Correction, error) {
 	return t.sending().Correction(ctx, id)

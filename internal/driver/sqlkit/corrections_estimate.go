@@ -20,6 +20,17 @@ func (k Sending) previewIn(ctx context.Context, tx SendingTx, target tenant.Corr
 		return tenant.DeletePreview{}, err
 	}
 	p := tenant.DeletePreview{Target: target, Counts: r.counts(), Storages: r.storages(), Issued: now.UTC().Truncate(time.Microsecond)}
+	// The replicas of those storages hold it too, and the purge removes it
+	// from each.
+	for _, s := range p.Storages {
+		replicas, err := replicasOf(ctx, tx, s)
+		if err != nil {
+			return p, err
+		}
+		for _, name := range replicas {
+			p.Replicas = append(p.Replicas, tenant.ReplicaCopy{Replica: name, Primary: s})
+		}
+	}
 	scope, arg := r.scanScope()
 	// The senders it was sent to: the send jobs' scans that answered any of
 	// it sent. One instance is in its scan, and the jobs count a scan's

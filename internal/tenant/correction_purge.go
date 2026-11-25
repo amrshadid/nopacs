@@ -88,6 +88,10 @@ type PurgeTarget struct {
 	// Shared says a live row of the catalog resolves to it now: an
 	// instance's object, or a live scan's manifest or metadata.
 	Shared bool
+	// Done names the copies (Storage, or a replica of it) whose removal of
+	// it is recorded already, while another copy has not answered
+	// (OutcomePending): a purge run again asks only the rest.
+	Done []string
 }
 
 // Key returns the target's key on its storage.
@@ -150,8 +154,10 @@ func (o PurgeOutcome) Valid() bool {
 }
 
 // PurgeSettled is what became of one target: its outcome and, when it was
-// purged, what its storage did with each version (each PurgedObject's ID
-// is the correction's).
+// purged, what each of its copies did with each version (each
+// PurgedObject's ID is the correction's, its Storage the copy's). With
+// OutcomePending the target stays to settle, and the copies of its
+// removals are added to its Done.
 type PurgeSettled struct {
 	Target   PurgeTarget
 	Outcome  PurgeOutcome
@@ -161,11 +167,14 @@ type PurgeSettled struct {
 // Validate returns an Invalid error unless s can be recorded for the
 // correction id.
 func (s PurgeSettled) Validate(id string) error {
-	if !s.Outcome.Valid() {
-		return invalid("a purge's outcome is purged, kept_shared or kept_changed")
+	if !s.Outcome.Valid() && s.Outcome != OutcomePending {
+		return invalid("a purge's outcome is purged, kept_shared or kept_changed, or pending")
 	}
-	if s.Outcome != OutcomePurged && len(s.Removals) > 0 {
+	if s.Outcome != OutcomePurged && s.Outcome != OutcomePending && len(s.Removals) > 0 {
 		return invalid("only a purged object has removals")
+	}
+	if s.Outcome == OutcomePending && len(s.Removals) == 0 {
+		return invalid("a pending object names the removals its copies answered")
 	}
 	for _, o := range s.Removals {
 		if o.ID != id {

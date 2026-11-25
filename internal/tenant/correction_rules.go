@@ -235,6 +235,15 @@ func DeleteConfirm(p DeletePreview) string {
 		keep = n(p.KeepUntil.UnixMicro())
 	}
 	w(n(p.SessionsUnderMinimum), keep)
+	// The replicas the purge removes it from: one attached or detached
+	// since the preview makes its token stale. Written only when there are
+	// any, so a tenant without replicas keeps the token it had.
+	if len(p.Replicas) > 0 {
+		w(n(int64(len(p.Replicas))))
+		for _, r := range p.Replicas {
+			w(r.Primary, r.Replica)
+		}
+	}
 	sum := sha256.Sum256([]byte(b.String()))
 	return "c1." + issued + "." + hex.EncodeToString(sum[:])
 }

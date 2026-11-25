@@ -40,12 +40,22 @@ func runReplication(t *testing.T, open OpenEvents, scratch Scratch) {
 		{"SwitchSecrets", testSwitchSecrets},
 		{"SwitchHoldsChanges", testSwitchHoldsChanges},
 		{"RepairAcrossSwap", testRepairAcrossSwap},
+		{"CorrectionRecordsOwed", testCorrectionRecordsOwed},
+		{"CorrectionPurgeCopies", testCorrectionPurgeCopies},
+		{"RelabelKeepsReplicaInStep", testRelabelKeepsReplicaInStep},
+		{"DetachAbandonsCopies", testDetachAbandonsCopies},
+		{"CorrectionCopiesSnapshot", testCorrectionCopiesSnapshot},
+		{"SwitchExcludesPurge", testSwitchExcludesPurge},
+		{"AttachOwesRecords", testAttachOwesRecords},
+		{"PurgeStepsOweRecords", testPurgeStepsOweRecords},
+		{"DropRecordOwed", testDropRecordOwed},
+		{"DetachAbandonsUnseeded", testDetachAbandonsUnseeded},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			s := open(t, SuiteTenant)
-			e := &renv{senv: &senv{eenv: &eenv{penv: &penv{env: &env{T: t, s: s, ctx: context.Background()}, p: s}, ev: s}}}
+			e := &renv{senv: &senv{eenv: &eenv{penv: &penv{env: &env{T: t, s: s, ctx: context.Background()}, p: s}, ev: s, openEv: open}}}
 			if scratch != nil {
 				e.scratch = scratch(t)
 				e.another = func() string { return scratch(t) }

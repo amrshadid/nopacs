@@ -92,11 +92,20 @@ func (e *Engine) ContinueRelabel(ctx context.Context, id string) (tenant.Correct
 	if err != nil {
 		return c, err
 	}
+	copies, err := e.cfg.Store.CorrectionCopies(ctx, id)
+	if err != nil {
+		return c, err
+	}
 	manifests := map[string]tenant.SHA256{}
 	snapshots := map[string]tenant.ScanSnapshot{}
+	replicas := map[string]map[string]tenant.SHA256{}
 	var copied int64
 	for _, s := range scans {
-		sum, snap, n, err := e.copyScan(ctx, c, s, &copied)
+		st, err := e.cfg.OpenStorage(ctx, s.Storage)
+		if err != nil {
+			return c, err
+		}
+		sum, snap, n, err := e.copyScan(ctx, c, st, s, &copied, tenant.SHA256{})
 		if errors.Is(err, errStopped) {
 			return e.stopped(ctx, id)
 		}
@@ -108,6 +117,31 @@ func (e *Engine) ContinueRelabel(ctx context.Context, id string) (tenant.Correct
 		}
 		manifests[s.SeriesUID], snapshots[s.SeriesUID] = sum, snap
 		copied += n
+		// Each replica in step for the scan gets the new keys before the
+		// publish, from its own objects, so a read may turn to it the moment
+		// the labels switch; a replica not in step, or that does not answer,
+		// is not waited for: the publish queues it, and the replicator
+		// copies the scan under its new labels.
+		for _, cp := range copies {
+			if cp.Primary != s.Storage || !cp.HoldsScan(s.SeriesUID) {
+				continue
+			}
+			rsum, err := e.copyToReplica(ctx, c, cp.Replica, s, snap.Manifest)
+			if errors.Is(err, errStopped) {
+				return e.stopped(ctx, id)
+			}
+			if err != nil {
+				e.cfg.Log.Warn("a relabel did not copy to a replica in step; the replica copies the scan after the publish", "correction", id,
+					"replica", cp.Replica, "error", err.Error())
+				continue
+			}
+			if rsum == sum {
+				if replicas[cp.Replica] == nil {
+					replicas[cp.Replica] = map[string]tenant.SHA256{}
+				}
+				replicas[cp.Replica][s.SeriesUID] = rsum
+			}
+		}
 	}
 	if err := e.cfg.Store.RecordCopied(ctx, id, copied); err != nil {
 		return c, err
@@ -115,7 +149,23 @@ func (e *Engine) ContinueRelabel(ctx context.Context, id string) (tenant.Correct
 	if err := e.reached(c, "copied"); err != nil {
 		return c, err
 	}
-	return e.publish(ctx, c, manifests, snapshots)
+	return e.publishWith(ctx, c, manifests, snapshots, replicas)
+}
+
+// copyToReplica copies one scan of a relabel on a replica in step for it:
+// from the replica's own objects under the old labels to their keys under
+// the new ones, each read back and compared, and the new metadata and
+// manifest. It answers the new manifest's SHA-256. The replica's manifest
+// must be the primary's (want), read before the copy; one that is not is
+// not in step, and nothing is written there.
+func (e *Engine) copyToReplica(ctx context.Context, c tenant.Correction, replica string, s tenant.CorrectionScan,
+	want tenant.SHA256) (tenant.SHA256, error) {
+	st, err := e.cfg.OpenStorage(ctx, replica)
+	if err != nil {
+		return tenant.SHA256{}, err
+	}
+	sum, _, _, err := e.copyScan(ctx, c, st, s, nil, want)
+	return sum, err
 }
 
 // stopped removes the copies of a relabel its copy found stopped, after its
@@ -142,6 +192,10 @@ func (e *Engine) stopped(ctx context.Context, id string) (tenant.Correction, err
 // errStopped is a relabel an admin stopped while it copied.
 var errStopped = errors.New("the relabel was stopped")
 
+// errNotInStep is a replica whose manifest of a scan is not the primary's:
+// a relabel does not copy to it before the publish.
+var errNotInStep = errors.New("the replica's manifest is not the primary's")
+
 // newKey returns the key of an object of the relabel's scan s under its
 // new labels: the same name, revision and all, in the new scan's tree.
 func newKey(key string, to label.Path) (string, error) {
@@ -153,16 +207,23 @@ func newKey(key string, to label.Path) (string, error) {
 	return k.String()
 }
 
-// copyScan copies one scan's objects and writes its manifest and metadata
-// under the new labels; it answers the new manifest's SHA-256, what it read
-// of the old manifest and metadata (what the purge may remove), and how
-// many objects it copied. The relabel's row is read before every write.
-func (e *Engine) copyScan(ctx context.Context, c tenant.Correction, s tenant.CorrectionScan,
-	copied *int64) (tenant.SHA256, tenant.ScanSnapshot, int64, error) {
+// copyScan copies one scan's objects on st and writes its manifest and
+// metadata under the new labels; it answers the new manifest's SHA-256,
+// what it read of the old manifest and metadata (what the purge may
+// remove), and how many objects it copied. The relabel's row is read before
+// every write, and its progress recorded from copied (nil for a replica's
+// copy, which counts nothing). want, when not zero, is the manifest the
+// scan's must be (a replica's, the primary's): another is errNotInStep,
+// before anything is written.
+func (e *Engine) copyScan(ctx context.Context, c tenant.Correction, st blob.Store, s tenant.CorrectionScan,
+	copied *int64, want tenant.SHA256) (tenant.SHA256, tenant.ScanSnapshot, int64, error) {
 	var snap tenant.ScanSnapshot
-	st, err := e.cfg.OpenStorage(ctx, s.Storage)
-	if err != nil {
-		return tenant.SHA256{}, snap, 0, err
+	var n int64
+	progress := func() int64 {
+		if copied == nil {
+			return 0
+		}
+		return *copied + n
 	}
 	mk, _ := layout.ManifestKey(s.Path)
 	raw, err := readAll(ctx, st, mk, int64(manifest.MaxBytes))
@@ -170,14 +231,16 @@ func (e *Engine) copyScan(ctx context.Context, c tenant.Correction, s tenant.Cor
 		return tenant.SHA256{}, snap, 0, errors.Join(errCopy, err)
 	}
 	snap.Manifest, snap.ManifestSize = sha256.Sum256(raw), int64(len(raw))
+	if !want.IsZero() && snap.Manifest != want {
+		return tenant.SHA256{}, snap, 0, errNotInStep
+	}
 	m, err := manifest.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return tenant.SHA256{}, snap, 0, errors.Join(errCopy, err)
 	}
-	var n int64
 	files := make([]manifest.File, len(m.Files))
 	for i, f := range m.Files {
-		if err := e.checkStill(ctx, c.ID, *copied+n); err != nil {
+		if err := e.checkStill(ctx, c.ID, progress()); err != nil {
 			return tenant.SHA256{}, snap, n, err
 		}
 		to, err := newKey(f.Key, s.NewPath)
@@ -194,7 +257,7 @@ func (e *Engine) copyScan(ctx context.Context, c tenant.Correction, s tenant.Cor
 			return tenant.SHA256{}, snap, n, err
 		}
 	}
-	if err := e.checkStill(ctx, c.ID, *copied+n); err != nil {
+	if err := e.checkStill(ctx, c.ID, progress()); err != nil {
 		return tenant.SHA256{}, snap, n, err
 	}
 	if snap.Metadata, snap.MetadataSize, err = copyMetadata(ctx, st, s.Path, s.NewPath); err != nil {
@@ -207,7 +270,7 @@ func (e *Engine) copyScan(ctx context.Context, c tenant.Correction, s tenant.Cor
 	if err != nil {
 		return tenant.SHA256{}, snap, n, fault.Wrap(fault.Internal, err, "a scan's manifest cannot be made")
 	}
-	if err := e.checkStill(ctx, c.ID, *copied+n); err != nil {
+	if err := e.checkStill(ctx, c.ID, progress()); err != nil {
 		return tenant.SHA256{}, snap, n, err
 	}
 	nk, _ := layout.ManifestKey(s.NewPath)
@@ -353,6 +416,10 @@ func (e *Engine) removeCopies(ctx context.Context, c tenant.Correction) error {
 	if err != nil {
 		return err
 	}
+	copies, err := e.cfg.Store.CorrectionCopies(ctx, c.ID)
+	if err != nil {
+		return err
+	}
 	for _, s := range scans {
 		if !free[s.SeriesUID] {
 			e.cfg.Log.Warn("a stopped relabel's copies are left: their new labels are held since", "correction", c.ID)
@@ -363,29 +430,59 @@ func (e *Engine) removeCopies(ctx context.Context, c tenant.Correction) error {
 			return err
 		}
 		mk, _ := layout.ManifestKey(s.Path)
+		var files []manifest.File
 		raw, err := readAll(ctx, st, mk, int64(manifest.MaxBytes))
 		if err == nil {
 			if m, err := manifest.Decode(bytes.NewReader(raw)); err == nil {
-				for _, f := range m.Files {
-					to, err := newKey(f.Key, s.NewPath)
-					if err != nil {
-						continue
-					}
-					if err := st.Delete(ctx, to); err != nil {
-						return err
-					}
-				}
+				files = m.Files
 			}
 		} else if fault.KindOf(err) != fault.NotFound {
 			return err
 		}
-		for _, k := range []func(label.Path) (string, error){layout.MetadataKey, layout.ManifestKey} {
-			key, _ := k(s.NewPath)
-			if err := st.Delete(ctx, key); err != nil {
-				return err
+		if err := e.removeCopiesOn(ctx, st, s, files); err != nil {
+			return err
+		}
+		// A replica the copy reached holds the same keys under the new
+		// labels. One that does not answer keeps them: the same bytes under
+		// labels nothing reads, which a later copy of a scan there writes
+		// over, and no reason to keep the relabel prepared.
+		for _, cp := range copies {
+			if cp.Primary != s.Storage {
+				continue
+			}
+			rst, err := e.cfg.OpenStorage(ctx, cp.Replica)
+			if err == nil {
+				err = e.removeCopiesOn(ctx, rst, s, files)
+			}
+			if err != nil {
+				e.cfg.Log.Warn("a stopped relabel's copies on a replica could not be removed", "correction", c.ID, "replica", cp.Replica,
+					"error", fault.Message(err))
 			}
 		}
-		e.pruneDirs(ctx, st, s.NewPath)
 	}
+	return nil
+}
+
+// removeCopiesOn removes, from one copy, a relabel's copies of scan s:
+// each object the old manifest names (files) at its key under the new
+// labels, then the new metadata and manifest, then the directories that
+// leaves empty.
+func (e *Engine) removeCopiesOn(ctx context.Context, st blob.Store, s tenant.CorrectionScan, files []manifest.File) error {
+	for _, f := range files {
+		to, err := newKey(f.Key, s.NewPath)
+		if err != nil {
+			continue
+		}
+		if err := st.Delete(ctx, to); err != nil {
+			return err
+		}
+	}
+	for _, k := range []func(label.Path) (string, error){layout.MetadataKey, layout.ManifestKey} {
+		key, _ := k(s.NewPath)
+		if err := st.Delete(ctx, key); err != nil {
+			return err
+		}
+	}
+	e.pruneDirs(ctx, st, s.NewPath)
 	return nil
 }

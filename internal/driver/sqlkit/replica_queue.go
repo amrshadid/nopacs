@@ -115,12 +115,22 @@ func (k Sending) recountTotals(ctx context.Context, tx SendingTx, replica string
 }
 
 // beginReplica begins what replica holds as a replica of primary: its
-// counts, and every scan of the primary pending for it as its backfill. It
-// answers the scans queued.
+// counts, every scan of the primary pending for it as its backfill, and
+// the record owed to it of every committed or purging correction with a
+// scan on the primary, which the outbox writes and a switch to it waits
+// for: a rebuild from the replica alone would otherwise not know a delete
+// published before the attach, and show what it hid. It answers the scans
+// queued.
 func (k Sending) beginReplica(ctx context.Context, tx SendingTx, replica, primary string, now time.Time) (int64, error) {
 	if _, err := tx.Exec(ctx, `INSERT INTO replica_totals (replica, pending, copying, in_step, damaged, objects_damaged, backfill,
 		attached_at, backfill_done_at, last_fault, last_fault_at) VALUES (?, 0, 0, 0, 0, 0, 0, ?, NULL, '', NULL)`,
 		replica, k.D.Time(now)); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO correction_records_owed (correction_id, storage, owed_at)
+		SELECT c.id, ?, ? FROM corrections AS c WHERE c.state IN ('committed', 'purging')
+		AND EXISTS (SELECT 1 FROM correction_scans AS cs WHERE cs.correction_id = c.id AND cs.storage = ?) ON CONFLICT DO NOTHING`,
+		replica, k.D.Time(now), primary); err != nil {
 		return 0, err
 	}
 	n, err := k.queueAll(ctx, tx, replica, primary, now)
@@ -247,8 +257,14 @@ func (k Sending) dropRow(ctx context.Context, tx SendingTx, row replicaRow, now 
 // correction does for the replicas: each scan the correction touches that
 // the catalog still holds is queued again for the replicas of its storage
 // (a relabel's new keys, a replace's new revision, an instance deleted from
-// it), and each it hid whole is dropped from every replica's rows.
-func (k Sending) QueueCorrectionCopies(ctx context.Context, tx SendingTx, correction string, now time.Time) error {
+// it), and each it hid whole is dropped from every replica's rows. kept
+// are, by replica then series, the manifests a relabel wrote under the new
+// labels on a replica in step (tenant.CorrectionCommit.ReplicaManifests):
+// such a row, in step still and at that digest the scan's manifest now, is
+// moved to it in step rather than queued, since the replica holds the new
+// keys verified before the publish, and a read may turn to it at once.
+func (k Sending) QueueCorrectionCopies(ctx context.Context, tx SendingTx, correction string, now time.Time,
+	kept map[string]map[string]tenant.SHA256) error {
 	var series []string
 	err := tx.Query(ctx, `SELECT series_uid FROM correction_scans WHERE correction_id = ? ORDER BY series_uid`, []any{correction},
 		func(r Row) error {
@@ -262,7 +278,8 @@ func (k Sending) QueueCorrectionCopies(ctx context.Context, tx SendingTx, correc
 	}
 	for _, s := range series {
 		var storage string
-		found, err := tx.QueryRow(ctx, `SELECT storage FROM scans WHERE series_uid = ?`, []any{s}, &storage)
+		var digest []byte
+		found, err := tx.QueryRow(ctx, `SELECT storage, manifest_sha256 FROM scans WHERE series_uid = ?`, []any{s}, &storage, &digest)
 		if err != nil {
 			return err
 		}
@@ -277,6 +294,16 @@ func (k Sending) QueueCorrectionCopies(ctx context.Context, tx SendingTx, correc
 			return err
 		}
 		for _, r := range replicas {
+			if sum, ok := kept[r][s]; ok && len(digest) > 0 && ToSHA256(digest) == sum {
+				moved, err := tx.Exec(ctx, `UPDATE replica_scans SET manifest_sha256 = ?, verified_at = ?
+					WHERE replica = ? AND series_uid = ? AND state = 'in_step'`, sum[:], k.D.Time(now), r, s)
+				if err != nil {
+					return err
+				}
+				if moved == 1 {
+					continue
+				}
+			}
 			if err := k.queueScan(ctx, tx, r, s, now); err != nil {
 				return err
 			}
