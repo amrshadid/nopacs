@@ -27,9 +27,12 @@ const (
 
 // TenantState is whether a tenant can serve requests. The server checks each
 // tenant when it starts and again on a timer. A request into a tenant that is
-// not ready is answered UNAVAILABLE, with two exceptions: a moved or fenced
-// tenant serves reads, and answers every change FAILED_PRECONDITION with the
-// reason TENANT_MOVED or TENANT_FENCED. The other tenants keep working.
+// not ready is answered UNAVAILABLE, with two exceptions: a moved tenant
+// serves reads and answers every change FAILED_PRECONDITION with the reason
+// TENANT_MOVED; a fenced tenant serves no data and answers every request
+// into it, read or change, FAILED_PRECONDITION with the reason
+// TENANT_FENCED. The state of either stays visible (GetTenant, ListTenants,
+// MonitorService.GetStatus). The other tenants keep working.
 type TenantState int32
 
 const (
@@ -54,17 +57,27 @@ const (
 	TenantState_TENANT_STATE_RESTORING TenantState = 5
 	// An export handed the tenant to another installation
 	// (BackupService.ExportTenant): read only, so nothing is written after
-	// the export's snapshot. Reads are served; a change is refused as
+	// the export's snapshot. Reads are served while the owner records on its
+	// storages still name this installation; a change is refused as
 	// FAILED_PRECONDITION with the reason TENANT_MOVED, its receivers refuse
 	// and its jobs stop with their place kept. ReclaimTenant undoes it while
-	// the import has not happened.
+	// the import has not happened. Once an import writes its own owner
+	// record, the server's next check of the records (on its timer, about
+	// every 30 seconds) makes the tenant fenced, and its reads stop; until
+	// that check, reads are still served from what the tenant held at the
+	// export.
 	TenantState_TENANT_STATE_MOVED TenantState = 6
 	// The owner record on one of the tenant's storages names another
 	// installation, or a later generation than this tenant's database holds:
 	// another installation has taken the storage over, by an import or a
-	// restore. Read only as moved: reads served, a change refused as
-	// FAILED_PRECONDITION with the reason TENANT_FENCED, so two installations
-	// never write one storage. The tenant's state_reason names the storage.
+	// restore. No data is served and nothing is written: every request into
+	// the tenant, a read of its catalog, metadata, files, settings, audit or
+	// events as well as a change, is refused as FAILED_PRECONDITION with a
+	// message that begins with the reason TENANT_FENCED and names the
+	// storage and the installation that owns it, so two installations never
+	// write one storage, and what the new owner deletes or corrects is not
+	// served on from here. Only the tenant's state and its state_reason,
+	// which names the storage, stay visible.
 	TenantState_TENANT_STATE_FENCED TenantState = 7
 )
 

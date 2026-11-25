@@ -245,6 +245,15 @@ the code before this release is in github.com/amrshadid/coria.
   old labels, references after corrections, provenance of received bytes,
   what a client sees of a damaged instance, objects not online and the purge
   clock.
+- A fenced tenant serves no data. After a hand-off the old installation kept
+  serving its catalog, downloads, DICOMweb and ReadFiles from what it held at
+  the export, including subjects the new owner had since deleted, whose files
+  stay on the shared storage until that purge. Every read of a fenced tenant
+  is refused FAILED_PRECONDITION with a message beginning TENANT_FENCED that
+  names the installation owning the storage; only its state and reason stay
+  visible. A moved tenant serves reads while its storages' owner records still
+  name this installation; after an import the next owner-record check (within
+  30 seconds, or at start) fences it.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

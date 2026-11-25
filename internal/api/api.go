@@ -582,9 +582,11 @@ const reroutedValue = "the tenant's database is not ready; written to the instal
 func (c *core) tenantStore(ctx context.Context, d access.Decision, name string) (tenant.Store, error) {
 	st, serr := c.reg.Store(name)
 	if fault.KindOf(serr) == fault.Precondition && readsOnly(ctx, d) {
-		// A moved or fenced tenant serves reads; every change is refused
-		// with the reason the registry gave (master.ReadOnlyError).
-		st, serr = c.reg.Reader(name)
+		// A moved tenant serves reads while its storages are still this
+		// installation's; a fenced one serves no data (master.
+		// FencedReadError). Every change is refused with the reason the
+		// registry gave (master.ReadOnlyError).
+		st, serr = c.reg.DataReader(name)
 	}
 	if fault.KindOf(serr) == fault.NotFound {
 		return nil, noTenant(d)

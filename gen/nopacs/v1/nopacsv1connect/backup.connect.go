@@ -79,7 +79,8 @@ type BackupServiceClient interface {
 	CreateBackup(context.Context, *v1.CreateBackupRequest) (BackupServiceCreateBackupClientStream, error)
 	// ExportTenant hands a tenant to another installation, in this order:
 	// (1) the tenant becomes moved (TENANT_STATE_MOVED): read only, its reads
-	// served, every change refused (FAILED_PRECONDITION, reason
+	// served while the owner records on its storages still name this
+	// installation, every change refused (FAILED_PRECONDITION, reason
 	// TENANT_MOVED), its receivers refusing; (2) its writers are drained: the
 	// receptions, corrections, purges, scrub marks and job units in flight
 	// finish or stop with their place kept; (3) the snapshot is taken, so
@@ -99,8 +100,12 @@ type BackupServiceClient interface {
 	// The summary, the last message, carries the transfer key once; the
 	// client writes it to a file of its own, readable by its owner alone,
 	// and it is never answered again. The import on the target writes a new
-	// owner record on each storage, so this installation, should it be
-	// started against them again, fences the tenant (TENANT_STATE_FENCED).
+	// owner record on each storage, so this installation, at its next check
+	// of the records (about every 30 seconds, and when it starts), fences the
+	// tenant (TENANT_STATE_FENCED): from then on it serves none of the
+	// tenant's data, answering every read FAILED_PRECONDITION with the
+	// reason TENANT_FENCED, so what the target deletes or corrects is not
+	// served on from here.
 	// The tenant's audit log and its checkpoints travel inside its database;
 	// the target does not yet check them against this installation's audit
 	// public key, so the chain is not verified across the move.
@@ -199,7 +204,8 @@ type BackupServiceHandler interface {
 	CreateBackup(context.Context, *v1.CreateBackupRequest, BackupServiceCreateBackupServerStream) error
 	// ExportTenant hands a tenant to another installation, in this order:
 	// (1) the tenant becomes moved (TENANT_STATE_MOVED): read only, its reads
-	// served, every change refused (FAILED_PRECONDITION, reason
+	// served while the owner records on its storages still name this
+	// installation, every change refused (FAILED_PRECONDITION, reason
 	// TENANT_MOVED), its receivers refusing; (2) its writers are drained: the
 	// receptions, corrections, purges, scrub marks and job units in flight
 	// finish or stop with their place kept; (3) the snapshot is taken, so
@@ -219,8 +225,12 @@ type BackupServiceHandler interface {
 	// The summary, the last message, carries the transfer key once; the
 	// client writes it to a file of its own, readable by its owner alone,
 	// and it is never answered again. The import on the target writes a new
-	// owner record on each storage, so this installation, should it be
-	// started against them again, fences the tenant (TENANT_STATE_FENCED).
+	// owner record on each storage, so this installation, at its next check
+	// of the records (about every 30 seconds, and when it starts), fences the
+	// tenant (TENANT_STATE_FENCED): from then on it serves none of the
+	// tenant's data, answering every read FAILED_PRECONDITION with the
+	// reason TENANT_FENCED, so what the target deletes or corrects is not
+	// served on from here.
 	// The tenant's audit log and its checkpoints travel inside its database;
 	// the target does not yet check them against this installation's audit
 	// public key, so the chain is not verified across the move.

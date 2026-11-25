@@ -12,7 +12,7 @@ library.
            the new history begins with catalog_rebuilt
   writer   export from A, import into B on the same storages: A refuses
            arrivals and, restarted, is fenced: no reception, no purge, no
-           reclaim
+           reclaim, and no read (TENANT_FENCED), its state still shown
 """
 
 import hashlib
@@ -235,9 +235,21 @@ def group_writer(p):
         time.sleep(1)
     p.result("11 A restarted shows the tenant fenced (nopacs tenant show)", "TENANT_STATE_FENCED" in state or '"fenced"' in state.lower(),
              " ".join(state.split())[:300])
+    # A fenced tenant serves no data: what B deletes or corrects on the shared
+    # storage never reaches A's catalog, so A refuses every read, naming B
+    # (the installation id B's data directory holds), and shows its state.
+    with open(os.path.join(b_data, "installation"), encoding="ascii") as f:
+        id_b = f.read().strip()
     code, _, body, _ = p.curl(instance_route(al))
-    p.result("11 the fenced A still serves a read, as a read-only tenant (curl, hashlib)", code == 200 and hashlib.sha256(body).hexdigest() == al["sha256"],
-             "GET of an instance HTTP %d %s" % (code, body[:80] if code != 200 else ""))
+    qcode, _, qbody, _ = p.curl("/tenants/lab/dicom-web/studies")
+    st, answer = p.call("nopacs.v1.CatalogService/ListSubjects", {"tenant": "lab", "pageSize": 100})
+    def fenced(c, b):
+        text = b.decode("utf-8", "replace") if isinstance(b, bytes) else str(b)
+        return c == 400 and "TENANT_FENCED: the tenant lab serves no data" in text and id_b in text and al["subject"] not in text
+    p.result("11 the fenced A refuses reads with TENANT_FENCED naming B, and shows its state (curl, nopacs tenant show)",
+             fenced(code, body) and fenced(qcode, qbody) and fenced(st, answer) and id_b in state
+             and ("TENANT_STATE_FENCED" in state or '"fenced"' in state.lower()),
+             "GET of an instance HTTP %d %s; QIDO-RS HTTP %d; ListSubjects HTTP %d %s" % (code, body[:200], qcode, st, str(answer)[:200]))
     n2, out2 = p.storescu(p.raw_port, more)
     p.result("11 the fenced A refuses a reception (storescu)", n2 == 0 and len(p.held()) == held_before,
              "storescu: %d of 1 answered success; A's catalog holds %d instances (it held %d)" % (n2, len(p.held()), held_before))

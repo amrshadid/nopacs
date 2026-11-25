@@ -117,8 +117,10 @@ const (
 	// reclaim takes it back.
 	StateMoved TenantState = "moved"
 	// StateFenced is a tenant the owner record of one of its storages says
-	// another installation (or a later generation) owns: read only, so two
-	// installations never write one storage. The reason names the storage.
+	// another installation (or a later generation) owns: every change is
+	// refused, so two installations never write one storage, and no data is
+	// served (FencedReadError), so what the new owner deletes or corrects is
+	// not served on from this copy. The reason names the storage.
 	StateFenced TenantState = "fenced"
 )
 
@@ -131,9 +133,31 @@ func (s TenantState) Valid() bool {
 	return false
 }
 
-// ReadOnly reports whether s is a state in which a tenant's reads are
-// served and every change is refused: moved or fenced.
+// ReadOnly reports whether s is a state in which every change of a tenant
+// is refused, while its database stays open: moved or fenced. A moved
+// tenant's data is still served; a fenced one's is not (FencedReadError).
 func (s TenantState) ReadOnly() bool { return s == StateMoved || s == StateFenced }
+
+// ErrFencedRead is the cause of a read refused by a fenced tenant
+// (FencedReadError), for errors.Is.
+var ErrFencedRead = errors.New("a fenced tenant serves no data")
+
+// FencedReadError returns the Precondition error of a read of its data
+// (catalog, metadata, files, settings, audit, events) refused by the tenant
+// named name, fenced for why (its state reason, which names the storage and
+// the installation that owns it; may be empty). The message begins with
+// ReasonTenantFenced, as the refusal of a change does. A fenced tenant
+// serves no data: once another installation owns a storage, a delete, a
+// relabel or a replace made there never reaches this installation's
+// catalog, so serving from it would keep handing out what the owner
+// withdrew, to keys the owner cannot revoke.
+func FencedReadError(name, why string) error {
+	msg := ReasonTenantFenced + ": the tenant " + name + " serves no data here, since another installation owns one of its storages"
+	if why != "" {
+		msg += " (" + why + ")"
+	}
+	return fault.Wrap(fault.Precondition, ErrFencedRead, msg)
+}
 
 // The reasons a change refused by a read-only tenant carries, as the API
 // contract names them (access.proto, "precondition").

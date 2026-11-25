@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -124,9 +125,11 @@ func TestHandoffGiveBackOnlyFromMoved(t *testing.T) {
 
 // TestHandoffFence guards the fence check: a tenant whose fence says
 // nothing is ready; once it names a reason the tenant turns fenced at the
-// next check (Store refused with TENANT_FENCED, Reader served, the master
-// and its audit say fenced with the reason), a moved tenant turns fenced
-// too, and a fenced tenant is not checked again; a check that fails fences
+// next check (Store refused with TENANT_FENCED, Reader served for the
+// server's own checks, DataReader refused with TENANT_FENCED naming the
+// owner, the master and its audit say fenced with the reason), a moved
+// tenant's data is served until that check and it turns fenced too, and a
+// fenced tenant is not checked again; a check that fails fences
 // nothing; CheckFence checks at once.
 func TestHandoffFence(t *testing.T) {
 	e := newEnv(t)
@@ -154,6 +157,9 @@ func TestHandoffFence(t *testing.T) {
 	if _, err := r.Store("lab"); err != nil {
 		t.Fatalf("a tenant no fence names: %v", err)
 	}
+	if _, err := r.DataReader("lab"); err != nil {
+		t.Fatalf("DataReader of a ready tenant: %v", err)
+	}
 	fail.Store(true)
 	reason.Store("the storage main's owner record names installation B")
 	r.checkAll().Wait()
@@ -164,6 +170,11 @@ func TestHandoffFence(t *testing.T) {
 	if err := r.SetHandoff(context.Background(), "clinic", master.StateMoved, "", e.audit("ExportTenant"), master.LocalOperator()); err != nil {
 		t.Fatal(err)
 	}
+	// Moved, not yet checked against the owner record that names B: its
+	// data is served until the next check.
+	if _, err := r.DataReader("clinic"); err != nil {
+		t.Fatalf("DataReader of moved clinic before the check = %v", err)
+	}
 	r.checkAll().Wait()
 	for _, name := range []string{"lab", "clinic"} {
 		_, err := r.Store(name)
@@ -173,6 +184,11 @@ func TestHandoffFence(t *testing.T) {
 		}
 		if _, err := r.Reader(name); err != nil {
 			t.Fatalf("Reader of fenced %s = %v", name, err)
+		}
+		if st, err := r.DataReader(name); st != nil || !errors.Is(err, master.ErrFencedRead) || fault.KindOf(err) != fault.Precondition ||
+			!strings.HasPrefix(fault.Message(err), master.ReasonTenantFenced+": the tenant "+name+" serves no data") ||
+			!strings.Contains(fault.Message(err), "names installation B") {
+			t.Fatalf("DataReader of fenced %s = %v %v, want TENANT_FENCED naming B", name, st, err)
 		}
 		if row := e.masterTenant(name); row.State != master.StateFenced || !strings.Contains(row.StateReason, "names installation B") {
 			t.Fatalf("the master holds %s (%q) for %s", row.State, row.StateReason, name)

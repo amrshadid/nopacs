@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
@@ -21,9 +22,10 @@ var _ nopacsv1connect.MonitorServiceHandler = monitorService{}
 // GetStatus answers the status of one tenant, or a page of every tenant's.
 // A tenant whose database does not answer is answered with its state and
 // what is held in memory rather than refused: that is when its status
-// matters most. The request is recorded in the log of its scope, or for a
-// tenant whose database does not answer, in the installation's log with
-// the reason.
+// matters most. A fenced tenant, which serves no data, is answered with
+// its state alone. The request is recorded in the log of its scope, or for
+// a tenant whose database does not answer or is fenced, in the
+// installation's log (with the reason, for the first).
 func (s monitorService) GetStatus(ctx context.Context, req *v1.GetStatusRequest) (*v1.GetStatusResponse, error) {
 	c := s.c
 	d, err := c.decision(ctx, nopacsv1connect.MonitorServiceGetStatusProcedure)
@@ -45,7 +47,8 @@ func (s monitorService) GetStatus(ctx context.Context, req *v1.GetStatusRequest)
 			return nil, c.fail(d, listError(err, page.Cursor))
 		}
 		for _, t := range rows {
-			st, _ := c.reg.Reader(t.Name)
+			// A fenced tenant serves no data: its status is its state alone.
+			st, _ := c.reg.DataReader(t.Name)
 			out.Tenants = append(out.Tenants, c.tenantStatus(ctx, t.Name, st))
 		}
 		out.NextPageToken = next
@@ -73,6 +76,12 @@ func (s monitorService) GetStatus(ctx context.Context, req *v1.GetStatusRequest)
 		out.Time = timestamp(c.now())
 		c.record(d, nil, master.OutcomeDone, "", access.Facts{TenantName: scope.Tenant,
 			Details: map[string]string{detailScope: scope.String(), access.DetailRerouted: reroutedValue}})
+	case errors.Is(err, master.ErrFencedRead):
+		// A fenced tenant serves no data, but its state stays visible: its
+		// status is that state alone, recorded in the installation's log.
+		out.Tenants = []*v1.TenantStatus{c.tenantStatus(ctx, scope.Tenant, nil)}
+		out.Time = timestamp(c.now())
+		c.record(d, nil, master.OutcomeDone, "", access.Facts{TenantName: scope.Tenant, Details: map[string]string{detailScope: scope.String()}})
 	default:
 		return nil, c.failWith(d, nil, access.Facts{TenantName: scope.Tenant}, err)
 	}

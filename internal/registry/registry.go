@@ -303,16 +303,43 @@ func (r *Registry) Store(name string) (tenant.Store, error) {
 	return v.store, nil
 }
 
-// Reader is Store for a request that only reads: it also returns the store
-// of a tenant that is moved or fenced, whose reads are served
-// (master.TenantState.ReadOnly). Whatever writes, a change, a reception, a
-// job's unit, takes its store from Store, which refuses such a tenant.
+// Reader is Store for the server's own reads of a tenant's database: it
+// also returns the store of a tenant that is moved or fenced
+// (master.TenantState.ReadOnly), for what must still read it there: the
+// tenant's network rule that guards every request, the installation's
+// checks of a setting against every tenant, a backup, a reclaim, the counts
+// of a status. A request for the tenant's data takes its store from
+// DataReader, which refuses a fenced tenant; whatever writes, a change, a
+// reception, a job's unit, takes its store from Store, which refuses both.
 func (r *Registry) Reader(name string) (tenant.Store, error) {
 	e := (*r.entries.Load())[name]
 	if e == nil {
 		return r.Store(name)
 	}
 	if v := e.view.Load(); v.state.ReadOnly() && v.store != nil {
+		return v.store, nil
+	}
+	return r.Store(name)
+}
+
+// DataReader is Store for a request that reads a tenant's data (its
+// catalog, metadata, files, settings, audit or events): it also returns
+// the store of a moved tenant, whose data is served while the owner records
+// of its storages still name this installation, and refuses a fenced one
+// with master.FencedReadError. A moved
+// tenant another installation has since taken over is served until the
+// next fence check (Config.Interval, or a CheckFence) finds the record and
+// makes it fenced.
+func (r *Registry) DataReader(name string) (tenant.Store, error) {
+	e := (*r.entries.Load())[name]
+	if e == nil {
+		return r.Store(name)
+	}
+	v := e.view.Load()
+	switch {
+	case v.state == master.StateFenced:
+		return nil, master.FencedReadError(name, v.reason)
+	case v.state == master.StateMoved && v.store != nil:
 		return v.store, nil
 	}
 	return r.Store(name)

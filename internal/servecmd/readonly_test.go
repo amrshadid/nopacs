@@ -96,18 +96,16 @@ func instanceUnder(t *testing.T, root, subject string) []string {
 	return parts
 }
 
-// checkReadOnly holds a read-only tenant to its contract over the network,
-// with a key: every read is served (the catalog's lists and gets, the
-// metadata, the plain download, DICOMweb's search and ReadFiles), the
-// tenant's network rule still refuses a request from outside it, and a
-// change is refused as FAILED_PRECONDITION naming reason, never INTERNAL.
-// inst is an instance's labels and UID (instanceUnder).
-func checkReadOnly(t *testing.T, k readOnlyKey, tn string, inst []string, reason string) {
-	t.Helper()
+// jsonType is the content type of a Connect JSON request.
+const jsonType = "application/json"
+
+// dataReads returns the reads of a tenant's data a key is held to, each a
+// procedure and its JSON body, for the instance inst (instanceUnder): the
+// catalog's lists and gets and the metadata.
+func dataReads(tn string, inst []string) [][2]string {
 	sub, ses, scan, uid := inst[0], inst[1], inst[2], inst[3]
-	const js = "application/json"
 	scope := `"tenant":"` + tn + `","subjectLabel":"` + sub + `"`
-	for _, r := range [][2]string{
+	return [][2]string{
 		{"/nopacs.v1.CatalogService/ListSubjects", `{"tenant":"` + tn + `"}`},
 		{"/nopacs.v1.CatalogService/GetSubject", `{` + scope + `}`},
 		{"/nopacs.v1.CatalogService/ListSessions", `{` + scope + `}`},
@@ -116,48 +114,119 @@ func checkReadOnly(t *testing.T, k readOnlyKey, tn string, inst []string, reason
 		{"/nopacs.v1.CatalogService/GetScan", `{` + scope + `,"sessionLabel":"` + ses + `","scanLabel":"` + scan + `"}`},
 		{"/nopacs.v1.MetadataService/GetScanMetadata", `{` + scope + `,"sessionLabel":"` + ses + `","scanLabel":"` + scan + `"}`},
 		{"/nopacs.v1.MetadataService/GetInstanceMetadata", `{` + scope + `,"sessionLabel":"` + ses + `","scanLabel":"` + scan + `","instanceId":"` + uid + `"}`},
-	} {
-		if code, body := k.do(t, http.MethodPost, r[0], js, r[1], ""); code != http.StatusOK || (!strings.Contains(body, sub) && !strings.Contains(body, uid)) {
-			t.Errorf("%s of the %s tenant: HTTP %d %.300s", r[0], reason, code, body)
-		}
 	}
-	if code, body := k.do(t, http.MethodGet, "/tenants/"+tn+"/instances/"+strings.Join(inst, "/"), "", "", ""); code != http.StatusOK || len(body) < 132 || body[128:132] != "DICM" {
-		t.Errorf("the download of an instance of the %s tenant: HTTP %d, %d bytes", reason, code, len(body))
-	}
-	if code, body := k.do(t, http.MethodGet, "/tenants/"+tn+"/dicom-web/studies", "", "", ""); code != http.StatusOK || !strings.Contains(body, "0020000D") {
-		t.Errorf("a DICOMweb search of the %s tenant: HTTP %d %.300s", reason, code, body)
-	}
+}
+
+// readFiles calls ReadFiles with the key for the subject sub and returns
+// how many files it streamed, or the error that ended it.
+func readFiles(t *testing.T, k readOnlyKey, tn, sub string) (int, error) {
+	t.Helper()
 	data := nopacsv1connect.NewDataServiceClient(connect.NewClient(connecthttp.NewTransport(&http.Client{Transport: keyed{k.secret}}, "http://"+k.listen)))
 	st, err := data.ReadFiles(t.Context(), &v1.ReadFilesRequest{Tenant: tn, SubjectLabel: sub})
 	if err != nil {
-		t.Fatalf("ReadFiles of the %s tenant: %v", reason, err)
+		return 0, err
 	}
+	defer func() { _ = st.Close() }()
 	var files int
 	for {
 		m, err := st.Receive()
 		if errors.Is(err, io.EOF) {
-			break
+			return files, nil
 		}
 		if err != nil {
-			t.Fatalf("ReadFiles of the %s tenant: %v", reason, err)
+			return files, err
 		}
 		if m.GetFile() != nil {
 			files++
 		}
 	}
-	_ = st.Close()
-	if files == 0 {
-		t.Errorf("ReadFiles of the %s tenant streamed no instance", reason)
-	}
-	// The tenant's rule still applies: an address outside its networks is
-	// refused as a key that is no good, before any read.
-	if code, body := k.do(t, http.MethodPost, "/nopacs.v1.CatalogService/ListSubjects", js, `{"tenant":"`+tn+`"}`, "192.0.2.7"); code != http.StatusUnauthorized {
+}
+
+// checkRuleAndChange holds a read-only tenant's boundary over the network:
+// its network rule still refuses a request from outside it, as a key that
+// is no good, and a change by its admin's key is refused as
+// FAILED_PRECONDITION naming reason, never INTERNAL.
+func checkRuleAndChange(t *testing.T, k readOnlyKey, tn, reason string) {
+	t.Helper()
+	if code, body := k.do(t, http.MethodPost, "/nopacs.v1.CatalogService/ListSubjects", jsonType, `{"tenant":"`+tn+`"}`, "192.0.2.7"); code != http.StatusUnauthorized {
 		t.Errorf("a read of the %s tenant from outside its networks: HTTP %d %.300s, want 401", reason, code, body)
 	}
-	// A change, the key an admin of the tenant: refused with the state.
-	if code, body := k.do(t, http.MethodPost, "/nopacs.v1.SettingsService/SetSetting", js,
+	if code, body := k.do(t, http.MethodPost, "/nopacs.v1.SettingsService/SetSetting", jsonType,
 		`{"setting":{"name":"delete.grace","scope":{"tenant":"`+tn+`"},"value":"3s"}}`, ""); code != http.StatusBadRequest ||
 		!strings.Contains(body, `"failed_precondition"`) || !strings.Contains(body, reason) {
 		t.Errorf("a change of the %s tenant by its admin's key: HTTP %d %.300s, want failed_precondition naming %s", reason, code, body, reason)
 	}
+}
+
+// checkMovedServes holds a moved tenant whose storages are still this
+// installation's to its contract over the network, with a key: every read
+// of its data is served (the catalog's lists and gets, the metadata, the
+// plain download, DICOMweb's search and ReadFiles), and its rule and the
+// refusal of a change hold (checkRuleAndChange). inst is an instance's
+// labels and UID (instanceUnder).
+func checkMovedServes(t *testing.T, k readOnlyKey, tn string, inst []string) {
+	t.Helper()
+	const reason = "TENANT_MOVED"
+	sub, uid := inst[0], inst[3]
+	for _, r := range dataReads(tn, inst) {
+		if code, body := k.do(t, http.MethodPost, r[0], jsonType, r[1], ""); code != http.StatusOK || (!strings.Contains(body, sub) && !strings.Contains(body, uid)) {
+			t.Errorf("%s of the moved tenant: HTTP %d %.300s", r[0], code, body)
+		}
+	}
+	if code, body := k.do(t, http.MethodGet, "/tenants/"+tn+"/instances/"+strings.Join(inst, "/"), "", "", ""); code != http.StatusOK || len(body) < 132 || body[128:132] != "DICM" {
+		t.Errorf("the download of an instance of the moved tenant: HTTP %d, %d bytes", code, len(body))
+	}
+	if code, body := k.do(t, http.MethodGet, "/tenants/"+tn+"/dicom-web/studies", "", "", ""); code != http.StatusOK || !strings.Contains(body, "0020000D") {
+		t.Errorf("a DICOMweb search of the moved tenant: HTTP %d %.300s", code, body)
+	}
+	if files, err := readFiles(t, k, tn, sub); err != nil || files == 0 {
+		t.Errorf("ReadFiles of the moved tenant: %d files, %v", files, err)
+	}
+	checkRuleAndChange(t, k, tn, reason)
+}
+
+// checkFenced holds a fenced tenant to its contract over the network, with
+// a key: it serves no data, so every read of it (the catalog's lists and
+// gets, the metadata, the plain download, DICOMweb's search and retrieval,
+// ReadFiles) is FAILED_PRECONDITION with a message that begins
+// TENANT_FENCED and names owner, the installation the storage's owner
+// record names; its state and reason stay visible (GetTenant, GetStatus);
+// and its rule and the refusal of a change hold (checkRuleAndChange).
+func checkFenced(t *testing.T, k readOnlyKey, tn string, inst []string, owner string) {
+	t.Helper()
+	const reason = "TENANT_FENCED"
+	refused := func(what string, code int, body string) {
+		t.Helper()
+		if code != http.StatusBadRequest || !strings.Contains(body, `"failed_precondition"`) ||
+			!strings.Contains(body, `"`+reason+`: the tenant `+tn+` serves no data`) || !strings.Contains(body, owner) ||
+			strings.Contains(body, inst[0]) || strings.Contains(body, "DICM") {
+			t.Errorf("%s of the fenced tenant: HTTP %d %.300s, want failed_precondition %s naming %s", what, code, body, reason, owner)
+		}
+	}
+	for _, r := range dataReads(tn, inst) {
+		code, body := k.do(t, http.MethodPost, r[0], jsonType, r[1], "")
+		refused(r[0], code, body)
+	}
+	code, body := k.do(t, http.MethodGet, "/tenants/"+tn+"/instances/"+strings.Join(inst, "/"), "", "", "")
+	refused("the download of an instance", code, body)
+	code, body = k.do(t, http.MethodGet, "/tenants/"+tn+"/dicom-web/studies", "", "", "")
+	refused("a DICOMweb search", code, body)
+	code, body = k.do(t, http.MethodGet, "/tenants/"+tn+"/dicom-web/studies/"+inst[3]+"/metadata", "", "", "")
+	refused("a DICOMweb retrieval", code, body)
+	files, err := readFiles(t, k, tn, inst[0])
+	var ce *connect.Error
+	if !errors.As(err, &ce) || ce.Code() != connect.CodeFailedPrecondition || files != 0 ||
+		!strings.HasPrefix(ce.Message(), reason+": the tenant "+tn+" serves no data") || !strings.Contains(ce.Message(), owner) {
+		t.Errorf("ReadFiles of the fenced tenant: %d files, %v; want failed_precondition %s naming %s", files, err, reason, owner)
+	}
+	// What stays visible: the state, with the reason naming the owner.
+	code, body = k.do(t, http.MethodPost, "/nopacs.v1.TenantService/GetTenant", jsonType, `{"name":"`+tn+`"}`, "")
+	if code != http.StatusOK || !strings.Contains(body, `"TENANT_STATE_FENCED"`) || !strings.Contains(body, owner) {
+		t.Errorf("GetTenant of the fenced tenant: HTTP %d %.300s, want its state and reason", code, body)
+	}
+	code, body = k.do(t, http.MethodPost, "/nopacs.v1.MonitorService/GetStatus", jsonType, `{"scope":{"tenant":"`+tn+`"}}`, "")
+	if code != http.StatusOK || !strings.Contains(body, `"TENANT_STATE_FENCED"`) || strings.Contains(body, `"counts"`) {
+		t.Errorf("GetStatus of the fenced tenant: HTTP %d %.300s, want its state alone", code, body)
+	}
+	checkRuleAndChange(t, k, tn, reason)
 }

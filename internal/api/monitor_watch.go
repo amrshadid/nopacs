@@ -221,8 +221,9 @@ func (f feedTenants) TenantNames(ctx context.Context) ([]string, error) {
 
 // Reader implements events.Tenants.
 func (f feedTenants) Reader(_ context.Context, name string) (events.Reader, error) {
-	// A feed is read only, so a moved or fenced tenant's is served.
-	st, err := f.c.reg.Reader(name)
+	// A feed is read only, so a moved tenant's is served; a fenced one
+	// serves no data, and its feed is left unanswered.
+	st, err := f.c.reg.DataReader(name)
 	if err != nil {
 		return nil, err
 	}

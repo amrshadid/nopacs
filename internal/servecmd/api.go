@@ -248,10 +248,11 @@ func APIServices(d Deps) (Built, error) {
 		// A tenant's networks live in its own database; each answer is kept
 		// a few seconds, so a request into a tenant does not read it. The
 		// rule is read through Reader: it guards every request, so a moved
-		// or fenced tenant, whose reads are served, still applies its rule,
-		// and a change there is refused afterward with the tenant's state
-		// (FAILED_PRECONDITION, TENANT_MOVED or TENANT_FENCED), never failed
-		// as an internal error by the check.
+		// or fenced tenant still applies its rule, and a request the rule
+		// lets through is refused afterward with the tenant's state
+		// (FAILED_PRECONDITION, TENANT_MOVED for a change, TENANT_FENCED for
+		// a change or a read of a fenced tenant's data), never failed as an
+		// internal error by the check.
 		TenantNetworks: access.CachedTenantNetworks(func(ctx context.Context, t access.TenantRef) (settings.Networks, error) {
 			st, err := reg.Reader(t.Name)
 			if err != nil {

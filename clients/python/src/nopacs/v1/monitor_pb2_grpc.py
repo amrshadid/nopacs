@@ -112,7 +112,9 @@ class MonitorServiceServicer:
         It answers whatever the tenant's state: a tenant whose database does not
         answer is answered with its database's state and what the server holds
         in memory, and without what is read from the database, rather than with
-        an error, since that is when its status matters most.
+        an error, since that is when its status matters most. A fenced tenant
+        (TENANT_STATE_FENCED), which serves no data, is answered the same way:
+        its state, without what its database holds.
 
         Role: reader on the tenant asked for; operator on the installation for
         every tenant.
@@ -186,7 +188,9 @@ class MonitorServiceServicer:
         history, and watches from its event_cursor), unavailable
         (with one tenant, its database does not answer or it is not ready, when
         the stream opens or while it is open; the client resumes later from its
-        last cursor), resource exhausted (the caller, a key or the local
+        last cursor), precondition (with one tenant, it is fenced, reason
+        TENANT_FENCED: it serves no data; with every tenant, a fenced tenant is
+        left unanswered), resource exhausted (the caller, a key or the local
         operator, already holds 16 open streams, or the server holds 1024; or,
         with every tenant, the installation has more than 10000 tenants).
         Limits: no deadline is applied to the stream when the client sends

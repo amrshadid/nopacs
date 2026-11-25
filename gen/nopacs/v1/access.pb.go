@@ -66,7 +66,9 @@
 //     changes. A change to a tenant that is read only carries the reason
 //     TENANT_MOVED (an export handed it to another installation) or
 //     TENANT_FENCED (its storages' owner record names another installation
-//     or a later generation). A delete of data a hold covers carries the
+//     or a later generation); a read of a fenced tenant's data carries
+//     TENANT_FENCED too, since a fenced tenant serves no data, and its
+//     message names the installation that owns the storage. A delete of data a hold covers carries the
 //     reason HELD, its metadata "hold" (the id of a hold that covers it,
 //     RetentionService); a person's delete of data a retention rule keeps
 //     at least until a time to come carries RETENTION_MINIMUM, its metadata

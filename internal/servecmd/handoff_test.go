@@ -87,18 +87,21 @@ func sendRefused(t *testing.T, scu string, port int, file string) {
 // holding a CT and an MR file archived by dcmtk's storescu and a delete of
 // the MR subject, is exported (nopacs tenant export): A shows it moved, a
 // storescu C-STORE to its receiver is refused, its catalog is still read, a
-// change is refused naming TENANT_MOVED; over the network, an admin key of
-// the tenant reads everything (checkReadOnly), is refused from outside the
-// tenant's networks, and its change is FAILED_PRECONDITION naming
-// TENANT_MOVED, never INTERNAL; the same holds fenced, naming
-// TENANT_FENCED. With A stopped, the export is
-// imported into installation B over the same directory storage (nopacs
-// tenant import), and the storage's owner record names B, one generation
-// past the one the export took it to. A started again
-// with its old database fences lab1, naming B: a C-STORE is refused, and so
-// is a purge, naming TENANT_FENCED. B, started, receives a new study into
-// lab1 and still hides the deleted subject. Reclaim on A is refused because
-// the owner record names B.
+// change is refused naming TENANT_MOVED; over the network, while the owner
+// record still names A, an admin key of the tenant reads everything
+// (checkMovedServes), is refused from outside the tenant's networks, and
+// its change is FAILED_PRECONDITION naming TENANT_MOVED, never INTERNAL.
+// With A stopped, the export is imported into installation B over the same
+// directory storage (nopacs tenant import), and the storage's owner record
+// names B, one generation past the one the export took it to. A started
+// again with its old database fences lab1, naming B: a C-STORE is refused,
+// and so is a purge, naming TENANT_FENCED, and it serves no data
+// (checkFenced): every read is FAILED_PRECONDITION TENANT_FENCED naming B,
+// its state still shown. B, started, receives a new study into lab1, still
+// hides the deleted subject, and deletes the CT subject; A, started again,
+// serves none of that subject (whose file is still on the storage until
+// B's purge) to its old key or its local operator. Reclaim on A is refused
+// because the owner record names B.
 func TestHandoffThroughServe(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs two server processes and sends studies over the network; left out under -short")
@@ -188,8 +191,10 @@ func TestHandoffThroughServe(t *testing.T) {
 		`{"setting":{"name":"delete.grace","scope":{"tenant":"`+tn+`"},"value":"3s"}}`); status != http.StatusBadRequest || !bytes.Contains(body, []byte("TENANT_MOVED")) {
 		t.Fatalf("a change into the moved tenant answered %d %s", status, body)
 	}
+	// The export took the owner record one generation further, still
+	// naming A: until an import takes the storage over, A serves reads.
 	inst := instanceUnder(t, filepath.Join(roots, tn, "main"), ctSubject)
-	checkReadOnly(t, key, tn, inst, "TENANT_MOVED")
+	checkMovedServes(t, key, tn, inst)
 	hcA.CloseIdleConnections()
 	stopServer(t, a)
 
@@ -235,7 +240,7 @@ func TestHandoffThroughServe(t *testing.T) {
 		`{"tenant":"`+tn+`","id":"`+delID+`"}`); status != http.StatusBadRequest || !bytes.Contains(body, []byte("TENANT_FENCED")) {
 		t.Fatalf("a purge in the fenced tenant answered %d %s", status, body)
 	}
-	checkReadOnly(t, key, tn, inst, "TENANT_FENCED")
+	checkFenced(t, key, tn, inst, idB)
 	hcA.CloseIdleConnections()
 	stopServer(t, a)
 
@@ -258,9 +263,33 @@ func TestHandoffThroughServe(t *testing.T) {
 	sendFiles(t, scu, port, mr)
 	waitBody(t, "B to hold the deleted subject's file", func() bool { return len(heldFiles(t, hcB, tn, "QUARANTINE_REASON_WAS_DELETED")) == 1 })
 
-	// A once more, B still running: reclaim refused, the record naming B.
-	a = startChildEnv(t, []string{childRealEnv + "=1"}, "serve", "--data-dir", dirA)
+	// B, the owner now, deletes the CT subject: hidden at once, its files
+	// kept on the shared storage until B's purge, after its grace.
+	if del := cliJSON(t, dirB, "correction", "delete", tn, ctSubject, "--reason", "consent withdrawn", "--yes"); str(del, "correction", "id") == "" {
+		t.Fatalf("B's delete answered %v", del)
+	}
+	if counts := subjectCounts(t, hcB, tn); len(counts) != 0 {
+		t.Fatalf("B's catalog after its delete is %v", counts)
+	}
+	if _, err := os.Stat(filepath.Join(append([]string{roots, tn, "main", "data"}, inst...)...) + ".dcm"); err != nil {
+		t.Fatalf("the withdrawn instance's file is not on the storage until the purge: %v", err)
+	}
+
+	// A once more, B still running: fenced, A serves none of what B
+	// withdrew, to its old keys or to its local operator, and shows its
+	// state; reclaim refused, the record naming B.
+	a = startChildEnv(t, []string{childRealEnv + "=1"}, "serve", "--data-dir", dirA, "--listen", listen)
 	waitServing(t, dirA, a)
+	hcA = socketClient(dirA)
+	if st, reason := tenantOf(t, hcA, tn); st != "TENANT_STATE_FENCED" || !strings.Contains(reason, idB) {
+		t.Fatalf("A's tenant after B's delete is %s (%q), want fenced naming %s", st, reason, idB)
+	}
+	if status, body := postCode(t, hcA, "/nopacs.v1.CatalogService/ListSubjects", `{"tenant":"`+tn+`"}`); status != http.StatusBadRequest ||
+		!bytes.Contains(body, []byte("TENANT_FENCED")) || bytes.Contains(body, []byte(ctSubject)) {
+		t.Fatalf("A's catalog of the fenced tenant, to its local operator: %d %s", status, body)
+	}
+	checkFenced(t, key, tn, inst, idB)
+	hcA.CloseIdleConnections()
 	code, out, errOut = nopacs(t.Context(), dirA, "tenant", "reclaim", tn)
 	if code != 5 || !strings.Contains(out+errOut, idB) {
 		t.Fatalf("tenant reclaim on A: exit %d\n%s\n%s", code, out, errOut)
