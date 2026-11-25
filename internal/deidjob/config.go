@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/deid/check"
 	"github.com/amrshadid/nopacs/internal/deid/engine"
@@ -44,8 +43,16 @@ type TenantSettings interface {
 // Storages opens the storages a unit reads from, each once, and closes
 // them at the unit's end: package checkedread's Stores is one.
 type Storages interface {
-	// Get returns the storage named name, opening it on first use.
-	Get(ctx context.Context, name string) (blob.Store, error)
+	// Readable returns checkedread.ErrMarked for an object a scrub marked
+	// that no replica in step serves (checkedread.Stores.Readable).
+	Readable(ctx context.Context, obj checkedread.Object) error
+	// Open opens length bytes of an archived object from offset, from its
+	// storage, or from a replica in step when that storage cannot serve
+	// it (checkedread.Stores.Open).
+	Open(ctx context.Context, obj checkedread.Object, offset, length int64) (checkedread.Opened, error)
+	// Mismatch records a read of o whose bytes were found not to be the
+	// catalog's: a replica's damage (checkedread.Stores.Mismatch).
+	Mismatch(ctx context.Context, o checkedread.Opened, err error) error
 	// Close closes every storage opened.
 	Close()
 }

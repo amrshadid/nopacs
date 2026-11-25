@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,10 @@ const (
 	detailFiles = "instances"
 	detailBytes = "bytes"
 	detailEnded = "ended"
+	// detailServedBy names the storages that served the reads, comma
+	// separated in the order each first served: a replica's name when the
+	// primary could not serve an instance.
+	detailServedBy = "served_by"
 )
 
 // The messages of what ReadFiles finds missing.
@@ -201,14 +206,16 @@ func (s dataService) ReadFiles(ctx context.Context, req *v1.ReadFilesRequest, st
 	defer stores.Close()
 
 	c.record(d, st, master.OutcomeDone, "", access.Facts{Details: withDetails(details, map[string]string{detailStream: "opened"})})
-	fr := &fileReader{p: p, q: q, stores: stores, send: stream.Send}
+	fr := &fileReader{c: c, p: p, q: q, stores: stores, send: stream.Send}
 	if !q.announceOnly {
 		fr.bufs = [2][]byte{make([]byte, ChunkSize), make([]byte, ChunkSize)}
 	}
 	err = fr.run(ctx)
 	end := func(how string) access.Facts {
-		return access.Facts{Details: withDetails(details, map[string]string{detailStream: "ended", detailEnded: how,
-			detailFiles: strconv.FormatInt(fr.files, 10), detailBytes: strconv.FormatInt(fr.bytes, 10)})}
+		more := map[string]string{detailStream: "ended", detailEnded: how,
+			detailFiles: strconv.FormatInt(fr.files, 10), detailBytes: strconv.FormatInt(fr.bytes, 10)}
+		maps.Copy(more, servedDetails(stores))
+		return access.Facts{Details: withDetails(details, more)}
 	}
 	if refusal, ok := refusedWhileOpen(ctx); ok {
 		// Confirm recorded the refusal.
@@ -230,6 +237,7 @@ func (s dataService) ReadFiles(ctx context.Context, req *v1.ReadFilesRequest, st
 // fileReader walks what a ReadFiles request names, in the contract's order,
 // and sends each message.
 type fileReader struct {
+	c      *core
 	p      tenant.Pipeline
 	q      readQuery
 	stores *checkedread.Stores
@@ -323,7 +331,7 @@ func (r *fileReader) scan(ctx context.Context, sc tenant.CatalogScan) error {
 		case in.SOPInstanceUID <= after:
 			return nil
 		}
-		return r.instance(ctx, path, in)
+		return r.instance(ctx, path, sc.SeriesUID, in)
 	}
 	page := master.Page{Limit: master.MaxPageLimit}
 	for {
@@ -335,7 +343,7 @@ func (r *fileReader) scan(ctx context.Context, sc tenant.CatalogScan) error {
 			if in.SOPInstanceUID <= after {
 				continue
 			}
-			if err := r.instance(ctx, path, in); err != nil {
+			if err := r.instance(ctx, path, sc.SeriesUID, in); err != nil {
 				return err
 			}
 		}
@@ -352,9 +360,13 @@ func (r *fileReader) scan(ctx context.Context, sc tenant.CatalogScan) error {
 // marked is announced, and the stream then ends as data loss before any
 // of its bytes: the announcement gives the client the instance's place,
 // so a new call with start_after at it goes on past it, rather than
-// stopping at it again.
-func (r *fileReader) instance(ctx context.Context, path label.Path, in tenant.ScanInstance) error {
-	marked := checkedread.Marked(in)
+// stopping at it again. Unless a replica in step serves it: an instance
+// whose primary cannot serve its bytes (marked, missing, not online, or a
+// storage that does not answer) is read from the replica, checked as the
+// primary's would be.
+func (r *fileReader) instance(ctx context.Context, path label.Path, series string, in tenant.ScanInstance) error {
+	obj := checkedread.InstanceObject(in, series, path)
+	marked := r.stores.Readable(ctx, obj)
 	if err := r.send(&v1.ReadFilesResponse{Part: &v1.ReadFilesResponse_File{File: &v1.ArchivedFile{
 		InstanceId: in.SOPInstanceUID, SopInstanceUid: in.SOPInstanceUID,
 		SubjectLabel: path.Subject, SessionLabel: path.Session, ScanLabel: path.Scan,
@@ -371,24 +383,21 @@ func (r *fileReader) instance(ctx context.Context, path label.Path, in tenant.Sc
 		return fault.Wrap(fault.DataLoss, marked, "an instance of the scan "+scan+
 			" was found missing or damaged on its storage by a scrub; it is announced and none of its bytes is sent: resume after it")
 	}
-	store, err := r.stores.Get(ctx, in.Storage)
-	if err != nil {
-		return err
-	}
-	rc, err := store.Read(ctx, in.Key, in.Offset, in.Length)
+	o, err := r.stores.Open(ctx, obj, in.Offset, in.Length)
 	if err != nil {
 		return instanceFailure(err, path)
 	}
-	defer func() { _ = rc.Close() }() // Only read from.
+	defer func() { _ = o.Body.Close() }() // Only read from.
 	var offset int64
 	sum := in.ArchivedSHA256
-	n, err := checkedread.CopyChecked(rc, in.Length, &sum, r.bufs, func(b []byte) error {
+	n, err := checkedread.CopyChecked(o.Body, in.Length, &sum, r.bufs, func(b []byte) error {
 		err := r.send(&v1.ReadFilesResponse{Part: &v1.ReadFilesResponse_Chunk{Chunk: &v1.FileChunk{Offset: offset, Data: b}}})
 		offset += int64(len(b))
 		return err
 	})
 	r.bytes += n
 	if err != nil {
+		r.c.mismatched(ctx, func(ctx context.Context, err error) error { return r.stores.Mismatch(ctx, o, err) }, err)
 		return instanceFailure(err, path)
 	}
 	r.files++

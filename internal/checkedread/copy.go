@@ -26,9 +26,10 @@ var (
 )
 
 // Marked returns ErrMarked for an instance a scrub marked, and nil for any
-// other. Every reader of archived bytes asks it before it opens the
-// instance's object, so a marked instance fails as data loss at once rather
-// than after a prefix of bytes that are not what was archived.
+// other. A marked instance fails as data loss at once rather than after a
+// prefix of bytes that are not what was archived; a reader that holds
+// Stores asks Stores.Readable instead, which lets a replica in step serve
+// it.
 func Marked(in tenant.ScanInstance) error {
 	if in.Damaged {
 		return ErrMarked

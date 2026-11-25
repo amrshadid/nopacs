@@ -184,15 +184,16 @@ func (x *webRequest) newLines() *lines {
 	return &lines{x: x}
 }
 
-// of returns the metadata file of a scan, opening its storage when the
-// request moves to it, and closing the one open before.
+// of returns the metadata file of a scan when the request moves to it,
+// closing the one open before; the storages are the request's, each opened
+// once.
 func (l *lines) of(ctx context.Context, s tenant.CatalogScan) (*scanLines, error) {
 	path := pathOf(s)
 	if l.cur != nil && l.path == path {
 		return l.cur, nil
 	}
 	l.closeAll()
-	src, closeSrc, err := l.x.c.metadataSource(ctx, l.x.p, l.x.tenant, s.Storage, path)
+	src, closeSrc, err := l.x.c.metadataSource(ctx, l.x.p, l.x.tenant, s, path, l.x.stores)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +201,7 @@ func (l *lines) of(ctx context.Context, s tenant.CatalogScan) (*scanLines, error
 	return l.cur, nil
 }
 
-// closeAll closes the file and the storage open.
+// closeAll closes the file open.
 func (l *lines) closeAll() {
 	if sl := l.cur; sl != nil {
 		sl.reset()

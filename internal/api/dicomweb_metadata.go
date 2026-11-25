@@ -33,7 +33,7 @@ func (x *webRequest) metadata(ctx context.Context) error {
 	if err != nil {
 		return x.fail(err)
 	}
-	if err := t.marked(); err != nil {
+	if err := x.marked(ctx, t); err != nil {
 		// One instance a scrub marked: data loss before the answer's first
 		// byte, as its retrieve answers. Of a study or a series, the
 		// stream ends at the marked instance (scanMetadata).
@@ -86,7 +86,7 @@ func (x *webRequest) metadata(ctx context.Context) error {
 // the one instance when only is not nil, and returns how many it wrote.
 func (x *webRequest) scanMetadata(ctx context.Context, s tenant.CatalogScan, only *tenant.ScanInstance, write func(string) error) (int, error) {
 	path := pathOf(s)
-	src, closeSrc, err := x.c.metadataSource(ctx, x.p, x.tenant, s.Storage, path)
+	src, closeSrc, err := x.c.metadataSource(ctx, x.p, x.tenant, s, path, x.stores)
 	if err != nil {
 		return 0, err
 	}

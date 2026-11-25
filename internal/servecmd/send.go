@@ -23,10 +23,10 @@ import (
 // newSending returns the supervisor of every tenant's senders, over the
 // registry's tenants. Its reads of archived bytes count in reads, the
 // server's one count, so the bound on reads open covers the API's and the
-// senders' together. Storages are opened as the API opens them for a
-// read; a stow sender's credential is opened with the installation key
+// senders' together, and those a replica served count in counts. Storages
+// are opened as the API opens them for a read; a stow sender's credential is opened with the installation key
 // under the context it was sealed with (place.CredentialContext).
-func newSending(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots) (*send.Supervisor, error) {
+func newSending(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots, counts *checkedread.Counts) (*send.Supervisor, error) {
 	values := settingvalue.Reader{Master: d.Master}
 	opener := place.Opener{Values: values, Keys: d.Keys, StaleUploadAge: -1}
 	tenantID := func(ctx context.Context, name string) (string, error) {
@@ -38,7 +38,7 @@ func newSending(d Deps, reg *registry.Registry, wake func(tenantName string), re
 		Installation:   values,
 		TenantSettings: func(st tenant.Store) send.TenantSettings { return values.OnTenant(st) },
 		OpenStorages: func(name string, p tenant.Pipeline) send.Storages {
-			return checkedread.NewStores(opener, tenantID, p, name)
+			return checkedread.NewStores(opener, tenantID, p, name).WithCounts(counts)
 		},
 		Credential: func(ctx context.Context, tenantName, sender string, sealed []byte) (string, error) {
 			id, err := tenantID(ctx, tenantName)
@@ -61,9 +61,10 @@ func newSending(d Deps, reg *registry.Registry, wake func(tenantName string), re
 
 // newDeidJobs returns the supervisor of every tenant's deid jobs, over the
 // registry's tenants. Its reads of archived bytes count in reads, the
-// server's one count; storages are opened as the senders open them; a
+// server's one count, and those a replica served in counts; storages are
+// opened as the senders open them; a
 // check reads the tenant's UID key from the registry, as a reception does.
-func newDeidJobs(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots, memory check.Memory) (*deidjob.Supervisor, error) {
+func newDeidJobs(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots, counts *checkedread.Counts, memory check.Memory) (*deidjob.Supervisor, error) {
 	values := settingvalue.Reader{Master: d.Master}
 	opener := place.Opener{Values: values, Keys: d.Keys, StaleUploadAge: -1}
 	tenantID := func(ctx context.Context, name string) (string, error) {
@@ -75,7 +76,7 @@ func newDeidJobs(d Deps, reg *registry.Registry, wake func(tenantName string), r
 		Installation:   values,
 		TenantSettings: func(st tenant.Store) deidjob.TenantSettings { return values.OnTenant(st) },
 		OpenStorages: func(name string, p tenant.Pipeline) deidjob.Storages {
-			return checkedread.NewStores(opener, tenantID, p, name)
+			return checkedread.NewStores(opener, tenantID, p, name).WithCounts(counts)
 		},
 		UIDKey: reg.UIDKey,
 		Reads:  reads,

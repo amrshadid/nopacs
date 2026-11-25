@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/amrshadid/nopacs/internal/access"
+	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/dicomweb"
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -85,6 +86,9 @@ type webRequest struct {
 	// release ends the open read the request holds, nil before it holds
 	// one (holdRead).
 	release func()
+	// stores opens the storages the request reads, each once, and names
+	// those that served (a replica's when a primary could not).
+	stores *checkedread.Stores
 }
 
 // holdRead takes one of the caller's open reads for the rest of the
@@ -118,8 +122,9 @@ func (c *core) dicomweb(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return err
 	}
-	x := &webRequest{c: c, d: d, st: st, p: p, w: w, r: r, tenant: name, details: facts.Details}
+	x := &webRequest{c: c, d: d, st: st, p: p, w: w, r: r, tenant: name, details: facts.Details, stores: c.newReadStores(p, name)}
 	defer func() {
+		x.stores.Close()
 		if x.release != nil {
 			x.release()
 		}
@@ -147,9 +152,10 @@ func (c *core) dicomweb(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	return x.refuse(&dicomweb.Error{Status: http.StatusNotFound, Message: "there is no such DICOMweb resource"})
 }
 
-// facts returns the audit facts of the request with more details added.
+// facts returns the audit facts of the request with more details added,
+// and the storages that served its reads.
 func (x *webRequest) facts(more map[string]string) access.Facts {
-	return access.Facts{Object: x.object, Details: withDetails(x.details, more)}
+	return access.Facts{Object: x.object, Details: withDetails(withDetails(x.details, more), servedDetails(x.stores))}
 }
 
 // refuse answers a request the protocol refuses with its status and

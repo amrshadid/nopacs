@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/access"
 	"github.com/amrshadid/nopacs/internal/checkedread"
+	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -91,12 +93,36 @@ func refusedWhileOpen(ctx context.Context) (error, bool) {
 }
 
 // newReadStores returns the storages of the tenant named name, none open
-// yet.
+// yet, counting the reads a replica serves in the server's counts.
 func (c *core) newReadStores(p tenant.Pipeline, name string) *checkedread.Stores {
 	return checkedread.NewStores(c.opener(), func(ctx context.Context, n string) (string, error) {
 		row, err := c.master.TenantByName(ctx, n)
 		return row.ID, err
-	}, p, name)
+	}, p, name).WithCounts(c.readCounts)
+}
+
+// servedDetails returns the audit detail that names the storages that
+// served a request's reads (Stores.Served), none before any served: one
+// for a read its primary served, and a replica's name beside or instead of
+// it when the primary could not serve an instance.
+func servedDetails(stores *checkedread.Stores) map[string]string {
+	served := stores.Served()
+	if len(served) == 0 {
+		return nil
+	}
+	return map[string]string{detailServedBy: strings.Join(served, ",")}
+}
+
+// mismatched records a read of stores that the checked copy found not to
+// be the catalog's bytes (Stores.Mismatch: a replica's damage), logging a
+// record that fails.
+func (c *core) mismatched(ctx context.Context, record func(ctx context.Context, err error) error, err error) {
+	if !checkedread.Mismatched(err) {
+		return
+	}
+	if rerr := record(ctx, err); rerr != nil {
+		c.log.Warn("api: a replica's bytes found wrong by a read could not be recorded as its damage", "kind", fault.KindOf(rerr).String())
+	}
 }
 
 // withDetails returns base with the pairs of more added, base unchanged.

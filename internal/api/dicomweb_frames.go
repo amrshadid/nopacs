@@ -35,7 +35,7 @@ func (x *webRequest) frames(ctx context.Context) error {
 	if err != nil {
 		return x.fail(err)
 	}
-	if err := t.marked(); err != nil {
+	if err := x.marked(ctx, t); err != nil {
 		return x.fail(err)
 	}
 	in := *t.instance
@@ -97,7 +97,8 @@ func (x *webRequest) frames(ctx context.Context) error {
 		}
 		// The table counts from the instance's first byte, which lies at
 		// its offset in the object at its key.
-		body := &rangesReader{ctx: ctx, sl: sl, key: in.Key, base: in.Offset, ranges: p.ranges}
+		src := sl.src.file(in)
+		body := &rangesReader{ctx: ctx, src: src, base: in.Offset, ranges: p.ranges}
 		_, err := checkedread.CopyChecked(body, p.length, p.sum, bufs,
 			func(b []byte) error {
 				w, err := open()
@@ -109,6 +110,7 @@ func (x *webRequest) frames(ctx context.Context) error {
 			})
 		_ = body.Close()
 		if err != nil {
+			x.c.mismatched(ctx, src.Mismatch, err)
 			return stream.end(instanceFailure(err, pathOf(t.scan)), i)
 		}
 		if part == nil {
@@ -172,15 +174,14 @@ func (s *metaSource) planFrames(ctx context.Context, held tenant.ScanInstance, l
 	return all.transferSyntax, plan, nil
 }
 
-// rangesReader reads the ranges of an object of the scan's storage, each
-// from base, one after another as one stream: a frame's bytes, the
-// contents of its fragments without the item headers between them. Each
-// range is opened only when the one before has ended, so one read is open
-// at a time.
+// rangesReader reads the ranges of an instance's file, each from base, one
+// after another as one stream: a frame's bytes, the contents of its
+// fragments without the item headers between them. Each range is opened
+// only when the one before has ended, so one read is open at a time, and
+// every range from the storage the file's first read chose.
 type rangesReader struct {
 	ctx    context.Context
-	sl     *scanLines
-	key    string
+	src    instanceFile
 	base   int64
 	ranges []sidecar.Range
 	cur    io.ReadCloser
@@ -198,7 +199,7 @@ func (r *rangesReader) Read(p []byte) (int, error) {
 			if rg.Length == 0 {
 				continue
 			}
-			body, err := r.sl.src.store.Read(r.ctx, r.key, r.base+rg.Offset, rg.Length)
+			body, err := r.src.Read(r.ctx, r.base+rg.Offset, rg.Length)
 			if err != nil {
 				return 0, err
 			}

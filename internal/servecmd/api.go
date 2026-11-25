@@ -183,7 +183,11 @@ func APIServices(d Deps) (Built, error) {
 	// The senders, which read archived bytes under the same count of reads
 	// open as the API, so one bound covers both.
 	reads := &checkedread.Slots{Limits: readLimits(settingvalue.Reader{Master: d.Master}, time.Now)}
-	senders, err := newSending(d, reg, feeds.Wake, reads)
+	// The reads a replica served because a primary could not, for the
+	// metrics, counted by the API, the senders and the deid jobs alike, and
+	// warned of in the server's log at most once a minute a primary storage.
+	readCounts := &checkedread.Counts{Log: d.Log}
+	senders, err := newSending(d, reg, feeds.Wake, reads, readCounts)
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)
@@ -191,7 +195,7 @@ func APIServices(d Deps) (Built, error) {
 	}
 	sending.Store(senders)
 	// The deid jobs, which read archived bytes under the same count.
-	deids, err := newDeidJobs(d, reg, feeds.Wake, reads, deidMemory)
+	deids, err := newDeidJobs(d, reg, feeds.Wake, reads, readCounts, deidMemory)
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)
@@ -232,7 +236,7 @@ func APIServices(d Deps) (Built, error) {
 	}
 	h, err := api.New(api.Config{Access: d.Access, Registry: reg, Master: d.Master, NewID: server.NewID, Log: d.Log, Keys: d.Keys, Now: clock.Now,
 		Receivers: receiverHealth{sup}, Live: receiverHealth{sup}, Feeds: feeds, Incoming: pipelineDecisions{sup}, Headers: heldHeaders{sup}, HeldFiles: heldHeaders{sup}, STOW: stowReceivers,
-		Reads: reads, SenderHealths: senderHealths{s: senders, deid: deids, scrub: scrubs, imports: imports, rebuilds: rebuilds}, SenderTests: senderTests{senders}, DeidMemory: deidMemory,
+		Reads: reads, ReadCounts: readCounts, SenderHealths: senderHealths{s: senders, deid: deids, scrub: scrubs, imports: imports, rebuilds: rebuilds}, SenderTests: senderTests{senders}, DeidMemory: deidMemory,
 		Installation: installation, ImportGuarded: importGuarded(d.DataDir), Corrections: engines, ReplaceSources: pipes,
 		Handoffs: handoffs{sup: sup, engines: engines, owners: owners}, StorageCleanups: cleanups, SealPause: sealer.Pause})
 	if err != nil {
@@ -300,7 +304,7 @@ func APIServices(d Deps) (Built, error) {
 		// once no request holds them; then the audit's last pass, which seals
 		// the entries the requests and the engines wrote.
 		AfterDrain: stopThen(engines, sealer.Last),
-		Counters:   func() []obs.Counter { return sealCounters(sealer.Stats()) },
+		Counters:   func() []obs.Counter { return append(sealCounters(sealer.Stats()), readCounters(readCounts)...) },
 		Gauges:     func() []obs.Gauge { return sealGauges(sealer.Stats(), time.Now()) },
 	}, nil
 }

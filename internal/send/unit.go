@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/jobmeet"
 	"github.com/amrshadid/nopacs/internal/tenant"
@@ -56,7 +57,9 @@ type unitRun struct {
 	// sealed is the sender's sealed credential, read with row as one
 	// (storedSender); nil for none.
 	sealed []byte
-	// stores and bufs serve the unit's reads.
+	// stores and bufs serve the unit's reads; scan is the labels of the
+	// scan it sends, which a read that turns to a replica looks up.
+	scan   label.Path
 	stores Storages
 	bufs   [2][]byte
 	prefix []byte
@@ -131,6 +134,7 @@ func (w *worker) work(p tenant.Pipeline, unit tenant.Work) {
 	defer u.stores.Close()
 	u.bufs = [2][]byte{make([]byte, readBuffer), make([]byte, readBuffer)}
 	u.prefix = make([]byte, metaPrefix)
+	u.scan = start.Scan.Path
 	u.log = u.log.With("scan", start.Scan.Path.Subject+"/"+start.Scan.Path.Session+"/"+start.Scan.Path.Scan)
 	rec := newRecorder(p, u.fence, start.Scan.Cursor, int(sr.t.kept.Load()), sup.cfg.Now, func() { sup.cfg.Wake(sr.t.name) })
 	var out outcome

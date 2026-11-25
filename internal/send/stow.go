@@ -451,7 +451,7 @@ func (u *unitRun) stowRequest(peer *stowPeer, req []*item) *outcome {
 				continue
 			}
 			x.in, x.rev = m.Instance, m.Revision
-			st, err := openStream(ctx, u.stores, x.in, u.bufs)
+			st, err := openStream(ctx, u.stores, u.scan, x.in, u.bufs, u.log)
 			switch {
 			case errors.Is(err, errMissing):
 				u.dataLoss(detailMissing)

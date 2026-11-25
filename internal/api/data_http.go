@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"strconv"
 	"time"
@@ -32,7 +33,9 @@ const messageNoDownload = "the tenant holds no instance at this path"
 // the request and every value of its path has passed the server's rule of
 // a segment: the whole instance, a range of it, or a window its query
 // names, with its strong ETag and the conditions of RFC 9110 13, read from
-// the storage at the key and place the catalog holds. A whole instance is
+// the storage at the key and place the catalog holds, or from a replica in
+// step when that storage cannot serve it (checkedread.Stores.Open), the
+// storage that served named in the audit entry. A whole instance is
 // checked against its SHA-256 as it is sent, and a body whose bytes do not
 // match is cut before its last byte (the connection closed, or on HTTP/2
 // the stream reset), so it never looks complete. Its errors before the
@@ -59,7 +62,10 @@ func (c *core) download(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return c.failIn(d, st, err)
 	}
-	if err := checkedread.Marked(in); err != nil {
+	stores := c.newReadStores(p, name)
+	defer stores.Close()
+	obj := checkedread.InstanceObject(in, "", path)
+	if err := stores.Readable(ctx, obj); err != nil {
 		// Data loss before any answer: no status, header or byte of the
 		// instance is sent, whatever was asked (a range, a window, HEAD).
 		return c.failIn(d, st, instanceFailure(err, path))
@@ -74,7 +80,9 @@ func (c *core) download(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 	defer release()
 	sent := func(n int64) access.Facts {
-		return access.Facts{Details: withDetails(details, map[string]string{detailBytes: strconv.FormatInt(n, 10)})}
+		more := map[string]string{detailBytes: strconv.FormatInt(n, 10)}
+		maps.Copy(more, servedDetails(stores))
+		return access.Facts{Details: withDetails(details, more)}
 	}
 
 	base, size, ctype := in.Offset, in.Length, contentDICOM
@@ -109,28 +117,26 @@ func (c *core) download(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 	n := span.last - span.first + 1
 
-	stores := c.newReadStores(p, name)
-	defer stores.Close()
-	store, err := stores.Get(ctx, in.Storage)
-	if err != nil {
-		return c.failIn(d, st, err)
-	}
-	var body io.ReadCloser
+	var (
+		body   io.ReadCloser
+		opened checkedread.Opened
+	)
 	if r.Method == http.MethodHead {
 		// What GET would answer, as far as it is known before a byte is
-		// read: an object missing or shorter than the catalog records is
-		// data loss.
-		info, err := store.Stat(ctx, in.Key)
+		// read, from the storage GET would read: an object missing or
+		// shorter than the catalog records is data loss.
+		info, _, err := stores.Stat(ctx, obj)
 		if err == nil && info.Size < in.Offset+in.Length {
 			err = checkedread.ErrShort
 		}
 		if err != nil {
-			return c.failIn(d, st, instanceFailure(err, path))
+			return c.failWith(d, st, sent(0), instanceFailure(err, path))
 		}
 	} else {
-		if body, err = store.Read(ctx, in.Key, base+span.first, n); err != nil {
-			return c.failIn(d, st, instanceFailure(err, path))
+		if opened, err = stores.Open(ctx, obj, base+span.first, n); err != nil {
+			return c.failWith(d, st, sent(0), instanceFailure(err, path))
 		}
+		body = opened.Body
 		defer func() { _ = body.Close() }() // Only read from.
 	}
 	head := func() {
@@ -172,11 +178,14 @@ func (c *core) download(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return err
 	}
 	// The SHA-256 is that of the whole instance, so only an answer of the
-	// whole instance can be checked against it; a range or a window is
+	// whole instance can be checked against it: a 200, or a range that
+	// covers every byte (bytes=0-, or 0 to the last byte), which is the
+	// whole instance under another status and must not pass wrong bytes,
+	// a replica's least of all, as whole. A shorter range or a window is
 	// checked for its length, and the client checks what it assembles
 	// against the ETag.
 	var sum *tenant.SHA256
-	if status == http.StatusOK && !win.given {
+	if !win.given && span.first == 0 && span.last == size-1 {
 		s := in.ArchivedSHA256
 		sum = &s
 	}
@@ -199,6 +208,7 @@ func (c *core) download(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	} else {
 		got, err = checkedread.CopyChecked(body, n, sum, bufs, emit)
 	}
+	c.mismatched(ctx, func(ctx context.Context, err error) error { return stores.Mismatch(ctx, opened, err) }, err)
 	refusal, refused := refusedWhileOpen(ctx)
 	switch {
 	case err == nil:

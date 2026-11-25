@@ -15,7 +15,6 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
-	"github.com/amrshadid/nopacs/internal/place"
 	"github.com/amrshadid/nopacs/internal/receive/sidecar"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -98,12 +97,15 @@ func (s metadataService) GetScanMetadata(ctx context.Context, req *v1.GetScanMet
 		return nil, c.failIn(d, st, listError(err, page.Cursor))
 	}
 	out := &v1.GetScanMetadataResponse{ManifestSha256: scan.ManifestSHA256.String()}
+	// The storages are this method's, so its audit entry names those that
+	// served it, a replica among them when the primary could not.
+	stores := c.newReadStores(p, req.GetTenant())
+	defer stores.Close()
 	if len(held) > 0 {
-		src, closeSrc, err := c.metadataSource(ctx, p, req.GetTenant(), scan.Storage, path)
+		src, _, err := c.metadataSource(ctx, p, req.GetTenant(), scan, path, stores)
 		if err != nil {
 			return nil, c.failIn(d, st, err)
 		}
-		defer closeSrc()
 		out.Instances, err = src.page(ctx, held)
 		if err != nil {
 			return nil, c.failIn(d, st, err)
@@ -120,7 +122,7 @@ func (s metadataService) GetScanMetadata(ctx context.Context, req *v1.GetScanMet
 		}
 	}
 	out.NextPageToken = next
-	c.record(d, st, master.OutcomeDone, "", access.Facts{Details: map[string]string{detailInstances: strconv.Itoa(len(out.Instances))}})
+	c.record(d, st, master.OutcomeDone, "", access.Facts{Details: withDetails(map[string]string{detailInstances: strconv.Itoa(len(out.Instances))}, servedDetails(stores))})
 	return out, nil
 }
 
@@ -170,50 +172,52 @@ func (s metadataService) GetInstanceMetadata(ctx context.Context, req *v1.GetIns
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}
-	if err := checkedread.Marked(held); err != nil {
-		return nil, c.failIn(d, st, instanceFailure(err, path))
-	}
-	src, closeSrc, err := c.metadataSource(ctx, p, req.GetTenant(), scan.Storage, path)
+	// The storages are this method's, so its audit entry names those that
+	// served it, a replica among them when the primary could not.
+	stores := c.newReadStores(p, req.GetTenant())
+	defer stores.Close()
+	src, _, err := c.metadataSource(ctx, p, req.GetTenant(), scan, path, stores)
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}
-	defer closeSrc()
+	if err := src.readable(ctx, held); err != nil {
+		return nil, c.failIn(d, st, instanceFailure(err, path))
+	}
 	got, err := src.page(ctx, []tenant.ScanInstance{held})
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}
-	c.done(d, st)
+	// The details given replace the request's, so its own (an instance
+	// named, never which) is given again beside the storages.
+	c.record(d, st, master.OutcomeDone, "", access.Facts{Details: withDetails(map[string]string{detailInstance: presentValue}, servedDetails(stores))})
 	return &v1.GetInstanceMetadataResponse{Instance: got[0]}, nil
 }
 
-// metadataSource opens the storage the scan is on, and returns what
-// answers headers from it with the function that closes the storage. A
-// storage that cannot be opened is the server's or the storage's, as the
-// opener says.
-func (c *core) metadataSource(ctx context.Context, p tenant.Pipeline, tenantName, storage string, path label.Path) (*metaSource, func(), error) {
+// metadataSource returns what answers the headers of the scan from the
+// storage it is on, or from a replica in step when that storage cannot
+// serve the scan's metadata file or an instance's file (checkedread), with
+// the function that ends it. The storages are those of stores, which the
+// caller closes; nil gives the source storages of its own, closed by the
+// function returned. A storage that cannot be opened is the server's or the
+// storage's, as the opener says, met at the first read.
+func (c *core) metadataSource(ctx context.Context, p tenant.Pipeline, tenantName string, scan tenant.CatalogScan, path label.Path, stores *checkedread.Stores) (*metaSource, func(), error) {
 	limit, err := c.values().HeaderLimit(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	row, err := c.master.TenantByName(ctx, tenantName)
-	if err != nil {
-		return nil, nil, err
-	}
-	srow, err := p.Storage(ctx, storage)
-	if err != nil {
-		return nil, nil, err
-	}
-	store, err := c.opener().OpenForReading(ctx, place.TenantOf(row.ID, tenantName, p), srow)
 	if err != nil {
 		return nil, nil, err
 	}
 	key, err := layout.MetadataKey(path)
 	if err != nil {
-		_ = store.Close()
 		return nil, nil, fault.Wrap(fault.Internal, err, "api: the scan's metadata key cannot be made")
 	}
-	src := &metaSource{store: store, tenant: tenantName, path: path, key: key, limit: limit}
-	return src, func() { _ = store.Close() }, nil
+	end := func() {}
+	if stores == nil {
+		stores = c.newReadStores(p, tenantName)
+		end = stores.Close
+	}
+	file := stores.Source(checkedread.Object{Storage: scan.Storage, Key: key, SeriesUID: scan.SeriesUID, Path: path})
+	src := &metaSource{store: file.Store(), stores: stores, storage: scan.Storage, series: scan.SeriesUID,
+		tenant: tenantName, path: path, key: key, limit: limit}
+	return src, end, nil
 }
 
 // page answers the headers of held, the instances of a page in order of
@@ -222,10 +226,11 @@ func (c *core) metadataSource(ctx context.Context, p tenant.Pipeline, tenantName
 // and returns the instances answered, which are at least one. A metadata
 // file that is missing, is not in its form, or does not hold an instance
 // the catalog holds, is data loss; so is a page holding an instance a
-// scrub marked (checkedread.Marked), refused before any read.
+// scrub marked that no replica in step serves (metaSource.readable),
+// refused before any read.
 func (s *metaSource) page(ctx context.Context, held []tenant.ScanInstance) ([]*v1.InstanceMetadata, error) {
 	for _, h := range held {
-		if err := checkedread.Marked(h); err != nil {
+		if err := s.readable(ctx, h); err != nil {
 			// A scrub found its bytes missing or not what was archived:
 			// what its header says is not answered as the archive's, as
 			// none of its bytes is, before anything is read.

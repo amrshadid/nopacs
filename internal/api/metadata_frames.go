@@ -108,7 +108,7 @@ func (s *metaSource) framesOf(ctx context.Context, held tenant.ScanInstance, in 
 	// sidecar), and so is the file read here: the instance's window of its
 	// object, which is the whole object while each instance is one.
 	size := held.Length
-	ra := io.NewSectionReader(readat.New(ctx, s.store, held.Key, held.Offset+size), held.Offset, size)
+	ra := io.NewSectionReader(readat.New(ctx, s.file(held).Store(), held.Key, held.Offset+size), held.Offset, size)
 	ts, table, sums := in.TransferSyntax, in.Frames, in.FrameSHA256
 	if in.PixelData == nil {
 		// No pixel data in the line: none in the file, or a deflated file,

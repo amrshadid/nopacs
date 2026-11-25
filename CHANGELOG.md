@@ -309,6 +309,17 @@ scan, keeps it whole, and serves it through an API with keys.
   delete due sessions through the ordinary delete. A rule change and a commit
   are ordered, so a keep is never lost; a delete a rule keeps needs
   `override_retention` with its own reason. Not served yet.
+- Reads of archived instances (downloads, ReadFiles, DICOMweb with frames and
+  metadata, senders, de-identification jobs) turn, before their first byte, to
+  a replica in step for the scan when the primary's object is missing, marked
+  damaged, not online, or its storage does not answer; the replica's bytes are
+  checked against the catalog as the primary's are, and wrong or missing
+  instance bytes are recorded as that replica's damage while the revision is
+  still the catalog's. A range covering the whole instance is checked like a
+  whole answer. The audit detail `served_by`, the metrics
+  `nopacs_reads_served_by_replica_total` and
+  `nopacs_replica_read_mismatches_total`, and a warning at most once a minute
+  per storage say a read turned.
 - The recall worker asks an archive-tier store once to bring a cold object
   back, polls until it reads, and records the answer in the tenant's shared
   recall row (online until a time, or failed with a fixed reason, never the

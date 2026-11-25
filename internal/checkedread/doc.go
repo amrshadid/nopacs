@@ -4,8 +4,8 @@
 // An instance's manifest holds its length and SHA-256. A read that passes
 // bytes on without comparing them would spread damage the archive already
 // knows about, so every reader of archived bytes (the data service of the
-// API, the DICOMweb retrievals and a sender that passes instances to a peer)
-// goes through the same three pieces:
+// API, the DICOMweb retrievals, a sender that passes instances to a peer,
+// and the de-identification job) goes through the same three pieces:
 //
 //   - CopyChecked passes the bytes of one instance in pieces of a fixed size
 //     and holds back the last piece until the count and the SHA-256 both
@@ -14,10 +14,35 @@
 //   - Slots bounds how many reads one caller and the whole server hold open,
 //     since each holds a storage's connection or file and two buffers.
 //   - Stores opens the storages a read reaches, each once, for the tenant
-//     whose pipeline it holds, and closes them at its end.
+//     whose pipeline it holds, and closes them at its end; its Open, Stat
+//     and Source are the one opener of an archived object, which turns to a
+//     replica when the primary cannot serve it.
 //
 // The package knows nothing of HTTP, gRPC or DICOM: callers decide what to
 // do with a mismatch.
+//
+// # Reading from a replica
+//
+// A read turns from its primary before its first byte, never midway. Open
+// reads the primary first and turns to a replica only when the primary's
+// object is marked damaged by a scrub, is not found, is not online, or its
+// storage does not answer, each judged by the error's kind. It reads only a
+// replica the tenant's database holds in step for the object's scan at the
+// catalog's manifest digest now: a replica that has not copied the scan's
+// latest change is never read, however close it is. Replicas are tried in
+// order of name, each once, and none is tried again within a read. A
+// replica's bytes pass through CopyChecked against the catalog's length and
+// SHA-256 as the primary's do; a mismatch still cuts the answer, and
+// Mismatch records it as the replica's damage, which the replicator then
+// copies again. A Source keeps the storage its first read chose for every
+// later read of the object, so an answer made of several ranges never mixes
+// two storages.
+//
+// A read its primary serves asks the database nothing: the lookup of the
+// replicas in step is made only after the primary failed, or for an object
+// marked damaged (Readable). Stores.Served names the storages that served,
+// for the audit entry, and Counts counts the reads replicas served, for the
+// metrics.
 //
 // # What a checked read guarantees
 //

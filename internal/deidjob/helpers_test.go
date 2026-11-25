@@ -118,11 +118,29 @@ func (o *oneTenant) Names(context.Context) ([]string, error) { return []string{"
 // Store answers its database.
 func (o *oneTenant) Store(string) (tenant.Store, error) { return o.p, nil }
 
-// storages is the tenant's one storage, opened by the test.
+// storages is the tenant's one storage, opened by the test, with no
+// replica.
 type storages struct{ s blob.Store }
 
-// Get answers the storage.
-func (s storages) Get(context.Context, string) (blob.Store, error) { return s.s, nil }
+// Readable refuses an object marked damaged: there is no replica.
+func (storages) Readable(_ context.Context, obj checkedread.Object) error {
+	if obj.Damaged {
+		return checkedread.ErrMarked
+	}
+	return nil
+}
+
+// Open reads the object from the storage.
+func (s storages) Open(ctx context.Context, obj checkedread.Object, offset, length int64) (checkedread.Opened, error) {
+	if obj.Damaged {
+		return checkedread.Opened{}, checkedread.ErrMarked
+	}
+	rc, err := s.s.Read(ctx, obj.Key, offset, length)
+	return checkedread.Opened{Body: rc, Storage: obj.Storage}, err
+}
+
+// Mismatch records nothing: there is no replica.
+func (storages) Mismatch(context.Context, checkedread.Opened, error) error { return nil }
 
 // Close keeps it open: the test closes it.
 func (storages) Close() {}

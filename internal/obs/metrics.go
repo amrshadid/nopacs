@@ -27,6 +27,10 @@ type Counter struct {
 	Help string
 	// Value is the count.
 	Value uint64
+	// Labels are the counter's labels, as name and value pairs; nil for
+	// none. Counters of one name with different labels are one metric:
+	// they are given one after another, with the same Help.
+	Labels []string
 }
 
 // Gauge is one value read from its owner at the moment of a scrape, which
@@ -136,9 +140,15 @@ func (m *Metrics) WriteText(w io.Writer) error {
 		}
 	}
 	if f := m.sources.Counters; f != nil {
+		last := ""
 		for _, c := range f() {
-			header(b, c.Name, "counter", c.Help)
-			sample(b, c.Name, nil, strconv.FormatUint(c.Value, 10))
+			// One HELP and TYPE a metric, however many label sets follow:
+			// the text format refuses a metric described twice.
+			if c.Name != last {
+				header(b, c.Name, "counter", c.Help)
+				last = c.Name
+			}
+			sample(b, c.Name, c.Labels, strconv.FormatUint(c.Value, 10))
 		}
 	}
 	if f := m.sources.Gauges; f != nil {

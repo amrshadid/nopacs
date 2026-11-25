@@ -85,10 +85,11 @@ package nopacs.v1;
 //     "Content-Range: bytes */<length>" (RFC 9110 15.5.17). A Range header
 //     that does not parse, names another unit, has a last before its
 //     first, or holds more than one range, is ignored, and the whole
-//     instance answered 200, which RFC 9110 14.2 allows. The server does
-//     not check the SHA-256 of a part it answers, which would mean reading
-//     the whole instance: the client checks what it assembles against the
-//     ETag.
+//     instance answered 200, which RFC 9110 14.2 allows. A range that
+//     covers every byte (from 0 to the last) is the whole instance and is
+//     checked against the SHA-256 as a 200 is. The server does not check the
+//     SHA-256 of a shorter part, which would mean reading the whole
+//     instance: the client checks what it assembles against the ETag.
 //   - If-Range (RFC 9110 13.1.5). With the strong ETag the client holds,
 //     the range is answered only while the instance is that one, and the
 //     whole instance otherwise, so a download resumed after the instance

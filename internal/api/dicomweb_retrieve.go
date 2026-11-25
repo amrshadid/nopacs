@@ -139,13 +139,16 @@ func (s *webStream) end(err error, results int) error {
 	return nil
 }
 
-// copyRange copies length bytes of the object key of the scan's storage
-// from offset to out through checkedread.CopyChecked, checked against sum when it is
-// not nil. part, when not nil, is called before the first byte, so a part
+// copyRange copies length bytes of the file of the instance held from
+// offset to out through checkedread.CopyChecked, checked against sum when
+// it is not nil, read from the scan's storage or a replica in step
+// (metaSource.file); a replica's bytes found wrong are recorded as its
+// damage. part, when not nil, is called before the first byte, so a part
 // of a multipart body starts only once its first piece is read and
 // checked.
-func copyRange(ctx context.Context, sl *scanLines, key string, offset, length int64, sum *tenant.SHA256, part func() (io.Writer, error)) (int64, error) {
-	body, err := sl.src.store.Read(ctx, key, offset, length)
+func (x *webRequest) copyRange(ctx context.Context, sl *scanLines, held tenant.ScanInstance, offset, length int64, sum *tenant.SHA256, part func() (io.Writer, error)) (int64, error) {
+	src := sl.src.file(held)
+	body, err := src.Read(ctx, offset, length)
 	if err != nil {
 		return 0, err
 	}
@@ -161,7 +164,9 @@ func copyRange(ctx context.Context, sl *scanLines, key string, offset, length in
 		return err
 	}
 	chunk := min(max(length, 1), httpChunk)
-	return checkedread.CopyChecked(body, length, sum, [2][]byte{make([]byte, chunk), make([]byte, chunk)}, emit)
+	n, err := checkedread.CopyChecked(body, length, sum, [2][]byte{make([]byte, chunk), make([]byte, chunk)}, emit)
+	x.c.mismatched(ctx, src.Mismatch, err)
+	return n, err
 }
 
 // target is what a retrieve names, found in the catalog: the scans it
@@ -204,14 +209,20 @@ func (x *webRequest) locate(ctx context.Context) (target, error) {
 }
 
 // marked returns the data loss of a target that names one instance a scrub
-// marked, before anything of it is read or answered (checkedread.Marked);
-// nil otherwise.
-func (t target) marked() error {
+// marked and that no replica in step serves, before anything of it is read
+// or answered (checkedread.Stores.Readable); nil otherwise.
+func (x *webRequest) marked(ctx context.Context, t target) error {
 	if t.instance == nil {
 		return nil
 	}
-	if err := checkedread.Marked(*t.instance); err != nil {
-		return instanceFailure(err, pathOf(t.scan))
+	return x.readable(ctx, t.scan, *t.instance)
+}
+
+// readable returns the data loss of an instance of the scan s a scrub
+// marked and that no replica in step serves; nil otherwise.
+func (x *webRequest) readable(ctx context.Context, s tenant.CatalogScan, in tenant.ScanInstance) error {
+	if err := x.stores.Readable(ctx, checkedread.InstanceObject(in, s.SeriesUID, pathOf(s))); err != nil {
+		return instanceFailure(err, pathOf(s))
 	}
 	return nil
 }
@@ -235,7 +246,7 @@ func syntaxOf(ctx context.Context, sl *scanLines, held tenant.ScanInstance) (str
 	if in.TransferSyntax != "" {
 		return in.TransferSyntax, nil
 	}
-	ts, err := header.ReadTransferSyntax(readat.New(ctx, sl.src.store, held.Key, held.Size), held.Size)
+	ts, err := header.ReadTransferSyntax(readat.New(ctx, sl.src.file(held).Store(), held.Key, held.Size), held.Size)
 	if err != nil {
 		return "", fileFailure(err)
 	}
@@ -259,7 +270,7 @@ func (x *webRequest) retrieve(ctx context.Context) error {
 	if err != nil {
 		return x.fail(err)
 	}
-	if err := t.marked(); err != nil {
+	if err := x.marked(ctx, t); err != nil {
 		return x.fail(err)
 	}
 	ls := x.newLines()
@@ -319,11 +330,11 @@ func (x *webRequest) retrieve(ctx context.Context) error {
 			continue
 		}
 		in, sum := row.held, row.held.ArchivedSHA256
-		if err := checkedread.Marked(in); err != nil {
+		if err := x.readable(ctx, row.scan, in); err != nil {
 			// Before the instance's part begins: none of its bytes is sent.
-			return stream.end(instanceFailure(err, pathOf(row.scan)), sent)
+			return stream.end(err, sent)
 		}
-		if _, err := copyRange(ctx, sl, in.Key, in.Offset, in.Length, &sum, func() (io.Writer, error) {
+		if _, err := x.copyRange(ctx, sl, in, in.Offset, in.Length, &sum, func() (io.Writer, error) {
 			return mp.Part(dicomweb.MediaDICOM, ts)
 		}); err != nil {
 			return stream.end(instanceFailure(err, pathOf(row.scan)), sent)
@@ -390,7 +401,7 @@ func (x *webRequest) retrieveBare(ctx context.Context, in tenant.ScanInstance, s
 		return stream.end(nil, 0)
 	}
 	sum := in.ArchivedSHA256
-	if _, err := copyRange(stream.ctx, sl, in.Key, in.Offset, in.Length, &sum, func() (io.Writer, error) { return stream, nil }); err != nil {
+	if _, err := x.copyRange(stream.ctx, sl, in, in.Offset, in.Length, &sum, func() (io.Writer, error) { return stream, nil }); err != nil {
 		return stream.end(instanceFailure(err, pathOf(s)), 0)
 	}
 	return stream.end(nil, 1)
@@ -417,7 +428,7 @@ func (x *webRequest) bulkData(ctx context.Context) error {
 	if err != nil {
 		return x.fail(err)
 	}
-	if err := t.marked(); err != nil {
+	if err := x.marked(ctx, t); err != nil {
 		return x.fail(err)
 	}
 	in := *t.instance
@@ -453,7 +464,7 @@ func (x *webRequest) bulkData(ctx context.Context) error {
 	if multi {
 		part = func() (io.Writer, error) { return mp.Part(dicomweb.MediaOctetStream, "") }
 	}
-	if _, err := copyRange(stream.ctx, sl, in.Key, in.Offset+win.offset, win.length, nil, part); err != nil {
+	if _, err := x.copyRange(stream.ctx, sl, in, in.Offset+win.offset, win.length, nil, part); err != nil {
 		return stream.end(instanceFailure(err, pathOf(t.scan)), 0)
 	}
 	if multi {

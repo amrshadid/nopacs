@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,13 +14,14 @@ import (
 	"github.com/amrshadid/go-dicom/filereader"
 
 	"github.com/amrshadid/nopacs/internal/checkedread"
+	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/receive/header"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// errMissing is an instance whose object the storage does not hold: data
-// loss, as a read of it reports it.
+// errMissing is an instance whose object neither its storage nor a replica
+// in step holds: data loss, as a read of it reports it.
 var errMissing = errors.New("send: the instance's file is not on its storage")
 
 // errNoMeta is an instance whose file meta information cannot be read, so
@@ -46,26 +48,26 @@ type stream struct {
 	err  error
 }
 
-// openStream opens the instance in from st, its bytes checked against its
-// length and archived SHA-256 as they are read into bufs. A storage that
-// does not hold the object is errMissing; an instance a scrub marked is
-// checkedread.ErrMarked, before its storage is opened.
-func openStream(ctx context.Context, st Storages, in tenant.ScanInstance, bufs [2][]byte) (*stream, error) {
-	if err := checkedread.Marked(in); err != nil {
-		// A scrub found its bytes damaged: not one is read or sent.
-		return nil, err
-	}
-	store, err := st.Get(ctx, in.Storage)
-	if err != nil {
-		return nil, err
-	}
-	body, err := store.Read(ctx, in.Key, in.Offset, in.Length)
+// openStream opens the instance in of the scan at path from st, its bytes
+// checked against its length and archived SHA-256 as they are read into
+// bufs: from its storage, or from a replica in step when that storage
+// cannot serve it (checkedread.Stores.Open), so a scan whose primary lost
+// an instance is still sent whole. An instance no storage holds is
+// errMissing; an instance a scrub marked that no replica serves is
+// checkedread.ErrMarked, its primary not read. A replica's bytes found
+// wrong are recorded as its damage, a record that fails logged to log.
+func openStream(ctx context.Context, st Storages, path label.Path, in tenant.ScanInstance, bufs [2][]byte, log *slog.Logger) (*stream, error) {
+	o, err := st.Open(ctx, checkedread.InstanceObject(in, "", path), in.Offset, in.Length)
 	switch {
+	case checkedread.StorageFailed(err):
+		// The storage itself, not the object: not the instance's loss.
+		return nil, err
 	case fault.KindOf(err) == fault.NotFound:
 		return nil, errMissing
 	case err != nil:
 		return nil, err
 	}
+	body := o.Body
 	pr, pw := io.Pipe()
 	s := &stream{pr: pr, body: body, done: make(chan struct{})}
 	sum := in.ArchivedSHA256
@@ -75,6 +77,11 @@ func openStream(ctx context.Context, st Storages, in tenant.ScanInstance, bufs [
 			_, err := pw.Write(b)
 			return err
 		})
+		if checkedread.Mismatched(err) {
+			if rerr := st.Mismatch(ctx, o, err); rerr != nil {
+				log.Warn("sender: a replica's bytes found wrong could not be recorded as its damage", "replica", o.Storage, "kind", fault.KindOf(rerr).String())
+			}
+		}
 		s.err = err
 		_ = pw.CloseWithError(err) // A nil error is the end of the instance.
 	}()

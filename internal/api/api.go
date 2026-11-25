@@ -105,6 +105,10 @@ type Config struct {
 	// the API's streams and downloads and the instances senders read. Nil
 	// gives the API a count of its own.
 	Reads *checkedread.Slots
+	// ReadCounts counts the reads of archived bytes a replica served
+	// because the primary could not, for the server's metrics, shared
+	// with the senders and deid jobs. Nil counts nothing.
+	ReadCounts *checkedread.Counts
 	// DeidMemory is the server's bound on de-identification's memory
 	// (deid.memory), shared with the reception pipelines and the deid
 	// jobs, which a trial run takes its copies of a file from. Nil gives
@@ -209,7 +213,7 @@ func New(cfg Config) (Handlers, error) {
 		access: cfg.Access, reg: cfg.Registry, master: cfg.Master, newID: cfg.NewID, log: log, settings: known,
 		keys: cfg.Keys, now: cfg.Now, receivers: cfg.Receivers, incoming: cfg.Incoming, headers: cfg.Headers,
 		live: cfg.Live, feeds: cfg.Feeds, stowReceivers: cfg.STOW, senders: cfg.SenderHealths, senderTests: cfg.SenderTests,
-		reads: cfg.Reads, heldFiles: cfg.HeldFiles, trials: make(chan struct{}, MaxTrialsAtOnce), deidMemory: cfg.DeidMemory,
+		reads: cfg.Reads, readCounts: cfg.ReadCounts, heldFiles: cfg.HeldFiles, trials: make(chan struct{}, MaxTrialsAtOnce), deidMemory: cfg.DeidMemory,
 		installation: cfg.Installation, importGuarded: cfg.ImportGuarded, corrections: cfg.Corrections, replaceSources: cfg.ReplaceSources,
 		handoffs: cfg.Handoffs, cleanups: cfg.StorageCleanups, sealPause: cfg.SealPause,
 	}
@@ -364,6 +368,8 @@ type core struct {
 	// for their bounds, in the server's one count, which the senders'
 	// reads share (Config.Reads).
 	reads *checkedread.Slots
+	// readCounts counts the reads a replica served (Config.ReadCounts).
+	readCounts *checkedread.Counts
 	// deidMemory bounds what trial runs hold in memory, with the rest of
 	// de-identification's work (Config.DeidMemory).
 	deidMemory check.Memory

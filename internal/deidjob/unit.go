@@ -9,6 +9,7 @@ import (
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/checkedread"
+	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/deid/engine"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/jobmeet"
@@ -46,6 +47,9 @@ type unitRun struct {
 	invalid atomic.Bool
 	stores  Storages
 	bufs    [2][]byte
+	// scan is the labels of the scan the unit judges, which a read that
+	// turns to a replica looks up.
+	scan label.Path
 }
 
 // work works one claimed unit to its end or until it is given back.
@@ -129,6 +133,7 @@ func (t *tenantRun) work(p tenant.Pipeline, st tenant.Store, w tenant.Work) {
 	u.stores = sup.cfg.OpenStorages(t.name, p)
 	defer u.stores.Close()
 	u.bufs = [2][]byte{make([]byte, readBuffer), make([]byte, readBuffer)}
+	u.scan = start.Scan.Path
 	u.log = u.log.With("scan", start.Scan.Path.Subject+"/"+start.Scan.Path.Session+"/"+start.Scan.Path.Scan)
 	rec := newRecorder(p, u.fence, start.Scan.Cursor, kept, sup.cfg.Now, func() { sup.cfg.Wake(t.name) })
 	u.finish(rec, u.judgeScan(j, start.Scan, rec))

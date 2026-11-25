@@ -91,7 +91,7 @@ func (s *dimseSession) send(in tenant.ScanInstance) (result, *outcome) {
 		return result{}, &out
 	}
 	defer release()
-	st, err := openStream(u.ctx, u.stores, in, u.bufs)
+	st, err := openStream(u.ctx, u.stores, u.scan, in, u.bufs, u.log)
 	switch {
 	case errors.Is(err, errMissing):
 		u.dataLoss(detailMissing)
