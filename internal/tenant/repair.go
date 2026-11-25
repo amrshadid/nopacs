@@ -25,27 +25,89 @@ import (
 //
 // A replica's own damage is not a repair: it is copied again from the
 // primary by the replicator (Replication.RecordReplicaDamage).
+//
+// A repair recorded under a fence holds its scan until it ends, is let go,
+// or runs out, as repair_hold.go says: every change of the scan's objects
+// is refused with ScanRepairingError meanwhile.
+//
+// A repair job's progress is kept with its repairs: CompleteRepair counts
+// the finding repaired or already good on the job its record names, and
+// RecordRepairOutcome counts one no replica holds good, each finding once a
+// job; EndRepairJob ends the job and its unit together.
 type Repairs interface {
 	// RecordRepair records r, under r.Fence when given (the repair job's
-	// unit), and answers it as stored and whether this call made it: a
-	// record of the same id is answered as it stands. The finding must hold,
-	// be on r.Storage, and be of a kind a repair mends (ScrubFindingKind's
-	// Mendable); r.Storage must not be a replica, and r.From must be a
-	// replica of it: each a precondition failure otherwise. A finding the
-	// tenant does not have is NotFound.
+	// unit), and answers it as stored and whether this call made it. The
+	// finding must hold, be on r.Storage, and be of a kind a repair mends
+	// (ScrubFindingKind's Mendable); r.Storage must not be a replica, and
+	// r.From must be a replica of it; the catalog must still name at the
+	// finding's key the bytes r expects (CheckRepairCatalog); no correction
+	// touching the scan may be prepared, committed or purging, and no
+	// switch of r.Storage or r.From accepted or swapped: each a
+	// precondition failure otherwise, writing nothing. A finding the tenant
+	// does not have is NotFound. Under the fence of a repair job's unit
+	// whose job has ended or was canceled, it is refused with
+	// RepairJobEndedError, writing nothing. Under a fence, the record holds
+	// the scan until its HeldUntil, the due the fence's unit has now plus
+	// RepairHoldGrace, unless it ends or is let go before. A record of the
+	// same id ended already is answered as it stands; one not ended whose
+	// hold under another fence has not run out is refused with
+	// ScanRepairingError (that fence's worker may still be putting the
+	// object); one not ended otherwise is checked again and holds the scan
+	// under the new fence, never to an earlier end than it held to; and one
+	// whose expected bytes are not r's is a precondition failure.
 	RecordRepair(ctx context.Context, r RepairRecord) (Repair, bool, error)
+	// ReleaseRepair ends the hold of the scan the repair of id holds under
+	// fence, writing nothing else: the way out of an object whose put
+	// failed or was not made, so a change of the scan waits no longer. A
+	// repair ended, held under another fence, or holding nothing is left as
+	// it is; one the tenant does not have is NotFound; a fence lost is
+	// ErrLeaseLost, and the hold then runs to its HeldUntil.
+	ReleaseRepair(ctx context.Context, fence WorkFence, id string) error
+	// ScanRepairHeld reports whether a repair holds, at now, the scan of
+	// the Series Instance UID: a reception reads it before it puts the
+	// scan's sidecar and manifest, so a hold does not let it write them
+	// and then refuse its commit.
+	ScanRepairHeld(ctx context.Context, seriesUID string, now time.Time) (bool, error)
 	// CompleteRepair ends the repair of id, under fence when given, as
 	// Repairs says, in one transaction with audit, the server's (no Guard),
-	// and answers it as stored. A repair ended already is answered as it
-	// stands, writing nothing; one the tenant does not have is NotFound;
-	// one whose finding a switch moved to another storage since it was
-	// recorded is a precondition failure, writing nothing.
+	// and answers it as stored; its hold of the scan ends with it. When the
+	// catalog no longer names the bytes the repair expected
+	// (CheckRepairCatalog: its hold ended with its lease and the scan
+	// changed meanwhile), the repair ends Changed, its finding left
+	// holding, and the audit entry's detail "outcome" says "changed"; unless
+	// the bytes it found were the bytes it expected (nothing was put), the
+	// key it may have put is recorded, in the same transaction, as a
+	// finding of kind FindingOrphan on its storage, of the repair's job, so
+	// bytes the catalog may no longer name are never left unrecorded. A
+	// repair ended already is answered as it stands, writing nothing; one
+	// the tenant does not have is NotFound; one whose finding a switch moved
+	// to another storage since it was recorded is a precondition failure,
+	// writing nothing. A repair of a repair job counts its finding on the
+	// job (repaired, or already good when the bytes found were the bytes
+	// expected) unless the job counted it before.
 	CompleteRepair(ctx context.Context, fence *WorkFence, id string, now time.Time, audit master.AuditEntry) (Repair, error)
 	// Repair answers the repair of id, or NotFound.
 	Repair(ctx context.Context, id string) (Repair, error)
 	// FindingRepairs answers the repairs of a finding, oldest first, at most
 	// MaxFindingRepairs.
 	FindingRepairs(ctx context.Context, findingID string) ([]Repair, error)
+	// RepairFindings answers the findings of these ids, cleared or not, in
+	// the order given, skipping an id the tenant does not have; at most
+	// MaxRepairFindings ids.
+	RepairFindings(ctx context.Context, ids []string) ([]ScrubFinding, error)
+	// RecordRepairOutcome counts o on the repair job whose unit holds its
+	// fence, with its tally, and answers the job: a finding the job counted
+	// before is not counted again, but for one counted no good copy and now
+	// repaired or good, which moves from refused to sent. A job ended is
+	// answered as it stands. A unit not of a repair job is a precondition
+	// failure.
+	RecordRepairOutcome(ctx context.Context, o RepairOutcome) (Job, error)
+	// EndRepairJob ends the repair job whose unit holds fence, done or
+	// partial by its counts (EndState), completes the unit and ends every
+	// hold of the job's repairs, in one transaction, and answers the job. A
+	// job ended already (canceled) is answered as it stands, its unit
+	// completed. A unit not of a repair job is a precondition failure.
+	EndRepairJob(ctx context.Context, fence WorkFence, now time.Time) (Job, error)
 }
 
 // MaxFindingRepairs is the most repairs FindingRepairs answers.
@@ -68,21 +130,37 @@ type Repair struct {
 	// zero for an object missing.
 	FoundSize   *int64
 	FoundSHA256 SHA256
+	// SeriesUID is the Series Instance UID of the object's scan, the scan
+	// the repair holds while it runs; the store's.
+	SeriesUID string
 	// Recorded is when it was recorded; Repaired when it ended, zero
 	// until then.
 	Recorded, Repaired time.Time
+	// HeldUntil is when its hold of the scan runs out by itself: the due
+	// its unit had at its record plus RepairHoldGrace. Zero when it holds
+	// nothing (ended, let go, or recorded under no fence).
+	HeldUntil time.Time
+	// Changed says it ended without clearing its finding: the catalog no
+	// longer named the bytes it expected.
+	Changed bool
 }
 
 // Done reports whether the repair ended.
 func (r Repair) Done() bool { return !r.Repaired.IsZero() }
+
+// FoundExpected reports whether the object the repair found was already the
+// bytes it expected, so nothing was put over it.
+func (r Repair) FoundExpected() bool {
+	return r.FoundSize != nil && *r.FoundSize == r.ExpectedSize && r.FoundSHA256 == r.ExpectedSHA256
+}
 
 // RepairRecord is what RecordRepair records.
 type RepairRecord struct {
 	// Fence is the repair unit's lease; nil for none.
 	Fence *WorkFence
 	// Repair is what it records; its Storage, Key, SOPInstanceUID and
-	// Revision are read from the finding, and Recorded and Repaired are the
-	// store's: each ignored.
+	// Revision are read from the finding, and SeriesUID, Recorded, Repaired,
+	// HeldUntil and Changed are the store's: each ignored.
 	Repair Repair
 	// Now is when it is recorded.
 	Now time.Time

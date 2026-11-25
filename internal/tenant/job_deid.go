@@ -40,6 +40,8 @@ func JobWorkKind(kind JobKind, sender string) string {
 		return ScrubWorkKind
 	case JobRebuild:
 		return RebuildWorkKind
+	case JobRepair:
+		return RepairWorkKind
 	}
 	return SendKind(sender)
 }

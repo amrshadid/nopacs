@@ -34,6 +34,12 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 		if err := k.checkNoRebuild(ctx, tx); err != nil {
 			return err
 		}
+		// The end gives the scan its rewritten manifest's checksum; a repair
+		// putting the old manifest back meanwhile would leave the storage
+		// holding other bytes than the catalog names.
+		if err := k.checkCorrectionNotHeld(ctx, tx, c.ID, f.Now); err != nil {
+			return err
+		}
 		if c.Kind == corr.KindDelete {
 			if err := k.dropDeleted(ctx, tx, *c, f.Manifest, f.ManifestBefore, f.Now); err != nil {
 				return err

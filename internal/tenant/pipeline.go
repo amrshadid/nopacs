@@ -340,7 +340,9 @@ type Pipeline interface {
 	// commit's. A scan and a session made take the commit's Values and the
 	// receiver of its reception; one already there fills only the values
 	// it holds empty (ScanValues). A scan of more than MaxScanCommit
-	// instances is committed in several calls.
+	// instances is committed in several calls. A commit to an existing
+	// scan a repair holds at c.At (Repairs) is refused with
+	// ScanRepairingError, writing nothing: the step is tried again.
 	CommitScan(ctx context.Context, c ScanCommit) (Scan, error)
 	// CatalogLabels returns the labels and storage of the study's session
 	// and the labels of those of its series that have scans, as the

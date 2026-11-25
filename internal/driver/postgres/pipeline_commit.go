@@ -350,6 +350,15 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		if err := addToCatalog(ctx, tx, c, session, scanID, newScan, newInstances, newBytes); err != nil {
 			return err
 		}
+		// Looked for once the scan's row is locked (addToCatalog updated it):
+		// a repair recorded meanwhile locks that row too, so this commit
+		// either waited for it and sees its hold, or the repair waits for
+		// this commit and reads the scan as it leaves it.
+		if !newScan {
+			if err := (sqlkit.Sending{D: sendingDialect}).CheckRepairHold(ctx, sendingTx{tx: tx, t: t}, c.SeriesUID, c.At); err != nil {
+				return err
+			}
+		}
 		// The scan's copies on the storage's replicas, queued in the
 		// commit's transaction so a crash after it forgets none; their rows
 		// are locked after the scan's, as a correction's publish locks them.

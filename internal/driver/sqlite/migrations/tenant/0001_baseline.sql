@@ -1731,7 +1731,13 @@ CREATE INDEX recalls_by_state ON recalls (state, storage);
 -- A primary's object put back from a replica: what the damaged object was
 -- (its found size and checksum, NULL for one missing) recorded before the
 -- good bytes are put over it, the finding it mends, the replica and the
--- job, and when it ended (NULL until then).
+-- job, and when it ended (NULL until then), with its outcome ('changed'
+-- when the catalog no longer named the bytes it expected). series_uid is
+-- its object's scan. While it runs it holds that scan still: open_work and
+-- open_attempt name the unit of work and attempt that recorded it, and the
+-- hold stands until hold_until, that unit's due at the record plus a grace
+-- longer than a put cut at its deadline takes to land (all three NULL once
+-- it ended or was let go, or for a record made under no unit).
 CREATE TABLE repairs (
     id               TEXT    NOT NULL PRIMARY KEY,
     finding_id       TEXT    NOT NULL,
@@ -1746,10 +1752,49 @@ CREATE TABLE repairs (
     found_size       INTEGER CHECK (found_size IS NULL OR found_size >= 0),
     found_sha256     BLOB CHECK (found_sha256 IS NULL OR length(found_sha256) = 32),
     recorded_at      INTEGER NOT NULL,
-    repaired_at      INTEGER
+    repaired_at      INTEGER,
+    series_uid       TEXT    NOT NULL,
+    outcome          TEXT    NOT NULL CHECK (outcome IN ('', 'repaired', 'changed')),
+    hold_until       INTEGER,
+    open_work        TEXT,
+    open_attempt     INTEGER,
+    CHECK ((repaired_at IS NULL) = (outcome = '')),
+    CHECK ((open_work IS NULL) = (open_attempt IS NULL)),
+    CHECK ((open_work IS NULL) = (hold_until IS NULL)),
+    CHECK (repaired_at IS NULL OR open_work IS NULL)
 ) STRICT;
 
 CREATE INDEX repairs_by_finding ON repairs (finding_id, recorded_at, id);
+-- A change of a scan looks for a repair holding it, among those that hold
+-- alone.
+CREATE INDEX repairs_holding ON repairs (series_uid) WHERE open_work IS NOT NULL;
+
+-- What a repair job mends: its primary, the replica it reads from ('' for
+-- any in step), the ids of the findings it names as a JSON array ('[]'
+-- with all or for an automatic job), and how it was made. A job's
+-- unfinished repair of a storage is found by it.
+CREATE TABLE repair_jobs (
+    job_id       TEXT    NOT NULL PRIMARY KEY,
+    storage      TEXT    NOT NULL,
+    from_replica TEXT    NOT NULL,
+    findings     TEXT    NOT NULL,
+    all_findings INTEGER NOT NULL CHECK (all_findings IN (0, 1)),
+    automatic    INTEGER NOT NULL CHECK (automatic IN (0, 1)),
+    CHECK (all_findings = 0 OR automatic = 0)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX repair_jobs_by_storage ON repair_jobs (storage);
+
+-- Each finding a repair job counted, with the outcome counted, so an
+-- attempt that walks the findings again counts none twice; one counted
+-- no_good_copy and repaired later moves from refused to sent.
+CREATE TABLE repair_outcomes (
+    job_id     TEXT    NOT NULL,
+    finding_id TEXT    NOT NULL,
+    outcome    TEXT    NOT NULL CHECK (outcome IN ('repaired', 'already_good', 'no_good_copy')),
+    bytes      INTEGER NOT NULL CHECK (bytes >= 0),
+    PRIMARY KEY (job_id, finding_id)
+) STRICT, WITHOUT ROWID;
 
 -- A switch of a primary to its replica, recorded when it is accepted, with
 -- each step it reaches: accepted, then swapped once the one transaction

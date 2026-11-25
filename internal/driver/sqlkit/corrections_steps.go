@@ -117,6 +117,11 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 		if err := k.checkNoRebuild(ctx, tx); err != nil {
 			return err
 		}
+		// A repair's put lands after the publish otherwise: a hidden
+		// instance's object put back, or an old revision over a new one.
+		if err := k.checkCorrectionNotHeld(ctx, tx, c.ID, cc.Now); err != nil {
+			return err
+		}
 		var err error
 		switch c.Kind {
 		case corr.KindDelete:
@@ -519,6 +524,11 @@ func (k Sending) StartPurge(ctx context.Context, id string, now time.Time, audit
 			if err := k.checkNoRebuild(ctx, tx); err != nil {
 				return err
 			}
+			// A purge that removes an object while a repair puts it back
+			// would leave it on the storage, unlisted, after "purged".
+			if err := k.checkCorrectionNotHeld(ctx, tx, c.ID, now); err != nil {
+				return err
+			}
 			if _, err := tx.Exec(ctx, `UPDATE corrections SET unresolved = ? WHERE id = ?`, k.D.Bool(false), c.ID); err != nil {
 				return err
 			}
@@ -578,6 +588,9 @@ func (k Sending) RecordPurgedObject(ctx context.Context, o tenant.PurgedObject) 
 		// Recorded at its storage's generation now: refused while a switch
 		// of the correction's storages runs, so that is the one it acted at.
 		if err := checkNoSwitch(ctx, tx, c.ID); err != nil {
+			return err
+		}
+		if err := k.checkCorrectionNotHeld(ctx, tx, c.ID, o.Now); err != nil {
 			return err
 		}
 		return k.insertPurged(ctx, tx, o, map[string]purgePlace{})

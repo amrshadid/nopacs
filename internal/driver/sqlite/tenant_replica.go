@@ -104,6 +104,16 @@ func (t *Tenant) RecordRepair(ctx context.Context, r tenant.RepairRecord) (tenan
 	return t.sending().RecordRepair(ctx, r)
 }
 
+// ReleaseRepair implements tenant.Repairs.
+func (t *Tenant) ReleaseRepair(ctx context.Context, fence tenant.WorkFence, id string) error {
+	return t.sending().ReleaseRepair(ctx, fence, id)
+}
+
+// ScanRepairHeld implements tenant.Repairs.
+func (t *Tenant) ScanRepairHeld(ctx context.Context, seriesUID string, now time.Time) (bool, error) {
+	return t.sending().ScanRepairHeld(ctx, seriesUID, now)
+}
+
 // CompleteRepair implements tenant.Repairs.
 func (t *Tenant) CompleteRepair(ctx context.Context, fence *tenant.WorkFence, id string, now time.Time, audit master.AuditEntry) (tenant.Repair, error) {
 	return t.sending().CompleteRepair(ctx, fence, id, now, audit)
@@ -117,6 +127,21 @@ func (t *Tenant) Repair(ctx context.Context, id string) (tenant.Repair, error) {
 // FindingRepairs implements tenant.Repairs.
 func (t *Tenant) FindingRepairs(ctx context.Context, findingID string) ([]tenant.Repair, error) {
 	return t.sending().FindingRepairs(ctx, findingID)
+}
+
+// RepairFindings implements tenant.Repairs.
+func (t *Tenant) RepairFindings(ctx context.Context, ids []string) ([]tenant.ScrubFinding, error) {
+	return t.sending().RepairFindings(ctx, ids)
+}
+
+// RecordRepairOutcome implements tenant.Repairs.
+func (t *Tenant) RecordRepairOutcome(ctx context.Context, o tenant.RepairOutcome) (tenant.Job, error) {
+	return t.sending().RecordRepairOutcome(ctx, o)
+}
+
+// EndRepairJob implements tenant.Repairs.
+func (t *Tenant) EndRepairJob(ctx context.Context, fence tenant.WorkFence, now time.Time) (tenant.Job, error) {
+	return t.sending().EndRepairJob(ctx, fence, now)
 }
 
 // SwitchFacts implements tenant.Switching.

@@ -95,7 +95,10 @@ type written struct {
 //     storage holds for a scan the catalog holds, every entry under a UID
 //     this reception claims, or that the manifest does not list, taken out,
 //     and with a scan header made from the catalog's scan and session as
-//     the commit leaves them.
+//     the commit leaves them. Before either is put, a scan the catalog
+//     holds that a repair holds (tenant.Repairs.ScanRepairHeld) fails the
+//     step, which is tried again, so its manifest is never replaced for a
+//     commit the hold would refuse.
 //  6. Commit the scan's catalog rows with the instances that read back equal
 //     (CommitScan, under the fence, at most MaxScanCommit per call).
 //
@@ -328,6 +331,21 @@ func (p *Pipeline) archiveScan(ctx context.Context, w tenant.Work, r tenant.Rece
 	// commits below make, so a line's held_at and the scan's created and
 	// updated times are the catalog's own.
 	at := p.now()
+	// A repair holding the scan refuses its commit; were the sidecar and
+	// manifest put first, the catalog would keep naming the old manifest's
+	// digest while the object is the new one (or the repair put the old one
+	// back over it). So a hold is looked for before either is written, and
+	// the step is tried again once the repair ends; the commit still checks,
+	// for a repair recorded between here and there.
+	if cat.hasScan {
+		held, err := p.store.ScanRepairHeld(ctx, g.uid, at)
+		if err != nil {
+			return res, err
+		}
+		if held {
+			return res, tenant.ScanRepairingError()
+		}
+	}
 	p.at("archive.before-sidecar")
 	var values tenant.ScanValues
 	if err := p.putSidecar(ctx, store, metadataKey, cat, g.uid, r, at, puts, func(u string) bool { return !inManifest[u] || ours[u] }, &values); err != nil {

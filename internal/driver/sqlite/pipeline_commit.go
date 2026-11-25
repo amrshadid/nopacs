@@ -308,6 +308,15 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		if err := addToCatalog(ctx, tx, c, session, scanID, newScan, newInstances, newBytes, manifest); err != nil {
 			return err
 		}
+		// A repair holding the scan puts an object of it meanwhile, maybe its
+		// manifest over the one this commit names: the step is retried once
+		// the repair ends (one writer at a time here, so this sees every
+		// repair recorded before).
+		if !newScan {
+			if err := (sqlkit.Sending{D: sendingDialect}).CheckRepairHold(ctx, sendingTx{tx: tx}, c.SeriesUID, c.At); err != nil {
+				return err
+			}
+		}
 		// The scan's copies on the storage's replicas, queued in the
 		// commit's transaction so a crash after it forgets none.
 		if err := (sqlkit.Sending{D: sendingDialect}).QueueReplicaCopies(ctx, sendingTx{tx: tx}, c.Storage, c.SeriesUID, c.At); err != nil {

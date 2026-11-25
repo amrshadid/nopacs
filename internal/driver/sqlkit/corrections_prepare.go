@@ -293,6 +293,11 @@ func (k Sending) PrepareCorrection(ctx context.Context, p tenant.CorrectionPrepa
 		if err := checkNoSwitch(ctx, tx, p.ID); err != nil {
 			return err
 		}
+		// A repair puts an object of a scan it touches meanwhile: what the
+		// correction read of the scan would not be what is on the storage.
+		if err := k.checkCorrectionNotHeld(ctx, tx, p.ID, p.Now); err != nil {
+			return err
+		}
 		if out, err = k.correctionIn(ctx, tx, p.ID, ""); err != nil {
 			return err
 		}

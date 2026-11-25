@@ -1892,7 +1892,13 @@ CREATE INDEX recalls_by_state ON recalls (state, storage);
 -- A primary's object put back from a replica: what the damaged object was
 -- (its found size and checksum, NULL for one missing) recorded before the
 -- good bytes are put over it, the finding it mends, the replica and the
--- job, and when it ended (NULL until then).
+-- job, and when it ended (NULL until then), with its outcome ('changed'
+-- when the catalog no longer named the bytes it expected). series_uid is
+-- its object's scan. While it runs it holds that scan still: open_work and
+-- open_attempt name the unit of work and attempt that recorded it, and the
+-- hold stands until hold_until, that unit's due at the record plus a grace
+-- longer than a put cut at its deadline takes to land (all three NULL once
+-- it ended or was let go, or for a record made under no unit).
 CREATE TABLE repairs (
     id               text        COLLATE "C" NOT NULL,
     finding_id       text        COLLATE "C" NOT NULL,
@@ -1908,13 +1914,54 @@ CREATE TABLE repairs (
     found_sha256     bytea,
     recorded_at      timestamptz NOT NULL,
     repaired_at      timestamptz,
+    series_uid       text        COLLATE "C" NOT NULL,
+    outcome          text        COLLATE "C" NOT NULL,
+    hold_until       timestamptz,
+    open_work        text        COLLATE "C",
+    open_attempt     integer,
     CONSTRAINT repairs_pkey PRIMARY KEY (id),
     CONSTRAINT repairs_values_check CHECK (object_key <> '' AND revision >= 0 AND expected_size >= 0
         AND length(expected_sha256) = 32 AND (found_size IS NULL OR found_size >= 0)
-        AND (found_sha256 IS NULL OR length(found_sha256) = 32))
+        AND (found_sha256 IS NULL OR length(found_sha256) = 32)),
+    CONSTRAINT repairs_outcome_check CHECK (outcome IN ('', 'repaired', 'changed')
+        AND (repaired_at IS NULL) = (outcome = '')),
+    CONSTRAINT repairs_hold_check CHECK ((open_work IS NULL) = (open_attempt IS NULL)
+        AND (open_work IS NULL) = (hold_until IS NULL) AND (repaired_at IS NULL OR open_work IS NULL))
 );
 
 CREATE INDEX repairs_by_finding ON repairs (finding_id, recorded_at, id);
+-- A change of a scan looks for a repair holding it, among those that hold
+-- alone.
+CREATE INDEX repairs_holding ON repairs (series_uid) WHERE open_work IS NOT NULL;
+
+-- What a repair job mends: its primary, the replica it reads from ('' for
+-- any in step), the ids of the findings it names as a JSON array ('[]'
+-- with all or for an automatic job), and how it was made. A job's
+-- unfinished repair of a storage is found by it.
+CREATE TABLE repair_jobs (
+    job_id       text    COLLATE "C" NOT NULL,
+    storage      text    COLLATE "C" NOT NULL,
+    from_replica text    COLLATE "C" NOT NULL,
+    findings     text    NOT NULL,
+    all_findings boolean NOT NULL,
+    automatic    boolean NOT NULL,
+    CONSTRAINT repair_jobs_pkey PRIMARY KEY (job_id),
+    CONSTRAINT repair_jobs_mode_check CHECK (NOT (all_findings AND automatic))
+);
+
+CREATE INDEX repair_jobs_by_storage ON repair_jobs (storage);
+
+-- Each finding a repair job counted, with the outcome counted, so an
+-- attempt that walks the findings again counts none twice; one counted
+-- no_good_copy and repaired later moves from refused to sent.
+CREATE TABLE repair_outcomes (
+    job_id     text   COLLATE "C" NOT NULL,
+    finding_id text   COLLATE "C" NOT NULL,
+    outcome    text   COLLATE "C" NOT NULL,
+    bytes      bigint NOT NULL,
+    CONSTRAINT repair_outcomes_pkey PRIMARY KEY (job_id, finding_id),
+    CONSTRAINT repair_outcomes_check CHECK (outcome IN ('repaired', 'already_good', 'no_good_copy') AND bytes >= 0)
+);
 
 -- A switch of a primary to its replica, recorded when it is accepted, with
 -- each step it reaches: accepted, then swapped once the one transaction

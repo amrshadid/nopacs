@@ -250,6 +250,10 @@ type Job struct {
 	Scheduled bool
 	// Rebuild is what a rebuild job does; nil for every other kind.
 	Rebuild *RebuildJob
+	// Repair is what a repair job mends; nil for every other kind. Its
+	// Counts read: sent, the objects repaired or found good; refused, those
+	// no replica holds good; Instances and Bytes, both together.
+	Repair *RepairJob
 	// State is where it is.
 	State JobState
 	// Counts are its instances and bytes so far.
@@ -300,6 +304,8 @@ type NewJob struct {
 	// Rebuild is what a rebuild job does: its mode and scratch schema; nil
 	// for every other kind.
 	Rebuild *RebuildJob
+	// Repair is what a repair job mends; nil for every other kind.
+	Repair *RepairJob
 	// Created is when it is made, and the moment whose catalog it sends.
 	Created time.Time
 }
@@ -315,7 +321,14 @@ func (j NewJob) Validate() error {
 	if j.Kind != JobRebuild && j.Rebuild != nil {
 		return invalid("only a rebuild job names a rebuild mode")
 	}
+	if j.Kind != JobRepair && j.Repair != nil {
+		return invalid("only a repair job names what it mends")
+	}
 	switch j.Kind {
+	case JobRepair:
+		if err := validateRepairJob(j); err != nil {
+			return err
+		}
 	case JobRebuild:
 		if err := validateRebuildJob(j); err != nil {
 			return err
@@ -344,7 +357,7 @@ func (j NewJob) Validate() error {
 			}
 		}
 	default:
-		return invalid("a job's kind is send, deid, scrub or rebuild")
+		return invalid("a job's kind is send, deid, scrub, rebuild or repair")
 	}
 	return master.ValidateTime("job time", j.Created)
 }

@@ -119,6 +119,12 @@ import (
 // activation. A purge refused part way goes on from where it stopped once
 // the rebuild has ended. Each check is made under the tenant's
 // configuration lock, as the making of a rebuild is.
+//
+// A correction's prepare, publish, purge's start, a purged object's record
+// and the purge's end are refused with ScanRepairingError, writing
+// nothing, while a repair holds a scan the correction touches at the
+// step's time (Repairs): the repair is putting an object of it back, and
+// the step is retried once it ended.
 type Corrections interface {
 	// PreviewDelete answers what a delete of target would remove, as the
 	// catalog holds it now, and the token a delete must carry (Confirm):

@@ -70,7 +70,7 @@ echo "== tables"
 "$SQLITE3" -batch "$db" '.tables'
 tables_hold "$(q "SELECT group_concat(name, ' ') FROM (SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name)")" \
 	subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles tenant_secrets reception_steps \
-	storage_generations replica_totals replica_scans replica_damage recalls repairs storage_switches \
+	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs repair_outcomes storage_switches \
 	correction_keys correction_objects correction_records_owed correction_copies_abandoned \
 	retention_rules retention_sessions retention_state holds hold_records dispose_jobs dispose_sessions
 
@@ -85,6 +85,14 @@ want "the newest migration" "$(printf '%s' "$mig" | awk '{print $(NF-1), $NF}')"
 # A receiver is of type dimse, on a port of its own, or stow or import, on no port.
 want "the receivers' rule of types and ports" 1 \
 	"$(q "SELECT instr(sql, 'CHECK ((type = ''dimse'' AND port BETWEEN 1 AND 65535) OR (type IN (''stow'', ''import'') AND port = 0 AND bind_address = ''''))') > 0 FROM sqlite_schema WHERE type = 'table' AND name = 'receivers'")"
+# A repair holds its scan only while it runs: an ended one holds nothing.
+want "the repairs' rule of an ended repair's hold" 1 \
+	"$(q "SELECT instr(sql, 'CHECK (repaired_at IS NULL OR open_work IS NULL)') > 0 FROM sqlite_schema WHERE type = 'table' AND name = 'repairs'")"
+# A hold that stands has its end; one let go has none.
+want "the repairs' rule of a hold's end" 1 \
+	"$(q "SELECT instr(sql, 'CHECK ((open_work IS NULL) = (hold_until IS NULL))') > 0 FROM sqlite_schema WHERE type = 'table' AND name = 'repairs'")"
+want "the index of the repairs that hold" 1 \
+	"$(q "SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name = 'repairs_holding' AND sql LIKE '%WHERE open_work IS NOT NULL'")"
 want "settings rows" 2 "$(q 'SELECT count(*) FROM settings')"
 want "audit rows" 5 "$(q 'SELECT count(*) FROM audit')"
 want "integrity_check" ok "$(q 'PRAGMA integrity_check')"

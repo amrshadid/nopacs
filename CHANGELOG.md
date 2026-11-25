@@ -353,6 +353,16 @@ scan, keeps it whole, and serves it through an API with keys.
   instance are deduplicated, bounded and rate-limited, and a request that
   cannot be read never holds a scrub back; coverage counts only scans read
   whole.
+- The repair job puts objects a scrub found missing or damaged back on a
+  primary from a replica in step: each replica object is read whole and
+  checked against the catalog's size and SHA-256, the damaged state is
+  recorded before the put, the put goes through the storage's write gate and
+  is read back, and the finding is cleared with an audit entry. While it runs
+  a repair holds the object's scan, so a correction or a reception's commit
+  to that scan is refused as retryable, and the repair is refused while a
+  correction of the scan or a switch is under way; if the catalog changed by
+  the end, the finding stays open. One repair per storage at a time, with
+  counts, tallies and cancel like other jobs. Not yet started by the server.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

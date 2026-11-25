@@ -187,6 +187,10 @@ func (k Sending) CreateJob(ctx context.Context, j tenant.NewJob, audit master.Au
 			if err := k.checkRebuildJob(ctx, tx, j); err != nil {
 				return err
 			}
+		} else if kind == tenant.JobRepair {
+			if err := k.checkRepairJob(ctx, tx, *j.Repair); err != nil {
+				return err
+			}
 		} else if !j.Profile.IsZero() {
 			has, err := exists(ctx, tx, `SELECT 1 FROM profile_versions WHERE name = ? AND version = ?`, j.Profile.Name, j.Profile.Version)
 			if err != nil {
@@ -214,6 +218,11 @@ func (k Sending) CreateJob(ctx context.Context, j tenant.NewJob, audit master.Au
 			// carries what it reads.
 			if _, err := tx.Exec(ctx, `INSERT INTO scrub_jobs (job_id, storage, scheduled) VALUES (?, ?, ?)`,
 				j.ID, j.Storage, k.D.Bool(j.Scheduled)); err != nil {
+				return err
+			}
+		}
+		if kind == tenant.JobRepair {
+			if err := k.insertRepairJob(ctx, tx, j.ID, *j.Repair); err != nil {
 				return err
 			}
 		}
@@ -496,6 +505,9 @@ func (k Sending) RetryJob(ctx context.Context, id, newID string, now time.Time, 
 		}
 		if first.job.Kind == tenant.JobRebuild {
 			return tenant.Precondition("a rebuild job is not retried; its shadow is dropped when it ends, and a new rebuild builds again")
+		}
+		if first.job.Kind == tenant.JobRepair {
+			return tenant.Precondition("a repair job is not retried; a new repair mends the findings that still hold")
 		}
 		has := true
 		if first.job.Kind == tenant.JobSend {

@@ -107,6 +107,8 @@ func fillJob(ctx context.Context, tx SendingTx, j *tenant.Job) error {
 		return fillScrub(ctx, tx, j)
 	case tenant.JobRebuild:
 		return fillRebuild(ctx, tx, j)
+	case tenant.JobRepair:
+		return fillRepair(ctx, tx, j)
 	}
 	return fillImport(ctx, tx, j)
 }

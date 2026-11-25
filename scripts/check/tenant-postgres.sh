@@ -77,7 +77,7 @@ echo
 echo "== the tenant's tables"
 tables_hold "$(q "SELECT string_agg(table_name, ' ' ORDER BY table_name COLLATE \"C\") FROM information_schema.tables WHERE table_schema = '$schema'")" \
 	subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles tenant_secrets tenant_identity \
-	storage_generations replica_totals replica_scans replica_damage recalls repairs storage_switches \
+	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs repair_outcomes storage_switches \
 	correction_keys correction_objects correction_records_owed correction_copies_abandoned \
 	retention_rules retention_sessions retention_state holds hold_records dispose_jobs dispose_sessions
 
@@ -94,6 +94,11 @@ want "the newest migration" "$(printf '%s' "$mig" | awk '{print $(NF-1), $NF}')"
 want "the receivers' rules of types and ports" "CHECK ((((type = 'dimse'::text) AND ((port >= 1) AND (port <= 65535))) OR ((type = ANY (ARRAY['stow'::text, 'import'::text])) AND (port = 0) AND (bind_address = ''::text)))) CHECK ((type = ANY (ARRAY['dimse'::text, 'stow'::text, 'import'::text])))" \
 	"$(q "SELECT string_agg(pg_get_constraintdef(oid), ' ' ORDER BY conname) FROM pg_constraint WHERE conname IN ('receivers_type_check', 'receivers_port_check') AND connamespace = '$schema'::regnamespace")"
 want "the schema records the tenant's id" sample-tenant "$(q "SELECT id FROM $t.tenant_identity")"
+# A repair holds its scan only while it runs: an ended one holds nothing.
+want "the repairs' rule of an ended repair's hold" "CHECK ((((open_work IS NULL) = (open_attempt IS NULL)) AND ((open_work IS NULL) = (hold_until IS NULL)) AND ((repaired_at IS NULL) OR (open_work IS NULL))))" \
+	"$(q "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'repairs_hold_check' AND connamespace = '$schema'::regnamespace")"
+want "the index of the repairs that hold" "CREATE INDEX repairs_holding ON $schema.repairs USING btree (series_uid) WHERE (open_work IS NOT NULL)" \
+	"$(q "SELECT indexdef FROM pg_indexes WHERE schemaname = '$schema' AND indexname = 'repairs_holding'")"
 want "settings rows" 2 "$(q "SELECT count(*) FROM $t.settings")"
 want "audit rows" 5 "$(q "SELECT count(*) FROM $t.audit")"
 want "constraints that are not valid" 0 \
