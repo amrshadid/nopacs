@@ -3,7 +3,8 @@
 -- groups follow the order a reader meets them in: the tenant's identity,
 -- settings and secrets, the audit log, the storages and receivers,
 -- receptions and the quarantine, the catalog, the leased units of work, the
--- event feed, de-identification, jobs and their kinds, and corrections.
+-- event feed, de-identification, jobs and their kinds, corrections, and
+-- replicas with their recalls, repairs and switches.
 --
 -- It holds what the SQLite schema holds, in Postgres types: times are
 -- timestamptz to the microsecond, read back in UTC; the audit entry's
@@ -190,15 +191,41 @@ CREATE TABLE storages (
     capacity_bytes   bigint      NOT NULL,
     created          timestamptz NOT NULL,
     updated          timestamptz NOT NULL,
+    -- The primary this storage is a replica of, '' for none; its tier; for
+    -- the archive tier, the days and speed of a recall (0 and '' online);
+    -- and a directory's statement, made by an admin, that its volume
+    -- encrypts at rest (an S3 store is asked instead).
+    replica_of       text        COLLATE "C" NOT NULL DEFAULT '',
+    tier             text        COLLATE "C" NOT NULL DEFAULT 'online',
+    s3_recall_days   integer     NOT NULL DEFAULT 0,
+    s3_recall_tier   text        COLLATE "C" NOT NULL DEFAULT '',
+    dir_encrypted    boolean     NOT NULL DEFAULT false,
     CONSTRAINT storages_pkey PRIMARY KEY (name),
     CONSTRAINT storages_type_check CHECK (type IN ('directory', 's3')),
-    CONSTRAINT storages_capacity_check CHECK (capacity_bytes >= 0)
+    CONSTRAINT storages_capacity_check CHECK (capacity_bytes >= 0),
+    CONSTRAINT storages_tier_check CHECK (tier IN ('online', 'archive')),
+    CONSTRAINT storages_recall_check CHECK (s3_recall_days BETWEEN 0 AND 365
+        AND s3_recall_tier IN ('', 'standard', 'bulk', 'expedited'))
 );
 
 -- The overlap checks of a change read the storages of one root, or of one
 -- endpoint and bucket, and no other.
 CREATE INDEX storages_by_root   ON storages (dir_root) WHERE type = 'directory';
 CREATE INDEX storages_by_bucket ON storages (s3_endpoint, s3_bucket) WHERE type = 's3';
+
+-- A primary's replicas, which every commit to it reads to queue its copies:
+-- the index holds the replicas alone, so a tenant without any reads nothing.
+CREATE INDEX storages_by_primary ON storages (replica_of) WHERE replica_of <> '';
+
+-- How many switches changed the place each name names. A row outlives its
+-- storage, so a name removed and added again goes on from where it was and
+-- a generation never names two places. A name with no row is at 0.
+CREATE TABLE storage_generations (
+    storage    text   COLLATE "C" NOT NULL,
+    generation bigint NOT NULL,
+    CONSTRAINT storage_generations_pkey PRIMARY KEY (storage),
+    CONSTRAINT storage_generations_check CHECK (generation >= 0)
+);
 
 -- The bytes the catalog holds on each storage, as running totals updated in
 -- the transaction of each commit, so a status reads them in its snapshot and
@@ -1692,3 +1719,181 @@ CREATE INDEX hidden_sessions_by_study  ON hidden_sessions (study_uid);
 CREATE INDEX hidden_sessions_by_label  ON hidden_sessions (subject_folded, folded);
 CREATE INDEX hidden_scans_by_series    ON hidden_scans (series_uid);
 CREATE INDEX hidden_scans_by_label     ON hidden_scans (subject_folded, session_folded, folded);
+
+-- A replica's counts, kept in the transaction of every change of its rows
+-- below, so a status reads them without counting: its scans by state, its
+-- damaged objects, the scans its backfill still owes; when it became a
+-- replica and when its last backfill was owed nothing more (NULL while one
+-- is); and the fault of its last failed copy ('' after one that did not).
+-- One row per replica, made by its attach and removed by its detach.
+CREATE TABLE replica_totals (
+    replica          text        COLLATE "C" NOT NULL,
+    pending          bigint      NOT NULL,
+    copying          bigint      NOT NULL,
+    in_step          bigint      NOT NULL,
+    damaged          bigint      NOT NULL,
+    objects_damaged  bigint      NOT NULL,
+    backfill         bigint      NOT NULL,
+    attached_at      timestamptz NOT NULL,
+    backfill_done_at timestamptz,
+    last_fault       text        COLLATE "C" NOT NULL,
+    last_fault_at    timestamptz,
+    CONSTRAINT replica_totals_pkey PRIMARY KEY (replica),
+    CONSTRAINT replica_totals_counts_check CHECK (pending >= 0 AND copying >= 0 AND in_step >= 0 AND damaged >= 0
+        AND objects_damaged >= 0 AND backfill >= 0)
+);
+
+-- A replica's state of one of its primary's scans, keyed by the scan's
+-- Series Instance UID, never an integer id, so a rebuild that makes the
+-- catalog's ids again leaves it standing. It is also the queue of copies:
+-- a row pending or damaged is due at due, and a claim leases it (copying,
+-- owner, lease_until) under attempt, which fences the copier's writes. seq
+-- counts the changes of the scan published since the row was made, and
+-- claimed_seq the one a claim saw, so a copy claimed before a change never
+-- ends in step. manifest_sha256 is the manifest digest the replica holds
+-- verified (NULL before the first); queued_at when the row last became
+-- pending (NULL in step), the start of its lag; backfill that the
+-- replica's backfill owes it.
+CREATE TABLE replica_scans (
+    replica         text        COLLATE "C" NOT NULL,
+    series_uid      text        COLLATE "C" NOT NULL,
+    state           text        COLLATE "C" NOT NULL,
+    manifest_sha256 bytea,
+    queued_at       timestamptz,
+    due             timestamptz NOT NULL,
+    seq             bigint      NOT NULL,
+    claimed_seq     bigint      NOT NULL,
+    attempt         integer     NOT NULL,
+    owner           text        NOT NULL,
+    lease_until     timestamptz,
+    verified_at     timestamptz,
+    backfill        boolean     NOT NULL,
+    last_error      text        NOT NULL,
+    CONSTRAINT replica_scans_pkey PRIMARY KEY (replica, series_uid),
+    CONSTRAINT replica_scans_state_check CHECK (state IN ('pending', 'copying', 'in_step', 'damaged')),
+    CONSTRAINT replica_scans_values_check CHECK (seq >= 1 AND claimed_seq >= 0 AND attempt >= 0
+        AND (manifest_sha256 IS NULL OR length(manifest_sha256) = 32)),
+    CONSTRAINT replica_scans_queued_check CHECK ((state = 'in_step') = (queued_at IS NULL)),
+    CONSTRAINT replica_scans_lease_check CHECK ((state = 'copying') = (lease_until IS NOT NULL))
+);
+
+-- A claim reads the rows due, earliest first, and the leases ended, and
+-- only those: rows in step, however many, are in neither index. Each holds
+-- the claim's whole order, so a claim reads its few rows in order and
+-- sorts none however long the backlog. A read that turns to a replica
+-- finds a scan's rows by its series; a status finds a replica's oldest row
+-- not in step.
+CREATE INDEX replica_scans_due     ON replica_scans (due, replica, series_uid) WHERE state IN ('pending', 'damaged');
+CREATE INDEX replica_scans_leased  ON replica_scans (lease_until, replica, series_uid) WHERE state = 'copying';
+CREATE INDEX replica_scans_by_uid  ON replica_scans (series_uid);
+CREATE INDEX replica_scans_lagging ON replica_scans (replica, queued_at) WHERE queued_at IS NOT NULL;
+
+-- An object of a replica a scrub or a read found missing or wrong, to copy
+-- again from the primary: sparse, so a replica that is whole holds none.
+-- sop_instance_uid is '' for the scan's manifest or metadata; the found
+-- size and checksum are NULL for an object missing.
+CREATE TABLE replica_damage (
+    replica          text        COLLATE "C" NOT NULL,
+    series_uid       text        COLLATE "C" NOT NULL,
+    sop_instance_uid text        COLLATE "C" NOT NULL,
+    revision         integer     NOT NULL,
+    found_size       bigint,
+    found_sha256     bytea,
+    found_at         timestamptz NOT NULL,
+    CONSTRAINT replica_damage_pkey PRIMARY KEY (replica, series_uid, sop_instance_uid),
+    CONSTRAINT replica_damage_values_check CHECK (revision >= 0 AND (found_size IS NULL OR found_size >= 0)
+        AND (found_sha256 IS NULL OR length(found_sha256) = 32))
+);
+
+-- A recall of an object of an archive-tier storage: one per object, shared
+-- by every request and job waiting for it, so one recall is asked of the
+-- store however many wait. object_key holds a SOP Instance UID as received
+-- and is kept in this table only. due is when the worker next asks or
+-- polls; online_until when the store said the object goes back to its cold
+-- class (NULL when it did not say).
+CREATE TABLE recalls (
+    storage      text        COLLATE "C" NOT NULL,
+    object_key   text        COLLATE "C" NOT NULL,
+    state        text        COLLATE "C" NOT NULL,
+    days         integer     NOT NULL,
+    speed        text        COLLATE "C" NOT NULL,
+    requested_at timestamptz NOT NULL,
+    updated      timestamptz NOT NULL,
+    due          timestamptz NOT NULL,
+    online_until timestamptz,
+    reason       text        NOT NULL,
+    CONSTRAINT recalls_pkey PRIMARY KEY (storage, object_key),
+    CONSTRAINT recalls_state_check CHECK (state IN ('requested', 'in_progress', 'online', 'failed')),
+    CONSTRAINT recalls_values_check CHECK (object_key <> '' AND days BETWEEN 1 AND 365
+        AND speed IN ('', 'standard', 'bulk', 'expedited'))
+);
+
+-- The worker reads the recalls due, earliest first, and only those; a
+-- status counts them by state, and a replica's in progress.
+CREATE INDEX recalls_due      ON recalls (due) WHERE state IN ('requested', 'in_progress');
+CREATE INDEX recalls_by_state ON recalls (state, storage);
+
+-- A primary's object put back from a replica: what the damaged object was
+-- (its found size and checksum, NULL for one missing) recorded before the
+-- good bytes are put over it, the finding it mends, the replica and the
+-- job, and when it ended (NULL until then).
+CREATE TABLE repairs (
+    id               text        COLLATE "C" NOT NULL,
+    finding_id       text        COLLATE "C" NOT NULL,
+    storage          text        COLLATE "C" NOT NULL,
+    object_key       text        COLLATE "C" NOT NULL,
+    sop_instance_uid text        COLLATE "C" NOT NULL,
+    revision         integer     NOT NULL,
+    from_replica     text        COLLATE "C" NOT NULL,
+    job_id           text        COLLATE "C" NOT NULL,
+    expected_size    bigint      NOT NULL,
+    expected_sha256  bytea       NOT NULL,
+    found_size       bigint,
+    found_sha256     bytea,
+    recorded_at      timestamptz NOT NULL,
+    repaired_at      timestamptz,
+    CONSTRAINT repairs_pkey PRIMARY KEY (id),
+    CONSTRAINT repairs_values_check CHECK (object_key <> '' AND revision >= 0 AND expected_size >= 0
+        AND length(expected_sha256) = 32 AND (found_size IS NULL OR found_size >= 0)
+        AND (found_sha256 IS NULL OR length(found_sha256) = 32))
+);
+
+CREATE INDEX repairs_by_finding ON repairs (finding_id, recorded_at, id);
+
+-- A switch of a primary to its replica, recorded when it is accepted, with
+-- each step it reaches: accepted, then swapped once the one transaction
+-- that swaps the two places committed, then done; or refused before the
+-- swap. confirm_token is the preview's token, used once. generation is the
+-- primary's switch generation when it was accepted.
+CREATE TABLE storage_switches (
+    id                   text        COLLATE "C" NOT NULL,
+    primary_name         text        COLLATE "C" NOT NULL,
+    replica_name         text        COLLATE "C" NOT NULL,
+    state                text        COLLATE "C" NOT NULL,
+    step                 text        COLLATE "C" NOT NULL,
+    confirm_token        text        COLLATE "C" NOT NULL,
+    generation           bigint      NOT NULL,
+    skip_verification    boolean     NOT NULL,
+    skip_reason          text        NOT NULL,
+    key_id               text        COLLATE "C" NOT NULL,
+    accepted_at          timestamptz NOT NULL,
+    swapped_at           timestamptz,
+    ended_at             timestamptz,
+    refusal              text        NOT NULL,
+    scans_drained        bigint      NOT NULL,
+    associations_refused bigint      NOT NULL,
+    pause_us             bigint      NOT NULL,
+    CONSTRAINT storage_switches_pkey PRIMARY KEY (id),
+    CONSTRAINT storage_switches_token_key UNIQUE (confirm_token),
+    CONSTRAINT storage_switches_state_check CHECK (state IN ('accepted', 'swapped', 'done', 'refused')),
+    CONSTRAINT storage_switches_counts_check CHECK (generation >= 0 AND scans_drained >= 0 AND associations_refused >= 0
+        AND pause_us >= 0),
+    CONSTRAINT storage_switches_ended_check CHECK ((state IN ('done', 'refused')) = (ended_at IS NOT NULL)),
+    CONSTRAINT storage_switches_swapped_check CHECK ((state IN ('swapped', 'done')) = (swapped_at IS NOT NULL))
+);
+
+-- The switches running (a start refuses or finishes them, and a new one
+-- waits for them), and a storage's last switch, as primary or as replica.
+CREATE INDEX storage_switches_running    ON storage_switches (accepted_at, id) WHERE state IN ('accepted', 'swapped');
+CREATE INDEX storage_switches_by_primary ON storage_switches (primary_name, accepted_at, id);
+CREATE INDEX storage_switches_by_replica ON storage_switches (replica_name, accepted_at, id);

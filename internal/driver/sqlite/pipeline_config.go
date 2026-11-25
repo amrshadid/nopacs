@@ -14,21 +14,14 @@ import (
 
 // --- Storages ---
 
-// storageColumns are a storage's columns as a read returns them: the secret
-// only as whether one is set, so no read can carry it out.
-const storageColumns = `name, type, dir_root, dir_path, s3_endpoint, s3_region, s3_bucket, s3_prefix,
-	s3_path_style, s3_access_key_id, s3_secret IS NOT NULL, s3_keep_versions, capacity_bytes, created, updated`
+// storageColumns are a storage's columns as a read returns them, package
+// sqlkit's: the secret only as whether one is set, so no read can carry it
+// out.
+const storageColumns = sqlkit.StorageColumns
 
 // scanStorage reads one row of storageColumns.
 func scanStorage(row interface{ Scan(...any) error }) (tenant.Storage, error) {
-	var s tenant.Storage
-	var typ string
-	var created, updated int64
-	err := row.Scan(&s.Name, &typ, &s.Directory.Root, &s.Directory.Path, &s.S3.Endpoint, &s.S3.Region, &s.S3.Bucket,
-		&s.S3.Prefix, &s.S3.PathStyle, &s.S3.AccessKeyID, &s.S3.SecretSet, &s.S3.KeepVersions, &s.CapacityBytes, &created, &updated)
-	s.Type = tenant.StorageType(typ)
-	s.Created, s.Updated = fromMicros(created), fromMicros(updated)
-	return s, err
+	return sqlkit.ScanStorage(row)
 }
 
 // storageInTx reads a storage inside a change's transaction, or NotFound.
@@ -74,7 +67,8 @@ func storageArgs(s tenant.Storage, created, updated time.Time) []any {
 		secret = s.S3.SealedSecret
 	}
 	return []any{s.Name, string(s.Type), s.Directory.Root, s.Directory.Path, s.S3.Endpoint, s.S3.Region, s.S3.Bucket,
-		s.S3.Prefix, boolInt(s.S3.PathStyle), s.S3.AccessKeyID, secret, boolInt(s.S3.KeepVersions), s.CapacityBytes, micros(created), micros(updated)}
+		s.S3.Prefix, boolInt(s.S3.PathStyle), s.S3.AccessKeyID, secret, boolInt(s.S3.KeepVersions), s.CapacityBytes, micros(created), micros(updated),
+		s.ReplicaOf, string(s.Tier), s.S3.RecallDays, string(s.S3.RecallSpeed), boolInt(s.EncryptedAtRestDeclared)}
 }
 
 // AddStorage implements tenant.Pipeline.
@@ -101,13 +95,20 @@ func (t *Tenant) AddStorage(ctx context.Context, s tenant.Storage, now time.Time
 		if err := checkStorageOverlap(ctx, tx, s); err != nil {
 			return err
 		}
+		if err := t.sending().CheckNewStorage(ctx, sendingTx{tx: tx}, s); err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO storages (name, type, dir_root, dir_path, s3_endpoint, s3_region, s3_bucket,
-			s3_prefix, s3_path_style, s3_access_key_id, s3_secret, s3_keep_versions, capacity_bytes, created, updated)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, storageArgs(s, now, now)...)
+			s3_prefix, s3_path_style, s3_access_key_id, s3_secret, s3_keep_versions, capacity_bytes, created, updated,
+			replica_of, tier, s3_recall_days, s3_recall_tier, dir_encrypted)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, storageArgs(s, now, now)...)
 		if isUniqueViolation(err) {
 			return fault.Wrap(fault.Conflict, err, "the tenant has a storage named "+s.Name)
 		}
 		if err != nil {
+			return err
+		}
+		if err := t.sending().AfterNewStorage(ctx, sendingTx{tx: tx}, s, now); err != nil {
 			return err
 		}
 		if out, err = storageInTx(ctx, tx, s.Name); err != nil {
@@ -185,8 +186,12 @@ func (t *Tenant) SetStorage(ctx context.Context, s tenant.Storage, fields []tena
 		if err != nil {
 			return err
 		}
-		if location && (next.Directory != stored.Directory || next.S3.Endpoint != stored.S3.Endpoint ||
-			next.S3.Bucket != stored.S3.Bucket || next.S3.Prefix != stored.S3.Prefix) {
+		moved := location && (next.Directory != stored.Directory || next.S3.Endpoint != stored.S3.Endpoint ||
+			next.S3.Bucket != stored.S3.Bucket || next.S3.Prefix != stored.S3.Prefix)
+		if err := t.sending().CheckStorageChange(ctx, sendingTx{tx: tx}, stored, next, moved); err != nil {
+			return err
+		}
+		if moved {
 			if why, err := storageInUse(ctx, tx, s.Name); err != nil || why != "" {
 				if err != nil {
 					return err
@@ -202,8 +207,10 @@ func (t *Tenant) SetStorage(ctx context.Context, s tenant.Storage, fields []tena
 		args := storageArgs(next, stored.Created, now)
 		_, err = tx.ExecContext(ctx, `UPDATE storages SET dir_root = ?, dir_path = ?, s3_endpoint = ?, s3_region = ?,
 			s3_bucket = ?, s3_prefix = ?, s3_path_style = ?, s3_access_key_id = ?, s3_secret = coalesce(?, s3_secret),
-			s3_keep_versions = ?, capacity_bytes = ?, updated = ? WHERE name = ?`,
-			args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[14], s.Name)
+			s3_keep_versions = ?, capacity_bytes = ?, updated = ?, tier = ?, s3_recall_days = ?, s3_recall_tier = ?,
+			dir_encrypted = ? WHERE name = ?`,
+			args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[14],
+			args[16], args[17], args[18], args[19], s.Name)
 		if err != nil {
 			return err
 		}
@@ -257,6 +264,9 @@ func (t *Tenant) RemoveStorage(ctx context.Context, name string, audit master.Au
 	err := t.write(ctx, "the storage cannot be removed", func(tx *sql.Tx, st *tenantStatements) error {
 		stored, err := storageInTx(ctx, tx, name)
 		if err != nil {
+			return err
+		}
+		if err := t.sending().CheckStorageRemoval(ctx, sendingTx{tx: tx}, stored); err != nil {
 			return err
 		}
 		var receiver string
@@ -334,20 +344,14 @@ func receiverInTx(ctx context.Context, tx *sql.Tx, name string) (tenant.Receiver
 // port and address, or a stow receiver, all of which are on port 0, that
 // lists one of its keys.
 func checkReceiver(ctx context.Context, tx *sql.Tx, r tenant.Receiver) error {
-	has, err := exists(ctx, tx, `SELECT 1 FROM storages WHERE name = ?`, r.Storage)
-	if err != nil {
+	// A storage named must be the tenant's, and neither a replica nor of the
+	// archive tier: nothing is archived to one of those first.
+	if err := sqlkit.CheckArchiveTarget(ctx, sendingTx{tx: tx}, "", r.Storage); err != nil {
 		return err
 	}
-	if !has {
-		return tenant.Precondition("the tenant has no storage named " + r.Storage)
-	}
 	for _, s := range r.Routing.Storages() {
-		has, err := exists(ctx, tx, `SELECT 1 FROM storages WHERE name = ?`, s)
-		if err != nil {
+		if err := sqlkit.CheckArchiveTarget(ctx, sendingTx{tx: tx}, "receiver.routing", s); err != nil {
 			return err
-		}
-		if !has {
-			return tenant.Precondition("receiver.routing: the tenant has no storage named " + s)
 		}
 	}
 	if err := checkForwardTo(ctx, tx, r.ForwardTo); err != nil {

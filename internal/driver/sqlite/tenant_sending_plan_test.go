@@ -13,7 +13,8 @@ import (
 // made at i seconds, one in a hundred of sender s1 and one in a hundred
 // failed, a tenth running; 20,000
 // scans of jobs; 20,000 failures, half of them of job j1, one in seven
-// refused; 20,000 instances owed; 20,000 tallies of 200 jobs.
+// refused; 20,000 instances owed; 20,000 tallies of 200 jobs; 40,000 rows
+// of a replica's queue.
 func fillSending(tb testing.TB, path string) {
 	tb.Helper()
 	db, err := sql.Open("sqlite", path)
@@ -38,6 +39,14 @@ func fillSending(tb testing.TB, path string) {
 		 INSERT INTO job_resends SELECT 'j' || (i % 2000 + 1), i % 2000, '2.25.3.' || i FROM n`,
 		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 20000)
 		 INSERT INTO job_owed SELECT 'j' || (i % 2000 + 1), i % 2000, '2.25.3.' || i FROM n`,
+		// A replica's queue: one row in four pending, one in four copying
+		// with its lease ended, the rest in step; due within a thousand
+		// seconds, so many rows share a time and the claim's order goes on
+		// to the replica and the series.
+		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 40000)
+		 INSERT INTO replica_scans SELECT 'copy', '2.25.2.' || i, s, NULL, CASE s WHEN 'in_step' THEN NULL ELSE 0 END,
+		   (i % 1000) * 1000000, 1, 0, 0, '', CASE s WHEN 'copying' THEN (i % 1000) * 1000000 END, NULL, 0, ''
+		 FROM (SELECT i, CASE WHEN i % 4 = 0 THEN 'pending' WHEN i % 4 = 1 THEN 'copying' ELSE 'in_step' END AS s FROM n)`,
 		`ANALYZE`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
@@ -94,6 +103,9 @@ func TestSendingPlans(t *testing.T) {
 		}
 		if !strings.Contains(text, want) {
 			t.Errorf("%s does not use %s", c.Name, want)
+		}
+		if c.Ordered && strings.Contains(text, "TEMP B-TREE") {
+			t.Errorf("%s sorts the rows it reads instead of reading them in order", c.Name)
 		}
 	}
 }

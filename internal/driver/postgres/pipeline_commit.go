@@ -344,6 +344,12 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		if err := addToCatalog(ctx, tx, c, session, scanID, newScan, newInstances, newBytes); err != nil {
 			return err
 		}
+		// The scan's copies on the storage's replicas, queued in the
+		// commit's transaction so a crash after it forgets none; their rows
+		// are locked after the scan's, as a correction's publish locks them.
+		if err := importSending().QueueReplicaCopies(ctx, sendingTx{tx: tx}, c.Storage, c.SeriesUID, c.At); err != nil {
+			return err
+		}
 		if newInstances > 0 {
 			if err := importSending().LowerCreated(ctx, sendingTx{tx: tx}, c.At, scanID, session.id, session.subjectID); err != nil {
 				return err

@@ -148,8 +148,9 @@ type Senders interface {
 type Jobs interface {
 	// CreateJob makes a send job, queued, and its listing unit, and
 	// returns it. A sender the tenant does not have is a precondition
-	// failure; a target the catalog does not hold is NotFound. The key
-	// that makes it is its audit entry's.
+	// failure; a target the catalog does not hold is NotFound; a rebuild
+	// while a switch of a storage runs (Switching) is a precondition
+	// failure. The key that makes it is its audit entry's.
 	CreateJob(ctx context.Context, j NewJob, audit master.AuditEntry, guard Guard) (Job, error)
 	// Job returns the job of that id with its counts now, or NotFound.
 	Job(ctx context.Context, id string) (Job, error)

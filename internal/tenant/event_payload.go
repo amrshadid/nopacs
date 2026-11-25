@@ -47,13 +47,16 @@ const (
 	// EventCatalogRebuilt is a catalog made again from the storages and put
 	// in use (rebuild.go).
 	EventCatalogRebuilt EventType = "catalog_rebuilt"
+	// EventStorageSwitched is a switch making a replica the primary, or
+	// refused (switch.go).
+	EventStorageSwitched EventType = "storage_switched"
 )
 
 // EventTypes returns every event type, in the contract's order.
 func EventTypes() []EventType {
 	return []EventType{EventAssociationFailed, EventReceptionStep, EventFileQuarantined, EventQuarantineDecided,
 		EventReceiverHealth, EventStorageSpace, EventFramesAdded, EventJobStep, EventJobProgress, EventSenderHealth,
-		EventScrubFinding, EventCatalogChanged, EventCatalogRebuilt}
+		EventScrubFinding, EventCatalogChanged, EventCatalogRebuilt, EventStorageSwitched}
 }
 
 // Valid reports whether t is one of EventTypes.
@@ -75,7 +78,7 @@ func ValidateEventTypes(types []EventType) error {
 	}
 	for _, t := range types {
 		if !t.Valid() {
-			return invalid("an event type is one of association_failed, reception_step, file_quarantined, quarantine_decided, receiver_health, storage_space, frames_added, job_step, job_progress, sender_health, scrub_finding, catalog_changed, catalog_rebuilt")
+			return invalid("an event type is one of association_failed, reception_step, file_quarantined, quarantine_decided, receiver_health, storage_space, frames_added, job_step, job_progress, sender_health, scrub_finding, catalog_changed, catalog_rebuilt, storage_switched")
 		}
 	}
 	return nil
@@ -190,6 +193,8 @@ func DecodeEvent(t EventType, payload string) (EventPayload, bool) {
 		p = &CatalogChanged{}
 	case EventCatalogRebuilt:
 		p = &CatalogRebuilt{}
+	case EventStorageSwitched:
+		p = &StorageSwitched{}
 	default:
 		return nil, true
 	}

@@ -373,6 +373,13 @@ func (k Sending) HideDeletes(ctx context.Context, deletes []tenant.DeleteToHide)
 			if err := k.hideTarget(ctx, tx, id, r, d.Snapshots); err != nil {
 				return err
 			}
+			// As the delete's publish does: a scan hidden whole leaves the
+			// replicas' rows, one an instance delete changed is queued
+			// again. The restore's step carries no time; a replica's
+			// backfill is recorded done at the clock's.
+			if err := k.QueueCorrectionCopies(ctx, tx, id, time.Now().UTC().Truncate(time.Microsecond)); err != nil {
+				return err
+			}
 			var whole, part int64
 			if _, err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM hidden_scans WHERE correction_id = ?),
 				(SELECT count(DISTINCT scan_id) FROM hidden_instances WHERE correction_id = ?

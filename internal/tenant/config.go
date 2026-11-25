@@ -64,6 +64,27 @@ type Storage struct {
 	// Created is when it was added; Updated when it last changed. Set by
 	// the store from the time a change is given.
 	Created, Updated time.Time
+	// ReplicaOf is the name of the primary this storage is a replica of,
+	// empty for a storage that is not one. AddStorage takes it, under the
+	// rules of an attach (CheckAttach); AttachReplica sets it and
+	// DetachReplica clears it; SetStorage never changes it.
+	ReplicaOf string
+	// Tier is whether the storage reads every object at once (TierOnline,
+	// and the empty tier, read as it) or may hold objects it must first
+	// recall (TierArchive, for an S3 replica only). A store answers
+	// TierOnline for the empty tier.
+	Tier StorageTier
+	// EncryptedAtRestDeclared is a directory storage's statement, made by an
+	// admin, that the volume under it encrypts what it holds: a directory
+	// cannot be asked, so its record is what a person declared. Always
+	// false for an S3 storage, which is asked live.
+	EncryptedAtRestDeclared bool
+	// SwitchGeneration counts the switches (Switching) that changed the
+	// place this name names. It is kept per name and outlives the storage,
+	// so a name removed and added again goes on from where it was and a
+	// generation never names two places. Answered by a store; ignored in a
+	// change.
+	SwitchGeneration int64
 }
 
 // DirectoryStorage is where a directory storage is: a root the installation
@@ -104,6 +125,14 @@ type S3Storage struct {
 	// nothing about where the files are, so it may change at any time: it
 	// changes only what later purges do.
 	KeepVersions bool
+	// RecallDays is, for a storage of the archive tier, how many days a
+	// recalled object stays readable: 1 to 365, 0 for DefaultRecallDays. A
+	// store keeps 0 for an online storage, whatever it was given.
+	RecallDays int
+	// RecallSpeed is, for a storage of the archive tier, how fast the store
+	// is asked to bring an object back; empty for RecallStandard. A store
+	// keeps it empty for an online storage.
+	RecallSpeed RecallSpeed
 }
 
 // StorageField names one field of a storage a partial change sets, as the
@@ -123,8 +152,16 @@ const (
 	FieldS3AccessKeyID   StorageField = "s3.access_key_id"
 	FieldS3SecretKey     StorageField = "s3.secret_access_key"
 	FieldS3PurgeVersions StorageField = "s3.purge_versions"
-	maxStorageFieldCount              = 11
+	FieldTier            StorageField = "tier"
+	FieldS3RecallDays    StorageField = "s3.recall_days"
+	FieldS3RecallTier    StorageField = "s3.recall_tier"
+	// FieldEncryptionDeclared is a directory storage's statement of
+	// encryption at rest (Storage.EncryptedAtRestDeclared).
+	FieldEncryptionDeclared StorageField = "directory.encrypted_at_rest_declared"
 )
+
+// maxStorageFieldCount is how many fields a change can name, each once.
+const maxStorageFieldCount = 15
 
 // storageFields says, for each field, the type it belongs to (empty for
 // both) and whether it says where the storage's files are.
@@ -144,6 +181,12 @@ var storageFields = map[StorageField]struct {
 	FieldS3SecretKey:   {StorageS3, false},
 	// What a purge does with older versions, not where the files are.
 	FieldS3PurgeVersions: {StorageS3, false},
+	// How the store reads its objects, and how a recall asks: not where
+	// the files are.
+	FieldTier:               {"", false},
+	FieldS3RecallDays:       {StorageS3, false},
+	FieldS3RecallTier:       {StorageS3, false},
+	FieldEncryptionDeclared: {StorageDirectory, false},
 }
 
 // Validate returns an Invalid error unless s can be stored as a new
@@ -168,6 +211,9 @@ func (s Storage) validate() error {
 	if s.CapacityBytes < 0 || s.CapacityBytes > MaxCapacityBytes {
 		return invalid("a storage's capacity is 0 to 2^62 bytes")
 	}
+	if err := s.validateReplica(); err != nil {
+		return err
+	}
 	switch s.Type {
 	case StorageDirectory:
 		if !s.S3.isZero() {
@@ -190,7 +236,8 @@ func (s Storage) validate() error {
 // not comparable with ==.
 func (c S3Storage) isZero() bool {
 	return c.Endpoint == "" && c.Region == "" && c.Bucket == "" && c.Prefix == "" && !c.PathStyle &&
-		c.AccessKeyID == "" && len(c.SealedSecret) == 0 && !c.SecretSet && !c.KeepVersions
+		c.AccessKeyID == "" && len(c.SealedSecret) == 0 && !c.SecretSet && !c.KeepVersions && c.RecallDays == 0 &&
+		c.RecallSpeed == ""
 }
 
 func (c S3Storage) validate() error {
@@ -317,9 +364,11 @@ func (s Storage) Normalize() (Storage, error) {
 	return s.normalized()
 }
 
-// normalized rewrites the endpoint of an S3 storage, for a storage already
-// checked.
+// normalized rewrites the endpoint of an S3 storage, and the tier and recall
+// fields in the one form a store keeps (normalizeTier), for a storage
+// already checked.
 func (s Storage) normalized() (Storage, error) {
+	s = s.normalizeTier()
 	if s.Type == StorageS3 {
 		e, err := NormalizeEndpoint(s.S3.Endpoint)
 		if err != nil {
@@ -437,6 +486,14 @@ func ApplyStorage(stored, change Storage, fields []StorageField) (Storage, bool,
 			out.S3.SealedSecret = change.S3.SealedSecret
 		case FieldS3PurgeVersions:
 			out.S3.KeepVersions = change.S3.KeepVersions
+		case FieldTier:
+			out.Tier = change.Tier
+		case FieldS3RecallDays:
+			out.S3.RecallDays = change.S3.RecallDays
+		case FieldS3RecallTier:
+			out.S3.RecallSpeed = change.S3.RecallSpeed
+		case FieldEncryptionDeclared:
+			out.EncryptedAtRestDeclared = change.EncryptedAtRestDeclared
 		}
 	}
 	if slices.Contains(fields, FieldS3AccessKeyID) != slices.Contains(fields, FieldS3SecretKey) {

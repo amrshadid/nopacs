@@ -120,7 +120,8 @@ type Corrections interface {
 	// (one purged is done, and the same relabel asked later is new). A
 	// delete's token that does not match the preview made in this
 	// transaction, or is more than MaxConfirmAge old, is a precondition
-	// failure.
+	// failure, as is a correction while a switch of the storage of a scan
+	// it touches runs (Switching).
 	PrepareCorrection(ctx context.Context, p CorrectionPrepare, audit master.AuditEntry, guard Guard) (Correction, bool, error)
 	// CorrectionScans returns the scans the correction touches, by the
 	// labels they had when it was made, in order of storage then Series

@@ -158,6 +158,16 @@ func (k Sending) checkRebuildJob(ctx context.Context, tx SendingTx, j tenant.New
 	if busy {
 		return tenant.Precondition("another rebuild of the tenant is queued or running")
 	}
+	// A catalog read while a switch runs could be read from a place the
+	// swap then gives the other name. BeginSwitch takes the configuration
+	// lock held here, so the two never pass each other.
+	switching, err := exists(ctx, tx, `SELECT 1 FROM storage_switches WHERE state IN ('accepted', 'swapped')`)
+	if err != nil {
+		return err
+	}
+	if switching {
+		return tenant.Precondition("a switch of a storage is running")
+	}
 	if scratch != "" {
 		return k.Shadow.Claim(ctx, tx, scratch, j.ID)
 	}

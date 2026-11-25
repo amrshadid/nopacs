@@ -302,6 +302,11 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		if err := addToCatalog(ctx, tx, c, session, scanID, newScan, newInstances, newBytes, manifest); err != nil {
 			return err
 		}
+		// The scan's copies on the storage's replicas, queued in the
+		// commit's transaction so a crash after it forgets none.
+		if err := (sqlkit.Sending{D: sendingDialect}).QueueReplicaCopies(ctx, sendingTx{tx: tx}, c.Storage, c.SeriesUID, c.At); err != nil {
+			return err
+		}
 		if newInstances > 0 {
 			if err := (sqlkit.Sending{D: sendingDialect}).LowerCreated(ctx, sendingTx{tx: tx}, c.At, scanID, session.id,
 				session.subjectID); err != nil {

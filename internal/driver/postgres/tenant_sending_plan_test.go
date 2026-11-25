@@ -16,10 +16,12 @@ import (
 // half of them recording one of 5,000 profile versions, 2,000 of them marked
 // damaged by a scrub; 50,000 finished
 // units of work; 20,000 scans of corrections, of 200 subjects, and
-// 50,000 instances they hide. For the very statements package sqlkit
-// runs (SendingDialect.Plans), Postgres's plan for the values used and its
-// generic plan (the one a prepared statement keeps) read no such table
-// whole, and the first uses the index named for it. The plans are logged.
+// 50,000 instances they hide; 40,000 rows of a replica's queue. For the
+// very statements package sqlkit runs (SendingDialect.Plans), Postgres's
+// plan for the values used and its generic plan (the one a prepared
+// statement keeps) read no such table whole, the first uses the index named
+// for it, and neither sorts the rows of a statement that must read them in
+// order. The plans are logged.
 func TestSendingPlans(t *testing.T) {
 	address := newSchema(t)
 	openTenantAt(t, address, "plans")
@@ -63,6 +65,15 @@ func TestSendingPlans(t *testing.T) {
 		   byte_length, size, held_at)
 		 SELECT 'c' || (i % 20000 + 1), '2.25.3.' || i, i % 20000 + 1, 'rc1', sha256(i::text::bytea), '', 0, 1000, 1000, now()
 		 FROM generate_series(1, 50000) i`,
+		// A replica's queue: one row in four pending, one in four copying
+		// with its lease ended, the rest in step; due within a thousand
+		// seconds, so many rows share a time and the claim's order goes on
+		// to the replica and the series.
+		`INSERT INTO replica_scans SELECT 'copy', '2.25.2.' || i, s, NULL,
+		   CASE s WHEN 'in_step' THEN NULL ELSE timestamptz 'epoch' END, timestamptz 'epoch' + (i % 1000) * interval '1 second',
+		   1, 0, 0, '', CASE s WHEN 'copying' THEN timestamptz 'epoch' + (i % 1000) * interval '1 second' END, NULL, false, ''
+		 FROM (SELECT i, CASE WHEN i % 4 = 0 THEN 'pending' WHEN i % 4 = 1 THEN 'copying' ELSE 'in_step' END AS s
+		   FROM generate_series(1, 40000) i) AS x`,
 		`ANALYZE`)
 	for _, c := range sendingDialect.Plans() {
 		statement := sqlkit.Rebind(c.SQL)
@@ -82,6 +93,13 @@ func TestSendingPlans(t *testing.T) {
 		}
 		if !strings.Contains(custom, want) {
 			t.Errorf("%s does not use %s", c.Name, want)
+		}
+		if c.Ordered {
+			for _, plan := range []string{custom, generic} {
+				if strings.Contains(plan, "Sort") {
+					t.Errorf("%s sorts the rows it reads instead of reading them in order:\n%s", c.Name, plan)
+				}
+			}
 		}
 	}
 }

@@ -283,6 +283,16 @@ scan, keeps it whole, and serves it through an API with keys.
   on a server shown at open to refuse a wrong checksum, puts bytes only when
   they are the size and SHA-256 expected, and reports an S3 bucket's default
   encryption.
+- The tenant database keeps replica storages (at most two per primary, named
+  with `replica_of`) and each replica's state per scan, keyed by Series Instance
+  UID, with the queue of copies written in the same transaction that publishes,
+  corrects, purges or restores a scan; one shared recall per archive-tier
+  object; the record of a primary's repair from a replica; and the switch that
+  swaps a primary's and a replica's places in one transaction, refusing while
+  a correction or a rebuild is open and taking each moved S3 secret sealed
+  again for its new name. Storages gain a tier, recall days and speed, a
+  directory's declared encryption at rest and a switch generation. Both
+  database drivers; nothing is served yet.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

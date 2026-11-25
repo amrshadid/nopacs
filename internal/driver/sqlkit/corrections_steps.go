@@ -132,6 +132,11 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 		if err != nil {
 			return err
 		}
+		// The publish changes what each scan's replicas must hold: a scan
+		// kept is queued again, one hidden whole is dropped from them.
+		if err := k.QueueCorrectionCopies(ctx, tx, c.ID, cc.Now); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE corrections SET committed_at = ?, purge_after = ? WHERE id = ?`, k.D.Time(cc.Now),
 			k.D.Time(cc.Now.Add(cc.Grace)), c.ID); err != nil {
 			return err
@@ -445,6 +450,10 @@ func (k Sending) UndoCorrection(ctx context.Context, id, reason string, now time
 // names its data dropped, its state undone with why as its state reason.
 func (k Sending) undoDeleteIn(ctx context.Context, tx SendingTx, c *tenant.Correction, reason, why string, now time.Time) error {
 	if err := k.showTarget(ctx, tx, *c); err != nil {
+		return err
+	}
+	// What was shown again is the replicas' to hold again.
+	if err := k.QueueCorrectionCopies(ctx, tx, c.ID, now); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM deleted_targets WHERE correction_id = ?`, c.ID); err != nil {

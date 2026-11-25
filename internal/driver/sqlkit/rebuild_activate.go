@@ -185,6 +185,12 @@ func (k Rebuild) ActivateCatalog(ctx context.Context, fence tenant.WorkFence, no
 		if err := k.copyShadow(ctx, tx, sp); err != nil {
 			return err
 		}
+		// A replica's state is not the catalog's, but it names the
+		// catalog's scans: it is made to agree with the new catalog in the
+		// same transaction (tenant.Replication, "Rebuilds and restores").
+		if err := k.ResyncReplicas(ctx, tx, now); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE rebuild_jobs SET activated = ? WHERE job_id = ?`, k.D.Bool(true), r.job.job.ID); err != nil {
 			return err
 		}

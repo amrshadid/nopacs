@@ -290,6 +290,9 @@ func (k Sending) PrepareCorrection(ctx context.Context, p tenant.CorrectionPrepa
 		if err != nil {
 			return err
 		}
+		if err := checkNoSwitch(ctx, tx, p.ID); err != nil {
+			return err
+		}
 		if out, err = k.correctionIn(ctx, tx, p.ID, ""); err != nil {
 			return err
 		}

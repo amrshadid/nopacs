@@ -332,4 +332,8 @@ type PipelineParts interface {
 	Scrubbing
 	Rebuilding
 	Corrections
+	Replication
+	Recalls
+	Repairs
+	Switching
 }

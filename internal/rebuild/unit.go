@@ -267,7 +267,11 @@ func (u *unitRun) end() error {
 	return err
 }
 
-// storageNames returns the names of the tenant's storages, in order.
+// storageNames returns the names of the tenant's storages a catalog is made
+// from, in order: every storage but a replica, which holds its primary's
+// keys, so a scan read from both would be one series on two storages, and
+// one read from the replica alone would name the replica as where the
+// catalog's files are.
 func (u *unitRun) storageNames() ([]string, error) {
 	var names []string
 	cursor := ""
@@ -279,7 +283,9 @@ func (u *unitRun) storageNames() ([]string, error) {
 			return nil, err
 		}
 		for _, s := range page {
-			names = append(names, s.Name)
+			if s.ReplicaOf == "" {
+				names = append(names, s.Name)
+			}
 		}
 		if cursor = next; cursor == "" {
 			slices.Sort(names)

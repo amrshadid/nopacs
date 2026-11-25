@@ -108,6 +108,10 @@ type SendingPlan struct {
 	SQL string
 	// Args are its parameters' values.
 	Args []any
+	// Ordered says the plan must read the rows in the statement's order
+	// from its index, sorting none: a queue whose backlog may be long, read
+	// a few rows at a time.
+	Ordered bool
 }
 
 // Plans returns every statement of senders' and jobs' work that reads a
@@ -173,5 +177,12 @@ func (d SendingDialect) Plans() []SendingPlan {
 		q("a sender's jobs in progress", "jobs_of_sender_in_progress", d.SenderJobsInProgressSQL(), []any{"s1"}),
 		// Either partial index of the jobs not ended bounds the count.
 		q("the jobs in progress by state", "_in_progress", d.JobsInProgressSQL(), nil),
+		// The replicas' queue: rows of replica "copy" for series
+		// "2.25.2.<n>", due at n seconds, a few pending, most in step,
+		// some copying with their leases ended.
+		SendingPlan{Name: "the replicas' rows due", Index: "replica_scans_due", SQL: replicaDueSQL + d.SkipLocked,
+			Args: []any{d.Time(at), tenant.MaxReplicaClaim}, Ordered: true},
+		SendingPlan{Name: "the replicas' leases ended", Index: "replica_scans_leased", SQL: replicaLeaseEndedSQL + d.SkipLocked,
+			Args: []any{d.Time(at), tenant.MaxReplicaClaim}, Ordered: true},
 	)
 }

@@ -85,7 +85,13 @@ func SecretContext(tenantID, storage string) string {
 // (SecretContext). A sealed secret longer than a store keeps is the
 // server's fault.
 func SealSecret(k Sealer, tenantID, storage, secret string) ([]byte, error) {
-	sealed, err := k.Seal(SecretContext(tenantID, storage), []byte(secret))
+	return sealSecret(k, tenantID, storage, []byte(secret))
+}
+
+// sealSecret is SealSecret of a secret held as bytes, which its caller may
+// clear after.
+func sealSecret(k Sealer, tenantID, storage string, secret []byte) ([]byte, error) {
+	sealed, err := k.Seal(SecretContext(tenantID, storage), secret)
 	if err != nil {
 		return nil, fault.Wrap(fault.Internal, err, "place: the secret access key could not be sealed")
 	}
@@ -93,6 +99,56 @@ func SealSecret(k Sealer, tenantID, storage, secret string) ([]byte, error) {
 		return nil, fault.New(fault.Internal, "place: a sealed secret access key is longer than the store keeps")
 	}
 	return sealed, nil
+}
+
+// KeyRing opens and seals secrets with the installation key (secret.Keys).
+type KeyRing interface {
+	Keys
+	Sealer
+}
+
+// SwapSecrets returns the sealed secrets a switch's swap of the places of
+// t's storages primary and replica writes (tenant.SwitchSwap): forPrimary
+// is the replica's secret access key sealed for the primary's name, which
+// comes to name the replica's place, and forReplica the primary's sealed
+// for the replica's name; each nil when that place is a directory. A seal
+// is bound to its storage's name (SecretContext), so the sealed bytes of a
+// row moved to the other name would not open there. The secret is opened
+// and sealed again here, where the installation key is; it is never
+// written anywhere in the clear. A failure is the server's.
+func SwapSecrets(ctx context.Context, k KeyRing, t Tenant, primary, replica tenant.Storage) (forPrimary, forReplica []byte, err error) {
+	if forPrimary, err = resealFor(ctx, k, t, replica, primary.Name); err != nil {
+		return nil, nil, err
+	}
+	if forReplica, err = resealFor(ctx, k, t, primary, replica.Name); err != nil {
+		return nil, nil, err
+	}
+	return forPrimary, forReplica, nil
+}
+
+// resealFor returns the secret of t's storage s sealed for the storage named
+// to, or nil when s is not an S3 storage.
+func resealFor(ctx context.Context, k KeyRing, t Tenant, s tenant.Storage, to string) ([]byte, error) {
+	if s.Type != tenant.StorageS3 {
+		return nil, nil
+	}
+	if t.Secrets == nil {
+		return nil, &ServerError{fault.Wrap(fault.Internal, errNoSecrets, "place: an S3 storage's secret cannot be sealed for its new name")}
+	}
+	sealed, err := t.Secrets.StorageSecret(ctx, s.Name)
+	if err != nil {
+		return nil, &ServerError{err}
+	}
+	plain, err := k.Open(SecretContext(t.ID, s.Name), sealed)
+	if err != nil {
+		return nil, &ServerError{fault.Wrap(fault.Internal, err, "place: an S3 storage's secret access key does not open with the installation key")}
+	}
+	defer clear(plain)
+	out, err := sealSecret(k, t.ID, to, plain)
+	if err != nil {
+		return nil, &ServerError{err}
+	}
+	return out, nil
 }
 
 // Opener opens a tenant's storage through the storage port, where the

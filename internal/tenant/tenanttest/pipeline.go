@@ -174,14 +174,16 @@ func (e *penv) wantPrecondition(what string, err error) {
 	e.wantKind(what, err, fault.Precondition)
 }
 
-// dirStorage returns a directory storage named name under root "fast".
+// dirStorage returns a directory storage named name under root "fast", of
+// the online tier, as a store answers it.
 func dirStorage(name, path string) tenant.Storage {
-	return tenant.Storage{Name: name, Type: tenant.StorageDirectory, Directory: tenant.DirectoryStorage{Root: "fast", Path: path}}
+	return tenant.Storage{Name: name, Type: tenant.StorageDirectory, Directory: tenant.DirectoryStorage{Root: "fast", Path: path},
+		Tier: tenant.TierOnline}
 }
 
-// s3Storage returns an S3 storage with a sealed secret.
+// s3Storage returns an S3 storage with a sealed secret, of the online tier.
 func s3Storage(name, prefix string) tenant.Storage {
-	return tenant.Storage{Name: name, Type: tenant.StorageS3, S3: tenant.S3Storage{
+	return tenant.Storage{Name: name, Type: tenant.StorageS3, Tier: tenant.TierOnline, S3: tenant.S3Storage{
 		Endpoint: "https://s3.example.org", Region: "us-east-1", Bucket: "lab-archive", Prefix: prefix,
 		PathStyle: true, AccessKeyID: "AKIDEXAMPLE", SealedSecret: []byte("sealed-secret-bytes"),
 	}}

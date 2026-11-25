@@ -2,6 +2,7 @@ package sqlkit
 
 import (
 	"context"
+	"time"
 
 	corr "github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -34,7 +35,7 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 			return err
 		}
 		if c.Kind == corr.KindDelete {
-			if err := k.dropDeleted(ctx, tx, *c, f.Manifest, f.ManifestBefore); err != nil {
+			if err := k.dropDeleted(ctx, tx, *c, f.Manifest, f.ManifestBefore, f.Now); err != nil {
 				return err
 			}
 		} else if _, err := tx.Exec(ctx, `UPDATE instance_revisions SET purged = ? WHERE correction_id = ?`, k.D.Bool(true),
@@ -67,8 +68,10 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 // statement is one over the delete's own rows, whatever their number, and
 // touches no row another correction or the catalog owns: a revision
 // another correction recorded is left as it is, and a mark of a UID the
-// catalog holds again stays.
-func (k Sending) dropDeleted(ctx context.Context, tx SendingTx, c tenant.Correction, manifest, before tenant.SHA256) error {
+// catalog holds again stays. A scan whose manifest it rewrites is queued
+// again for its storage's replicas at now: they hold the manifest it
+// replaces, which no longer names the scan.
+func (k Sending) dropDeleted(ctx context.Context, tx SendingTx, c tenant.Correction, manifest, before tenant.SHA256, now time.Time) error {
 	// The layout's key is revision 1; a key the catalog held whole is a
 	// later revision, whose number its key carries, read one by one (a
 	// replaced instance is rare).
@@ -120,9 +123,37 @@ func (k Sending) dropDeleted(ctx context.Context, tx SendingTx, c tenant.Correct
 		if !before.IsZero() {
 			q, args = q+` AND (manifest_sha256 = ? OR manifest_sha256 IS NULL)`, append(args, before[:])
 		}
-		if _, err := tx.Exec(ctx, q, args...); err != nil {
+		n, err := tx.Exec(ctx, q, args...)
+		if err != nil {
 			return err
+		}
+		if n > 0 {
+			if err := k.queueRewritten(ctx, tx, c.ID, now); err != nil {
+				return err
+			}
 		}
 	}
 	return dropHidden(ctx, tx, c.ID)
+}
+
+// queueRewritten queues the scan of an instance delete's hidden instance,
+// whose manifest the delete's purge rewrote, for each replica of its
+// storage, so no replica is taken as in step at the manifest it replaced.
+func (k Sending) queueRewritten(ctx context.Context, tx SendingTx, correction string, now time.Time) error {
+	var storage, series string
+	found, err := tx.QueryRow(ctx, `SELECT storage, series_uid FROM scans WHERE id = (SELECT scan_id FROM hidden_instances
+		WHERE correction_id = ? LIMIT 1)`, []any{correction}, &storage, &series)
+	if err != nil || !found {
+		return err
+	}
+	replicas, err := replicasOf(ctx, tx, storage)
+	if err != nil {
+		return err
+	}
+	for _, r := range replicas {
+		if err := k.queueScan(ctx, tx, r, series, now); err != nil {
+			return err
+		}
+	}
+	return nil
 }
