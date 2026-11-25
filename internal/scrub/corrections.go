@@ -343,9 +343,11 @@ func (c coverage) add(to, from label.Path) {
 // coverageOf reads what the corrections not yet purged leave on the
 // storage: by the database's rows, a published delete's scans and a
 // relabel's old and new trees; by the records with no row that verify, the
-// same. It returns how many records have no row, and how many of those do
-// not verify.
-func (u *unitRun) coverageOf(store Storage, storage string) (coverage, recordCount, error) {
+// same. A correction's scans are those of catalog, the storage whose scans
+// the catalog holds for this one (its primary, for a replica, which holds
+// the same keys). It returns how many records have no row, and how many of
+// those do not verify.
+func (u *unitRun) coverageOf(store Storage, storage, catalog string) (coverage, recordCount, error) {
 	cov := coverage{}
 	err := u.listCorrections(nil, func(c tenant.Correction) error {
 		if c.Kind == record.KindReplace || c.Kind == record.KindDelete && (c.State == record.StatePrepared || c.Level == record.LevelInstance) {
@@ -358,7 +360,7 @@ func (u *unitRun) coverageOf(store Storage, storage string) (coverage, recordCou
 			return err
 		}
 		for _, s := range scans {
-			if s.Storage != storage {
+			if s.Storage != catalog {
 				continue
 			}
 			cov.add(s.Path, s.Path)

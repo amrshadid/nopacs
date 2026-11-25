@@ -344,6 +344,15 @@ scan, keeps it whole, and serves it through an API with keys.
   runs; a relabel copies to replicas in step before its publish; detaching
   with `abandon_purges` records the replica's objects unknown; the delete
   preview lists replicas.
+- Scrubs read replicas like primaries: a replica's damage is recorded on the
+  replica, never on the instance, and findings a switch moved there clear
+  once it reads good; a replica that fails reads is passed over for that run
+  while its primary is still checked; objects no manifest names are recorded
+  as strays, never removed; an archive-tier storage is checked by presence
+  (sizes and the store's own SHA-256) with no recall; requests to scrub one
+  instance are deduplicated, bounded and rate-limited, and a request that
+  cannot be read never holds a scrub back; coverage counts only scans read
+  whole.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

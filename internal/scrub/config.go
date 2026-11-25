@@ -55,6 +55,11 @@ type Storage interface {
 	Read(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
 	// List returns a page of keys (blob.Store's List).
 	List(ctx context.Context, opts blob.ListOptions) (blob.Page, error)
+	// Stat returns what the storage knows of the object at key without
+	// reading it (blob.Store's Stat): what a presence check of an object
+	// of the archive tier reads, since a read of one held cold fails, and
+	// a recall costs the site.
+	Stat(ctx context.Context, key string) (blob.Info, error)
 }
 
 // readStores hands out a unit's storages as Storage alone.
@@ -159,6 +164,22 @@ type Config struct {
 	// ScheduleInterval is how often a tenant's scheduled scrubs are looked
 	// at; 0 is DefaultScheduleInterval.
 	ScheduleInterval time.Duration
+	// ArchiveSample is the share, from 0 to 1, of the objects online on a
+	// storage of the archive tier whose bytes a scrub reads; the rest are
+	// checked by presence (Stat: size, and the store's own SHA-256 where it
+	// keeps one). Zero, the default, reads no object's bytes there: a
+	// read may bill the site, and a scrub never asks for a recall.
+	ArchiveSample float64
+	// RequestRate is how many requests to scrub one instance a tenant may
+	// make a minute (Supervisor.RequestInstance); 0 is
+	// DefaultRequestRate. MaxRequests is how many wait at most per
+	// tenant; 0 is DefaultMaxRequests.
+	RequestRate int
+	MaxRequests int
+	// Verifications, when set, records when each scan was last read whole
+	// on each storage, the ground of a storage's coverage (Coverage). Nil
+	// records nothing.
+	Verifications func(st tenant.Store) VerificationRecorder
 	// Logger receives the supervisor's lines: names, labels, ids, counts
 	// and fixed phrases, never a key or a UID. Nil discards them.
 	Logger *slog.Logger
@@ -196,6 +217,16 @@ func (c Config) check() (Config, error) {
 		return c, fault.New(fault.Internal, "scrub: the supervisor is given no way to make ids")
 	case c.Keys == nil || c.Keys.SealVersion() == 0 || c.TenantID == nil:
 		return c, fault.New(fault.Internal, "scrub: the supervisor is given no installation keys or tenant ids to check correction records with")
+	case c.ArchiveSample < 0 || c.ArchiveSample > 1 || c.ArchiveSample != c.ArchiveSample:
+		return c, fault.New(fault.Internal, "scrub: the share of archive-tier objects read is 0 to 1")
+	case c.RequestRate < 0 || c.MaxRequests < 0:
+		return c, fault.New(fault.Internal, "scrub: the bounds of requests to scrub an instance are not negative")
+	}
+	if c.RequestRate == 0 {
+		c.RequestRate = DefaultRequestRate
+	}
+	if c.MaxRequests == 0 {
+		c.MaxRequests = DefaultMaxRequests
 	}
 	if c.Wake == nil {
 		c.Wake = func(string) {}

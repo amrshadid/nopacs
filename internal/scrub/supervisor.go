@@ -26,6 +26,8 @@ type Supervisor struct {
 
 	poke chan struct{}
 	stop chan struct{}
+	// requests are the requests to scrub one instance waiting, by tenant.
+	requests *requests
 	// hard ends everything in flight: canceled when Stop's ctx ends before
 	// the units have been given back.
 	hard   context.Context
@@ -43,7 +45,7 @@ func New(cfg Config) (*Supervisor, error) {
 		return nil, err
 	}
 	s := &Supervisor{cfg: cfg, log: cfg.Logger, units: make(chan struct{}, MaxUnits), tenants: map[string]*tenantRun{},
-		poke: make(chan struct{}, 1), stop: make(chan struct{})}
+		poke: make(chan struct{}, 1), stop: make(chan struct{}), requests: &requests{rate: cfg.RequestRate, max: cfg.MaxRequests, now: cfg.Now}}
 	s.hard, s.cancel = context.WithCancel(context.Background())
 	return s, nil
 }
@@ -114,9 +116,10 @@ func (s *Supervisor) Poke(name string) {
 }
 
 // TenantRemoved makes the supervisor read the list of tenants at once, so
-// the units of a tenant the registry let go are given back now. It never
-// blocks.
-func (s *Supervisor) TenantRemoved(string) {
+// the units of a tenant the registry let go are given back now, and drops
+// the tenant's requests waiting. It never blocks.
+func (s *Supervisor) TenantRemoved(name string) {
+	s.requests.forget(name)
 	select {
 	case s.poke <- struct{}{}:
 	default:
@@ -174,8 +177,7 @@ func (s *Supervisor) syncTenants() {
 		if s.tenants[n] != nil {
 			continue
 		}
-		t := &tenantRun{sup: s, name: n, log: s.log.With("tenant", n), poke: make(chan struct{}, 1), retired: make(chan struct{}),
-			pacers: map[string]*pacer{}}
+		t := s.newTenantRun(n)
 		s.tenants[n] = t
 		s.wg.Add(2)
 		go t.run()
@@ -185,8 +187,15 @@ func (s *Supervisor) syncTenants() {
 		if !want[n] {
 			delete(s.tenants, n)
 			t.retire()
+			s.requests.forget(n) // a tenant gone keeps no requests
 		}
 	}
+}
+
+// newTenantRun returns the worker of the tenant named name, not started.
+func (s *Supervisor) newTenantRun(name string) *tenantRun {
+	return &tenantRun{sup: s, name: name, log: s.log.With("tenant", name), poke: make(chan struct{}, 1), retired: make(chan struct{}),
+		pacers: map[string]*pacer{}, requestMade: map[string]time.Time{}, requestWaitLogged: map[string]bool{}}
 }
 
 // retireAll retires every tenant's worker, at Stop.
@@ -196,6 +205,7 @@ func (s *Supervisor) retireAll() {
 	for n, t := range s.tenants {
 		delete(s.tenants, n)
 		t.retire()
+		s.requests.forget(n)
 	}
 }
 
@@ -220,6 +230,12 @@ type tenantRun struct {
 	// whichever unit reads it.
 	pacersMu sync.Mutex
 	pacers   map[string]*pacer
+
+	// requestMade is when the worker last made, or found made, a scrub for
+	// requests of each storage, and requestWaitLogged says it logged since
+	// that requests wait (requestJob). Used by the worker's goroutine only.
+	requestMade       map[string]time.Time
+	requestWaitLogged map[string]bool
 }
 
 // wake makes the worker look for work at once. It never blocks.
@@ -306,6 +322,9 @@ func (t *tenantRun) claimAll() bool {
 		cancel()
 		if err != nil {
 			<-t.sup.units
+			if fault.KindOf(err) == fault.NotFound && t.requestJob(p, st) {
+				continue // a scrub made for requests waiting: its first unit is due now
+			}
 			if fault.KindOf(err) != fault.NotFound && t.sup.hard.Err() == nil {
 				t.log.Warn("scrubs: looking for work failed", "reason", fault.Message(err))
 			}

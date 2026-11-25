@@ -52,6 +52,10 @@ type unitRun struct {
 	// tenantID is the tenant's id, which its correction records are
 	// authenticated for, read once a unit (recordTenant).
 	tenantID string
+	// replicas are the replicas of each primary, and rows the storages by
+	// name, each read once a unit (replicasOf, storageRow).
+	replicas map[string][]tenant.ReplicaStatus
+	rows     map[string]tenant.Storage
 }
 
 // work works one claimed unit to its end or until it is given back.
@@ -100,6 +104,10 @@ func (t *tenantRun) work(p tenant.Pipeline, st tenant.Store, w tenant.Work) {
 	u.stores = readStores{s: sup.cfg.OpenStorages(t.name, p)}
 	defer u.stores.Close()
 	u.buf = make([]byte, readBuffer)
+	if out := u.requested(); out != (outcome{}) {
+		u.giveBack(out) // nothing of the unit's own work is read yet
+		return
+	}
 	if start.Listing {
 		if out := u.walk(); out != (outcome{}) {
 			u.giveBack(out)

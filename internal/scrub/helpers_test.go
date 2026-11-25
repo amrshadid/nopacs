@@ -373,7 +373,13 @@ func (f *fixture) createScrub(storage string) tenant.Job {
 // returns it; it fails the test after the bound.
 func (f *fixture) waitEnded(s *Supervisor, id string) tenant.Job {
 	f.t.Helper()
-	deadline := time.Now().Add(60 * time.Second)
+	return f.waitEndedWithin(s, id, 60*time.Second)
+}
+
+// waitEndedWithin waits as waitEnded does, failing the test after bound.
+func (f *fixture) waitEndedWithin(s *Supervisor, id string, bound time.Duration) tenant.Job {
+	f.t.Helper()
+	deadline := time.Now().Add(bound)
 	for {
 		j, err := f.p.Job(f.ctx, id)
 		if err != nil {

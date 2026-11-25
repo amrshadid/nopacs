@@ -54,6 +54,31 @@
 // tallied, never a finding and never a mark: not readable now is not
 // missing.
 //
+// # Replicas and the archive tier
+//
+// A scrub of the whole tenant reads each scan on its storage and on each
+// replica of that storage that holds it in step (copies.go); a scrub of
+// one storage reads that storage. What is wrong on a replica is recorded
+// as the replica's damage, never as a mark on the instance, and an object
+// no manifest names there is recorded as an orphan on the replica's name.
+// A finding a switch moved to a replica's name with its place is cleared
+// when a read of the replica shows it gone. A replica that fails a read is
+// dropped for the unit and tallied; the scan is read on its other copies.
+// An object of the archive tier held cold is checked by presence, never
+// read or recalled.
+//
+// # Requests and coverage
+//
+// A read that finds an instance not as archived midway asks for it to be
+// scrubbed (requests.go): the next unit of the tenant's scrubs reads it
+// first. A request that fails is tried again behind the others and dropped
+// after a few attempts; it never holds back the unit. When no scrub runs,
+// the supervisor makes one for requests, at most one per storage per
+// scrub.interval; later requests wait for the next scrub. Each scan read
+// whole on a storage (every object read, or checked by presence on the
+// archive tier) is recorded with its time, from which a storage's coverage
+// is computed (verified.go).
+//
 // # What a scrub never does
 //
 // It never writes to a storage: it opens storages for reading and holds

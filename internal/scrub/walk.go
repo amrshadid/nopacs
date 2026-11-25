@@ -148,12 +148,17 @@ func (u *unitRun) walkStorage(store Storage, storage string) outcome {
 	return u.clearOutside(storage, believed)
 }
 
-// clearOutside clears each open orphan finding of the storage that names
-// no scan and is not among those believed now.
+// clearOutside clears each open orphan finding of the storage that is not
+// among those believed now and names no scan, or names a scan the catalog
+// no longer holds on the storage (for a replica, on its primary): the walk
+// just looked at every object outside the storage's scans, so an orphan
+// of a scan gone is either believed again now or gone. An orphan of a
+// scan still held is the scan's unit's to clear.
 func (u *unitRun) clearOutside(storage string, believed map[string]bool) outcome {
 	filter := tenant.ScrubFindingFilter{Kinds: []tenant.ScrubFindingKind{tenant.FindingOrphan}, Storage: storage}
 	page := master.Page{Limit: master.MaxPageLimit}
 	var stale []string
+	held := map[label.Path]bool{}
 	for range maxListPages {
 		ctx, cancel := context.WithTimeout(u.ctx, opTimeout)
 		rows, next, err := u.p.ListScrubFindings(ctx, filter, page)
@@ -162,9 +167,22 @@ func (u *unitRun) clearOutside(storage string, believed map[string]bool) outcome
 			return u.failure(err, reasonDatabase)
 		}
 		for _, f := range rows {
-			if f.Path == (label.Path{}) && !believed[f.Key] {
-				stale = append(stale, f.ID)
+			if believed[f.Key] {
+				continue
 			}
+			if f.Path != (label.Path{}) {
+				in, ok := held[f.Path]
+				if !ok {
+					if in, err = u.heldOn(storage, f.Path); err != nil {
+						return u.failure(err, reasonDatabase)
+					}
+					held[f.Path] = in
+				}
+				if in {
+					continue
+				}
+			}
+			stale = append(stale, f.ID)
 		}
 		if next == "" {
 			break
@@ -180,6 +198,25 @@ func (u *unitRun) clearOutside(storage string, believed map[string]bool) outcome
 		}
 	}
 	return outcome{}
+}
+
+// heldOn reports whether the catalog holds the scan at path on the storage
+// named storage, or, for a replica, on its primary.
+func (u *unitRun) heldOn(storage string, path label.Path) (bool, error) {
+	catalog, err := u.catalogStorage(storage)
+	if err != nil {
+		return false, err
+	}
+	ctx, cancel := context.WithTimeout(u.ctx, opTimeout)
+	defer cancel()
+	sc, err := u.p.CatalogScan(ctx, path)
+	if fault.KindOf(err) == fault.NotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return sc.Storage == catalog, nil
 }
 
 // databaseError is a failure of the tenant's database during a walk, as
@@ -213,6 +250,44 @@ type walkResult struct {
 	// flight writes a new scan's objects, manifest and sidecar before it
 	// commits the scan.
 	paths map[label.Path]*pathKeys
+	// catalog names the storage whose scans the catalog holds for the
+	// storage walked: itself, or, for a replica, its primary, whose keys it
+	// holds (catalogStorage).
+	catalog string
+}
+
+// catalogStorage returns the name of the storage whose scans the catalog
+// holds for the storage named name: a replica's primary, since a replica
+// holds its primary's objects under the same keys and the catalog names
+// only the primary; name itself otherwise.
+func (u *unitRun) catalogStorage(name string) (string, error) {
+	row, err := u.storageRow(name)
+	if err != nil {
+		return "", err
+	}
+	if row.ReplicaOf != "" {
+		return row.ReplicaOf, nil
+	}
+	return name, nil
+}
+
+// storageRow returns the storage named name as the tenant's database holds
+// it, read once a unit.
+func (u *unitRun) storageRow(name string) (tenant.Storage, error) {
+	if s, ok := u.rows[name]; ok {
+		return s, nil
+	}
+	ctx, cancel := context.WithTimeout(u.ctx, opTimeout)
+	defer cancel()
+	s, err := u.p.Storage(ctx, name)
+	if err != nil {
+		return tenant.Storage{}, err
+	}
+	if u.rows == nil {
+		u.rows = map[string]tenant.Storage{}
+	}
+	u.rows[name] = s
+	return s, nil
 }
 
 // pathKeys are the objects under one scan's keys, in its data/ and meta/
@@ -232,13 +307,17 @@ type pathKeys struct {
 // returns how many correction records on the storage have no row, and how
 // many of those do not verify.
 func (u *unitRun) orphansOutside(store Storage, storage string) (map[string]bool, recordCount, error) {
-	w := &walkResult{out: map[string]bool{}, paths: map[label.Path]*pathKeys{}}
+	catalog, err := u.catalogStorage(storage)
+	if err != nil {
+		return nil, recordCount{}, databaseError{err}
+	}
+	w := &walkResult{out: map[string]bool{}, paths: map[label.Path]*pathKeys{}, catalog: catalog}
 	for _, root := range []string{layout.DataRoot, layout.MetaRoot} {
 		if err := u.walkLevel(store, storage, root, nil, w); err != nil {
 			return nil, recordCount{}, err
 		}
 	}
-	cov, recordOnly, err := u.coverageOf(store, storage)
+	cov, recordOnly, err := u.coverageOf(store, storage, catalog)
 	if err != nil {
 		return nil, recordCount{}, err
 	}
@@ -340,8 +419,8 @@ func (u *unitRun) manifestClaimed(store Storage, storage string, p label.Path, m
 
 // walkLevel lists one level under prefix, whose labels so far are labels:
 // an object at this level is an orphan; a prefix is listed further, down
-// to the scan's level, where a scan of this storage the catalog holds is
-// left to its own unit and any other's objects are kept aside by their
+// to the scan's level, where a scan the catalog holds on this storage (on
+// its primary, for a replica) is left to its own unit and any other's objects are kept aside by their
 // path, for orphansOutside to ask whether a reception writes them.
 func (u *unitRun) walkLevel(store Storage, storage, prefix string, labels []string, w *walkResult) error {
 	if o, stop := u.stopping(); stop && o.stopped {
@@ -353,8 +432,8 @@ func (u *unitRun) walkLevel(store Storage, storage, prefix string, labels []stri
 		sc, err := u.p.CatalogScan(ctx, p)
 		cancel()
 		switch {
-		case err == nil && sc.Storage == storage:
-			return nil // the scan's own unit looks under its keys
+		case err == nil && sc.Storage == w.catalog:
+			return nil // the scan's own unit looks under its keys, on every copy it reads
 		case err != nil && fault.KindOf(err) != fault.NotFound:
 			return databaseError{err}
 		}

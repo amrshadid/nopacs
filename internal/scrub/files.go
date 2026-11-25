@@ -197,6 +197,9 @@ func (s *scanCheck) lookManifest(v catalogView, r *lookResult) (map[string]bool,
 		return nil, fault.Wrap(fault.Internal, err, "the scan's labels make no key")
 	}
 	data, p, err := s.readAll(key, int64(manifest.MaxBytes))
+	if p == notOnline && err == nil {
+		s.short = true // not compared now: the scan is not read whole
+	}
 	if err != nil || p == notOnline {
 		return nil, err
 	}
