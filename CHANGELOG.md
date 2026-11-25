@@ -309,6 +309,10 @@ scan, keeps it whole, and serves it through an API with keys.
   delete due sessions through the ordinary delete. A rule change and a commit
   are ordered, so a keep is never lost; a delete a rule keeps needs
   `override_retention` with its own reason. Not served yet.
+- The recall worker asks an archive-tier store once to bring a cold object
+  back, polls until it reads, and records the answer in the tenant's shared
+  recall row (online until a time, or failed with a fixed reason, never the
+  store's text). Not yet started by the server.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.
