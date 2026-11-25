@@ -1017,7 +1017,7 @@ CREATE TABLE jobs (
     profile_version     integer     NOT NULL DEFAULT 0,
     CONSTRAINT jobs_pkey PRIMARY KEY (id),
     CONSTRAINT jobs_key UNIQUE (unique_key),
-    CONSTRAINT jobs_kind_check CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild')),
+    CONSTRAINT jobs_kind_check CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose')),
     CONSTRAINT jobs_state_check CHECK (state IN ('queued', 'running', 'done', 'partial', 'failed', 'canceled')),
     CONSTRAINT jobs_scans_check CHECK (scans >= 0 AND scans_done >= 0 AND scans_done <= scans),
     CONSTRAINT jobs_counts_check CHECK (sent >= 0 AND warned >= 0 AND refused >= 0 AND sent + warned + refused <= instances),
@@ -1122,9 +1122,10 @@ CREATE TABLE job_tallies (
 -- counts, kept in the transaction of every file's record and every outcome.
 -- next_unit and next_file number its units and its listed files.
 -- fail_reason is the first failed unit's reason; settling_since when its
--- last walk ended with files processing. The CHECKs make the counts
--- reconcile: every file found is skipped or handed in, and every file
--- handed in has one outcome.
+-- last walk ended with files processing; retention_start the start time an
+-- admin gave the sessions it archives first (NULL for their archive time).
+-- The CHECKs make the counts reconcile: every file found is skipped or
+-- handed in, and every file handed in has one outcome.
 --
 -- A path can identify a person, so it is kept in the import's rows only.
 -- Where an index orders paths (a unit's folder and cursor, a file's path) it
@@ -1168,6 +1169,7 @@ CREATE TABLE import_jobs (
     processing       bigint      NOT NULL,
     bytes_handed_in  bigint      NOT NULL,
     label_differs    bigint      NOT NULL,
+    retention_start  timestamptz,
     CONSTRAINT import_jobs_pkey PRIMARY KEY (job_id),
     CONSTRAINT import_jobs_bounds_check CHECK (failures_kept > 0 AND files_listed >= 0 AND files_not_listed >= 0
         AND units >= 0 AND units_walked >= 0 AND units_walked <= units),
@@ -1403,6 +1405,10 @@ CREATE TABLE rebuild_differences (
 -- its correction records on the storages were last written with ('' before
 -- the first), so a stop between writing the row and the records is found at
 -- start. swept says an abandoned relabel's copies were removed.
+-- retention_rule and retention_due are, for a delete a disposal made
+-- (origin retention), the rule and the due time its session was listed
+-- under; override_retention and override_reason say a person's delete went
+-- over a rule's keep-at-least, and why.
 CREATE TABLE corrections (
     id                 text        COLLATE "C" NOT NULL,
     kind               text        COLLATE "C" NOT NULL,
@@ -1444,7 +1450,14 @@ CREATE TABLE corrections (
     objects_copied     bigint      NOT NULL,
     objects_superseded bigint      NOT NULL,
     swept              boolean     NOT NULL DEFAULT false,
+    retention_rule     text        COLLATE "C" NOT NULL DEFAULT '',
+    retention_due      timestamptz,
+    override_retention boolean     NOT NULL DEFAULT false,
+    override_reason    text        NOT NULL DEFAULT '',
     CONSTRAINT corrections_pkey PRIMARY KEY (id),
+    CONSTRAINT corrections_retention_check CHECK ((origin = 'retention') = (retention_rule <> '')),
+    CONSTRAINT corrections_retention_due_check CHECK ((retention_rule = '') = (retention_due IS NULL)),
+    CONSTRAINT corrections_override_check CHECK (override_retention = (override_reason <> '')),
     CONSTRAINT corrections_id_check CHECK (length(id) = 26),
     CONSTRAINT corrections_kind_check CHECK (kind IN ('delete', 'relabel', 'replace')),
     CONSTRAINT corrections_level_check CHECK (level IN ('subject', 'session', 'scan', 'instance')),
@@ -1897,3 +1910,171 @@ CREATE TABLE storage_switches (
 CREATE INDEX storage_switches_running    ON storage_switches (accepted_at, id) WHERE state IN ('accepted', 'swapped');
 CREATE INDEX storage_switches_by_primary ON storage_switches (primary_name, accepted_at, id);
 CREATE INDEX storage_switches_by_replica ON storage_switches (replica_name, accepted_at, id);
+
+-- A retention rule: its selector (receiver and route, or storage, or none
+-- for the whole tenant), its periods in years then days (0 and 0 for
+-- none), its action, and until when the clamp of its last change that made
+-- anything due sooner or kept it less holds (NULL for none).
+CREATE TABLE retention_rules (
+    name          text        COLLATE "C" NOT NULL,
+    receiver      text        COLLATE "C" NOT NULL,
+    route         text        COLLATE "C" NOT NULL,
+    storage       text        COLLATE "C" NOT NULL,
+    keep_years    bigint      NOT NULL,
+    keep_days     bigint      NOT NULL,
+    dispose_years bigint      NOT NULL,
+    dispose_days  bigint      NOT NULL,
+    action        text        COLLATE "C" NOT NULL,
+    created       timestamptz NOT NULL,
+    updated       timestamptz NOT NULL,
+    notice_until  timestamptz,
+    CONSTRAINT retention_rules_pkey PRIMARY KEY (name),
+    CONSTRAINT retention_rules_periods_check CHECK (keep_years BETWEEN 0 AND 100 AND keep_days BETWEEN 0 AND 365
+        AND dispose_years BETWEEN 0 AND 100 AND dispose_days BETWEEN 0 AND 365
+        AND keep_years + keep_days + dispose_years + dispose_days > 0),
+    CONSTRAINT retention_rules_action_check CHECK (action IN ('review', 'delete'))
+);
+
+-- The retention times of a session, keyed by its Study Instance UID,
+-- never an integer id, so a rebuild that makes the catalog's ids again
+-- leaves it standing: start_at is when retention counts from (when the
+-- session was first archived, by the server's clock, or an import's
+-- retention start), archived_at when it was first archived, floor_at the
+-- time it is never due before (an import's start: archived plus the
+-- notice; NULL for none), keep_until the latest time a rule keeps it until,
+-- due_at when it is due under rule (NULL for never), with that rule's
+-- action. A session a delete hides keeps its row, which every listing
+-- passes over (it reads only sessions the catalog shows), so an undo finds
+-- its times as they were; the delete's purge removes the row. exempt_rule
+-- names the rule a person's undo of a retention delete exempts it from in
+-- the daily pass, '' for none.
+CREATE TABLE retention_sessions (
+    study_uid   text        COLLATE "C" NOT NULL,
+    start_at    timestamptz NOT NULL,
+    archived_at timestamptz NOT NULL,
+    floor_at    timestamptz,
+    keep_until  timestamptz,
+    due_at      timestamptz,
+    rule        text        COLLATE "C" NOT NULL,
+    action      text        COLLATE "C" NOT NULL,
+    exempt_rule text        COLLATE "C" NOT NULL,
+    CONSTRAINT retention_sessions_pkey PRIMARY KEY (study_uid),
+    CONSTRAINT retention_sessions_action_check CHECK (action IN ('', 'review', 'delete')),
+    CONSTRAINT retention_sessions_due_check CHECK ((due_at IS NULL) = (rule = ''))
+);
+
+-- The sessions due now under a rule, oldest due first, read as a range of
+-- one index (a held or exempt session is passed over as it is read); and
+-- those due under every rule, and the next to become due.
+CREATE INDEX retention_sessions_due  ON retention_sessions (rule, due_at, study_uid) WHERE due_at IS NOT NULL;
+CREATE INDEX retention_sessions_next ON retention_sessions (due_at, study_uid) WHERE due_at IS NOT NULL;
+
+-- Where retention's clock stands: the last time the server's clock was
+-- trusted, the daily pass's last time, whether retention is paused (and
+-- why, by how far the clock moved, at which reading), the step and notice
+-- the last check gave (microseconds), and the last confirmation. One row,
+-- made here.
+CREATE TABLE retention_state (
+    one          bigint      NOT NULL,
+    trusted      timestamptz,
+    last_pass    timestamptz,
+    paused       boolean     NOT NULL,
+    pause_reason text        NOT NULL,
+    pause_step   bigint      NOT NULL,
+    paused_at    timestamptz,
+    max_step     bigint      NOT NULL,
+    notice       bigint      NOT NULL,
+    confirmed_at timestamptz,
+    observed_at  timestamptz,
+    CONSTRAINT retention_state_pkey PRIMARY KEY (one),
+    CONSTRAINT retention_state_one_check CHECK (one = 1),
+    CONSTRAINT retention_state_bounds_check CHECK (max_step > 0 AND notice > 0),
+    CONSTRAINT retention_state_paused_check CHECK (paused = (paused_at IS NOT NULL))
+);
+INSERT INTO retention_state (one, trusted, last_pass, paused, pause_reason, pause_step, paused_at, max_step, notice, confirmed_at,
+    observed_at) VALUES (1, NULL, NULL, false, '', 0, NULL, 172800000000, 2592000000000, NULL, NULL);
+
+-- A hold: its target by labels as the catalog has them now (a relabel
+-- rewrites them) and case folded, its reason, who placed and released it,
+-- whether it was made from a record found on a storage with no row, and
+-- seq, which counts its changes (placed, relabeled, released) so a record
+-- written at an older count is owed again.
+CREATE TABLE holds (
+    id               text        COLLATE "C" NOT NULL,
+    level            text        COLLATE "C" NOT NULL,
+    subject_label    text        COLLATE "C" NOT NULL,
+    session_label    text        COLLATE "C" NOT NULL,
+    scan_label       text        COLLATE "C" NOT NULL,
+    subject_folded   text        COLLATE "C" NOT NULL,
+    session_folded   text        COLLATE "C" NOT NULL,
+    scan_folded      text        COLLATE "C" NOT NULL,
+    reason           text        NOT NULL,
+    state            text        COLLATE "C" NOT NULL,
+    placed_by        text        COLLATE "C" NOT NULL,
+    placed_at        timestamptz NOT NULL,
+    release_reason   text        NOT NULL,
+    released_by      text        COLLATE "C" NOT NULL,
+    released_at      timestamptz,
+    found_on_storage boolean     NOT NULL,
+    seq              bigint      NOT NULL,
+    CONSTRAINT holds_pkey PRIMARY KEY (id),
+    CONSTRAINT holds_id_check CHECK (length(id) = 26),
+    CONSTRAINT holds_level_check CHECK (level IN ('tenant', 'subject', 'session', 'scan')),
+    CONSTRAINT holds_state_check CHECK (state IN ('active', 'released')),
+    CONSTRAINT holds_seq_check CHECK (seq >= 1),
+    CONSTRAINT holds_released_check CHECK ((state = 'released') = (released_at IS NOT NULL))
+);
+
+-- The active holds of a subject, which a delete, a purge and a disposal
+-- look up; and a subject's holds for a listing.
+CREATE INDEX holds_active     ON holds (subject_folded, session_folded, scan_folded) WHERE state = 'active';
+CREATE INDEX holds_by_subject ON holds (subject_folded, id);
+
+-- The storages a hold's record goes on, and the hold's count its record
+-- was last written at there (0 before the first): owed while below the
+-- hold's seq.
+CREATE TABLE hold_records (
+    hold_id     text   COLLATE "C" NOT NULL,
+    storage     text   COLLATE "C" NOT NULL,
+    written_seq bigint NOT NULL,
+    CONSTRAINT hold_records_pkey PRIMARY KEY (hold_id, storage),
+    CONSTRAINT hold_records_seq_check CHECK (written_seq >= 0)
+);
+
+-- A dispose job's own part: its rule, the admin's reason ('' for the
+-- daily pass), whether the pass made it, and the confirm token of the
+-- preview it was made from, used once (NULL for the pass).
+CREATE TABLE dispose_jobs (
+    job_id        text    COLLATE "C" NOT NULL,
+    rule          text    COLLATE "C" NOT NULL,
+    reason        text    NOT NULL,
+    scheduled     boolean NOT NULL,
+    confirm_token text    COLLATE "C",
+    CONSTRAINT dispose_jobs_pkey PRIMARY KEY (job_id),
+    CONSTRAINT dispose_jobs_token_check CHECK (scheduled = (confirm_token IS NULL))
+);
+
+CREATE UNIQUE INDEX dispose_jobs_by_confirm ON dispose_jobs (confirm_token) WHERE confirm_token IS NOT NULL;
+CREATE INDEX dispose_jobs_by_rule ON dispose_jobs (rule);
+
+-- The sessions a dispose job lists, in order, as they were listed, and
+-- what became of each ('' before it is reached) with the delete that took
+-- it ('' for none).
+CREATE TABLE dispose_sessions (
+    job_id        text        COLLATE "C" NOT NULL,
+    ord           bigint      NOT NULL,
+    study_uid     text        COLLATE "C" NOT NULL,
+    subject_label text        COLLATE "C" NOT NULL,
+    session_label text        COLLATE "C" NOT NULL,
+    due_at        timestamptz NOT NULL,
+    instances     bigint      NOT NULL,
+    bytes         bigint      NOT NULL,
+    outcome       text        COLLATE "C" NOT NULL,
+    correction_id text        COLLATE "C" NOT NULL,
+    CONSTRAINT dispose_sessions_pkey PRIMARY KEY (job_id, ord),
+    CONSTRAINT dispose_sessions_counts_check CHECK (ord >= 1 AND instances >= 0 AND bytes >= 0),
+    CONSTRAINT dispose_sessions_outcome_check CHECK (outcome IN ('', 'deleted', 'skipped|held', 'skipped|not_due',
+        'skipped|already_deleted', 'skipped|undone'))
+);
+
+CREATE UNIQUE INDEX dispose_sessions_by_study ON dispose_sessions (job_id, study_uid);

@@ -137,6 +137,18 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 		if err := k.QueueCorrectionCopies(ctx, tx, c.ID, cc.Now); err != nil {
 			return err
 		}
+		// A delete of some of a session's scans changes what its scans
+		// arrived through, and so its retention times; a relabel moves the
+		// holds of what it moves.
+		switch c.Kind {
+		case corr.KindDelete:
+			err = k.retentionAfterPublish(ctx, tx, c.ID, cc.Now)
+		case corr.KindRelabel:
+			err = relabelHolds(ctx, tx, *c)
+		}
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE corrections SET committed_at = ?, purge_after = ? WHERE id = ?`, k.D.Time(cc.Now),
 			k.D.Time(cc.Now.Add(cc.Grace)), c.ID); err != nil {
 			return err
@@ -454,6 +466,14 @@ func (k Sending) undoDeleteIn(ctx context.Context, tx SendingTx, c *tenant.Corre
 	}
 	// What was shown again is the replicas' to hold again.
 	if err := k.QueueCorrectionCopies(ctx, tx, c.ID, now); err != nil {
+		return err
+	}
+	// Its sessions' times are stored again from the scans shown, and a
+	// retention delete undone exempts its sessions from the rule's pass.
+	if err := k.retentionAfterPublish(ctx, tx, c.ID, now); err != nil {
+		return err
+	}
+	if err := k.exemptAfterUndo(ctx, tx, *c); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM deleted_targets WHERE correction_id = ?`, c.ID); err != nil {

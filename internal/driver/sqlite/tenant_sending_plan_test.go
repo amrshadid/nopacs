@@ -14,7 +14,7 @@ import (
 // failed, a tenth running; 20,000
 // scans of jobs; 20,000 failures, half of them of job j1, one in seven
 // refused; 20,000 instances owed; 20,000 tallies of 200 jobs; 40,000 rows
-// of a replica's queue.
+// of a replica's queue; 40,000 sessions' retention times.
 func fillSending(tb testing.TB, path string) {
 	tb.Helper()
 	db, err := sql.Open("sqlite", path)
@@ -47,6 +47,12 @@ func fillSending(tb testing.TB, path string) {
 		 INSERT INTO replica_scans SELECT 'copy', '2.25.2.' || i, s, NULL, CASE s WHEN 'in_step' THEN NULL ELSE 0 END,
 		   (i % 1000) * 1000000, 1, 0, 0, '', CASE s WHEN 'copying' THEN (i % 1000) * 1000000 END, NULL, 0, ''
 		 FROM (SELECT i, CASE WHEN i % 4 = 0 THEN 'pending' WHEN i % 4 = 1 THEN 'copying' ELSE 'in_step' END AS s FROM n)`,
+		// The sessions' retention times: under four rules, due within a
+		// thousand seconds, one in ten due under none.
+		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 40000)
+		 INSERT INTO retention_sessions SELECT '2.25.1.' || i, 0, 0, NULL, NULL,
+		   CASE WHEN i % 10 = 0 THEN NULL ELSE (i % 1000) * 1000000 END, CASE WHEN i % 10 = 0 THEN '' ELSE 'r' || (i % 4) END,
+		   CASE WHEN i % 10 = 0 THEN '' ELSE 'review' END, '' FROM n`,
 		`ANALYZE`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {

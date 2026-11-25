@@ -335,6 +335,12 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 				return err
 			}
 		}
+		// The retention start an import gave, read before the outcome of its
+		// files decides their arrivals.
+		started, err := importSending().ImportRetentionStart(ctx, sendingTx{tx: tx}, c.ReceptionID, newScan)
+		if err != nil {
+			return err
+		}
 		// The outcome of an import's files among those confirmed, in this
 		// transaction (tenant.Importing); its events are written last.
 		importEvents, err := importSending().ImportArchived(ctx, sendingTx{tx: tx}, c.ReceptionID, confirmed, c.At)
@@ -348,6 +354,15 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		// commit's transaction so a crash after it forgets none; their rows
 		// are locked after the scan's, as a correction's publish locks them.
 		if err := importSending().QueueReplicaCopies(ctx, sendingTx{tx: tx}, c.Storage, c.SeriesUID, c.At); err != nil {
+			return err
+		}
+		// A new scan joins its session's retention: its times are stored
+		// again in the commit's transaction (tenant.Retention).
+		if err := importSending().CommitRetention(ctx, sendingTx{tx: tx}, c, newScan, started); err != nil {
+			return err
+		}
+		// A held target's new scan owes its holds' records to its storage.
+		if err := importSending().CommitHolds(ctx, sendingTx{tx: tx}, c, newScan); err != nil {
 			return err
 		}
 		if newInstances > 0 {

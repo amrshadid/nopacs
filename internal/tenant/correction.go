@@ -155,7 +155,13 @@ type Corrections interface {
 	// PurgeTargets returns, in order (every instance, then each scan's
 	// metadata, then its manifest), at most limit objects of a purging
 	// correction not yet settled, each saying whether a row of the catalog
-	// resolves to it now.
+	// resolves to it now. A correction an active hold covers answers the
+	// hold's refusal (HoldRefusalError) and no page; the holds are read
+	// once for the page, so a hold placed while its objects are being
+	// removed does not stop that page. A caller therefore asks
+	// CorrectionHeld again before removing each object (a read of the few
+	// active holds, no write) and stops, leaving the rest unsettled, when
+	// it answers a hold.
 	PurgeTargets(ctx context.Context, id string, limit int) ([]PurgeTarget, error)
 	// AddPurgeTargets records objects a purging correction owns that its
 	// publish did not fix (a correction known only from its record, after a
@@ -255,8 +261,12 @@ const (
 	MaxPurgeTargets = 1000
 )
 
-// OriginPerson is the origin of a correction a person asked for.
-const OriginPerson = "person"
+// OriginPerson is the origin of a correction a person asked for;
+// OriginRetention of a delete a disposal of a retention rule made.
+const (
+	OriginPerson    = "person"
+	OriginRetention = "retention"
+)
 
 // StateReasonUnresolved is the state reason of a correction found on a
 // storage with no row.
@@ -361,6 +371,14 @@ type DeletePreview struct {
 	// HeldAfterPurge are the subject labels arrivals stay held under after
 	// the purge: a subject's label and its labels before a relabel.
 	HeldAfterPurge []string
+	// Holds are the ids of the active holds that cover any of it, in
+	// order; a delete of it is refused while any is.
+	Holds []string
+	// SessionsUnderMinimum counts its sessions a rule keeps at least until
+	// a time to come, KeepUntil the latest such time (zero for none): a
+	// person's delete of them needs OverrideRetention.
+	SessionsUnderMinimum int64
+	KeepUntil            time.Time
 	// Issued is when the preview was made; Confirm its token.
 	Issued  time.Time
 	Confirm string
@@ -389,6 +407,14 @@ type CorrectionPrepare struct {
 	Reason, Confirm string
 	// KeyID is the key that asked, empty for the local operator.
 	KeyID string
+	// Retention, for a delete a disposal makes (origin retention), is the
+	// rule and due time it was listed under; nil for a person's.
+	Retention *RetentionOrigin
+	// OverrideRetention says a person's delete goes over a rule's
+	// keep-at-least, with its own OverrideReason. Who may ask it is
+	// checked before the store; the store records it and KeyID.
+	OverrideRetention bool
+	OverrideReason    string
 	// Now is when.
 	Now time.Time
 }
@@ -524,6 +550,14 @@ type Correction struct {
 	// Holds are the values a delete holds arrivals by, read with one
 	// correction (Correction), not with a list.
 	Holds []HeldValue
+	// RetentionRule and RetentionDue are, for origin retention, the rule
+	// and the due time its session was listed under.
+	RetentionRule string
+	RetentionDue  time.Time
+	// OverrideRetention says the delete went over a rule's keep-at-least,
+	// for OverrideReason.
+	OverrideRetention bool
+	OverrideReason    string
 }
 
 // HasEnded reports whether the correction reached an end.

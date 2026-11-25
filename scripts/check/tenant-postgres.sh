@@ -77,7 +77,8 @@ echo
 echo "== the tenant's tables"
 tables_hold "$(q "SELECT string_agg(table_name, ' ' ORDER BY table_name COLLATE \"C\") FROM information_schema.tables WHERE table_schema = '$schema'")" \
 	subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles tenant_secrets tenant_identity \
-	storage_generations replica_totals replica_scans replica_damage recalls repairs storage_switches
+	storage_generations replica_totals replica_scans replica_damage recalls repairs storage_switches \
+	retention_rules retention_sessions retention_state holds hold_records dispose_jobs dispose_sessions
 
 show schema_migrations "SELECT version, name, encode(checksum, 'hex') AS checksum, applied FROM $t.schema_migrations"
 show tenant_identity "SELECT * FROM $t.tenant_identity"

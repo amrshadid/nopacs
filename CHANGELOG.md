@@ -301,6 +301,14 @@ scan, keeps it whole, and serves it through an API with keys.
   primary; the lease is renewed on a timer and a lost lease writes nothing;
   a scan is recorded in step only at the manifest it copied. Not yet started
   by the server.
+- The tenant database keeps retention rules and each session's keep and due
+  times, stored and indexed, clamped by `retention.shorten-notice`, on a clock
+  that pauses on a forward jump until an admin confirms it (a step back only
+  delays); holds that refuse deletes, stop purges (a relabel's too) and are
+  owed as records on every storage their target reaches; and dispose jobs that
+  delete due sessions through the ordinary delete. A rule change and a commit
+  are ordered, so a keep is never lost; a delete a rule keeps needs
+  `override_retention` with its own reason. Not served yet.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

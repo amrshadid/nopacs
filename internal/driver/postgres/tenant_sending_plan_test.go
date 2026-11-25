@@ -16,7 +16,8 @@ import (
 // half of them recording one of 5,000 profile versions, 2,000 of them marked
 // damaged by a scrub; 50,000 finished
 // units of work; 20,000 scans of corrections, of 200 subjects, and
-// 50,000 instances they hide; 40,000 rows of a replica's queue. For the
+// 50,000 instances they hide; 40,000 rows of a replica's queue; 40,000
+// sessions' retention times. For the
 // very statements package sqlkit runs (SendingDialect.Plans), Postgres's
 // plan for the values used and its generic plan (the one a prepared
 // statement keeps) read no such table whole, the first uses the index named
@@ -74,6 +75,12 @@ func TestSendingPlans(t *testing.T) {
 		   1, 0, 0, '', CASE s WHEN 'copying' THEN timestamptz 'epoch' + (i % 1000) * interval '1 second' END, NULL, false, ''
 		 FROM (SELECT i, CASE WHEN i % 4 = 0 THEN 'pending' WHEN i % 4 = 1 THEN 'copying' ELSE 'in_step' END AS s
 		   FROM generate_series(1, 40000) i) AS x`,
+		// The sessions' retention times: under four rules, due within a
+		// thousand seconds, one in ten due under none.
+		`INSERT INTO retention_sessions SELECT '2.25.1.' || i, timestamptz 'epoch', timestamptz 'epoch', NULL, NULL,
+		   CASE WHEN i % 10 = 0 THEN NULL ELSE timestamptz 'epoch' + (i % 1000) * interval '1 second' END,
+		   CASE WHEN i % 10 = 0 THEN '' ELSE 'r' || (i % 4) END, CASE WHEN i % 10 = 0 THEN '' ELSE 'review' END, ''
+		 FROM generate_series(1, 40000) i`,
 		`ANALYZE`)
 	for _, c := range sendingDialect.Plans() {
 		statement := sqlkit.Rebind(c.SQL)

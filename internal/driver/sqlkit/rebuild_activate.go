@@ -191,6 +191,11 @@ func (k Rebuild) ActivateCatalog(ctx context.Context, fence tenant.WorkFence, no
 		if err := k.ResyncReplicas(ctx, tx, now); err != nil {
 			return err
 		}
+		// So are the retention rows, keyed by Study Instance UID: a session
+		// the new catalog shows with no row gets one (tenant.Retention).
+		if err := k.ResyncRetention(ctx, tx, now); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE rebuild_jobs SET activated = ? WHERE job_id = ?`, k.D.Bool(true), r.job.job.ID); err != nil {
 			return err
 		}

@@ -86,6 +86,9 @@ func (k Sending) AttachReplica(ctx context.Context, replica, primary string, now
 			if queued, err = k.beginReplica(ctx, tx, replica, primary, now); err != nil {
 				return err
 			}
+			if err := holdsAfterAttach(ctx, tx); err != nil {
+				return err
+			}
 			attached = true
 		}
 		if out, _, err = storageIn(ctx, tx, replica, ""); err != nil {

@@ -70,7 +70,8 @@ echo "== tables"
 "$SQLITE3" -batch "$db" '.tables'
 tables_hold "$(q "SELECT group_concat(name, ' ') FROM (SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name)")" \
 	subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles tenant_secrets reception_steps \
-	storage_generations replica_totals replica_scans replica_damage recalls repairs storage_switches
+	storage_generations replica_totals replica_scans replica_damage recalls repairs storage_switches \
+	retention_rules retention_sessions retention_state holds hold_records dispose_jobs dispose_sessions
 
 show schema_migrations "SELECT version, name, hex(checksum) AS checksum, applied FROM schema_migrations"
 show settings "SELECT * FROM settings"

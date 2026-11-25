@@ -379,6 +379,9 @@ type ImportJob struct {
 	// SettlingSince is when the job's last walk ended with files still
 	// processing; zero until then, and when none were.
 	SettlingSince time.Time
+	// RetentionStart is the start time retention counts from for the
+	// sessions it archives first; zero for their archive time.
+	RetentionStart time.Time
 }
 
 // NewImportJob is an import job a person asks for (Imports.CreateImportJob).
@@ -399,6 +402,11 @@ type NewImportJob struct {
 	Map ImportMap
 	// FailuresKept is the setting job.failures-kept now.
 	FailuresKept int
+	// RetentionStart, when not zero, is the start time retention counts
+	// from for each session the job archives first (an admin's, never a
+	// file's): not before 1970 and not after Created
+	// (ValidateRetentionStart).
+	RetentionStart time.Time
 	// Created is when it is made.
 	Created time.Time
 }
@@ -429,6 +437,9 @@ func (j NewImportJob) Validate() error {
 	}
 	if j.FailuresKept < MinFailuresKept || j.FailuresKept > MaxFailuresKept {
 		return invalid("a job keeps 100 to 1000000 failures")
+	}
+	if err := ValidateRetentionStart(j.RetentionStart, j.Created); err != nil {
+		return err
 	}
 	return master.ValidateTime("job time", j.Created)
 }

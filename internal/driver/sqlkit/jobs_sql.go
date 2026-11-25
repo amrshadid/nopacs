@@ -184,5 +184,12 @@ func (d SendingDialect) Plans() []SendingPlan {
 			Args: []any{d.Time(at), tenant.MaxReplicaClaim}, Ordered: true},
 		SendingPlan{Name: "the replicas' leases ended", Index: "replica_scans_leased", SQL: replicaLeaseEndedSQL + d.SkipLocked,
 			Args: []any{d.Time(at), tenant.MaxReplicaClaim}, Ordered: true},
+		// The sessions due: rows of study "2.25.1.<n>" under rule
+		// "r<n % 4>", due at n % 1000 seconds, one in ten due under none;
+		// a page after a position.
+		SendingPlan{Name: "the sessions due under a rule", Index: "retention_sessions_due", SQL: dueByRuleSQL,
+			Args: []any{"r3", d.Time(at), d.Time(dueBefore), "", tenant.MaxDisposeSessions}, Ordered: true},
+		SendingPlan{Name: "the sessions due under any rule", Index: "retention_sessions_next", SQL: dueAllSQL,
+			Args: []any{d.Time(at), d.Time(dueBefore), "", tenant.MaxDisposeSessions}, Ordered: true},
 	)
 }

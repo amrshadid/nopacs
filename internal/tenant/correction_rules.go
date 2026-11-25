@@ -163,6 +163,35 @@ func (p CorrectionPrepare) Validate() error {
 	default:
 		return invalid("a correction is a delete, a relabel or a replace")
 	}
+	return p.validateRetention()
+}
+
+// validateRetention returns an Invalid error unless what p says of
+// retention is well formed: an override with its own reason, on a person's
+// delete; a disposal's origin on a delete of one session.
+func (p CorrectionPrepare) validateRetention() error {
+	if p.OverrideRetention != (p.OverrideReason != "") {
+		return invalid("override_retention carries its own reason, and a reason only comes with it")
+	}
+	if p.OverrideRetention {
+		if p.Kind != record.KindDelete || p.Retention != nil {
+			return invalid("only a person's delete overrides retention")
+		}
+		if err := validateCorrectionReason("override's reason", p.OverrideReason); err != nil {
+			return err
+		}
+	}
+	if r := p.Retention; r != nil {
+		if p.Kind != record.KindDelete || p.Target.Level() != record.LevelSession {
+			return invalid("a disposal deletes one session")
+		}
+		if err := ValidateName("rule", r.Rule); err != nil {
+			return err
+		}
+		if err := master.ValidateTime("due time", r.Due); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -185,7 +214,7 @@ func DeleteConfirm(p DeletePreview) string {
 	n := func(v int64) string { return strconv.FormatInt(v, 10) }
 	issued := strconv.FormatInt(p.Issued.UnixMicro(), 10)
 	t, c := p.Target, p.Counts
-	w("nopacs-delete-preview-2", issued, t.Subject, t.Session, t.Scan, t.Instance,
+	w("nopacs-delete-preview-3", issued, t.Subject, t.Session, t.Scan, t.Instance,
 		n(c.Subjects), n(c.Sessions), n(c.Scans), n(c.Instances), n(c.Bytes), n(p.Quarantined), n(p.Receptions))
 	w(n(int64(len(p.Storages))))
 	w(p.Storages...)
@@ -197,6 +226,15 @@ func DeleteConfirm(p DeletePreview) string {
 	w(p.Jobs...)
 	w(n(int64(len(p.HeldAfterPurge))))
 	w(p.HeldAfterPurge...)
+	// The holds and what retention keeps: a hold placed, or a rule changed,
+	// since the preview makes its token stale.
+	w(n(int64(len(p.Holds))))
+	w(p.Holds...)
+	keep := ""
+	if !p.KeepUntil.IsZero() {
+		keep = n(p.KeepUntil.UnixMicro())
+	}
+	w(n(p.SessionsUnderMinimum), keep)
 	sum := sha256.Sum256([]byte(b.String()))
 	return "c1." + issued + "." + hex.EncodeToString(sum[:])
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/amrshadid/nopacs/internal/core/reception"
+	"github.com/amrshadid/nopacs/internal/driver/sqlkit"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -167,6 +168,7 @@ func TestPipelinePlans(t *testing.T) {
 		{"the feed's place", "event_marks", eventHighSQL, nil},
 		{"the pruning", "INTEGER PRIMARY KEY", pruneSQL, []any{100}},
 		{"the incoming bytes", "receptions_holding", incomingBytesSQL, nil},
+		{"the oldest file held", "quarantine_by_state", sqlkit.QuarantineOldestSQL, nil},
 	}
 	for _, c := range []struct {
 		name, index string

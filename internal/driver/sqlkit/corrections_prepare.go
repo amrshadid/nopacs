@@ -397,7 +397,13 @@ func (k Sending) prepareDelete(ctx context.Context, tx SendingTx, p tenant.Corre
 	if err := k.checkReceptions(ctx, tx, r, p.Target.Subject); err != nil {
 		return err
 	}
+	if err := k.checkRetentionDelete(ctx, tx, p, r); err != nil {
+		return err
+	}
 	if err := k.insertCorrection(ctx, tx, p, r.level, r, r.counts(), samePath, r.instance); err != nil {
+		return err
+	}
+	if err := k.markRetention(ctx, tx, p); err != nil {
 		return err
 	}
 	return writeDeletedTargets(ctx, tx, p.ID, p.Target, r)

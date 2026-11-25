@@ -248,6 +248,7 @@ func TestScalePipelinePlans(t *testing.T) {
 		{"a storage in use by a reception", "receptions_by_storage", storageUsedSQL, []any{"store"}, false},
 		{"a receiver's name held by a reception", "receptions_by_receiver", receptionNamesReceiverSQL, []any{"gone"}, false},
 		{"a receiver's name held by a record", "quarantine_by_receiver", quarantineNamesReceiverSQL, []any{"gone"}, false},
+		{"the oldest file held", "quarantine_by_state", sqlkit.QuarantineOldestSQL, nil, false},
 		{"the open reception of a study", "receptions_open", openReceptionSQL, []any{"busy", "2.25.1.4000"}, false},
 		{"a study's next arrival", "receptions_arrival", nextArrivalSQL, []any{"2.25.1.4000"}, false},
 		{"a study's arrivals", "receptions_arrival", arrivalsSQL, []any{"2.25.1.4000", 100}, false},

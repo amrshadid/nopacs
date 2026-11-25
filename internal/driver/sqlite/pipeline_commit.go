@@ -280,6 +280,12 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 			newBytes += in.Size
 			confirmed = append(confirmed, sqlkit.ArchivedFile{UID: in.SOPInstanceUID, Sum: sqlkit.ToSHA256(sum)})
 		}
+		// The retention start an import gave, read before the outcome of its
+		// files decides their arrivals.
+		started, err := (sqlkit.Sending{D: sendingDialect}).ImportRetentionStart(ctx, sendingTx{tx: tx}, c.ReceptionID, newScan)
+		if err != nil {
+			return err
+		}
 		// The outcome of an import's files among those confirmed, in this
 		// transaction (tenant.Importing).
 		importEvents, err := importInTx(tx, func(k sqlkit.Sending, x sqlkit.SendingTx) ([]tenant.EventRecord, error) {
@@ -305,6 +311,15 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		// The scan's copies on the storage's replicas, queued in the
 		// commit's transaction so a crash after it forgets none.
 		if err := (sqlkit.Sending{D: sendingDialect}).QueueReplicaCopies(ctx, sendingTx{tx: tx}, c.Storage, c.SeriesUID, c.At); err != nil {
+			return err
+		}
+		// A new scan joins its session's retention: its times are stored
+		// again in the commit's transaction (tenant.Retention).
+		if err := (sqlkit.Sending{D: sendingDialect}).CommitRetention(ctx, sendingTx{tx: tx}, c, newScan, started); err != nil {
+			return err
+		}
+		// A held target's new scan owes its holds' records to its storage.
+		if err := (sqlkit.Sending{D: sendingDialect}).CommitHolds(ctx, sendingTx{tx: tx}, c, newScan); err != nil {
 			return err
 		}
 		if newInstances > 0 {

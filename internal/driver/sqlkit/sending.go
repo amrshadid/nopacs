@@ -80,6 +80,10 @@ type SendingDialect struct {
 	// Share is the clause that keeps a row from being removed or its key
 	// changed until the commit (" FOR KEY SHARE"), or "".
 	Share string
+	// ShareAll is the clause that keeps a row from any change until the
+	// commit while letting others read it so too (" FOR SHARE"), or "": it
+	// waits for, and holds off, a transaction that read the row with Lock.
+	ShareAll string
 	// LockDelete is the clause that locks a row read for its removal
 	// (" FOR UPDATE"), or "".
 	LockDelete string

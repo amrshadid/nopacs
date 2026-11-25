@@ -38,6 +38,9 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 			if err := k.dropDeleted(ctx, tx, *c, f.Manifest, f.ManifestBefore, f.Now); err != nil {
 				return err
 			}
+			if err := dropPurgedRetention(ctx, tx, c.ID); err != nil {
+				return err
+			}
 		} else if _, err := tx.Exec(ctx, `UPDATE instance_revisions SET purged = ? WHERE correction_id = ?`, k.D.Bool(true),
 			c.ID); err != nil {
 			return err

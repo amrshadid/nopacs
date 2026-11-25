@@ -27,6 +27,7 @@ var sendingDialect = sqlkit.SendingDialect{
 	Bool:       func(b bool) any { return b },
 	Lock:       " FOR NO KEY UPDATE",
 	Share:      " FOR KEY SHARE",
+	ShareAll:   " FOR SHARE",
 	LockDelete: " FOR UPDATE",
 	SkipLocked: " FOR UPDATE SKIP LOCKED",
 	NotEnded:   "NOT ended",

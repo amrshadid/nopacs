@@ -41,6 +41,18 @@ func (k Sending) checkClockIn(ctx context.Context, tx SendingTx, now time.Time, 
 	if automatic && !trusted.T.IsZero() && now.Sub(trusted.T) > tenant.MaxClockStep {
 		return tenant.ClockError("the server's clock reads more than two days past the last time it was trusted; automatic purges wait for an admin's purge")
 	}
+	// A clock retention saw jump pauses every purge its purge time starts
+	// too, until a person confirms the time: a grace that ended by a jump
+	// did not end.
+	if automatic {
+		paused, err := retentionPaused(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if paused {
+			return tenant.ClockError("clock jumped: the tenant's retention is paused until an admin confirms the time; automatic purges wait")
+		}
+	}
 	_, err := tx.Exec(ctx, `UPDATE correction_clock SET trusted = ? WHERE one = 1`, k.D.Time(now))
 	return err
 }
@@ -69,10 +81,19 @@ func (k Sending) PurgeTargets(ctx context.Context, id string, limit int) ([]tena
 	var out []tenant.PurgeTarget
 	err := k.Host.Read(ctx, "the correction's objects cannot be read", func(tx SendingTx) error {
 		out = nil
+		// A purge of what a hold covers waits before its next page of
+		// objects: nothing held is removed (tenant.Holds).
+		hold, err := correctionHeldIn(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if hold != "" {
+			return tenant.HoldRefusalError(hold)
+		}
 		// An instance's object is shared when a live row resolves to its
 		// key: the same UID on the same storage, by the key the catalog
 		// holds whole, or by the layout's key under the same labels.
-		err := tx.Query(ctx, `SELECT ck.ord, ck.storage, ck.subject_label, ck.session_label, ck.scan_label, ck.sop_instance_uid,
+		err = tx.Query(ctx, `SELECT ck.ord, ck.storage, ck.subject_label, ck.session_label, ck.scan_label, ck.sop_instance_uid,
 			ck.storage_key, ck.size, ck.sha256,
 			EXISTS (SELECT 1 FROM instances AS i JOIN scans AS s ON s.id = i.scan_id WHERE ck.ord = 1
 				AND i.sop_instance_uid = ck.sop_instance_uid AND s.storage = ck.storage

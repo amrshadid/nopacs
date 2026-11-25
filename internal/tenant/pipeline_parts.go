@@ -336,4 +336,7 @@ type PipelineParts interface {
 	Recalls
 	Repairs
 	Switching
+	Retention
+	Holds
+	Disposal
 }

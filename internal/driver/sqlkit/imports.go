@@ -27,7 +27,7 @@ const (
 const importJobColumns = `job_id, receiver, path, map_file, map_key_columns, map_value_column, map_key_parts, map_gives,
 	failures_kept, files_listed, files_not_listed, listed, units, units_walked, next_unit, next_file, fail_reason,
 	settling_since, found, skipped, handed_in, archived, already_held, quarantined, lost, failed, discarded, processing,
-	bytes_handed_in, label_differs`
+	bytes_handed_in, label_differs, retention_start`
 
 // importJobRow is an import job's row: what a read answers, and what only
 // the store's own work reads.
@@ -48,15 +48,15 @@ func scanImportJob(row Row) (importJobRow, error) {
 	s := &r.spec
 	c := &s.Counts
 	var keyColumns, keyParts string
-	var settling DBTime
+	var settling, retentionStart DBTime
 	err := row.Scan(&r.jobID, &s.Receiver, &s.Path, &s.MapFile, &keyColumns, &s.Map.ValueColumn, &keyParts, &s.Map.Gives,
 		&s.FailuresKept, &r.filesListed, &s.FilesNotListed, &s.Listed, &c.Units, &c.UnitsWalked, &r.nextUnit, &r.nextFile,
 		&r.failReason, &settling, &c.Found, &r.skipped, &c.HandedIn, &c.Archived, &c.AlreadyHeld, &r.quarantined, &c.Lost,
-		&c.Failed, &c.Discarded, &c.Processing, &c.BytesHandedIn, &c.LabelDiffers)
+		&c.Failed, &c.Discarded, &c.Processing, &c.BytesHandedIn, &c.LabelDiffers, &retentionStart)
 	if err != nil {
 		return r, err
 	}
-	s.SettlingSince = settling.T
+	s.SettlingSince, s.RetentionStart = settling.T, retentionStart.T
 	if err := FromJSON(keyColumns, &s.Map.KeyColumns); err != nil {
 		return r, err
 	}
@@ -215,10 +215,10 @@ func (k Sending) CreateImportJob(ctx context.Context, j tenant.NewImportJob, aud
 		if _, err := tx.Exec(ctx, `INSERT INTO import_jobs (job_id, receiver, path, map_file, map_csv, map_key_columns,
 			map_value_column, map_key_parts, map_gives, failures_kept, files_listed, files_not_listed, listed, units, units_walked,
 			next_unit, next_file, fail_reason, settling_since, found, skipped, handed_in, archived, already_held, quarantined, lost,
-			failed, discarded, processing, bytes_handed_in, label_differs)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 1, 0, 1, 1, '', NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)`,
+			failed, discarded, processing, bytes_handed_in, label_differs, retention_start)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 1, 0, 1, 1, '', NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?)`,
 			j.ID, j.Receiver, j.Path, j.MapFile, mapCSV, keyColumns, j.Map.ValueColumn, keyParts, j.Map.Gives, j.FailuresKept,
-			k.D.Bool(false)); err != nil {
+			k.D.Bool(false), k.nullTime(j.RetentionStart)); err != nil {
 			return err
 		}
 		if err := k.insertImportUnit(ctx, tx, j.ID, 0, j.Path, true, j.Created); err != nil {

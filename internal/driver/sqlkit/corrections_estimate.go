@@ -70,6 +70,9 @@ func (k Sending) previewIn(ctx context.Context, tx SendingTx, target tenant.Corr
 	if err := k.previewClears(ctx, tx, r, target, &p); err != nil {
 		return p, err
 	}
+	if err := k.previewRetention(ctx, tx, r, target, &p); err != nil {
+		return p, err
+	}
 	p.Confirm = tenant.DeleteConfirm(p)
 	return p, nil
 }
