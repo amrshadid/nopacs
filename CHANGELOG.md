@@ -238,6 +238,13 @@ the code before this release is in github.com/amrshadid/coria.
   none), under "external credentials to re-enter", one that cannot be looked
   at as not checked, never failing the restore; and they say the network
   listener's certificate and key are not in a backup.
+- Outside proofs of the archive kept whole (`make prove-whole`): purge
+  dispositions on versioned and object-locked buckets, a restore onto a fresh
+  host with its recovery time, the event history after a restore, one writer
+  per storage across a move, sends meeting corrections, ResolveInstances and
+  old labels, references after corrections, provenance of received bytes,
+  what a client sees of a damaged instance, objects not online and the purge
+  clock.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

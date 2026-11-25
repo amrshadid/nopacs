@@ -503,15 +503,22 @@ prove-import:
 # quarantined as was_deleted and arriving again once allowed; a backup restored
 # into a destroyed data directory (a changed backup restores nothing, keys
 # suspended, a later delete held as unresolved); a correction record written by
-# hand not applied by a rebuild. No container; SQLite and a directory storage.
-# PROVE_WHOLE_ONLY (groups: rebuild scrub delete restore records) runs a part.
-# Needs dcmtk (DCMTK=dir) and a PYTHON with scripts/requirements/prove-reception.txt
-# and the cryptography package (the one of make python-env).
+# hand not applied by a rebuild. Later groups: purge dispositions on versioned
+# and object-locked buckets, a restore onto a fresh host and its time, the event
+# history after a restore, one writer per storage across a move, a send meeting
+# corrections, ResolveInstances, references after corrections, provenance of
+# received bytes, what a client sees of a damaged instance, objects not online
+# and the purge clock. PROVE_WHOLE_ONLY (groups: rebuild scrub delete restore
+# records versions fresh cursor writer jobs resolve references provenance client
+# room) runs a part. versions and room start an S3 server (S3_SILO_IMAGE) in a
+# container named for the run and remove it after. Needs dcmtk (DCMTK=dir),
+# openssl, docker for those two, and a PYTHON with
+# scripts/requirements/prove-whole.txt.
 PROVE_WHOLE_ONLY ?=
 .PHONY: prove-whole
 prove-whole:
 	"$(PYTHON)" scripts/prove/whole.py --go "$(GO)" --dcmtk "$(DCMTK)" --python "$(PYTHON)" --only "$(PROVE_WHOLE_ONLY)" \
-		$(if $(PYDICOM_CORPUS),--pydicom-corpus "$(PYDICOM_CORPUS)")
+		--docker "$(DOCKER)" --s3-image "$(S3_SILO_IMAGE)" $(if $(PYDICOM_CORPUS),--pydicom-corpus "$(PYDICOM_CORPUS)")
 
 # The interruption harness: the server built with the build tag "interrupt"
 # killed at each named durable step of a correction (delete, relabel, replace,

@@ -1,0 +1,43 @@
+# What scripts/prove/whole.py needs: pydicom to build the studies it sends and
+# read what was archived, pynetdicom as the DICOM peer of its send jobs,
+# cryptography for scripts/prove/backup_open.py, and boto3 with what it pulls
+# in to read the S3 server's buckets and their versions; each at an exact
+# version, with the SHA-256 of every file pip may choose for it on Linux
+# x86_64 (CPython 3.12 to 3.14) and on macOS. Install it with:
+#
+#   pip install --require-hashes -r scripts/requirements/prove-whole.txt
+#
+# so a file that differs from the one hashed here is refused. The hashes were
+# made by scripts/requirements/hash.sh prove-whole with "pip download" and
+# "pip hash"; to change a version, edit the line below and run it again.
+pydicom==2.4.5 \
+    --hash=sha256:35a594cc8ebae8dd40b1f632cd7c9f08ecaa147cb9305a9f9fbca2c03f5ccc93
+pynetdicom==2.1.0 \
+    --hash=sha256:a9d066cb253fc73e8ffec3f4934251ac7c4dc9b47e1b2222a46a80108ce481a9
+cryptography==46.0.3 \
+    --hash=sha256:109d4ddfadf17e8e7779c39f9b18111a09efb969a301a31e987416a0191ed93a \
+    --hash=sha256:10b01676fc208c3e6feeb25a8b83d81767e8059e1fe86e1dc62d10a3018fa926
+cffi==2.1.1 \
+    --hash=sha256:398aff33cee2767e3e781d2554c54bd0dff386bb437581e0d8011fde1a942ec1 \
+    --hash=sha256:f81b3b8f3d4e343550fa4baa0e479bba9f2d29ce9c2e9b51d1ce1718d7442fcf \
+    --hash=sha256:c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf \
+    --hash=sha256:19ee6127ee34de7d83ce3d371ebc5ed91addbdcc39f9ab15ce4eb35a4e534971 \
+    --hash=sha256:a931079504ecc49efed7744c476a5c343a92fabf66dec2db95edb1b2fdc770e2 \
+    --hash=sha256:661c298b4821edebead0c91edd2b00374d67ad7c5a1f7a91d4442633b79d6a72 \
+    --hash=sha256:b0431303acaea1089ad4b3e9ce4e6518193def1118d4073ca848635ee4ea2e96
+pycparser==3.12 \
+    --hash=sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e
+boto3==1.40.61 \
+    --hash=sha256:6b9c57b2a922b5d8c17766e29ed792586a818098efe84def27c8f582b33f898c
+botocore==1.40.61 \
+    --hash=sha256:17ebae412692fd4824f99cde0f08d50126dc97954008e5ba2b522eb049238aa7
+s3transfer==0.14.0 \
+    --hash=sha256:ea3b790c7077558ed1f02a3072fb3cb992bbbd253392f4b6e9e8976941c7d456
+jmespath==1.0.1 \
+    --hash=sha256:02e2e4cc71b5bcab88332eebf907519190dd9e6e82107fa7f83b1003a6252980
+python-dateutil==2.9.0.post0 \
+    --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+urllib3==2.6.2 \
+    --hash=sha256:ec21cddfe7724fc7cb4ba4bea7aa8e2ef36f607a4bab81aa6ce42a13dc3f03dd

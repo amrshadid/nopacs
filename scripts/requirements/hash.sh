@@ -11,9 +11,9 @@
 # prints each package with all its hashes in the form pip install
 # --require-hashes reads. Copy the output under the file's header comment.
 #
-#   scripts/requirements/hash.sh <name> [python]     name: check-seal, check-server, client-python, proto, prove-deid, prove-reception, prove-reading
+#   scripts/requirements/hash.sh <name> [python]     name: check-seal, check-server, client-python, proto, prove-deid, prove-reception, prove-reading, prove-whole
 set -euo pipefail
-name="${1:?usage: scripts/requirements/hash.sh <name> [python], name being check-seal, check-server, client-python, proto, prove-deid, prove-reception or prove-reading}"
+name="${1:?usage: scripts/requirements/hash.sh <name> [python], name being check-seal, check-server, client-python, proto, prove-deid, prove-reception, prove-reading or prove-whole}"
 py="${2:-python3}"
 file="$(dirname "$0")/$name.txt"
 [ -f "$file" ] || { echo "hash.sh: no $file" >&2; exit 2; }

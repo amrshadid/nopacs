@@ -97,6 +97,12 @@ correction and a rebuild to the server (`internal/interrupt`); without it,
 prove-interrupt` builds with it, and the lint target runs once more with the
 tag.
 
+`make prove-whole` is an outside proof, not a Go test. Two of its groups
+(`versions`, `room`) start an S3 server (Silo, at the digest `S3_SILO_IMAGE`
+pins) in a container named for the run and remove it when the group ends; they
+need docker reachable through `DOCKER_HOST` and boto3
+(`scripts/requirements/prove-whole.txt`). Every other group needs no container.
+
 A test that measures at scale is named `TestScale*` and runs only in its own
 run, `make test-scale`; the ordinary run skips it. A test that needs a service
 asks for it through an environment variable below and skips when the variable
@@ -208,6 +214,7 @@ itself reads are listed first.
 | Variable | What it does | Default | Read by |
 |---|---|---|---|
 | `NOPACS_PROVE_STRICT` | `1`: a check of the proof that is skipped is a failure, as in CI. | `0` | `scripts/prove/run.sh`; set to `1` by `make ci` on Linux and by CI, not by `make prove` itself |
+| `NOPACS_PROVE_S3_SECRET` | The secret key the `versions` and `room` groups of `make prove-whole` hand the command line for the S3 server they start in a container (the command line reads a storage's secret from this variable, never from an argument). Set by those groups for the commands they run; nobody sets it by hand. | unset | `scripts/lib/nopacs_scripts/wholemore.py` |
 | `NOPACS_PROVE_BUILD` | `host` builds only this machine's binary, for a quicker run; the check of the static build for every target is then skipped. | `all` | `scripts/prove/run.sh` |
 | `NOPACS_PROVE_ONLY` | `reading` runs the builds and the sections that read the archive (13 to 19: an installation of their own built by sending public studies with dcmtk's `storescu`, then the catalog, metadata, downloads, DICOMweb and STOW-RS, the Python client and the refusals) alone, without Docker; their tenant on Postgres is then skipped. They need dcmtk (`DCMTK=` its directory) and a `PYTHON` with `scripts/requirements/check-server.txt` and `scripts/requirements/prove-reading.txt`. | unset: every section | `scripts/prove/run.sh` |
 | `NOPACS_PROVE_CRASHES` | How many times the crash check kills the server while it creates a tenant. | `24` | `scripts/prove/run.sh` |

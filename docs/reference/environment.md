@@ -72,6 +72,7 @@ These are for people who change the code. A test that needs an outside tool or a
 | `NOPACS_PROVE_PG_CONTAINER` | A running Postgres container (such as CI's service container) the proof uses instead of starting one. Needs `NOPACS_PROVE_PG_PORT`. |
 | `NOPACS_PROVE_PG_IMAGE` | The Postgres image the proof starts, when it starts its own container. |
 | `NOPACS_PROVE_PG_PORT` | The port of that container on `127.0.0.1`. |
+| `NOPACS_PROVE_S3_SECRET` | The secret key the `versions` and `room` groups of `make prove-whole` hand the command line for the S3 server they start in a container (the command line reads a storage's secret from this variable, never from an argument). Set by those groups for the commands they run; nobody sets it by hand. |
 | `NOPACS_PROVE_STRICT` | `1`: a check of the proof that is skipped is a failure, as in CI. |
 | `NOPACS_PYDICOM_CORPUS` | pydicom's `test_files` directory, from which the metadata comparison also receives implicit VR, big endian, padded, JPEG-LS and explicit big endian files, and whose files with pixel data the frame table comparison adds. |
 | `NOPACS_PYTHON` | The Python, with pynetdicom and pydicom, that the DICOM receiver's outside tests use, and that the held-file header test compares against pydicom's `to_json_dict` with. |

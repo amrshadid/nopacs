@@ -9,9 +9,10 @@ curl, dcmtk, scripts/prove/catalog_dump.py and scripts/prove/backup_open.py.
 Each check prints one line, "ok" or "FAIL", with what it saw; the run ends
 with a count and exits 1 when one failed.
 
-  whole.py --go GO --dcmtk DIR [--python PY] [--only rebuild,scrub,delete,restore,records]   (make prove-whole)
+  whole.py --go GO --dcmtk DIR [--python PY] [--docker PROGRAM] [--s3-image IMAGE] [--only GROUP,...]   (make prove-whole)
 
-Groups, each with its own installation and under three minutes on a laptop:
+Groups, each with its own installation and under three minutes on a laptop
+(those after records are in the modules whole_*.py beside this one):
   rebuild  a relabel and a replace made and checked on the storage, then the
            catalog made again from the storages by a restore and compared
            with the dump taken before (an empty diff)
@@ -22,12 +23,30 @@ Groups, each with its own installation and under three minutes on a laptop:
   restore  a backup restored into a destroyed data directory: a changed
            backup restores nothing, keys suspended, a later delete held
   records  a correction record written by hand is not applied by a rebuild
+  versions     purges on a bucket with versioning and object lock, a versioned
+               one set to keep versions, an unversioned one and a directory,
+               read by boto3 (an S3 server in a container)
+  fresh        a restore onto a fresh data directory: the losses per receiver,
+               the credentials to give again, the time taken
+  cursor       an event cursor from before a restore refused; the new history
+               begins with catalog_rebuilt
+  writer       one writer per storage across an export and an import
+  jobs         a 200-instance send meeting a delete and a replace
+  resolve      ResolveInstances through a replace, a delete and a relabel
+  references   a SEG's references found after corrections, in its tenant only
+  provenance   what the sidecar says of the bytes received three ways
+  client       a damaged 64 MiB instance on every read path, before and after
+               the scrub marks it
+  room         an object not online (InvalidObjectState, through a proxy to
+               the S3 server), a grace changed after a delete, one clock
 
-It needs no container: SQLite and a directory storage. The two database
-drivers and the object store are not switched here.
+Every group but two needs no container: SQLite and a directory storage.
+versions and room start an S3 server (Silo, the maintained fork of MinIO) in
+a container named for the run and remove it at the end; they need docker
+and boto3.
 
-Needs: Go, dcmtk, and a Python with pydicom and cryptography
-(scripts/requirements/prove-reception.txt).
+Needs: Go, dcmtk, openssl, and a Python with pydicom, pynetdicom,
+cryptography and boto3 (scripts/requirements/prove-whole.txt).
 """
 
 import argparse
@@ -47,6 +66,7 @@ from nopacs_scripts.digest import sha256_file
 from nopacs_scripts.paths import PROVE
 from nopacs_scripts.report import Failure
 from nopacs_scripts.whole import Proof, listing, make_study
+from nopacs_scripts.wholemore import SILO_IMAGE
 
 CORPUS_DEFAULT = wholekit.DEFAULT_CORPUS
 
@@ -463,7 +483,18 @@ def group_records(p):
 GROUPS = {"rebuild": group_rebuild, "scrub": group_scrub, "delete": group_delete, "restore": group_restore, "records": group_records}
 
 
+def all_groups():
+    """The groups of this module and those of the modules beside it, which
+    import this one for the scene, so they are joined here at run time."""
+    from nopacs_scripts.sections import whole_client, whole_host, whole_jobs, whole_refs, whole_room, whole_versions
+    out = dict(GROUPS)
+    for m in (whole_versions, whole_host, whole_jobs, whole_refs, whole_client, whole_room):
+        out.update(m.GROUPS)
+    return out
+
+
 def main(argv):
+    groups = all_groups()
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--go", default="go")
     ap.add_argument("--dcmtk", default="", help="the directory of dcmtk's programs")
@@ -471,21 +502,29 @@ def main(argv):
     ap.add_argument("--pydicom-corpus", default=os.environ.get("PYDICOM_TEST_FILES", CORPUS_DEFAULT), help="pydicom's test files directory")
     ap.add_argument("--binary", default="", help="a built nopacs to run, in place of building the working tree's; needs --server-binary")
     ap.add_argument("--server-binary", default="", help="a built nopacs-server to run, in place of building the working tree's")
-    ap.add_argument("--only", default="", help="groups to run, comma separated: %s (default all)" % ", ".join(GROUPS))
+    ap.add_argument("--docker", default="docker", help="the docker program the groups that need a container run (versions)")
+    ap.add_argument("--s3-image", default=SILO_IMAGE, help="the S3 server's image, MinIO's or a fork's (versions)")
+    ap.add_argument("--only", default="", help="groups to run, comma separated: %s (default all)" % ", ".join(groups))
     args = ap.parse_args(argv)
-    names = [n for n in args.only.split(",") if n] or list(GROUPS)
-    bad = [n for n in names if n not in GROUPS]
+    names = [n for n in args.only.split(",") if n] or list(groups)
+    bad = [n for n in names if n not in groups]
     if bad:
-        raise Failure("no group %s; groups are %s" % (bad, ", ".join(GROUPS)))
-    ok = failed = 0
+        raise Failure("no group %s; groups are %s" % (bad, ", ".join(groups)))
+    ok = failed = skipped = 0
     for n in names:
         p = Proof(args)
+        p.counts["skip"] = 0
         print("== %s" % n, flush=True)
         t0 = time.time()
         try:
-            GROUPS[n](p)
+            groups[n](p)
         finally:
             p.stop()
+            for f in getattr(p, "cleanups", []):
+                try:
+                    f()
+                except Exception as e:  # noqa: BLE001 - a peer or container already stopped is no failure of the run
+                    print("   (cleanup: %r)" % e, flush=True)
         print("   (%s took %.0f s)" % (n, time.time() - t0), flush=True)
         ok += p.counts["ok"]
         failed += p.counts["FAIL"]
@@ -493,8 +532,9 @@ def main(argv):
             print("the work directory is kept: %s" % p.work)
         else:
             subprocess.run(["rm", "-rf", p.work])
+        skipped += p.counts["skip"]
     print()
-    print("%d ok, %d FAIL" % (ok, failed))
+    print("%d ok, %d FAIL" % (ok, failed) + (", %d skip" % skipped if skipped else ""))
     if failed:
         return 1
 
