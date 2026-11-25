@@ -56,7 +56,10 @@ type Store interface {
 	// called, even when a Put replaces it meanwhile. The caller closes it.
 	Read(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
 
-	// Stat returns what is known of key without reading it, or NotFound.
+	// Stat returns what is known of key without reading it, or NotFound:
+	// its size, whether it reads at once (an object in a cold class is
+	// held, not missing), and the storage's own SHA-256 of it where the
+	// storage keeps one.
 	Stat(ctx context.Context, key string) (Info, error)
 
 	// List returns one page of the keys that begin with opts.Prefix, in
@@ -173,12 +176,42 @@ type Written struct {
 	Size int64
 	// SHA256 is the SHA-256 of the bytes written.
 	SHA256 [sha256.Size]byte
+	// Confirmed says the storage itself answered for every byte it kept, so
+	// reading the object back to verify a copy adds nothing: an S3 server,
+	// shown at open to refuse a wrong checksum, that checked and echoed the
+	// x-amz-checksum-sha256 of the one request, or of each part and then the
+	// composite checksum of those parts in order (a confirmation part by
+	// part, which together covers the whole object). False when only this
+	// process saw the bytes pass (a directory: what a read soon after gives
+	// may come from the kernel's cache, not the disk), when the storage
+	// answered less (a size and an ETag), or when it was never shown to
+	// check what it echoes.
+	Confirmed bool
 }
 
 // Info is what Stat knows of an object without reading it.
 type Info struct {
 	// Size is the object's size in bytes.
 	Size int64
+	// State is whether a Read of the object answers at once. A driver that
+	// keeps every object at hand leaves it Online, the zero value.
+	State OnlineState
+	// OnlineUntil is, for an object a recall brought back from a cold
+	// class, when it goes back there, as the store said; zero otherwise.
+	OnlineUntil time.Time
+	// SHA256 is the SHA-256 of the whole object as the storage itself keeps
+	// it, when HasSHA256 is set: what an S3 server computed and checked when
+	// the object was put in one request (x-amz-checksum-sha256, asked with
+	// the checksum mode), on a server shown at open to refuse a wrong
+	// checksum. It may confirm a copy's identity right after its put,
+	// trusting the storage's word. It never replaces a scrub's read: it was
+	// computed when the object was written, and the bytes may decay after.
+	// A storage that keeps none, keeps only a checksum of parts (an S3
+	// multipart object's composite checksum, "<digest>-<parts>"), or was
+	// never shown to check checksums leaves HasSHA256 false.
+	SHA256 [sha256.Size]byte
+	// HasSHA256 says SHA256 is the storage's.
+	HasSHA256 bool
 }
 
 // ListOptions says which keys List returns and from where.

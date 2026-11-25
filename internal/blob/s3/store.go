@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/ratelimit"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
 	"github.com/amrshadid/nopacs/internal/blob"
@@ -30,6 +32,11 @@ type Store struct {
 	notes  Notes
 	sweep  sweepState
 	purge  purgeState
+	// checksumsChecked is set at Open, before the store is returned, when
+	// the server refused an upload whose checksum was wrong (probeVerifies):
+	// only then is its echo or its HEAD's checksum taken as its word on the
+	// bytes (Written.Confirmed, Info.HasSHA256). Never changed after Open.
+	checksumsChecked bool
 }
 
 var _ blob.Store = (*Store)(nil)
@@ -57,6 +64,7 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 		return nil, err
 	}
 	if set.forReading {
+		s.notes.ChecksumUnchecked = true
 		return s, nil
 	}
 	if err := s.probeUpload(ctx); err != nil {
@@ -212,7 +220,11 @@ func (s *Store) Usage(ctx context.Context) (blob.Usage, error) {
 	return blob.Usage{}, nil
 }
 
-// Stat returns the size of key with a HEAD request.
+// Stat returns what a HEAD request says of key: its size, whether it reads
+// at once (x-amz-storage-class, x-amz-archive-status, x-amz-restore), and,
+// asked with the checksum mode, the SHA-256 the server checked when the
+// object was put in one request (see infoOf). A server that does not know
+// the checksum mode ignores it and sends no checksum.
 func (s *Store) Stat(ctx context.Context, key string) (blob.Info, error) {
 	if err := s.begin(ctx, "the stat"); err != nil {
 		return blob.Info{}, err
@@ -225,11 +237,15 @@ func (s *Store) Stat(ctx context.Context, key string) (blob.Info, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.set.callTimeout)
 	defer cancel()
-	out, err := s.client.HeadObject(ctx, &awss3.HeadObjectInput{Bucket: aws.String(s.set.bucket), Key: s.object(key)})
+	out, err := s.client.HeadObject(ctx, &awss3.HeadObjectInput{Bucket: aws.String(s.set.bucket), Key: s.object(key), ChecksumMode: types.ChecksumModeEnabled})
 	if err != nil {
 		return blob.Info{}, fail(ctx, err, "the stat")
 	}
-	return blob.Info{Size: aws.ToInt64(out.ContentLength)}, nil
+	info := infoOf(out)
+	if !s.checksumsChecked {
+		info.SHA256, info.HasSHA256 = [sha256.Size]byte{}, false
+	}
+	return info, nil
 }
 
 // Delete removes key with a DELETE request, which S3 answers with success

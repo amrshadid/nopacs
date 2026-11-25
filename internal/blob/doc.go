@@ -30,6 +30,22 @@
 //     nothing, Invalid for a key, prefix, range or page that is wrong as
 //     written, Unavailable for a storage that cannot be reached or written
 //     now.
+//   - An object a storage holds in a cold class is held, not missing: Stat
+//     says whether it reads at once (Info.State), a Read of it fails with
+//     ErrNotOnline in its chain, and Recall, which every driver implements,
+//     brings it back for a time.
+//
+// # What a driver may offer
+//
+// A storage that can do more says so through an optional interface a
+// caller asserts, the narrowest it needs: PurgeExpecter, VersionPurger,
+// DirPruner, EncryptionReporter (whether the storage says it encrypts at
+// rest). Stat gives the storage's own SHA-256 of an object where it keeps
+// one (Info.HasSHA256), and Put says when the storage itself answered for
+// the checksum of what it kept (Written.Confirmed), so a copy can be
+// verified without reading it back. PutConfirmed puts bytes known
+// beforehand, on any driver, and refuses them, keeping nothing, when they
+// are not the size and SHA-256 expected.
 //
 // # What this package must never do
 //

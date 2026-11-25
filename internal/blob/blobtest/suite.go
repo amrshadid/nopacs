@@ -35,6 +35,15 @@ type Driver struct {
 	// Versioned says the store keeps older versions of an object (a
 	// versioned bucket), so a purge may answer several removals, or hidden.
 	Versioned bool
+	// KeepsSHA256 says Stat gives the storage's own SHA-256 of an object put
+	// in one request (Info.HasSHA256). The suite holds it to what it says,
+	// and the checksum to the bytes.
+	KeepsSHA256 bool
+	// ConfirmsPuts says the storage itself answers for every byte of a small
+	// object it was put, one request whose SHA-256 it checked
+	// (Written.Confirmed); the suite holds it to what it says for such an
+	// object. Larger objects may be confirmed part by part or not at all.
+	ConfirmsPuts bool
 }
 
 // Run runs the whole contract suite against the stores d opens. Each test
@@ -69,6 +78,10 @@ func Run(t *testing.T, d Driver) {
 		{"PutDeleteRace", testPutDeleteRace},
 		{"SiblingsRace", testSiblingsRace},
 		{"NewParentsAtOnce", testNewParentsAtOnce},
+		{"StatState", testStatState},
+		{"Recall", testRecall},
+		{"PutConfirmed", testPutConfirmed},
+		{"Encryption", testEncryption},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

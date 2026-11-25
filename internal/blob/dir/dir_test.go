@@ -40,7 +40,9 @@ func openTemp(tb testing.TB) *Store {
 
 // TestSuite guards that the directory driver keeps the storage contract,
 // declaring what a file system cannot do: one name cannot be an object and
-// a prefix at once.
+// a prefix at once. A directory keeps no checksum of its own and confirms
+// no put beyond what this process saw pass (KeepsSHA256 and ConfirmsPuts
+// false).
 func TestSuite(t *testing.T) {
 	blobtest.Run(t, blobtest.Driver{
 		Open:         func(tb testing.TB) blob.Store { return openTemp(tb) },

@@ -501,6 +501,9 @@ func TestChecksumHeaders(t *testing.T) {
 
 func checksumHeaders(t *testing.T, f *fakeS3) {
 	s := openFake(t, f, func(c *Config) { c.PartSize = MinPartSize })
+	// Open's puts are left out: the second carries a wrong checksum on
+	// purpose, to see the server refuse it.
+	opened := len(f.requests())
 	ctx := context.Background()
 	small := blobtest.PatternBytes(1, 1000)
 	big := blobtest.PatternBytes(2, 2*MinPartSize+5)
@@ -511,7 +514,7 @@ func checksumHeaders(t *testing.T, f *fakeS3) {
 		}
 	}
 	puts := 0
-	for _, r := range f.requests() {
+	for _, r := range f.requests()[opened:] {
 		if r.method != http.MethodPut {
 			if r.method == http.MethodPost && r.query.Has("uploads") {
 				if got := r.header.Get("x-amz-checksum-algorithm"); got != "SHA256" {
@@ -536,8 +539,8 @@ func checksumHeaders(t *testing.T, f *fakeS3) {
 			t.Errorf("PUT sent no body")
 		}
 	}
-	if puts != 5 {
-		t.Errorf("saw %d PUTs, want the probe at Open, 1 for the small object and 3 parts for the big", puts)
+	if puts != 4 {
+		t.Errorf("saw %d PUTs, want 1 for the small object and 3 parts for the big", puts)
 	}
 	for _, r := range f.requests() {
 		if r.method == http.MethodPost && r.query.Has("uploadId") && !bytes.Contains(r.body, []byte("<ChecksumSHA256>")) {

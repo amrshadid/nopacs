@@ -79,7 +79,9 @@ var knownCodes = map[string]bool{
 	"RequestTimeTooSkewed": true, "RequestTimeout": true, "ServiceUnavailable": true, "SignatureDoesNotMatch": true,
 	"SlowDown": true, "TemporaryRedirect": true, "XAmzContentSHA256Mismatch": true, "InvalidBucketName": true,
 	"Conflict": true, "OperationAborted": true, "KeyTooLongError": true,
-	"InvalidObjectState": true,
+	"InvalidObjectState": true, "RestoreAlreadyInProgress": true, "ObjectAlreadyInActiveTierError": true,
+	"GlacierExpeditedRetrievalNotAvailable": true, "ServerSideEncryptionConfigurationNotFoundError": true,
+	"XAmzContentChecksumMismatch": true,
 }
 
 // closedError is what every call gives once the store is closed.
@@ -164,7 +166,7 @@ func failCode(code string, status int, what string) error {
 		code == "InvalidAccessKeyId", code == "InvalidToken", code == "SignatureDoesNotMatch",
 		code == "RequestTimeTooSkewed", status == http.StatusUnauthorized, status == http.StatusForbidden:
 		return fault.Wrap(fault.Unavailable, inClass(ErrRefused, cause), what+" failed: the storage refused the credentials it was given or their permissions")
-	case code == "BadDigest", code == "XAmzContentSHA256Mismatch", code == "InvalidDigest", code == "IncompleteBody":
+	case code == "BadDigest", code == "XAmzContentSHA256Mismatch", code == "XAmzContentChecksumMismatch", code == "InvalidDigest", code == "IncompleteBody":
 		return fault.Wrap(fault.Unavailable, inClass(ErrWrongAnswer, cause), what+" failed: the storage found the bytes damaged in transit")
 	case code == "EntityTooLarge", code == "KeyTooLongError":
 		return fault.Wrap(fault.Invalid, inClass(ErrRefused, cause), what+" failed: the storage refused the object's size or name")

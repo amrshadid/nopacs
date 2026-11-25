@@ -37,6 +37,13 @@ type putJob struct {
 	// held is the bytes of the store's budget this Put holds. Only the
 	// goroutine that runs Put changes it.
 	held int64
+	// confirmed is set when a server whose checksums Open tested
+	// (Store.checksumsChecked) answered for every byte: the echo of one
+	// request's checksum, the whole object's SHA-256; or, for a multipart
+	// upload, each part's echoed SHA-256 and a composite checksum equal to
+	// the one of those parts in order, which confirms the object part by
+	// part. A HEAD's size and ETag alone confirm nothing.
+	confirmed bool
 }
 
 // Put writes r to key whole or not at all; see blob.Store. An object of at
@@ -89,7 +96,7 @@ func (s *Store) Put(ctx context.Context, key string, r io.Reader) (blob.Written,
 }
 
 func (j *putJob) written() blob.Written {
-	w := blob.Written{Size: j.size}
+	w := blob.Written{Size: j.size, Confirmed: j.confirmed}
 	j.hash.Sum(w.SHA256[:0])
 	return w
 }
@@ -155,7 +162,11 @@ func (j *putJob) putObject(ctx context.Context, b []byte) error {
 	if err != nil {
 		return fail(ctx, err, "the put")
 	}
-	return confirmed(out.ChecksumSHA256, sum)
+	if err := confirmed(out.ChecksumSHA256, sum); err != nil {
+		return err
+	}
+	j.confirmed = j.s.checksumsChecked
+	return nil
 }
 
 // confirmed checks a server's echo of the SHA-256 of what it was sent. The
@@ -367,6 +378,7 @@ func (j *putJob) confirmComplete(ctx context.Context, done *awss3.CompleteMultip
 		if want := fmt.Sprintf("%s-%d", base64.StdEncoding.EncodeToString(h.Sum(nil)), len(parts)); got != want {
 			return fault.Wrap(fault.Unavailable, errMalformed, "the put failed: the storage kept an object whose checksum is not that of the parts sent")
 		}
+		j.confirmed = j.s.checksumsChecked
 		return nil
 	}
 	head, err := j.s.client.HeadObject(ctx, &awss3.HeadObjectInput{Bucket: aws.String(j.s.set.bucket), Key: j.key})

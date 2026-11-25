@@ -1,10 +1,12 @@
 package s3
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -69,6 +71,13 @@ type Notes struct {
 	// ProbeLeft is true when the small object Open wrote to check the server,
 	// whose name no key of the port can have, could not be deleted.
 	ProbeLeft bool
+	// ChecksumUnchecked is true when the server did not refuse, at Open, an
+	// upload whose x-amz-checksum-sha256 was deliberately wrong, or the test
+	// could not be made (a store opened for reading makes none). Its echo
+	// then proves only that it repeats what it was sent: Put still requires
+	// it, but Written.Confirmed and Info.HasSHA256 stay false, so a copy is
+	// read back rather than taken on the server's word.
+	ChecksumUnchecked bool
 }
 
 // Notes returns what Open found and did not treat as a failure.
@@ -239,12 +248,49 @@ func (s *Store) probeUpload(ctx context.Context) error {
 		return fault.Wrap(fault.Invalid, errNotConfirmed, "opening the storage failed: the server does not return the checksum of an object it stores, which this driver needs to know an upload was kept")
 	case isCode(err, "AccessDenied") || isCode(err, "AllAccessDisabled"):
 		s.notes.WriteUnchecked = true
+		s.notes.ChecksumUnchecked = true
 		return nil
 	default:
 		return openError(err)
 	}
 	s.deleteProbe(ctx, key)
+	s.checksumsChecked = s.probeVerifies(ctx, key)
+	s.notes.ChecksumUnchecked = !s.checksumsChecked
 	return nil
+}
+
+// badDigestCodes are the codes a server answers an upload whose checksum is
+// not that of its body with: BadDigest (Amazon S3,
+// docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html),
+// XAmzContentChecksumMismatch (MinIO and its forks), and the SHA-256 payload
+// mismatch.
+var badDigestCodes = []string{"BadDigest", "XAmzContentChecksumMismatch", "XAmzContentSHA256Mismatch"}
+
+// probeVerifies puts the probe again with an x-amz-checksum-sha256 that is
+// not its body's, and reports whether the server refused it as a checksum
+// mismatch. A server that echoes a checksum without computing it passes
+// probeUpload and fails here: its echo is then not its word on the bytes,
+// and nothing is confirmed by it alone. A probe the server kept is deleted.
+// Any answer but a mismatch, a refusal of the credentials included, counts
+// as not verified: the claim is made only when it was seen.
+func (s *Store) probeVerifies(ctx context.Context, key *string) bool {
+	body := []byte("nopacs open probe")
+	pctx, cancel := context.WithTimeout(ctx, s.set.callTimeout)
+	defer cancel()
+	_, err := s.client.PutObject(pctx, &awss3.PutObjectInput{
+		Bucket:            aws.String(s.set.bucket),
+		Key:               key,
+		Body:              bytes.NewReader(body),
+		ContentLength:     aws.Int64(int64(len(body))),
+		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+		ChecksumSHA256:    aws.String(checksum([]byte("other bytes than the body"))),
+	})
+	if err == nil {
+		s.deleteProbe(ctx, key)
+		return false
+	}
+	code, _ := apiError(err)
+	return slices.Contains(badDigestCodes, code)
 }
 
 func (s *Store) deleteProbe(ctx context.Context, key *string) {

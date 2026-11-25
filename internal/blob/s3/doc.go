@@ -42,16 +42,41 @@
 // the server computed and reported the checksum of every part and of the
 // whole object over the bytes it was sent; on a server that echoes but gives
 // no composite, it means the same for every part, and that the object exists
-// with the right size and ETag. Neither is a read-back of the object: a
-// server that reports a checksum it did not compute is not caught here, which
-// is what the archive's own verification by reading is for.
+// with the right size and ETag. Neither is a read-back of the object, and an
+// echo alone proves only that the server repeats what it was sent.
 //
 // Open puts a small object under the prefix, with a name no key of the port
 // can have, and deletes it, to see that the server echoes. That needs the
 // right to write at Open, which is acceptable because a server that does not
 // echo would fail every Put, each with a message that says less; credentials
 // that may not write still open the storage, and Store.Notes says the check
-// was not made.
+// was not made. Open then puts it again with a checksum that is not its
+// body's, and the server must refuse it as a mismatch (BadDigest, or
+// XAmzContentChecksumMismatch from MinIO and its forks): only then is the
+// server shown to compute what it echoes. On such a server the first case
+// above sets Written.Confirmed and Stat gives the server's checksum; on any
+// other, a store opened for reading included, neither is given
+// (Notes.ChecksumUnchecked), and a copy is verified by reading it back.
+//
+// Stat asks HEAD with the checksum mode (x-amz-checksum-mode: ENABLED), and
+// gives the server's SHA-256 of an object put in one request. An object put
+// in parts has only a composite checksum, which is not the object's own, and
+// Stat gives none for it. The checksum was computed when the object was put;
+// it confirms a copy's identity right after the put and never replaces a
+// scrub's read of bytes that may have decayed since.
+//
+// # Cold classes
+//
+// A bucket's own lifecycle rule may move objects to GLACIER or DEEP_ARCHIVE,
+// or an Intelligent-Tiering archive tier; the driver never sets a class.
+// Stat reads x-amz-storage-class, x-amz-archive-status and x-amz-restore
+// into Info.State, a class it does not know as online; a GET of a cold
+// object answers InvalidObjectState, read as blob.ErrNotOnline. Recall is
+// RestoreObject, asked unless a restore runs or the class is one known to
+// read at once; an answer that no restore is needed is believed only when a
+// second HEAD shows the object online. Encryption reads GetBucketEncryption
+// when asked, never at Open, so a store opened per read costs no extra
+// request.
 //
 // # Memory
 //

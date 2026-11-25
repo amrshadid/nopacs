@@ -277,6 +277,13 @@ the code before this release is in github.com/amrshadid/coria.
   proxy (`scripts/prove/s3_stub.py`), a comparison of two storage trees
   (`tree_compare.py`), and a test-only clock (`internal/clock`, build tag
   `clock`) with its offset helper (`clock_offset.py`).
+- The storage port tells whether an object reads at once (online, archived,
+  restoring, with a recalled copy's expiry), recalls one from a cold S3 class
+  (asked once, and only when the object is cold), gives the store's own SHA-256
+  of an object and says when a put was confirmed by the store itself, both only
+  on a server shown at open to refuse a wrong checksum, puts bytes only when
+  they are the size and SHA-256 expected, and reports an S3 bucket's default
+  encryption.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

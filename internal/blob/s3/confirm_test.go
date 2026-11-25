@@ -20,7 +20,8 @@ import (
 // either the right composite checksum or, when the server gives none, a HEAD
 // that shows the object with the size and ETag put. A bare 200, an error
 // body under a 200, a wrong key and a wrong checksum are each a failure, with
-// the upload aborted.
+// the upload aborted. Written.Confirmed is set only when the server answered
+// for the whole object's checksum, never on the HEAD alone.
 func TestPutSuccessNeedsConfirmation(t *testing.T) {
 	const part = MinPartSize
 	ctx := context.Background()
@@ -130,6 +131,11 @@ func TestPutSuccessNeedsConfirmation(t *testing.T) {
 			}
 			if got := f.count(http.MethodHead, "") - headsBefore; got != c.heads {
 				t.Errorf("the Put made %d HEADs, want %d", got, c.heads)
+			}
+			// Written.Confirmed only when the server answered for the whole
+			// object's checksum, not when a HEAD showed its size and ETag.
+			if w.Confirmed != (c.heads == 0) {
+				t.Errorf("Written.Confirmed = %v, want %v", w.Confirmed, c.heads == 0)
 			}
 		})
 	}

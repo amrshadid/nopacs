@@ -55,6 +55,9 @@ type fakeS3 struct {
 	badCRC atomic.Bool
 	// badEcho makes every PUT answer with a checksum that is not the one sent.
 	badEcho atomic.Bool
+	// noVerify makes the fake keep an object whatever its checksum says,
+	// and echo the checksum sent, as a server that never computes one.
+	noVerify atomic.Bool
 	// hits counts requests, for hooks that fail the first few.
 	hits atomic.Int64
 
@@ -215,6 +218,13 @@ func (f *fakeS3) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"part`+q.Get("partNumber")+`"`)
 		w.Header().Set("x-amz-checksum-sha256", f.echo(r))
 	case r.Method == http.MethodPut:
+		// A server that checks checksums refuses a body whose SHA-256 is not
+		// the one sent, before it keeps anything; noVerify makes the fake one
+		// that only repeats what it was sent.
+		if c := r.Header.Get("x-amz-checksum-sha256"); c != "" && c != sha256b64(body) && !f.noVerify.Load() {
+			xmlError(w, http.StatusBadRequest, "BadDigest", "the checksum does not match")
+			return
+		}
 		f.mu.Lock()
 		f.objects[key] = body
 		f.mu.Unlock()
@@ -300,6 +310,11 @@ func (f *fakeS3) serve(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("x-amz-checksum-crc32", "AAAAAA==")
 		}
 		if r.Method == http.MethodHead {
+			// Asked with the checksum mode, a server that keeps checksums
+			// answers the object's own.
+			if r.Header.Get("x-amz-checksum-mode") == "ENABLED" {
+				w.Header().Set("x-amz-checksum-sha256", sha256b64(obj))
+			}
 			return
 		}
 		_, _ = w.Write(obj)

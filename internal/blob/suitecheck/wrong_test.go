@@ -35,9 +35,12 @@ const (
 	failDropsOld      flaw = "failed-put-drops-the-old-object"
 	anyKey            flaw = "accepts-any-key"
 	staleStat         flaw = "stat-sees-deleted-keys"
+	staleStoreSum     flaw = "stat-keeps-the-first-checksum"
+	recallMissing     flaw = "recall-answers-online-for-nothing"
+	failedPutCommits  flaw = "put-commits-when-its-input-fails"
 )
 
-var flaws = []flaw{partialReplace, wrongChecksum, nextOnFullPage, liveRead, unstableOrder, commitOnCancel, deleteTakesPrefix, failDropsOld, anyKey, staleStat}
+var flaws = []flaw{partialReplace, wrongChecksum, nextOnFullPage, liveRead, unstableOrder, commitOnCancel, deleteTakesPrefix, failDropsOld, anyKey, staleStat, staleStoreSum, recallMissing, failedPutCommits}
 
 // flawEnv names the variable that makes this test binary, run again by
 // TestSuiteCatchesWrongDrivers, run the suite against one flawed driver.
@@ -47,7 +50,7 @@ const flawEnv = "NOPACS_BLOBTEST_FLAW"
 // blob.Store's documentation alone, passes the suite: the suite asks for
 // nothing a bucket or a map could not do.
 func TestSuiteOnMemory(t *testing.T) {
-	blobtest.Run(t, blobtest.Driver{Open: openMem(noFlaw)})
+	blobtest.Run(t, blobtest.Driver{Open: openMem(noFlaw), KeepsSHA256: true})
 }
 
 // TestSuiteCatchesWrongDrivers guards the suite itself: run against an
@@ -77,11 +80,13 @@ func TestFlawedDriverChild(t *testing.T) {
 	if f == noFlaw {
 		t.Skip("run by TestSuiteCatchesWrongDrivers")
 	}
-	blobtest.Run(t, blobtest.Driver{Open: openMem(f)})
+	blobtest.Run(t, blobtest.Driver{Open: openMem(f), KeepsSHA256: true})
 }
 
 func openMem(f flaw) func(testing.TB) blob.Store {
-	return func(testing.TB) blob.Store { return &mem{m: map[string][]byte{}, flaw: f, deleted: map[string]bool{}} }
+	return func(testing.TB) blob.Store {
+		return &mem{m: map[string][]byte{}, sums: map[string][sha256.Size]byte{}, flaw: f, deleted: map[string]bool{}}
+	}
 }
 
 // mem is an in-memory blob.Store. Objects are byte slices that are never
@@ -89,6 +94,7 @@ func openMem(f flaw) func(testing.TB) blob.Store {
 type mem struct {
 	mu      sync.Mutex
 	m       map[string][]byte
+	sums    map[string][sha256.Size]byte // the store's own checksum of each object
 	deleted map[string]bool
 	flaw    flaw
 	closed  bool
@@ -150,6 +156,11 @@ func (s *mem) Put(ctx context.Context, key string, r io.Reader) (blob.Written, e
 			break
 		}
 		if err != nil {
+			if s.flaw == failedPutCommits {
+				s.mu.Lock()
+				s.m[key] = slices.Clone(buf.Bytes())
+				s.mu.Unlock()
+			}
 			return blob.Written{}, err
 		}
 	}
@@ -159,6 +170,9 @@ func (s *mem) Put(ctx context.Context, key string, r io.Reader) (blob.Written, e
 	b := buf.Bytes()
 	s.mu.Lock()
 	s.m[key] = b
+	if _, ok := s.sums[key]; !ok || s.flaw != staleStoreSum {
+		s.sums[key] = sha256.Sum256(b)
+	}
 	delete(s.deleted, key)
 	s.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -237,7 +251,27 @@ func (s *mem) Stat(ctx context.Context, key string) (blob.Info, error) {
 		}
 		return blob.Info{}, fault.New(fault.NotFound, "no object")
 	}
-	return blob.Info{Size: int64(len(b))}, nil
+	return blob.Info{Size: int64(len(b)), SHA256: s.sums[key], HasSHA256: true}, nil
+}
+
+// Recall answers online for an object held: memory reads at once.
+func (s *mem) Recall(ctx context.Context, key string, req blob.RecallRequest) (blob.Recall, error) {
+	if err := s.begin(ctx); err != nil {
+		return blob.Recall{}, err
+	}
+	if err := s.checkKey(key); err != nil {
+		return blob.Recall{}, err
+	}
+	if err := blob.CheckRecall(req); err != nil {
+		return blob.Recall{}, err
+	}
+	s.mu.Lock()
+	_, ok := s.m[key]
+	s.mu.Unlock()
+	if !ok && s.flaw != recallMissing {
+		return blob.Recall{}, fault.New(fault.NotFound, "no object")
+	}
+	return blob.Recall{State: blob.RecallOnline}, nil
 }
 
 func (s *mem) List(ctx context.Context, o blob.ListOptions) (blob.Page, error) {
