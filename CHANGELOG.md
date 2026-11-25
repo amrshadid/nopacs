@@ -273,6 +273,10 @@ the code before this release is in github.com/amrshadid/coria.
   rebuild job a server had not ended no longer blocks a restore, a reconcile or
   an import: it is canceled and its shadow removed. `serve`, `backup create` and
   `tenant import` check the restore and reconcile markers again under the lock.
+- Proof tools for archive tiers, replicas and retention: an archive-tier S3
+  proxy (`scripts/prove/s3_stub.py`), a comparison of two storage trees
+  (`tree_compare.py`), and a test-only clock (`internal/clock`, build tag
+  `clock`) with its offset helper (`clock_offset.py`).
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

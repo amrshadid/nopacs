@@ -11,6 +11,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/api"
 	"github.com/amrshadid/nopacs/internal/backup"
 	"github.com/amrshadid/nopacs/internal/checkedread"
+	"github.com/amrshadid/nopacs/internal/clock"
 	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/deid/check"
 	"github.com/amrshadid/nopacs/internal/deidjob"
@@ -110,7 +111,7 @@ func APIServices(d Deps) (Built, error) {
 			driver.SQLiteDriver:   driver.SQLiteTenants{DataDir: d.DataDir},
 			driver.PostgresDriver: driver.PostgresTenants{},
 		},
-		Now:         time.Now,
+		Now:         clock.Now,
 		Interval:    TenantCheckInterval,
 		OpenTimeout: TenantOpenTimeout,
 		PingTimeout: TenantPingTimeout,
@@ -229,7 +230,7 @@ func APIServices(d Deps) (Built, error) {
 		closeRegistry(reg)
 		return Built{}, err
 	}
-	h, err := api.New(api.Config{Access: d.Access, Registry: reg, Master: d.Master, NewID: server.NewID, Log: d.Log, Keys: d.Keys, Now: time.Now,
+	h, err := api.New(api.Config{Access: d.Access, Registry: reg, Master: d.Master, NewID: server.NewID, Log: d.Log, Keys: d.Keys, Now: clock.Now,
 		Receivers: receiverHealth{sup}, Live: receiverHealth{sup}, Feeds: feeds, Incoming: pipelineDecisions{sup}, Headers: heldHeaders{sup}, HeldFiles: heldHeaders{sup}, STOW: stowReceivers,
 		Reads: reads, SenderHealths: senderHealths{s: senders, deid: deids, scrub: scrubs, imports: imports, rebuilds: rebuilds}, SenderTests: senderTests{senders}, DeidMemory: deidMemory,
 		Installation: installation, ImportGuarded: importGuarded(d.DataDir), Corrections: engines, ReplaceSources: pipes,
@@ -238,7 +239,7 @@ func APIServices(d Deps) (Built, error) {
 		closeRegistry(reg)
 		return Built{}, err
 	}
-	counts := &stateCounts{master: d.Master, registry: reg, now: time.Now}
+	counts := &stateCounts{master: d.Master, registry: reg, now: clock.Now}
 	return Built{
 		Register:       h.Register,
 		Methods:        api.Methods{},

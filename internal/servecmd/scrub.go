@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/amrshadid/nopacs/internal/checkedread"
+	"github.com/amrshadid/nopacs/internal/clock"
 	"github.com/amrshadid/nopacs/internal/place"
 	"github.com/amrshadid/nopacs/internal/registry"
 	"github.com/amrshadid/nopacs/internal/scrub"
@@ -31,6 +32,7 @@ func newScrubs(d Deps, reg *registry.Registry, wake func(tenantName string), rea
 			return checkedread.NewStores(opener, tenantID, p, name)
 		},
 		Reads:    reads,
+		Now:      clock.Now,
 		NewID:    server.NewID,
 		Wake:     wake,
 		Logger:   d.Log,

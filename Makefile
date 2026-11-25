@@ -170,6 +170,7 @@ lint: $(filter $(TOOLS)/%,$(GOLANGCI_LINT))
 	GOOS=windows $(GOLANGCI_LINT) run ./...
 	GOOS=darwin $(GOLANGCI_LINT) run ./...
 	$(GOLANGCI_LINT) run --build-tags interrupt ./internal/interrupt/... ./internal/correct/... ./internal/rebuild/...
+	$(GOLANGCI_LINT) run --build-tags clock ./internal/clock/...
 
 vuln: $(filter $(TOOLS)/%,$(GOVULNCHECK))
 	$(GOVULNCHECK) -version
@@ -557,6 +558,9 @@ check-prove-tools:
 	OPENSSL="$(OPENSSL)" "$(PYTHON)" scripts/prove/audit_verify.py --self-test
 	"$(PYTHON)" scripts/prove/backup_open.py --self-test
 	"$(PYTHON)" scripts/prove/catalog_dump.py --self-test
+	"$(PYTHON)" scripts/prove/s3_stub.py --self-test
+	"$(PYTHON)" scripts/prove/tree_compare.py --self-test
+	GO="$(GO)" "$(PYTHON)" scripts/prove/clock_offset.py --self-test
 
 # Sending's speed: a scan of 64 small instances to an in-process DIMSE and
 # STOW-RS peer, three runs of twenty jobs each.

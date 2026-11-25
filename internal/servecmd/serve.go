@@ -16,6 +16,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/access"
 	"github.com/amrshadid/nopacs/internal/backup"
+	"github.com/amrshadid/nopacs/internal/clock"
 	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/driver"
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -345,7 +346,7 @@ func open(ctx context.Context, opts Options, f serveFlags, dir, keyPath string, 
 	var tenantNetworks access.TenantNetworks
 	values := settingvalue.Reader{Master: m}
 	a, err = access.New(access.Config{
-		Store: m, Clock: time.Now, NewID: server.NewID, Log: log,
+		Store: m, Clock: clock.Now, NewID: server.NewID, Log: log,
 		Events: access.LogEvents(log),
 		TenantNetworks: func(ctx context.Context, t access.TenantRef) (settings.Networks, error) {
 			if tenantNetworks == nil {

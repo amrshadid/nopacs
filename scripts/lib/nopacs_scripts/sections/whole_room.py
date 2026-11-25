@@ -5,100 +5,28 @@ GET of an archived object), a grace period changed after a delete, and two
 data sets whose file dates lie (one shifted by the profile, one ten years
 back) purged by the server's clock alone.
 
-The cold object is made by a short Python proxy in front of the S3 server of
-the versions group (Silo in a container named for the run): it passes every
-request on, but answers a GET of one key as S3 answers one of an object in
-an archive class (docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html,
+The cold object is made by the archive-tier proxy (nopacs_scripts.tools.s3_stub)
+in front of the S3 server of the versions group (Silo in a container named for
+the run): it passes every request on, but answers a GET of one key as S3
+answers one of an object in an archive class
+(docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html,
 InvalidObjectState, 403).
 
   room  not online, a grace changed after a delete, one clock (needs docker)
 """
 
 import datetime
-import http.client
 import os
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from pydicom import dcmread
 
-from nopacs_scripts.net import free_ports
+from nopacs_scripts.net import free_port
 from nopacs_scripts.report import Failure
 from nopacs_scripts.sections.whole import instance_route, tallies
+from nopacs_scripts.tools.s3_stub import ArchiveProxy
 from nopacs_scripts.whole import make_study
 from nopacs_scripts.wholemore import S3Server, SECRET_ENV, receiver
-
-COLD = (b'<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>InvalidObjectState</Code><Message>The operation is not valid for the '
-        b"object's storage class</Message><StorageClass>GLACIER</StorageClass></Error>")
-HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection"}
-
-
-class ColdProxy:
-    """A proxy on a loopback port that passes each request to the S3 server
-    as it came (the Host header kept, so the signature still holds), but
-    answers a GET of the path in cold with InvalidObjectState."""
-
-    def __init__(self, port, upstream_port):
-        self.cold = set()
-        self.refused = 0
-        proxy = self
-
-        class Handler(BaseHTTPRequestHandler):
-            protocol_version = "HTTP/1.1"
-
-            def log_message(self, *a):
-                pass
-
-            def body(self):
-                if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
-                    out = b""
-                    while True:
-                        n = int(self.rfile.readline().split(b";")[0].strip() or b"0", 16)
-                        if n == 0:
-                            self.rfile.readline()
-                            return out
-                        out += self.rfile.read(n)
-                        self.rfile.readline()
-                n = int(self.headers.get("Content-Length", 0) or 0)
-                return self.rfile.read(n) if n else b""
-
-            def relay(self):
-                data = self.body()
-                if self.command == "GET" and self.path.split("?")[0] in proxy.cold:
-                    proxy.refused += 1
-                    self.send_response(403)
-                    self.send_header("Content-Type", "application/xml")
-                    self.send_header("Content-Length", str(len(COLD)))
-                    self.end_headers()
-                    self.wfile.write(COLD)
-                    return
-                c = http.client.HTTPConnection("127.0.0.1", upstream_port, timeout=60)
-                headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
-                if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
-                    headers["Content-Length"] = str(len(data))
-                c.request(self.command, self.path, body=data if data or self.command in ("PUT", "POST") else None, headers=headers)
-                r = c.getresponse()
-                answer = r.read()
-                self.send_response(r.status)
-                for k, v in r.getheaders():
-                    if k.lower() not in HOP and k.lower() != "content-length":
-                        self.send_header(k, v)
-                self.send_header("Content-Length", str(len(answer)))
-                self.end_headers()
-                if self.command != "HEAD":
-                    self.wfile.write(answer)
-                c.close()
-
-            do_GET = do_PUT = do_POST = do_DELETE = do_HEAD = relay
-
-        self.server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-        self.port = port
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
-
-    def stop(self):
-        self.server.shutdown()
-        self.server.server_close()
 
 
 def purge_time(p, cid):
@@ -118,10 +46,10 @@ def group_room(p):
     p.cleanups = [s3.stop]
     s3.start()
     s3.client().create_bucket(Bucket="cold")
-    proxy_port, cold_port = free_ports(2)
-    proxy = ColdProxy(proxy_port, s3.port)
+    cold_port = free_port()
+    proxy = ArchiveProxy(s3.port)
     p.cleanups.append(proxy.stop)
-    endpoint = "http://127.0.0.1:%d" % proxy_port
+    endpoint = proxy.endpoint
     p.m("setting", "set", "storage.s3-endpoints", endpoint + " plain-http private-address")
     os.environ[SECRET_ENV] = s3.secret
     p.m("storage", "add", "lab", "cold", "--type", "s3", "--endpoint", endpoint, "--region", "us-east-1", "--bucket", "cold",
@@ -133,7 +61,7 @@ def group_room(p):
         raise Failure("the cold scene: %d of 2 answered success, %d held" % (n, len(p.held())))
     rows = p.held()
     target, other = rows[0], rows[1]
-    proxy.cold.add("/cold/" + target["storage_key"])
+    proxy.archive("/cold/" + target["storage_key"])
     code, _, body, _ = p.curl(instance_route(target))
     code2, _, body2, _ = p.curl(instance_route(other))
     p.result("17 an object the store answers InvalidObjectState: the read answers unavailable, not_online, and the other instance is served (curl)",

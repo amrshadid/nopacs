@@ -97,6 +97,8 @@ correction and a rebuild to the server (`internal/interrupt`); without it,
 prove-interrupt` builds with it, and the lint target runs once more with the
 tag.
 
+The build tag `clock` makes the server's time movable (`internal/clock`): without it `clock.Now` is `time.Now`; with it, the offset in `NOPACS_CLOCK_OFFSET` or `NOPACS_CLOCK_FILE` is added to points in time, while waits and deadlines stay on real time. `scripts/prove/s3_stub.py` is an archive tier for the proofs (a proxy in front of a real S3 server that answers a GET of an archived key with 403 InvalidObjectState, shows `x-amz-storage-class` and `x-amz-restore`, and starts and completes restores, with a control port); `scripts/prove/tree_compare.py` compares two trees (directories or `s3://bucket/prefix`) by key, size and SHA-256; `scripts/prove/clock_offset.py` moves the time of a server built with the tag. Each has `--self-test`, run by `make check-prove-tools`.
+
 `make prove-whole` is an outside proof, not a Go test. Two of its groups
 (`versions`, `room`) start an S3 server (Silo, at the digest `S3_SILO_IMAGE`
 pins) in a container named for the run and remove it when the group ends; they
@@ -214,6 +216,8 @@ itself reads are listed first.
 | Variable | What it does | Default | Read by |
 |---|---|---|---|
 | `NOPACS_PROVE_STRICT` | `1`: a check of the proof that is skipped is a failure, as in CI. | `0` | `scripts/prove/run.sh`; set to `1` by `make ci` on Linux and by CI, not by `make prove` itself |
+| `NOPACS_CLOCK_OFFSET` | A fixed offset (`720h`, `400d`, `-36h`) added to the time of a server built with `-tags clock`, read once at its start; a normal build never reads it. An offset it cannot read ends the process. | unset: no offset | `internal/clock`; set by the proofs that move time |
+| `NOPACS_CLOCK_FILE` | A file holding an offset for a server built with `-tags clock`, read at most every 200 ms, so a proof moves a running server's time by rewriting it; it wins over `NOPACS_CLOCK_OFFSET` once it exists. A normal build never reads it. | unset | `internal/clock`; written by `scripts/prove/clock_offset.py` |
 | `NOPACS_PROVE_S3_SECRET` | The secret key the `versions` and `room` groups of `make prove-whole` hand the command line for the S3 server they start in a container (the command line reads a storage's secret from this variable, never from an argument). Set by those groups for the commands they run; nobody sets it by hand. | unset | `scripts/lib/nopacs_scripts/wholemore.py` |
 | `NOPACS_PROVE_BUILD` | `host` builds only this machine's binary, for a quicker run; the check of the static build for every target is then skipped. | `all` | `scripts/prove/run.sh` |
 | `NOPACS_PROVE_ONLY` | `reading` runs the builds and the sections that read the archive (13 to 19: an installation of their own built by sending public studies with dcmtk's `storescu`, then the catalog, metadata, downloads, DICOMweb and STOW-RS, the Python client and the refusals) alone, without Docker; their tenant on Postgres is then skipped. They need dcmtk (`DCMTK=` its directory) and a `PYTHON` with `scripts/requirements/check-server.txt` and `scripts/requirements/prove-reading.txt`. | unset: every section | `scripts/prove/run.sh` |
@@ -230,6 +234,7 @@ nothing when it is run alone.
 
 | Variable | What it carries | Set and read by |
 |---|---|---|
+| `NOPACS_CLOCK_CHILD` | Marks the clock test's own child process, which checks the offset read at start | `internal/clock` (`TestEnvAtStart`) |
 | `NOPACS_BLOBTEST_FLAW` | Which promise of the storage interface a deliberately flawed driver breaks | `internal/blob/suitecheck` |
 | `NOPACS_BLOB_CRASH_ROOT`, `NOPACS_BLOB_CRASH_GENERATION`, `NOPACS_BLOB_CRASH_STALL` | The root, the first generation and the stall point of the child that writes until it is killed | `internal/blob/dir` |
 | `NOPACS_E2E_ARGS` | The arguments of a command the end-to-end test runs as one of the two programs | `cmd/nopacs-server` |

@@ -11,6 +11,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/api"
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/blob/dir"
+	"github.com/amrshadid/nopacs/internal/clock"
 	"github.com/amrshadid/nopacs/internal/deid/check"
 	"github.com/amrshadid/nopacs/internal/deid/engine"
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -81,7 +82,7 @@ func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantNam
 			}
 			storages := newTenantStorages(pipelineOpener, d.Master, name, st)
 			p, err := receive.New(receive.Config{
-				Tenant: name, Store: st, IncomingRoot: incomingRoot, Logger: log,
+				Tenant: name, Store: st, IncomingRoot: incomingRoot, Logger: log, Clock: clock.System{},
 				OpenStorage: storages.Open, Hasher: hasher, HeaderLimit: values.HeaderLimit,
 				// deid.pixel-limit as it applies on the tenant, read live.
 				PixelLimit: func(ctx context.Context) (int64, error) {

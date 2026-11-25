@@ -3,9 +3,9 @@ package servecmd
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/amrshadid/nopacs/internal/api"
+	"github.com/amrshadid/nopacs/internal/clock"
 	"github.com/amrshadid/nopacs/internal/correct"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/place"
@@ -142,7 +142,7 @@ func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, l
 				TenantID:    row.ID,
 				Keys:        d.Keys,
 				OpenStorage: storages.Open,
-				Now:         time.Now,
+				Now:         clock.Now,
 				Grace:       values.OnTenant(src).DeleteGrace,
 				ConfirmKey:  key,
 				LockScan:    locks.of(name).Lock,

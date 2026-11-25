@@ -5,6 +5,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/api"
 	"github.com/amrshadid/nopacs/internal/checkedread"
+	"github.com/amrshadid/nopacs/internal/clock"
 	"github.com/amrshadid/nopacs/internal/deid/check"
 	"github.com/amrshadid/nopacs/internal/deidjob"
 	"github.com/amrshadid/nopacs/internal/dirimport"
@@ -51,6 +52,7 @@ func newSending(d Deps, reg *registry.Registry, wake func(tenantName string), re
 			return string(plain), nil
 		},
 		Reads:  reads,
+		Now:    clock.Now,
 		TLSDir: func(tenantName string) string { return server.TLSDir(d.DataDir, tenantName) },
 		Wake:   wake,
 		Logger: d.Log,
@@ -77,6 +79,7 @@ func newDeidJobs(d Deps, reg *registry.Registry, wake func(tenantName string), r
 		},
 		UIDKey: reg.UIDKey,
 		Reads:  reads,
+		Now:    clock.Now,
 		Memory: memory,
 		Wake:   wake,
 		Logger: d.Log,
