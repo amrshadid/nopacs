@@ -128,14 +128,37 @@ func newSchema(tb testing.TB) string {
 	return newSchemaAt(tb, testAddress(tb))
 }
 
+// schemaWork bounds how many schemas are created (with their migration) or
+// dropped at the same moment. Creating a schema's tables and indexes in one
+// transaction, and dropping it with CASCADE, each hold one lock per table and
+// index until the transaction commits, and Postgres keeps every lock in one
+// shared table of max_locks_per_transaction (64 by default) times
+// max_connections (100), 6,400 entries. The tenant schema has so many objects
+// that the suite's parallel subtests, each making and dropping a schema,
+// fill that table and fail with "out of shared memory" (SQLSTATE 53200).
+// Four at a time stay far under the limit; the tests themselves still run in
+// parallel. The channel only bounds, and no test changes it.
+var schemaWork = make(chan struct{}, 4)
+
+// holdSchemaWork takes a place among the schema creations and drops running
+// at once and returns the function that gives it back.
+func holdSchemaWork() (release func()) {
+	schemaWork <- struct{}{}
+	return func() { <-schemaWork }
+}
+
 // newSchemaAt is newSchema in the database that base names.
 func newSchemaAt(tb testing.TB, base string) string {
 	tb.Helper()
 	conn := admin(tb, base)
 	schema := randomName(tb, "mt_")
-	mustExec(tb, conn, `CREATE SCHEMA `+schema)
+	func() {
+		defer holdSchemaWork()()
+		mustExec(tb, conn, `CREATE SCHEMA `+schema)
+	}()
 	tb.Cleanup(func() {
 		c := admin(tb, base)
+		defer holdSchemaWork()()
 		mustExec(tb, c, `DROP SCHEMA `+schema+` CASCADE`)
 	})
 	return withParams(tb, base, map[string]string{"search_path": schema, "pool_max_conns": "3"})
@@ -180,6 +203,7 @@ func settledAcquired(m *base) int32 {
 func openTest(tb testing.TB) master.Store {
 	tb.Helper()
 	m := openUnmigrated(tb)
+	defer holdSchemaWork()()
 	if err := m.Migrate(context.Background()); err != nil {
 		tb.Fatal(err)
 	}

@@ -30,6 +30,7 @@ func openTenantAt(tb testing.TB, address, tenantID string) *Tenant {
 		tb.Fatal(err)
 	}
 	tb.Cleanup(func() { _ = t.Close() })
+	defer holdSchemaWork()()
 	if err := t.Migrate(ctx); err != nil {
 		tb.Fatal(err)
 	}
