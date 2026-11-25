@@ -13,8 +13,7 @@ as two static binaries (pure Go, `CGO_ENABLED=0`): `nopacs-server`, which runs
 an installation, and `nopacs`, the command line, an API client that links no
 database or storage driver. It receives DICOM,
 de-identifies it, routes it to a storage, catalogs it as subject / session /
-scan, keeps it whole, and serves it through an API with keys. The history of
-the code before this release is in github.com/amrshadid/coria.
+scan, keeps it whole, and serves it through an API with keys.
 
 #### Installation, tenants and databases
 

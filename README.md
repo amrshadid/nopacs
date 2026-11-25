@@ -6,8 +6,6 @@ de-identifies it, routes it to a storage, catalogs it as subject / session /
 scan, and serves it to other systems through an API with keys, as a core that
 research platforms are built on.
 
-NoPACs was formerly named CORIA.
-
 **State: early development, no release yet.** What runs today:
 
 - an installation made with `nopacs-server init` and served with
