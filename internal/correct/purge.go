@@ -349,11 +349,12 @@ func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.
 			e.note(ctx, c, tenant.StateReasonHeld)
 			return pending(out), fault.New(fault.Precondition, "the purge is held")
 		}
-		st, err := e.cfg.OpenStorage(ctx, name)
-		if err != nil {
-			return pending(out), err
-		}
-		removals, err := e.purgeKey(ctx, st, key)
+		var removals []blob.Removal
+		err := e.removeGated(ctx, name, func(st blob.Store) error {
+			var err error
+			removals, err = e.purgeKey(ctx, st, key)
+			return err
+		})
 		if err != nil {
 			return pending(out), err
 		}
@@ -379,6 +380,25 @@ func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.
 func pending(s tenant.PurgeSettled) tenant.PurgeSettled {
 	s.Outcome = tenant.OutcomePending
 	return s
+}
+
+// removeGated runs remove on the storage named inside its write gate
+// (Config.Pause): the gate is entered first, the storage opened only once
+// admitted, and the gate released after the removal. A switch swaps the
+// storage's place while the gate holds its writes, so a store opened before
+// the gate admitted may be the place the name no longer names, and a
+// removal through it would land on the old place.
+func (e *Engine) removeGated(ctx context.Context, storage string, remove func(st blob.Store) error) error {
+	release, err := e.enter(ctx, storage)
+	if err != nil {
+		return err
+	}
+	defer release()
+	st, err := e.cfg.OpenStorage(ctx, storage)
+	if err != nil {
+		return err
+	}
+	return remove(st)
 }
 
 // purgeKey removes one key through its storage's Purge and answers what
@@ -412,20 +432,21 @@ func (e *Engine) record(ctx context.Context, id, storage, key string, size int64
 // place: they still list what it removed (an instance's UID and its
 // header).
 func (e *Engine) purgeOlderMeta(ctx context.Context, c tenant.Correction, storage string, p label.Path) error {
-	st, err := e.cfg.OpenStorage(ctx, storage)
-	if err != nil {
-		return err
-	}
-	vp, ok := st.(blob.VersionPurger)
-	if !ok {
-		return nil
-	}
 	for _, k := range []func(label.Path) (string, error){layout.MetadataKey, layout.ManifestKey} {
 		key, err := k(p)
 		if err != nil {
 			return fault.Wrap(fault.Internal, err, "a scan's key cannot be made")
 		}
-		removals, err := vp.PurgeOlder(ctx, key)
+		var removals []blob.Removal
+		err = e.removeGated(ctx, storage, func(st blob.Store) error {
+			vp, ok := st.(blob.VersionPurger)
+			if !ok {
+				return nil
+			}
+			var err error
+			removals, err = vp.PurgeOlder(ctx, key)
+			return err
+		})
 		if err != nil {
 			return err
 		}
@@ -447,18 +468,23 @@ func (e *Engine) repurge(ctx context.Context, now time.Time) error {
 	changed := map[string]bool{}
 	var errs []error
 	for _, o := range due {
-		st, err := e.cfg.OpenStorage(ctx, o.Storage)
+		var r blob.Removal
+		purged := false
+		err := e.removeGated(ctx, o.Storage, func(st blob.Store) error {
+			vp, ok := st.(blob.VersionPurger)
+			if !ok {
+				return nil
+			}
+			var err error
+			r, err = vp.PurgeVersion(ctx, o.Key, o.Version)
+			purged = err == nil
+			return err
+		})
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		vp, ok := st.(blob.VersionPurger)
-		if !ok {
-			continue
-		}
-		r, err := vp.PurgeVersion(ctx, o.Key, o.Version)
-		if err != nil {
-			errs = append(errs, err)
+		if !purged {
 			continue
 		}
 		if err := e.record(ctx, o.ID, o.Storage, o.Key, o.Size, o.SHA256, []blob.Removal{r}); err != nil {

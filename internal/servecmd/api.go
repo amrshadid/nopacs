@@ -83,6 +83,7 @@ func APIServices(d Deps) (Built, error) {
 	var deidJobs atomic.Pointer[deidjob.Supervisor]
 	var scrubJobs atomic.Pointer[scrub.Supervisor]
 	var importJobs atomic.Pointer[dirimport.Supervisor]
+	var tenantJobs atomic.Pointer[tenantWork]
 	pokeSenders := func(name string) {
 		if s := sending.Load(); s != nil {
 			s.Poke(name)
@@ -101,10 +102,16 @@ func APIServices(d Deps) (Built, error) {
 	// storage test's), so no later store removes the work in progress of
 	// one already writing there.
 	cleanups := &place.Cleanups{}
-	owners := backup.OwnerCheck{Installation: installation, Keys: d.Keys,
+	ownerCheck := backup.OwnerCheck{Installation: installation, Keys: d.Keys,
 		Opener: place.Opener{Values: settingvalue.Reader{Master: d.Master}, Keys: d.Keys, StaleUploadAge: -1, Cleanups: cleanups}}
 	reg, err := registry.New(registry.Config{
-		Fence:  owners.Fence,
+		// A tenant a check fences stops its background work at once, not at
+		// the work's next reading of the tenants.
+		Fence: fenceNotice(ownerCheck.Fence, func(name string) {
+			if s := tenantJobs.Load(); s != nil {
+				s.Fenced(name)
+			}
+		}),
 		Master: d.Master,
 		Keys:   d.Keys,
 		Drivers: map[string]registry.Driver{
@@ -131,6 +138,9 @@ func APIServices(d Deps) (Built, error) {
 				s.TenantRemoved(name)
 			}
 			if s := importJobs.Load(); s != nil {
+				s.TenantRemoved(name)
+			}
+			if s := tenantJobs.Load(); s != nil {
 				s.TenantRemoved(name)
 			}
 		},
@@ -166,7 +176,20 @@ func APIServices(d Deps) (Built, error) {
 	// engine, and its running pipeline, which a replace makes its file
 	// through.
 	scanLocks, pipes := &tenantScanLocks{}, &runningPipelines{}
-	sup, err := newReception(d, reg, feeds.Wake, pokeSenders, stowReceivers, deidMemory, scanLocks, pipes, cleanups)
+	// Each tenant's background work that keeps its copies whole, and the
+	// switcher whose gate every write to a primary asks: made before the
+	// reception, whose pipelines ask the gate, and the corrections, whose
+	// purges do. One lock per tenant serializes every advance of its owner
+	// records (an export's, a reclaim's, a switch's).
+	owners := &ownerLocks{}
+	work, err := newTenantWork(d, reg, cleanups, installation, owners)
+	if err != nil {
+		_ = feeds.Close()
+		closeRegistry(reg)
+		return Built{}, err
+	}
+	tenantJobs.Store(work)
+	sup, err := newReception(d, reg, feeds.Wake, pokeSenders, stowReceivers, deidMemory, scanLocks, pipes, cleanups, work)
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)
@@ -174,12 +197,13 @@ func APIServices(d Deps) (Built, error) {
 	}
 	// Every tenant's corrections engine, and the pass that takes up what a
 	// stop left and purges what is due.
-	engines, err := newCorrections(d, reg, sup, scanLocks, cleanups)
+	engines, err := newCorrections(d, reg, sup, scanLocks, cleanups, work)
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)
 		return Built{}, err
 	}
+	work.setEngines(engines)
 	// The senders, which read archived bytes under the same count of reads
 	// open as the API, so one bound covers both.
 	reads := &checkedread.Slots{Limits: readLimits(settingvalue.Reader{Master: d.Master}, time.Now)}
@@ -212,7 +236,7 @@ func APIServices(d Deps) (Built, error) {
 	scrubJobs.Store(scrubs)
 	// The rebuilds, which read the storages' meta/ trees and write each
 	// tenant's shadow catalog.
-	rebuilds, err := newRebuilds(d, reg, feeds.Wake, handoffs{sup: sup, engines: engines})
+	rebuilds, err := newRebuilds(d, reg, feeds.Wake, handoffs{sup: sup, engines: engines, locks: owners, work: work})
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)
@@ -238,7 +262,7 @@ func APIServices(d Deps) (Built, error) {
 		Receivers: receiverHealth{sup}, Live: receiverHealth{sup}, Feeds: feeds, Incoming: pipelineDecisions{sup}, Headers: heldHeaders{sup}, HeldFiles: heldHeaders{sup}, STOW: stowReceivers,
 		Reads: reads, ReadCounts: readCounts, SenderHealths: senderHealths{s: senders, deid: deids, scrub: scrubs, imports: imports, rebuilds: rebuilds}, SenderTests: senderTests{senders}, DeidMemory: deidMemory,
 		Installation: installation, ImportGuarded: importGuarded(d.DataDir), Corrections: engines, ReplaceSources: pipes,
-		Handoffs: handoffs{sup: sup, engines: engines, owners: owners}, StorageCleanups: cleanups, SealPause: sealer.Pause})
+		Handoffs: handoffs{sup: sup, engines: engines, owners: ownerCheck, locks: owners, work: work}, StorageCleanups: cleanups, SealPause: sealer.Pause})
 	if err != nil {
 		closeRegistry(reg)
 		return Built{}, err
@@ -292,9 +316,11 @@ func APIServices(d Deps) (Built, error) {
 		// Stopped last first: the event keeper, the imports (each finishing
 		// the file it hands in), the scrubs, the deid jobs and the senders
 		// (each giving its unit back), then the receivers and pipelines,
-		// then the sealing pass's timer, then the feeds. The corrections'
+		// then each tenant's background work and switches (a switch before
+		// its swap refused, once no pipeline writes), then the sealing
+		// pass's timer, then the feeds. The corrections'
 		// engines start with them but stop after the drain (AfterDrain).
-		Reception: runners{closer{feeds}, sealer, sup, startOnly{engines}, senders, deids, scrubs, rebuilds, imports, events.NewKeeper(events.KeeperConfig{
+		Reception: runners{closer{feeds}, sealer, work, sup, startOnly{engines}, senders, deids, scrubs, rebuilds, imports, events.NewKeeper(events.KeeperConfig{
 			Tenants: keptFeeds{tenants: registryTenants{master: d.Master, registry: reg}, registry: reg, values: settingvalue.Reader{Master: d.Master}},
 			Logger:  d.Log,
 		})},

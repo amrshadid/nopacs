@@ -262,8 +262,11 @@ func testListSettings(t *testing.T) {
 					"api.cors-origins=@/BUILT_IN,audit.retention=0@/BUILT_IN,audit.seal-interval=10m@/BUILT_IN,backup.max-duration=6h@/BUILT_IN,deid.memory=2GiB@/BUILT_IN,deid.pixel-limit=1GiB@/BUILT_IN,delete.grace=7d@/BUILT_IN,events.retention=90d@/BUILT_IN," +
 					"import.allowed-roots=@/BUILT_IN,import.max-dir-entries=200000@/BUILT_IN,import.max-units=4@/BUILT_IN,import.roots=@/BUILT_IN,import.server-max-units=8@/BUILT_IN," +
 					"incoming.limit=0@/BUILT_IN,job.failures-kept=10000@/BUILT_IN,key.default-lifetime=90d@/BUILT_IN," +
-					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN,read.per-caller=16@/BUILT_IN,read.per-server=256@/BUILT_IN,receiver.allow-as-received=false@/BUILT_IN," +
-					"receiver.bind-addresses=@/BUILT_IN,receiver.header-limit=64MiB@/BUILT_IN,receiver.ports=@/BUILT_IN,scrub.interval=30d@/BUILT_IN,scrub.rate=64MiB@/BUILT_IN,sender.allow-plain-http=false@/BUILT_IN," +
+					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN,quarantine.warn-age=30d@/BUILT_IN,quarantine.warn-bytes=0@/BUILT_IN," +
+					"read.per-caller=16@/BUILT_IN,read.per-server=256@/BUILT_IN,receiver.allow-as-received=false@/BUILT_IN," +
+					"receiver.bind-addresses=@/BUILT_IN,receiver.header-limit=64MiB@/BUILT_IN,receiver.ports=@/BUILT_IN," +
+					"replica.repair=manual@/BUILT_IN,replica.repair-lease=1m@/BUILT_IN,retention.max-clock-step=2d@/BUILT_IN,retention.max-per-pass=1000@/BUILT_IN," +
+					"retention.shorten-notice=30d@/BUILT_IN,scrub.interval=30d@/BUILT_IN,scrub.rate=64MiB@/BUILT_IN,sender.allow-plain-http=false@/BUILT_IN," +
 					"sender.destinations=@/BUILT_IN,sender.max-associations=32@/BUILT_IN,sender.tenant-max-associations=8@/BUILT_IN,storage.directory-roots=@/BUILT_IN," +
 					"storage.reserve=10%,10GiB@/BUILT_IN,storage.s3-endpoints=@/BUILT_IN,test.allotted=@/BUILT_IN,test.retention=100d@/INSTALLATION,test.text=@/BUILT_IN"
 				if got := names(o); got != want {
@@ -282,9 +285,8 @@ func testListSettings(t *testing.T) {
 				if got, next := names(o), o.res.(*v1.ListSettingsResponse).GetNextPageToken(); got != "events.retention=90d@/BUILT_IN,import.allowed-roots=@/BUILT_IN,import.max-dir-entries=200000@/BUILT_IN,import.max-units=4@/BUILT_IN,"+
 					"import.roots=@/BUILT_IN,import.server-max-units=8@/BUILT_IN,incoming.limit=0@/BUILT_IN,"+
 					"job.failures-kept=10000@/BUILT_IN,key.default-lifetime=90d@/BUILT_IN,"+
-					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN,read.per-caller=16@/BUILT_IN,read.per-server=256@/BUILT_IN,"+
-					"receiver.allow-as-received=false@/BUILT_IN,"+
-					"receiver.bind-addresses=@/BUILT_IN" || next == "" {
+					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN,quarantine.warn-age=30d@/BUILT_IN,quarantine.warn-bytes=0@/BUILT_IN,"+
+					"read.per-caller=16@/BUILT_IN,read.per-server=256@/BUILT_IN" || next == "" {
 					t.Errorf("got %q, token %q", got, next)
 				}
 			}},

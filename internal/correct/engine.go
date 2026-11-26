@@ -68,6 +68,22 @@ type Config struct {
 	// (the registry's CheckFence), so a tenant another installation took
 	// over since its last check, or one handed off, writes nothing more.
 	Fence func(ctx context.Context) error
+	// Pause, when not nil, is entered before a purge removes an object from
+	// one copy, and released once the removal returned (storageswitch.Gate):
+	// a switch of that storage to its replica waits for a removal admitted
+	// and holds the next one, so a purge already running when the switch
+	// began never removes from a place its storage's name no longer names.
+	// Fence refuses a purge that starts while a switch runs; Pause holds one
+	// that started before. Nil admits every removal.
+	Pause WritePause
+}
+
+// WritePause is the gate a write to a tenant's storage asks before it lands
+// there (storageswitch.Gate, the shape of receive.WritePause).
+type WritePause interface {
+	// Enter admits a write to the storage named and returns its release,
+	// called once after the write's last effect; an error refuses it.
+	Enter(ctx context.Context, storage string) (func(), error)
 }
 
 // fence asks Config.Fence, when there is one, whether the tenant may still
@@ -77,6 +93,15 @@ func (e *Engine) fence(ctx context.Context) error {
 		return nil
 	}
 	return e.cfg.Fence(ctx)
+}
+
+// enter asks Config.Pause, when there is one, to admit a removal from the
+// storage named, and returns its release.
+func (e *Engine) enter(ctx context.Context, storage string) (func(), error) {
+	if e.cfg.Pause == nil {
+		return func() {}, nil
+	}
+	return e.cfg.Pause.Enter(ctx, storage)
 }
 
 // Engine makes corrections on a tenant's storages and database.

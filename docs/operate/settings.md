@@ -125,6 +125,28 @@ take ([importing](../use/importing.md)). `job.failures-kept` is how many refused
 instances a job lists; the rest are counted, not listed. `events.retention` is how
 long a tenant's events are kept.
 
+## Replicas, retention and the quarantine
+
+`replica.repair` is `manual` by default: a primary's object a scrub found damaged
+or missing is put back from a replica in step only when a person runs `nopacs
+repair`, since reads already turn to the replica. With `auto`, the server makes an
+automatic repair job, within five minutes of a scrub's finding, for each primary
+that has a replica. `replica.repair-lease` (a minute by default, from `30s` to
+`1h`) is how long a repair's claim holds its job, which bounds one put of an
+object: 15 seconds less than the lease. A lease too short to put the largest file a
+receiver of the tenant accepts at 100 MiB a second is refused, the server's log says
+which lease would do, and no repair runs until it is lengthened. No speed of the
+storage is measured yet; the check assumes that floor.
+
+`retention.shorten-notice` and `retention.max-clock-step` guard retention against a
+mistyped rule and a clock set wrong. A tenant's own value is set by an admin on the
+installation only. Once a day the server disposes of what each delete rule makes due,
+at most `retention.max-per-pass` sessions a rule, each through an ordinary delete, and
+works the disposals a person queued within the hour. `quarantine.warn-age` and
+`quarantine.warn-bytes` make a tenant's status warn of files held too long, or too
+many bytes held. They warn and nothing more: only a quarantine retention rule
+removes a held file.
+
 A period is a whole number followed by `s`, `m`, `h` or `d`; a size is a whole number
 of bytes, or a number followed by `KiB`, `MiB`, `GiB`, `TiB` or `PiB`.
 
@@ -156,6 +178,10 @@ when it starts do not change until it is started again.
 | `key.expiry-warning` | At the next status, and within an hour for the report in the log |
 | `access.denied-networks`, `access.allowed-networks`, `access.trusted-proxies`, `access.forwarded-header`, `access.failure-limit`, `access.failure-window`, `access.block-time` | Within five seconds: the server keeps the values it read for that long |
 | `access.tenant-networks` | Within five seconds, on the same terms, for each tenant |
+| `replica.repair-lease` | At the next claim of a repair job; a job running keeps the lease it claimed with |
+| `replica.repair` | Within five minutes, at the next look for damage a scrub found |
+| `retention.max-clock-step`, `retention.shorten-notice` | At the next check of the tenant's clock, at most an hour away, and at the next change of a rule |
+| `retention.max-per-pass` | At the next daily pass |
 | the server's `--listen` address | Needs a restart: the address is opened once, when the server starts |
 | the server's `--tls-cert` and `--tls-key` | A certificate renewed in the same files: within five seconds, at the next connection; files that change into a pair that does not load are logged and the last good pair is still served. Other paths need a restart |
 | the key file | Needs a restart: it is read once, when the server starts, and the keys are held in memory |

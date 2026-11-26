@@ -22,6 +22,15 @@ type DeleteRequest struct {
 	Reason, Confirm string
 	// KeyID is the key that asked, empty for the local operator.
 	KeyID string
+	// Retention, for a delete a disposal of a retention rule makes, is the
+	// rule and due time its session was listed under; the store checks again
+	// that the session is due and not held (tenant.CorrectionPrepare). Nil
+	// for a person's delete.
+	Retention *tenant.RetentionOrigin
+	// OverrideRetention goes over a retention rule's keep-at-least, for
+	// OverrideReason; who may ask it is the caller's to check.
+	OverrideRetention bool
+	OverrideReason    string
 	// Audit is the request's entry; Guard the check of who asks.
 	Audit master.AuditEntry
 	Guard tenant.Guard
@@ -115,7 +124,8 @@ func (e *Engine) Delete(ctx context.Context, r DeleteRequest) (tenant.Correction
 		return tenant.Correction{}, err
 	}
 	c, made, err := e.cfg.Store.PrepareCorrection(ctx, tenant.CorrectionPrepare{ID: id, Kind: record.KindDelete, Target: r.Target,
-		Reason: r.Reason, Confirm: confirm, KeyID: r.KeyID, Now: now}, r.Audit, r.Guard)
+		Reason: r.Reason, Confirm: confirm, KeyID: r.KeyID, Retention: r.Retention, OverrideRetention: r.OverrideRetention,
+		OverrideReason: r.OverrideReason, Now: now}, r.Audit, r.Guard)
 	if err == nil && e.cfg.ConfirmKey != nil {
 		e.remember(r.Confirm, confirm, r.Target)
 	}

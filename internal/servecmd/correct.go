@@ -110,7 +110,13 @@ var _ api.ReplaceSources = (*runningPipelines)(nil)
 // to the tenant's pipeline, which removes them as it removes a rejected
 // file's (and keeps the removal while none runs). Its storages are opened
 // to write with cleanups, the server's one, shared with the pipelines.
-func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, locks *tenantScanLocks, cleanups *place.Cleanups) (*correct.Engines, error) {
+//
+// While a switch of any of the tenant's storages runs, a correction's next
+// step that writes to a storage is refused as the switch gate refuses a
+// write (switchingFence), and a purge already running asks the gate before
+// each removal (correct.Config.Pause).
+func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, locks *tenantScanLocks, cleanups *place.Cleanups,
+	work *tenantWork) (*correct.Engines, error) {
 	key, err := d.Keys.Derive(secret.ConfirmToken)
 	if err != nil {
 		return nil, err
@@ -133,7 +139,20 @@ func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, l
 			if !ok {
 				return correct.Config{}, nil, fault.New(fault.Internal, "the tenant's database keeps no settings")
 			}
+			full, err := dbOf(cs)
+			if err != nil {
+				return correct.Config{}, nil, err
+			}
 			row, err := d.Master.TenantByName(ctx, name)
+			if err != nil {
+				return correct.Config{}, nil, err
+			}
+			// The owner records are read again before each step that writes
+			// to a storage, so a tenant another installation took over since
+			// the registry's last check, or one handed off, writes nothing
+			// more; and while a switch runs, a step is refused as a write to
+			// its primary is, and a purge running asks the gate.
+			fence, pause, err := work.correctionWrites(ctx, name, full, func() error { return reg.CheckFence(name) })
 			if err != nil {
 				return correct.Config{}, nil, err
 			}
@@ -154,11 +173,8 @@ func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, l
 					}
 					return nil
 				},
-				// The owner records are read again before each step that
-				// writes to a storage, so a tenant another installation took
-				// over since the registry's last check, or one handed off,
-				// writes nothing more.
-				Fence: func(context.Context) error { return reg.CheckFence(name) },
+				Fence: fence,
+				Pause: pause,
 			}, storages.Close, nil
 		},
 	})

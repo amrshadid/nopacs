@@ -377,6 +377,17 @@ scan, keeps it whole, and serves it through an API with keys.
 - A rebuild compare can read one named storage, a replica among them, alone,
   against that storage's primary only. Receivers refuse new associations
   with `storage_switching` while their storage switches, each counted.
+- The server runs each tenant's replicator, recall worker, repair jobs (by
+  hand, or automatically with `replica.repair = auto`), storage switches and
+  retention: the clock checked hourly, due sessions disposed of daily through
+  the ordinary delete, a failed pass tried again the next hour. Every write of
+  this background work asks whether the tenant may still write, and an
+  export's or rebuild's drain stops it first. A storage switch pauses every
+  write to the primary: receptions, purges and repairs, each entering the
+  gate before it opens the storage. New settings: `replica.repair`,
+  `replica.repair-lease`, `retention.shorten-notice`,
+  `retention.max-clock-step`, `retention.max-per-pass`, `quarantine.warn-age`,
+  `quarantine.warn-bytes`.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

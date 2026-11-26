@@ -52,8 +52,13 @@ type Runner interface {
 // corrections engine, and each is published in pipes while it runs, for
 // the replaces made through it. Its storages are opened to write with
 // cleanups, the server's one (writingOpener).
+//
+// Each pipeline asks its tenant's switch gate before it writes to a
+// primary (receive.Config.Pause), and the switcher is made, ending the
+// switches a stopped server left, before the pipeline starts; a commit
+// wakes the tenant's replicator as well as its event streams.
 func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantName string), stowReceivers *stow.Directory, memory check.Memory,
-	locks *tenantScanLocks, pipes *runningPipelines, cleanups *place.Cleanups) (*supervise.Supervisor, error) {
+	locks *tenantScanLocks, pipes *runningPipelines, cleanups *place.Cleanups, work *tenantWork) (*supervise.Supervisor, error) {
 	incomingRoot := filepath.Join(d.DataDir, IncomingDirName)
 	if err := os.MkdirAll(incomingRoot, 0o700); err != nil {
 		return nil, fault.Wrap(fault.Unavailable, err, "the incoming area cannot be made in the data directory")
@@ -80,6 +85,14 @@ func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantNam
 			if err != nil {
 				return nil, err
 			}
+			full, err := dbOf(st)
+			if err != nil {
+				return nil, err
+			}
+			pause, committed, err := work.receptionWrites(ctx, name, full, wake)
+			if err != nil {
+				return nil, err
+			}
 			storages := newTenantStorages(pipelineOpener, d.Master, name, st)
 			p, err := receive.New(receive.Config{
 				Tenant: name, Store: st, IncomingRoot: incomingRoot, Logger: log, Clock: clock.System{},
@@ -92,7 +105,7 @@ func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantNam
 					}
 					return values.OnTenant(src).PixelLimit(ctx)
 				},
-				LowDisk: g.LowDisk, OverLimit: g.OverLimit, Wake: func() { wake(name) },
+				LowDisk: g.LowDisk, OverLimit: g.OverLimit, Pause: pause, Wake: committed,
 				Forwarded: func() { forwarded(name) },
 				// The keys of a receiver that de-identifies, read when its
 				// first file comes and kept by the pipeline; never logged.

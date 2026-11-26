@@ -76,6 +76,14 @@ func TestBuiltin(t *testing.T) {
 		ImportMaxUnits:       {SetByInstallation, "4", false},
 		ImportServerMaxUnits: {InstallationOnly, "8", false},
 		ImportMaxDirEntries:  {InstallationOnly, "200000", false},
+
+		ReplicaRepair:          {Ordinary, "manual", false},
+		ReplicaRepairLease:     {Ordinary, "1m", false},
+		RetentionShortenNotice: {SetByInstallation, "30d", false},
+		RetentionMaxClockStep:  {SetByInstallation, "2d", false},
+		RetentionMaxPerPass:    {Ordinary, "1000", false},
+		QuarantineWarnAge:      {Ordinary, "30d", false},
+		QuarantineWarnBytes:    {Ordinary, "0", false},
 	}
 	if got := tab.Names(); len(got) != len(want) {
 		t.Errorf("names %v, want the %d this test knows", got, len(want))

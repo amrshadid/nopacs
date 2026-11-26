@@ -38,5 +38,14 @@ func newScrubs(d Deps, reg *registry.Registry, wake func(tenantName string), rea
 		Logger:   d.Log,
 		Keys:     d.Keys,
 		TenantID: tenantID,
+		// When each scan was last read whole on each storage, the ground of
+		// a storage's coverage, kept by a tenant database that records it;
+		// one that does not records nothing and its coverage is not told.
+		Verifications: func(st tenant.Store) scrub.VerificationRecorder {
+			if v, ok := st.(scrub.VerificationRecorder); ok {
+				return v
+			}
+			return nil
+		},
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -187,7 +188,15 @@ func (e *Engine) checkGone(ctx context.Context, c tenant.Correction) error {
 					e.note(ctx, c, tenant.StateReasonHeld)
 					return fault.New(fault.Precondition, "the purge is held")
 				}
-				removals, err := e.purgeKey(ctx, st, key)
+				// The removal enters the storage's gate and reopens the
+				// storage inside it (removeGated): the store the presence was
+				// read from may name the place a switch swapped away meanwhile.
+				var removals []blob.Removal
+				err = e.removeGated(ctx, name, func(st blob.Store) error {
+					var err error
+					removals, err = e.purgeKey(ctx, st, key)
+					return err
+				})
 				if err != nil {
 					return e.waitStorage(ctx, c, err)
 				}
