@@ -132,6 +132,15 @@ func (s *scanCopy) run(ctx context.Context, stores *storeSet) error {
 	if err := s.copyObjects(ctx, objects); err != nil {
 		return err
 	}
+	if len(s.c.Purging) > 0 {
+		// A purge of the scan is unfinished: the manifest claimed and its
+		// sidecar still name what it removes, and put on the replica after
+		// the purge rewrote them there they would name the deleted
+		// instance again. The new objects are copied; the database keeps
+		// the row from being in step until FinishPurge queues it again at
+		// the manifest written without the instance.
+		return nil
+	}
 	if err := s.copySidecar(ctx); err != nil {
 		return err
 	}
@@ -512,8 +521,10 @@ func (s *scanCopy) finish(ctx context.Context, err error) outcome {
 			w.succeeded(c.Fence.Replica)
 			return endedInStep
 		}
-		if err == nil {
-			// A change was published while the copy ran.
+		if err == nil && len(c.Purging) == 0 {
+			// A change was published while the copy ran. A copy that left
+			// out the manifest of a scan whose purge is unfinished ends
+			// pending by design, and what it put the catalog names.
 			s.sweep(ctx)
 		}
 		return endedAgain

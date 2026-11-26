@@ -249,21 +249,42 @@ func (r *replicaRig) deleteDuringBackfill(during func(s tenant.CatalogScan)) (te
 	return s, p
 }
 
-// TestCopyRemovesWhatItPutOfADeletedScan guards the copy's own guard: a
-// backfill's puts of a scan, each under way when the scan is deleted,
-// land, and the copy, whose lease the delete's publish ended, removes
-// every one of them, its sidecar and its manifest too, since the catalog
-// no longer names the scan; the other scan of the study stays.
-func TestCopyRemovesWhatItPutOfADeletedScan(t *testing.T) {
+// TestCopyKeepsWhatItPutOfAScanADeleteHides guards the copy's own guard
+// against a delete still undoable: a backfill's puts of a scan, each under
+// way when the scan is deleted, land, and the copy, whose lease the
+// delete's publish ended, keeps them, since the delete is committed and
+// an undo shows the scan again; removing them, every version, would take
+// from the replica what the primary still holds. The delete's purge then
+// removes the scan from every copy, and nothing of it is left on the
+// replica; the other scan of the study stays.
+func TestCopyKeepsWhatItPutOfAScanADeleteHides(t *testing.T) {
 	r := newReplicaRig(t)
-	e := r.inFlightEngine(&movable{})
+	clock := &movable{}
+	e := r.inFlightEngine(clock)
+	var c tenant.Correction
 	s, _ := r.deleteDuringBackfill(func(s tenant.CatalogScan) {
-		if _, err := r.deleteNow(e, tenant.CorrectionTarget{Subject: s.SubjectLabel, Session: s.SessionLabel, Scan: s.Label}); err != nil {
+		var err error
+		if c, err = r.deleteNow(e, tenant.CorrectionTarget{Subject: s.SubjectLabel, Session: s.SessionLabel, Scan: s.Label}); err != nil {
 			r.t.Error(err)
 		}
 	})
+	if c.ID == "" {
+		t.Fatal("the scan was not deleted")
+	}
+	left := scanKeys(t, r.copyObjects(), pathOf(s))
+	if len(left) == 0 {
+		t.Error("the replica keeps nothing a copy put of a scan a delete still undoable hides")
+	}
+	for _, k := range left {
+		if want, ok := r.objects()[k]; !ok || r.copyObjects()[k] != want {
+			t.Errorf("the replica keeps %s, which is not the primary's object of the hidden scan", k)
+		}
+	}
+	_, purgeErr := e.PurgeNow(r.ctx, c.ID, r.audit(), nil)
+	until := r.wantWaitingForCopies("the purge after the copy kept what it put", c.ID, purgeErr)
+	r.purgeAcross(e, clock, c.ID, until)
 	if left := scanKeys(t, r.copyObjects(), pathOf(s)); len(left) != 0 {
-		t.Errorf("the replica keeps %v, put by a copy of a scan deleted while it streamed", left)
+		t.Errorf("the replica keeps %v of the scan after its purge", left)
 	}
 	for _, other := range r.scans() {
 		if left := scanKeys(t, r.copyObjects(), pathOf(other)); len(left) == 0 {

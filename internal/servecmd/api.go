@@ -18,6 +18,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/dirimport"
 	"github.com/amrshadid/nopacs/internal/driver"
 	"github.com/amrshadid/nopacs/internal/events"
+	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/obs"
 	"github.com/amrshadid/nopacs/internal/place"
@@ -264,7 +265,21 @@ func APIServices(d Deps) (Built, error) {
 		Reads: reads, ReadCounts: readCounts, SenderHealths: senderHealths{s: senders, deid: deids, scrub: scrubs, imports: imports, rebuilds: rebuilds}, SenderTests: senderTests{senders}, DeidMemory: deidMemory,
 		Installation: installation, ImportGuarded: importGuarded(d.DataDir), Corrections: engines, ReplaceSources: pipes,
 		Handoffs: handoffs{sup: sup, engines: engines, owners: ownerCheck, locks: owners, work: work}, StorageCleanups: cleanups, SealPause: sealer.Pause,
-		Holds: work.HoldWriter})
+		Holds: work.HoldWriter,
+		// A switch request runs through the tenant's switcher, made when
+		// its reception pipeline starts; none yet is answered as the
+		// server not ready for it, never as a nil switcher.
+		Switches: api.SwitchesFunc(func(ctx context.Context, name string) (api.Switcher, error) {
+			sw, err := work.Switcher(ctx, name)
+			if err != nil {
+				return nil, err
+			}
+			if sw == nil {
+				return nil, fault.New(fault.Unavailable, "the server runs no switch of the tenant's storages now")
+			}
+			return sw, nil
+		}),
+		StorageReports: newStorageReports(d.Master, reg, settingvalue.Reader{Master: d.Master}, d.Keys, clock.Now)})
 	if err != nil {
 		closeRegistry(reg)
 		return Built{}, err

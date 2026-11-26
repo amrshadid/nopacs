@@ -176,10 +176,11 @@ func (r *replicaRig) removeFromCopy(key string) {
 }
 
 // TestReplicatorSkipsWhatAPurgeHides guards the replicator while an
-// instance's purge is under way: it claims no copy of the scan, so the
-// hidden instance is not put on the replica, whose purge copies were taken
-// when it began, nor the manifest the purge is replacing; once the purge
-// ends, the scan is copied at its new manifest.
+// instance's purge is under way: it still copies the scan, so an arrival
+// would reach the replica, but the hidden instance is not put on the
+// replica, whose purge copies were taken when it began, nor the manifest
+// or sidecar the purge is replacing; once the purge ends, the scan is
+// copied at its new manifest.
 func TestReplicatorSkipsWhatAPurgeHides(t *testing.T) {
 	r := newReplicaRig(t)
 	e := r.engine()
@@ -188,11 +189,26 @@ func TestReplicatorSkipsWhatAPurgeHides(t *testing.T) {
 	if _, err := e.StartPurge(r.ctx, c.ID, r.audit(), nil); err != nil {
 		t.Fatal(err)
 	}
-	if n := r.runReplicator(); n != 0 {
-		t.Errorf("the replicator claimed %d copies while the instance's purge was under way, want none", n)
+	mk, err := layout.ManifestKey(pathOf(s))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := r.copyObjects()[key]; ok {
+	sk, err := layout.MetadataKey(pathOf(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := r.copyObjects()
+	if n := r.runReplicator(); n != 1 {
+		t.Errorf("the replicator claimed %d copies while the instance's purge was under way, want the scan's", n)
+	}
+	after := r.copyObjects()
+	if _, ok := after[key]; ok {
 		t.Errorf("a copy claimed while the purge was under way put the hidden instance %s", key)
+	}
+	for _, k := range []string{mk, sk} {
+		if after[k] != before[k] {
+			t.Errorf("a copy claimed while the purge was under way rewrote %s on the replica", k)
+		}
 	}
 	if p, err := e.ContinuePurge(r.ctx, c.ID); err != nil || p.State != record.StatePurged {
 		t.Fatalf("the purge = %s, %v", p.State, err)

@@ -8,8 +8,10 @@ import (
 	"io"
 	"slices"
 
+	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/core/manifest"
+	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -57,7 +59,7 @@ func (s *scanCopy) sweep(ctx context.Context) {
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), opTimeout)
 	defer cancel()
 	log := s.w.log.With("replica", s.c.Fence.Replica, "scan", scanPath(s.c.Path))
-	keep, err := s.named(cctx)
+	keep, err := s.named(cctx, keys)
 	if err != nil {
 		log.Warn("replicas: what a copy that did not end put could not be told from the catalog; it is left to the scrub",
 			"kind", fault.KindOf(err).String())
@@ -84,21 +86,37 @@ func (s *scanCopy) sweep(ctx context.Context) {
 // instance's object, every object the committed manifest names (an
 // instance a delete hid is kept until its purge), and the scan's manifest
 // and metadata, which the next copy writes again as the catalog says. A
-// scan the catalog no longer holds, or hides, names nothing. An error is a
-// catalog that cannot be read, or a committed manifest the primary does not
-// hold at its digest now (a change in flight): nothing can be told then.
-func (s *scanCopy) named(ctx context.Context) (map[string]bool, error) {
+// scan the catalog hides under a delete still undoable (committed, not
+// purging) names every key put: the undo shows it again, and its objects
+// stay on every copy until a purge removes them. A scan the catalog no
+// longer holds, or hides under a delete purging or purged, names nothing.
+// An error is a catalog that cannot be read, or a committed manifest the
+// primary does not hold at its digest now (a change in flight): nothing
+// can be told then.
+func (s *scanCopy) named(ctx context.Context, put []string) (map[string]bool, error) {
 	keep := map[string]bool{}
+	gone := func() (map[string]bool, error) {
+		undoable, err := s.undoablyHidden(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if undoable {
+			for _, k := range put {
+				keep[k] = true
+			}
+		}
+		return keep, nil
+	}
 	held, err := s.held(ctx)
 	if errors.Is(err, errScanGone) {
-		return keep, nil
+		return gone()
 	}
 	if err != nil {
 		return nil, err
 	}
 	scan, err := s.w.cfg.Catalog.CatalogScan(ctx, s.c.Path)
 	if fault.KindOf(err) == fault.NotFound {
-		return keep, nil
+		return gone()
 	}
 	if err != nil {
 		return nil, &databaseError{err: err}
@@ -141,6 +159,40 @@ func (s *scanCopy) named(ctx context.Context) (map[string]bool, error) {
 		keep[f.Key] = true
 	}
 	return keep, nil
+}
+
+// HiddenScans is what a sweep asks of the corrections when the catalog no
+// longer holds a scan (tenant.Corrections): the correction not ended that
+// holds its path or UIDs, and that correction's kind and state. A Catalog
+// that also implements it lets a sweep tell a delete still undoable from
+// one being purged; one that does not leaves what the copy put to the
+// scrub, never removing what an undo would show again.
+type HiddenScans interface {
+	HeldByCorrection(ctx context.Context, p label.Path, studyUID, seriesUID string) (tenant.CorrectionHold, error)
+	Correction(ctx context.Context, id string) (tenant.Correction, error)
+}
+
+// undoablyHidden reports whether the scan is hidden by a delete still
+// undoable: committed, its purge not begun. A delete purging or purged,
+// or no delete at all, lets the sweep remove what the copy put; an error
+// leaves everything as it is.
+func (s *scanCopy) undoablyHidden(ctx context.Context) (bool, error) {
+	hs, ok := s.w.cfg.Catalog.(HiddenScans)
+	if !ok {
+		return false, fault.New(fault.Unavailable, "the catalog cannot say which correction hides the scan")
+	}
+	h, err := hs.HeldByCorrection(ctx, s.c.Path, s.c.StudyUID, s.c.Fence.SeriesUID)
+	if err != nil {
+		return false, &databaseError{err: err}
+	}
+	if h.Correction == "" {
+		return false, nil
+	}
+	c, err := hs.Correction(ctx, h.Correction)
+	if err != nil {
+		return false, &databaseError{err: err}
+	}
+	return c.Kind == record.KindDelete && c.State == record.StateCommitted, nil
 }
 
 // remove purges key, every version of it, from the replica inside its

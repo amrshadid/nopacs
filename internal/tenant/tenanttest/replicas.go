@@ -30,7 +30,7 @@ func runReplication(t *testing.T, open OpenEvents, scratch Scratch) {
 		{"ReplicaFollowsCorrections", testReplicaFollowsCorrections},
 		{"ReplicaFollowsPurge", testReplicaFollowsPurge},
 		{"PurgeEndsCopies", testPurgeEndsCopies},
-		{"PurgingScanNotClaimed", testPurgingScanNotClaimed},
+		{"PurgingScanClaimedWithoutItsManifest", testPurgingScanClaimedWithoutItsManifest},
 		{"DeletePublishEndsCopies", testDeletePublishEndsCopies},
 		{"ReplicaFollowsRestoreHide", testReplicaFollowsRestoreHide},
 		{"ReplicaFollowsRebuild", testReplicaFollowsRebuild},

@@ -131,6 +131,9 @@ func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, l
 		Tenants:  registryTenants{master: d.Master, registry: reg},
 		Interval: CorrectionPassInterval,
 		Log:      d.Log,
+		// No purge of a tenant runs until the holds found on its storages
+		// are adopted since this start and the catalog's last activation.
+		HoldsAdopted: (&purgeAdoptions{work: work}).check,
 		Configure: func(ctx context.Context, name string, cs tenant.Corrections) (correct.Config, func() error, error) {
 			p, ok := cs.(tenant.Pipeline)
 			if !ok {

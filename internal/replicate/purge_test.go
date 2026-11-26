@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,16 +16,18 @@ import (
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// TestPurgingScanIsNotCopiedOverItsRewrite guards a replica against the
-// manifest an instance delete's purge replaces: until the purge ends, the
-// catalog names the old manifest, so a copy made while the purge runs
-// would put that manifest, which names the deleted SOP Instance UID, on
-// the replica after the purge wrote it again there without the instance.
-// The test's purge rewrites both copies at the moment such a copy would
-// put its manifest (or after the pass, when no copy was made); after the
-// purge ends, and after the next copy, the replica's manifest is the one
-// written without the instance, and the instance's object is gone.
-func TestPurgingScanIsNotCopiedOverItsRewrite(t *testing.T) {
+// TestAPurgingScanCopiesArrivalsWithoutItsManifest guards the copy of a
+// scan whose instance delete is purging, which a hold can keep purging for
+// years: a new arrival in the scan reaches the replica all the same, but no
+// copy puts the scan's manifest or sidecar while the purge is unfinished,
+// since the catalog's manifest is the one the purge is replacing and, put
+// after the purge rewrote it, would name the deleted SOP Instance UID again
+// on the replica. The row is not in step meanwhile and is not claimed again
+// until the scan changes; once the purge ends, the next copy brings it in
+// step at the scan's new manifest, which names the arrival and not the
+// deleted instance, and the deleted instance's object is not on the
+// replica.
+func TestAPurgingScanCopiesArrivalsWithoutItsManifest(t *testing.T) {
 	f := newFixture(t)
 	files := synthetic(1, 1, 3, 900)
 	s := f.archive(1, "scan-a", files)
@@ -61,9 +64,9 @@ func TestPurgingScanIsNotCopiedOverItsRewrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The purge as the correction engine runs it on both copies: the
-	// instance's object removed, the manifest and the sidecar written again
-	// without it.
+	// The purge as the correction engine runs it on both copies, its end
+	// not yet recorded: the instance's object removed, the manifest and
+	// the sidecar written again without it.
 	mk, sk := mustKey(layout.ManifestKey(s.path)), mustKey(layout.MetadataKey(s.path))
 	var kept []manifest.File
 	for _, l := range s.lines {
@@ -75,52 +78,82 @@ func TestPurgingScanIsNotCopiedOverItsRewrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	after := tenant.SHA256(sha256.Sum256(enc))
-	var once sync.Once
-	purge := func() {
-		once.Do(func() {
-			for _, st := range []*store{f.primary, f.replica} {
-				if err := st.Delete(f.ctx, c.InstanceKey); err != nil {
-					t.Error(err)
-				}
-				for key, b := range map[string][]byte{mk: enc, sk: fmt.Appendf(nil, "sidecar of scan-a with %d files\n", len(kept))} {
-					if _, err := st.Store.Put(f.ctx, key, bytes.NewReader(b)); err != nil {
-						t.Error(err)
-					}
-				}
+	for _, st := range []*store{f.primary, f.replica} {
+		if err := st.Delete(f.ctx, c.InstanceKey); err != nil {
+			t.Fatal(err)
+		}
+		for key, b := range map[string][]byte{mk: enc, sk: fmt.Appendf(nil, "sidecar of scan-a with %d files\n", len(kept))} {
+			if _, err := st.Store.Put(f.ctx, key, bytes.NewReader(b)); err != nil {
+				t.Fatal(err)
 			}
-		})
+		}
 	}
+	// Any manifest or sidecar the replica is asked to put from here until
+	// the purge's end is a failure.
+	var mu sync.Mutex
+	var putWhilePurging []string
 	f.replica.set(func(st *store) {
 		st.onPut = func(key string) {
-			if key == mk {
-				purge()
+			if key == mk || key == sk {
+				mu.Lock()
+				putWhilePurging = append(putWhilePurging, key)
+				mu.Unlock()
 			}
 		}
 	})
-	f.runOnce(w)
-	purge()
+
+	// A new arrival in the scan, its manifest written from the one the
+	// purge left.
+	s.lines = kept
+	arrival := synthetic(1, 10, 1, 700)
+	s = f.archive(1, "scan-a", arrival)
+	newKey := mustKey(layout.InstanceKey(s.path, arrival[0].uid))
+	f.clock.Add(time.Second)
+	if p := f.runOnce(w); p.Again != 1 || p.InStep != 0 {
+		t.Fatalf("the pass after the arrival is %+v; want the scan copied and left not in step", p)
+	}
+	if !f.replicaHas(newKey) {
+		t.Errorf("the arrival's object %s did not reach the replica while the purge is unfinished", newKey)
+	}
+	if r := f.row("scan-a"); r.State == tenant.ReplicaInStep {
+		t.Errorf("the replica's row is in step while the purge is unfinished: %+v", r)
+	}
+	f.wantReplicaManifest("while the purge is unfinished", mk, enc, gone)
+	f.clock.Add(time.Second)
+	if p := f.runOnce(w); p.Again+p.InStep+p.Failed != 0 {
+		t.Errorf("a later pass while the purge is unfinished is %+v; want nothing claimed", p)
+	}
+	mu.Lock()
+	if len(putWhilePurging) > 0 {
+		t.Errorf("the replica was asked to put %q while the purge was unfinished", putWhilePurging)
+	}
+	mu.Unlock()
 	f.replica.set(func(st *store) { st.onPut = nil })
+
 	if err := corr.RecordPurgedObject(f.ctx, tenant.PurgedObject{ID: id, Storage: "main", Key: c.InstanceKey, Size: c.InstanceSize,
 		SHA256: sumOf(files[1]), Disposition: tenant.DispositionRemoved, Now: f.clock.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := corr.FinishPurge(f.ctx, tenant.PurgeFinish{ID: id, Now: f.clock.Now(), Manifest: after,
-		ManifestBefore: s.manifestSHA256}); err != nil {
+	if _, err := corr.FinishPurge(f.ctx, tenant.PurgeFinish{ID: id, Now: f.clock.Now(), Manifest: tenant.SHA256(sha256.Sum256(enc)),
+		ManifestBefore: tenant.SHA256(sha256.Sum256(enc))}); err != nil {
 		t.Fatal(err)
 	}
-	f.wantReplicaManifest("after the purge", mk, enc, gone)
-
 	f.clock.Add(time.Second)
 	if p := f.runOnce(w); p.InStep != 1 {
 		t.Fatalf("the pass after the purge is %+v, want the scan in step", p)
 	}
-	f.wantReplicaManifest("after the next copy", mk, enc, gone)
-	if r := f.row("scan-a"); r.ManifestSHA256 != after {
-		t.Errorf("the replica's row is in step at %s; want the manifest written without the instance, %s", r.ManifestSHA256, after)
+	if r := f.row("scan-a"); r.ManifestSHA256 != s.manifestSHA256 {
+		t.Errorf("the replica's row is in step at %s; want the scan's manifest with the arrival, %s", r.ManifestSHA256, s.manifestSHA256)
+	}
+	got := f.read(f.replica, mk)
+	if strings.Contains(string(got), gone) || !strings.Contains(string(got), arrival[0].uid) {
+		t.Errorf("after the purge the replica's manifest names the deleted instance, or not the arrival")
 	}
 	if f.replicaHas(c.InstanceKey) {
 		t.Errorf("the replica still holds the deleted instance's object %s", c.InstanceKey)
+	}
+	if !slices.ContainsFunc(s.lines, func(l manifest.File) bool { return l.SOPInstanceUID == arrival[0].uid }) {
+		t.Fatal("the fixture's scan does not list the arrival")
 	}
 }
 

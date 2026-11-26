@@ -205,7 +205,13 @@ func (k Sending) queueScan(ctx context.Context, tx SendingTx, replica, series st
 		return err
 	}
 	if row.State != tenant.ReplicaInStep {
-		_, err := tx.Exec(ctx, `UPDATE replica_scans SET seq = seq + 1 WHERE replica = ? AND series_uid = ?`, replica, series)
+		// A row waiting out a purge (EndReplicaScan: no failure, due
+		// later) is due at once: the change is a new arrival to copy, or
+		// the purge's end giving the scan its new manifest. A row waiting
+		// after a failure keeps its retry time.
+		_, err := tx.Exec(ctx, `UPDATE replica_scans SET seq = seq + 1,
+			due = CASE WHEN state IN ('pending', 'damaged') AND last_error = '' AND due > ? THEN ? ELSE due END
+			WHERE replica = ? AND series_uid = ?`, k.D.Time(now), k.D.Time(now), replica, series)
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE replica_scans SET state = 'pending', queued_at = ?, due = ?, seq = seq + 1

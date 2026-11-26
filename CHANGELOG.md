@@ -475,8 +475,14 @@ scan, keeps it whole, and serves it through an API with keys.
   every put ends before its lease's due, the purge removes nothing until no
   such put can land (state reason "copies in flight"), copies enter the
   replica's write gate, a copy that did not end removes what it put that the
-  catalog no longer names, and a scan whose instance delete is purging is not
-  copied until the purge ends.
+  catalog no longer names (but never what a delete that can still be undone
+  hides), and a scan whose instance delete is purging is copied without its
+  manifest or metadata file until the purge ends.
+- A storage switch could not be started on a running server: the API was
+  never given the switch runner. Storage status now also shows scrub coverage
+  and an S3 storage's encryption at rest. A correction purge waits after a
+  start or a catalog activation until the holds found on storage are
+  adopted.
 - A session archived while the clock was set back could be deleted early once
   the clock was put right: retention times are never stored earlier than the
   time last trusted. Automatic purges use `retention.max-clock-step` and pause

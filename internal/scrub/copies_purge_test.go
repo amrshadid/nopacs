@@ -42,10 +42,9 @@ func (downStore) List(context.Context, blob.ListOptions) (blob.Page, error) {
 }
 
 // TestPurgingInstanceIsNotFlaggedOnReplica guards that a replica is not
-// called damaged while an instance delete on its scan is purging: the scan
-// is not copied until the purge ends (a copy could put back a manifest that
-// names the deleted instance), so the replica's row waits and a scrub passes
-// it over, recording no damage and no finding.
+// called damaged while an instance delete on its scan is purging: the
+// replica's row is not in step until the purge ends, so a scrub passes it
+// over, recording no damage and no finding.
 func TestPurgingInstanceIsNotFlaggedOnReplica(t *testing.T) {
 	r := newReplicaRig(t)
 	p, series, keys := r.archiveTwo("s1", "1.2.826.0.1.3680043.10.505")
@@ -78,13 +77,9 @@ func TestPurgingInstanceIsNotFlaggedOnReplica(t *testing.T) {
 		t.Fatalf("the purge with its replica out of reach is %+v, %v; want purging", got, err)
 	}
 	// The instance's object is gone from the replica, as a purge that reached
-	// it would leave it; no copy runs while the purge does.
+	// it would leave it.
 	if err := copy1.Delete(r.ctx, keys[1]); err != nil {
 		t.Fatal(err)
-	}
-	r.copyAll()
-	if _, err := copy1.Stat(r.ctx, keys[1]); err == nil {
-		t.Fatal("a copy made during the purge put the purging instance's object back")
 	}
 	if row := r.row("copy", series); row.State == tenant.ReplicaInStep {
 		t.Fatalf("the replica's row before the scrub is %+v; want it waiting for the purge", row)

@@ -378,25 +378,35 @@ func scanOfSeries(ctx context.Context, tx SendingTx, series string) (claimedScan
 // however long the backlog: replica_scans_due, the rows due earliest first;
 // replica_scans_leased, the leases ended.
 //
-// Neither takes a scan an instance delete in state purging touches
-// (notPurgingSQL): until FinishPurge, the catalog names the manifest the
-// purge is replacing, and a copy claimed then would put that manifest and
-// its sidecar on the replica after the purge rewrote them there, naming the
-// deleted SOP Instance UID and holding its header until the next copy (on a
-// versioned store, as an old version for good). The row stays as it is,
-// due, and FinishPurge, which gives the scan its new manifest, queues it
-// again in the same transaction, so the next claim copies it at the new
-// manifest. The test reads the purging corrections by corrections_by_state
-// and each one's scan by correction_scans' key: they are few, so the rows
-// of every other scan pay one short probe each.
+// A scan whose instance delete is purging is claimed like any other: a
+// purge can wait for years under a hold, and new arrivals in the scan must
+// reach the replica meanwhile. The claim names the instances a purging
+// correction hides (ReplicaClaim.Purging): the copy skips their objects and
+// puts no manifest and no sidecar while the purge is unfinished, since the
+// catalog's manifest is the one the purge is replacing and, put on the
+// replica after the purge rewrote it there, would name the deleted SOP
+// Instance UID again. Such a copy never ends in step (EndReplicaScan); the
+// row waits, pending, until FinishPurge gives the scan its new manifest and
+// queues it again.
 const (
-	notPurgingSQL = ` AND NOT EXISTS (SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
-		WHERE c.state = 'purging' AND c.kind = 'delete' AND c.level = 'instance' AND cs.series_uid = replica_scans.series_uid)`
-	replicaDueSQL = `SELECT replica, series_uid FROM replica_scans WHERE state IN ('pending', 'damaged') AND due <= ?` +
-		notPurgingSQL + ` ORDER BY due, replica, series_uid LIMIT ?`
-	replicaLeaseEndedSQL = `SELECT replica, series_uid FROM replica_scans WHERE state = 'copying' AND lease_until <= ?` +
-		notPurgingSQL + ` ORDER BY lease_until, replica, series_uid LIMIT ?`
+	replicaDueSQL = `SELECT replica, series_uid FROM replica_scans WHERE state IN ('pending', 'damaged') AND due <= ?
+		ORDER BY due, replica, series_uid LIMIT ?`
+	replicaLeaseEndedSQL = `SELECT replica, series_uid FROM replica_scans WHERE state = 'copying' AND lease_until <= ?
+		ORDER BY lease_until, replica, series_uid LIMIT ?`
 )
+
+// purgeWaitRetry is how long a row whose copy left out the manifest of a
+// scan with a purge unfinished waits before it is claimed again, when
+// nothing queues it sooner: FinishPurge and every commit of the scan queue
+// it at once, so this only bounds how long a lost wake-up can leave the
+// replica behind, while a purge held for years copies the scan once a day
+// at most.
+const purgeWaitRetry = 24 * time.Hour
+
+// purgingHiddenSQL selects the SOP Instance UIDs of a scan, by its series
+// UID, that a correction in state purging hides.
+const purgingHiddenSQL = `SELECT h.sop_instance_uid FROM hidden_instances AS h JOIN corrections AS c ON c.id = h.correction_id
+	JOIN scans AS s ON s.id = h.scan_id WHERE c.state = 'purging' AND s.series_uid = ? ORDER BY h.sop_instance_uid`
 
 // ClaimReplicaScans implements tenant.Replication.
 func (k Sending) ClaimReplicaScans(ctx context.Context, owner string, now time.Time, lease time.Duration, limit int) ([]tenant.ReplicaClaim, error) {
@@ -494,18 +504,15 @@ func (k Sending) claimOne(ctx context.Context, tx SendingTx, replica, series, ow
 	}
 	// An instance a purging correction hides is not copied: the purge took
 	// its copies when it began, and StartPurge counted a change on every
-	// row of its scans being copied, so a claim made before ends again. The
-	// claim's reads already leave out a scan an instance delete is purging
-	// (notPurgingSQL); this list keeps any other purge's hidden instance off
-	// a copy all the same.
-	err = tx.Query(ctx, `SELECT h.sop_instance_uid FROM hidden_instances AS h JOIN corrections AS c ON c.id = h.correction_id
-		JOIN scans AS s ON s.id = h.scan_id WHERE c.state = 'purging' AND s.series_uid = ? ORDER BY h.sop_instance_uid`,
-		[]any{series}, func(r Row) error {
-			var uid string
-			err := r.Scan(&uid)
-			c.Purging = append(c.Purging, uid)
-			return err
-		})
+	// row of its scans being copied, so a claim made before ends again.
+	// While the list is not empty the copy also puts no manifest and no
+	// sidecar, which still name the hidden instance until FinishPurge.
+	err = tx.Query(ctx, purgingHiddenSQL, []any{series}, func(r Row) error {
+		var uid string
+		err := r.Scan(&uid)
+		c.Purging = append(c.Purging, uid)
+		return err
+	})
 	return c, true, err
 }
 
@@ -575,8 +582,22 @@ func (k Sending) EndReplicaScan(ctx context.Context, fence tenant.ReplicaFence, 
 		if !held || s.storage != primary {
 			return k.dropRow(ctx, tx, row, now)
 		}
+		// A copy of a scan with a purge unfinished put no manifest: the
+		// catalog's still names what the purge removes. The row waits,
+		// pending, for FinishPurge to queue it at the new manifest.
+		purging, err := tx.QueryRow(ctx, purgingHiddenSQL, []any{fence.SeriesUID}, new(string))
+		if err != nil {
+			return err
+		}
 		var t totals
-		if row.seq == row.claimed && ToSHA256(s.manifest) == manifest {
+		if purging {
+			out = afterCopy(row)
+			if _, err := tx.Exec(ctx, `UPDATE replica_scans SET state = ?, lease_until = NULL, owner = '', due = ?,
+				last_error = '' WHERE replica = ? AND series_uid = ?`, string(out), k.D.Time(now.Add(purgeWaitRetry)), fence.Replica,
+				fence.SeriesUID); err != nil {
+				return err
+			}
+		} else if row.seq == row.claimed && ToSHA256(s.manifest) == manifest {
 			// The copy put every damaged object again, verified: the
 			// findings recorded with the damage go with it.
 			if err := k.clearDamageFindings(ctx, tx, `replica = ? AND series_uid = ?`, []any{fence.Replica, fence.SeriesUID}, "",

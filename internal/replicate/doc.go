@@ -23,7 +23,11 @@
 //     among them: a replica is a faithful copy of its storage, and a hidden
 //     instance's object stays on the primary until its purge. Once its
 //     correction is purging, its object is skipped (the claim's Purging):
-//     the purge removes it from the copies it took when it began. A manifest
+//     the purge removes it from the copies it took when it began. While a
+//     purge of the scan is unfinished the copy also puts no sidecar and no
+//     manifest (step 4), which still name what the purge removes: the new
+//     objects of an arrival reach the replica, and the row is in step only
+//     after the purge's end queues it again at the new manifest. A manifest
 //     line of an instance the catalog holds must agree with the catalog's
 //     row of it, or the scan changed under the copy.
 //  3. Each object the replica does not hold verified, every object the

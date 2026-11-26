@@ -39,6 +39,14 @@ type EnginesConfig struct {
 	RecoverWait time.Duration
 	// Log takes what the pass reports; nil for none.
 	Log *slog.Logger
+	// HoldsAdopted, when not nil, answers nil once the holds found active
+	// on the tenant's storages with no row are adopted since this start
+	// and since the catalog's last activation (holds.Adopted), adopting
+	// them first when owed. The pass purges nothing of a tenant until it
+	// does: a database lost and made again, or restored from before a hold
+	// was placed, lacks the hold's row, and a committed delete past its
+	// grace would otherwise be purged before its hold holds again.
+	HoldsAdopted func(ctx context.Context, name string, st tenant.Store) error
 }
 
 // DefaultInterval is how often the pass runs by default: a minute, so a
@@ -466,6 +474,15 @@ func (es *Engines) passOne(name string, r *engineRun) {
 		}
 	} else {
 		es.abandonLeft(name, r)
+	}
+	if es.cfg.HoldsAdopted != nil {
+		if err := es.cfg.HoldsAdopted(es.ctx, name, r.store); err != nil {
+			if es.ctx.Err() == nil {
+				es.cfg.Log.Warn("corrections: purges wait: the holds found on the tenant's storages are not adopted yet; the pass tries again",
+					"tenant", name, "reason", fault.Message(err))
+			}
+			return
+		}
 	}
 	n, err := r.engine.PurgeDue(es.ctx)
 	switch {

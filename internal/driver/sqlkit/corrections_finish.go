@@ -83,9 +83,9 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 // statement is one over the delete's own rows, whatever their number, and
 // touches no row another correction or the catalog owns: a revision
 // another correction recorded is left as it is, and a mark of a UID the
-// catalog holds again stays. A scan whose manifest it rewrites is queued
-// again for its storage's replicas at now: they hold the manifest it
-// replaces, which no longer names the scan.
+// catalog holds again stays. An instance delete's scan is queued again for
+// its storage's replicas at now: they hold the manifest the purge replaces,
+// or none put while it ran.
 func (k Sending) dropDeleted(ctx context.Context, tx SendingTx, c tenant.Correction, manifest, before tenant.SHA256, now time.Time) error {
 	// The layout's key is revision 1; a key the catalog held whole is a
 	// later revision, whose number its key carries, read one by one (a
@@ -138,14 +138,17 @@ func (k Sending) dropDeleted(ctx context.Context, tx SendingTx, c tenant.Correct
 		if !before.IsZero() {
 			q, args = q+` AND (manifest_sha256 = ? OR manifest_sha256 IS NULL)`, append(args, before[:])
 		}
-		n, err := tx.Exec(ctx, q, args...)
-		if err != nil {
+		if _, err := tx.Exec(ctx, q, args...); err != nil {
 			return err
 		}
-		if n > 0 {
-			if err := k.queueRewritten(ctx, tx, c.ID, now); err != nil {
-				return err
-			}
+	}
+	if c.Level == corr.LevelInstance {
+		// Queued whether or not the manifest was set here: a copy made
+		// while the purge ran put no manifest and left the row waiting
+		// for this end, and an arrival committed meanwhile already gave
+		// the scan a manifest written without the instance.
+		if err := k.queueRewritten(ctx, tx, c.ID, now); err != nil {
+			return err
 		}
 	}
 	return dropHidden(ctx, tx, c.ID)

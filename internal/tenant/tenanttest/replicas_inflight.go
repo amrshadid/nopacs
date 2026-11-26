@@ -17,7 +17,8 @@ import (
 // lost lease, so it puts nothing more and never ends in step), its row is
 // due again with the change counted, and the correction keeps the copy's
 // lease due plus the grace as the moment its purge waits for; the next
-// claim does not take the scan while the purge runs.
+// claim takes the scan naming the instance the purge removes, so that copy
+// skips it.
 func testPurgeEndsCopies(e *renv) {
 	e.replicaSetup()
 	e.attach("copy", "store", 10)
@@ -55,19 +56,23 @@ func testPurgeEndsCopies(e *renv) {
 	if c := e.correction(id); !c.CopiesInFlightUntil.Equal(want) {
 		e.Errorf("the purge's start kept %v as copies in flight; want the copy's lease due plus the grace, %v", c.CopiesInFlightUntil, want)
 	}
-	if again := e.claimAll(53); len(again) != 0 {
-		e.Fatalf("the claim after the purge's start is %+v; want none while the purge runs", again)
+	again := e.claimAll(53)
+	if len(again) != 1 || again[0].Fence.SeriesUID != seriesA || len(again[0].Purging) != 1 || again[0].Purging[0] != uidOf(3, 0) {
+		e.Fatalf("the claim after the purge's start is %+v; want the scan, naming the instance the purge removes", again)
 	}
 }
 
-// testPurgingScanNotClaimed guards the claim against an instance delete in
-// state purging: until FinishPurge the catalog still names the manifest the
-// purge is replacing, so a copy claimed then would put that manifest, which
-// names the deleted instance, on the replica after the purge rewrote it
-// there. The scan's row stays pending, due, and is not claimed while the
-// purge runs (the replica's other scans are); FinishPurge queues it again,
-// and the next claim takes it at the new manifest.
-func testPurgingScanNotClaimed(e *renv) {
+// testPurgingScanClaimedWithoutItsManifest guards the claim of a scan an
+// instance delete in state purging touches, which may stay purging for
+// years under a hold: the scan is claimed, so new arrivals in it reach the
+// replica, and the claim names the instance the purge removes, which the
+// copy skips. Until FinishPurge the catalog still names the manifest the
+// purge is replacing, so such a copy puts no manifest, and its end never
+// records the row in step: the row waits, pending and not due, a new
+// arrival making it due at once; FinishPurge queues it again, and the next
+// claim takes it at the new manifest, naming nothing purging, and ends it
+// in step.
+func testPurgingScanClaimedWithoutItsManifest(e *renv) {
 	e.replicaSetup()
 	e.attach("copy", "store", 10)
 	e.copyAll(20)
@@ -85,31 +90,48 @@ func testPurgingScanNotClaimed(e *renv) {
 		e.Fatalf("the scan of the deleted instance is %s on the replica after the publish, want pending", st)
 	}
 	e.startPurge(id, 40)
-	// The other scan, queued again, is claimed beside the purge.
-	_, err = e.p.BackfillReplica(e.ctx, "copy", at(41), e.audit(), nil)
-	e.ok("BackfillReplica", err)
-	claims := e.claimAll(42)
-	if len(claims) != 1 || claims[0].Fence.SeriesUID != seriesB {
-		e.Fatalf("the claims while the instance delete purges are %+v; want the other scan alone", claims)
+	purgingOne := func(what string, claims []tenant.ReplicaClaim) tenant.ReplicaClaim {
+		e.Helper()
+		if len(claims) != 1 || claims[0].Fence.SeriesUID != seriesA || len(claims[0].Purging) != 1 || claims[0].Purging[0] != uidOf(3, 0) {
+			e.Fatalf("the claims %s are %+v; want the scan, naming the instance the purge removes", what, claims)
+		}
+		return claims[0]
 	}
-	_, err = e.p.EndReplicaScan(e.ctx, claims[0].Fence, claims[0].ManifestSHA256, at(43))
-	e.ok("EndReplicaScan", err)
-	if again := e.claimAll(44); len(again) != 0 {
-		e.Fatalf("a later claim while the purge runs is %+v; want none", again)
+	endPending := func(what string, c tenant.ReplicaClaim, s int) {
+		e.Helper()
+		st, err := e.p.EndReplicaScan(e.ctx, c.Fence, c.ManifestSHA256, at(s))
+		e.ok("EndReplicaScan", err)
+		if st != tenant.ReplicaPending || e.rowState("copy", seriesA) != tenant.ReplicaPending {
+			e.Fatalf("the end of a copy %s is %s; want pending, never in step while the purge is unfinished", what, st)
+		}
+		if again := e.claimAll(s + 1); len(again) != 0 {
+			e.Fatalf("the claims just after the copy %s are %+v; want none until the scan changes", what, again)
+		}
 	}
-	if st := e.rowState("copy", seriesA); st != tenant.ReplicaPending {
-		e.Errorf("the scan left unclaimed while its purge runs is %s, want pending", st)
-	}
+	endPending("while the purge runs", purgingOne("while the instance delete purges", e.claimAll(42)), 43)
 	e.wantReplicaCounts("while the purge runs", "copy", 1, 0, 1, 0, 0)
+	// A new arrival in the scan: due at once, claimed at its new manifest.
+	_, err = e.commitInto(seriesA, 9, 50)
+	e.ok("CommitScan into the scan whose purge runs", err)
+	arrived := purgingOne("after an arrival", e.claimAll(53))
+	if arrived.ManifestSHA256 != sum(9) {
+		e.Errorf("the claim after an arrival is at manifest %v; want the arrival's %v", arrived.ManifestSHA256, sum(9))
+	}
+	endPending("after an arrival", arrived, 54)
 	e.ok("RecordPurgedObject", e.p.RecordPurgedObject(e.ctx, tenant.PurgedObject{ID: id, Storage: "store", Key: c.InstanceKey,
-		Size: c.InstanceSize, SHA256: sum(5), Disposition: tenant.DispositionRemoved, Now: at(45)}))
+		Size: c.InstanceSize, SHA256: sum(5), Disposition: tenant.DispositionRemoved, Now: at(60)}))
 	scan, err := e.p.CatalogScan(e.ctx, target.Path())
 	e.ok("CatalogScan", err)
-	_, err = e.p.FinishPurge(e.ctx, tenant.PurgeFinish{ID: id, Now: at(46), Manifest: sum(77), ManifestBefore: scan.ManifestSHA256})
+	_, err = e.p.FinishPurge(e.ctx, tenant.PurgeFinish{ID: id, Now: at(61), Manifest: sum(77), ManifestBefore: scan.ManifestSHA256})
 	e.ok("FinishPurge", err)
-	after := e.claimAll(47)
-	if len(after) != 1 || after[0].Fence.SeriesUID != seriesA || after[0].ManifestSHA256 != sum(77) {
-		e.Fatalf("the claims after the purge are %+v; want the scan at the manifest written without the instance", after)
+	after := e.claimAll(62)
+	if len(after) != 1 || after[0].Fence.SeriesUID != seriesA || after[0].ManifestSHA256 != sum(77) || len(after[0].Purging) != 0 {
+		e.Fatalf("the claims after the purge are %+v; want the scan at the manifest written without the instance, nothing purging", after)
+	}
+	st, err := e.p.EndReplicaScan(e.ctx, after[0].Fence, after[0].ManifestSHA256, at(63))
+	e.ok("EndReplicaScan", err)
+	if st != tenant.ReplicaInStep {
+		e.Errorf("the copy after the purge ended %s; want in step", st)
 	}
 }
 

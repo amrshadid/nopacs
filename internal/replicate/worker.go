@@ -34,7 +34,8 @@ type Queue interface {
 // whose manifest lines must agree with its row (tenant.InstanceReads); and
 // the scan's row, for the manifest digest it is committed at
 // (tenant.Catalog), which a copy that did not end reads to tell what it put
-// that the catalog no longer names.
+// that the catalog no longer names. A Catalog that is also HiddenScans
+// lets that copy keep what it put of a scan a delete still undoable hides.
 type Catalog interface {
 	ListHeldInstances(ctx context.Context, path label.Path, page master.Page) ([]tenant.ScanInstance, string, error)
 	CatalogScan(ctx context.Context, path label.Path) (tenant.CatalogScan, error)
@@ -286,7 +287,8 @@ type Pass struct {
 	// Claimed counts the scans claimed.
 	Claimed int
 	// InStep counts those ended in step; Again those ended but not in
-	// step, a change of the scan published while it copied; Failed those
+	// step, a change of the scan published while it copied or a purge of
+	// it unfinished, whose manifest is not put until it ends; Failed those
 	// whose failure was recorded; Stopped those left to their lease (a
 	// lease lost or a stop).
 	InStep, Again, Failed, Stopped int
