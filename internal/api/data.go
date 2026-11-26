@@ -208,7 +208,7 @@ func (s dataService) ReadFiles(ctx context.Context, req *v1.ReadFilesRequest, st
 	defer stores.Close()
 
 	c.record(d, st, master.OutcomeDone, "", access.Facts{Details: withDetails(details, map[string]string{detailStream: "opened"})})
-	fr := &fileReader{c: c, p: p, q: q, stores: stores, send: stream.Send}
+	fr := &fileReader{c: c, d: d, p: p, q: q, stores: stores, send: stream.Send}
 	if !q.announceOnly {
 		fr.bufs = [2][]byte{make([]byte, ChunkSize), make([]byte, ChunkSize)}
 	}
@@ -239,7 +239,10 @@ func (s dataService) ReadFiles(ctx context.Context, req *v1.ReadFilesRequest, st
 // fileReader walks what a ReadFiles request names, in the contract's order,
 // and sends each message.
 type fileReader struct {
-	c      *core
+	c *core
+	// d is the request's decision, which an instance archived as received
+	// is judged by before anything of it is sent (refuseAsReceived).
+	d      access.Decision
 	p      tenant.Pipeline
 	q      readQuery
 	stores *checkedread.Stores
@@ -367,6 +370,10 @@ func (r *fileReader) scan(ctx context.Context, sc tenant.CatalogScan) error {
 // storage that does not answer) is read from the replica, checked as the
 // primary's would be.
 func (r *fileReader) instance(ctx context.Context, path label.Path, series string, in tenant.ScanInstance) error {
+	if err := refuseAsReceived(r.d, in); err != nil {
+		// Before its announcement, whose SOP Instance UID is the sender's.
+		return err
+	}
 	obj := checkedread.InstanceObject(in, series, path)
 	marked := r.stores.Readable(ctx, obj)
 	if err := r.send(&v1.ReadFilesResponse{Part: &v1.ReadFilesResponse_File{File: &v1.ArchivedFile{

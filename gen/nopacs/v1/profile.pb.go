@@ -4857,7 +4857,14 @@ type TryProfileRequest struct {
 	// at most 64 bytes.
 	QuarantineRecords []string `protobuf:"bytes,4,rep,name=quarantine_records,json=quarantineRecords,proto3" json:"quarantine_records,omitempty"`
 	// The reception the sent files are tried as coming from.
-	Reception     *TrialReception `protobuf:"bytes,5,opt,name=reception,proto3" json:"reception,omitempty"`
+	Reception *TrialReception `protobuf:"bytes,5,opt,name=reception,proto3" json:"reception,omitempty"`
+	// Whether to answer each element's values (TrialElement.before and
+	// after). Unset, each element is answered with its path, VR, the lengths
+	// of its values, the action, the rule and whether it changed, and no
+	// value: what the caller prints may leave the site, as an AI agent's
+	// output does. Set, the values are answered and the run's audit entry
+	// records it ("show_values"); a masked key (Key.masked) is refused it.
+	ShowValues    bool `protobuf:"varint,6,opt,name=show_values,json=showValues,proto3" json:"show_values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4925,6 +4932,13 @@ func (x *TryProfileRequest) GetReception() *TrialReception {
 		return x.Reception
 	}
 	return nil
+}
+
+func (x *TryProfileRequest) GetShowValues() bool {
+	if x != nil {
+		return x.ShowValues
+	}
+	return false
 }
 
 // TryProfileResponse is the result of each file, in the order of the
@@ -5400,11 +5414,13 @@ type TrialElement struct {
 	Changed bool `protobuf:"varint,9,opt,name=changed,proto3" json:"changed,omitempty"`
 	// The value before, as text, its padding removed; empty for a value
 	// that is not text (a sequence, binary data) and for an element the
-	// received data set does not hold at this path.
+	// received data set does not hold at this path. Empty unless the request
+	// set show_values.
 	Before string `protobuf:"bytes,10,opt,name=before,proto3" json:"before,omitempty"`
 	// The value after, read back from the de-identified file as written;
 	// empty when it is not text or the element is not in that file, and for
-	// every element of a file that was held before it was written.
+	// every element of a file that was held before it was written. Empty
+	// unless the request set show_values.
 	After string `protobuf:"bytes,11,opt,name=after,proto3" json:"after,omitempty"`
 	// Whether the de-identified file holds the element.
 	PresentAfter bool `protobuf:"varint,12,opt,name=present_after,json=presentAfter,proto3" json:"present_after,omitempty"`
@@ -5415,8 +5431,14 @@ type TrialElement struct {
 	// value: each part it matched whole, each text a search found; zero when
 	// the deciding rule has no value pattern.
 	PatternMatches int32 `protobuf:"varint,14,opt,name=pattern_matches,json=patternMatches,proto3" json:"pattern_matches,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The length in bytes of the value before, as before states it (text,
+	// its padding removed); zero where before is empty for any reason but
+	// show_values. Answered whether or not the values are.
+	BeforeLength int32 `protobuf:"varint,15,opt,name=before_length,json=beforeLength,proto3" json:"before_length,omitempty"`
+	// The length in bytes of the value after, as after states it.
+	AfterLength   int32 `protobuf:"varint,16,opt,name=after_length,json=afterLength,proto3" json:"after_length,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TrialElement) Reset() {
@@ -5543,6 +5565,20 @@ func (x *TrialElement) GetRedactions() int32 {
 func (x *TrialElement) GetPatternMatches() int32 {
 	if x != nil {
 		return x.PatternMatches
+	}
+	return 0
+}
+
+func (x *TrialElement) GetBeforeLength() int32 {
+	if x != nil {
+		return x.BeforeLength
+	}
+	return 0
+}
+
+func (x *TrialElement) GetAfterLength() int32 {
+	if x != nil {
+		return x.AfterLength
 	}
 	return 0
 }
@@ -7266,13 +7302,15 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\x0eTrialReception\x12\x1a\n" +
 	"\breceiver\x18\x01 \x01(\tR\breceiver\x12(\n" +
 	"\x10calling_ae_title\x18\x02 \x01(\tR\x0ecallingAeTitle\x12&\n" +
-	"\x0fcalled_ae_title\x18\x03 \x01(\tR\rcalledAeTitle\"\xf2\x01\n" +
+	"\x0fcalled_ae_title\x18\x03 \x01(\tR\rcalledAeTitle\"\x93\x02\n" +
 	"\x11TryProfileRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x121\n" +
 	"\aprofile\x18\x02 \x01(\v2\x17.nopacs.v1.TrialProfileR\aprofile\x12*\n" +
 	"\x05files\x18\x03 \x03(\v2\x14.nopacs.v1.TrialFileR\x05files\x12-\n" +
 	"\x12quarantine_records\x18\x04 \x03(\tR\x11quarantineRecords\x127\n" +
-	"\treception\x18\x05 \x01(\v2\x19.nopacs.v1.TrialReceptionR\treception\"\xf7\x01\n" +
+	"\treception\x18\x05 \x01(\v2\x19.nopacs.v1.TrialReceptionR\treception\x12\x1f\n" +
+	"\vshow_values\x18\x06 \x01(\bR\n" +
+	"showValues\"\xf7\x01\n" +
 	"\x12TryProfileResponse\x123\n" +
 	"\aversion\x18\x01 \x01(\v2\x19.nopacs.v1.ProfileVersionR\aversion\x12\x1a\n" +
 	"\bchecksum\x18\x02 \x01(\tR\bchecksum\x12+\n" +
@@ -7310,7 +7348,7 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\rdecoded_bytes\x18\b \x01(\x03R\fdecodedBytes\x12\x18\n" +
 	"\adecoded\x18\t \x01(\bR\adecoded\x12)\n" +
 	"\x10segments_removed\x18\n" +
-	" \x03(\tR\x0fsegmentsRemoved\"\x85\x03\n" +
+	" \x03(\tR\x0fsegmentsRemoved\"\xcd\x03\n" +
 	"\fTrialElement\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\akeyword\x18\x02 \x01(\tR\akeyword\x12\x0e\n" +
@@ -7328,7 +7366,9 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\n" +
 	"redactions\x18\r \x01(\x05R\n" +
 	"redactions\x12'\n" +
-	"\x0fpattern_matches\x18\x0e \x01(\x05R\x0epatternMatches\"\xd2\x01\n" +
+	"\x0fpattern_matches\x18\x0e \x01(\x05R\x0epatternMatches\x12#\n" +
+	"\rbefore_length\x18\x0f \x01(\x05R\fbeforeLength\x12!\n" +
+	"\fafter_length\x18\x10 \x01(\x05R\vafterLength\"\xd2\x01\n" +
 	"\fTrialSummary\x12\x14\n" +
 	"\x05files\x18\x01 \x01(\x05R\x05files\x12\x16\n" +
 	"\x06passed\x18\x02 \x01(\x05R\x06passed\x12\x12\n" +

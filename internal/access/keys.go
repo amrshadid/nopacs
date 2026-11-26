@@ -31,7 +31,14 @@ const (
 	detailExpires = "expires"
 	detailScope   = "scope"
 	detailFilter  = "filter"
+	// detailKeyMasked is on the entry that makes a masked key: the key
+	// made is masked, whoever made it (DetailMasked says the caller is).
+	detailKeyMasked = "key_masked"
 )
+
+// reasonMaskedMakesPlain is the audit reason of a masked caller refused a
+// key without the flag.
+const reasonMaskedMakesPlain = "a masked key may make only masked keys"
 
 // Expiry is when a new key stops working. The zero Expiry is the default,
 // DefaultKeyLifetime after the key is made.
@@ -150,6 +157,7 @@ func (a *Access) actFor(d Decision, needAdmin bool, object string, details map[s
 	}
 	if details != nil {
 		e.Details = details
+		e = d.principal.markMasked(e)
 	}
 	role := master.Role("")
 	if needAdmin {
@@ -377,10 +385,37 @@ func publicKey(k master.Key) master.Key {
 // names the key, its holder and its rules and never its secret, are written
 // in one transaction. The whole key is in the result's Secret, once: only
 // its hash is stored.
+//
+// A masked caller is refused, as Denied with MessageMasked: the secret of a
+// key without the flag, answered to a key that has it, would let its holder
+// read what its own key is refused. It makes a masked key instead
+// (CreateMaskedKey).
 func (a *Access) CreateKey(ctx context.Context, d Decision, holder string, exp Expiry, rules master.KeyRules) (CreatedKey, error) {
-	entry, by, err := a.change(ctx, d, "", map[string]string{detailHolder: auditText(holder, master.MaxAuditDetailValueLength)})
+	return a.createKey(ctx, d, holder, exp, rules, false)
+}
+
+// CreateMaskedKey is CreateKey for a masked key (master.Key.Masked): one
+// never answered a value that is not in its archived, de-identified form,
+// for an AI agent or any outside service whose output leaves the site. The
+// flag is kept by every rotation and never removed; its entry records it
+// (detailKeyMasked).
+func (a *Access) CreateMaskedKey(ctx context.Context, d Decision, holder string, exp Expiry, rules master.KeyRules) (CreatedKey, error) {
+	return a.createKey(ctx, d, holder, exp, rules, true)
+}
+
+// createKey is CreateKey and CreateMaskedKey.
+func (a *Access) createKey(ctx context.Context, d Decision, holder string, exp Expiry, rules master.KeyRules, masked bool) (CreatedKey, error) {
+	details := map[string]string{detailHolder: auditText(holder, master.MaxAuditDetailValueLength)}
+	if masked {
+		details[detailKeyMasked] = "true"
+	}
+	entry, by, err := a.change(ctx, d, "", details)
 	if err != nil {
 		return CreatedKey{}, err
+	}
+	if !masked && d.principal.Masked() {
+		a.record(entry, master.OutcomeRefused, reasonMaskedMakesPlain)
+		return CreatedKey{}, fault.New(fault.Denied, MessageMasked)
 	}
 	now := entry.Time
 	expires, err := exp.expires(now)
@@ -391,7 +426,7 @@ func (a *Access) CreateKey(ctx context.Context, d Decision, holder string, exp E
 	if err != nil {
 		return CreatedKey{}, a.failAfter(entry, err)
 	}
-	k := master.Key{ID: made.ID, Hash: made.Hash[:], Holder: holder, Created: now, Expires: expires, Rules: rules}
+	k := master.Key{ID: made.ID, Hash: made.Hash[:], Holder: holder, Created: now, Expires: expires, Rules: rules, Masked: masked}
 	entry.Object = k.ID
 	addRuleDetails(entry.Details, rules)
 	if expires.IsZero() {
@@ -453,7 +488,8 @@ func (a *Access) readGrantsAs(ctx context.Context, d Decision, scope Scope, deta
 // tenant named tenantName, in order of key id, and the token of the next
 // page; ListGrants on the tenant answers their roles. The installation's
 // admin reads each key whole, without its hash; the tenant's own admin reads
-// only each key's id and holder, never its networks, certificate, expiry,
+// only each key's id, holder and masked flag (which tells the admin which
+// keys an outside service holds), never its networks, certificate, expiry,
 // use or other grants: who may use the tenant is that admin's business, the
 // rest of a key is the installation's. A tenant that does not exist is
 // NotFound.
@@ -486,7 +522,7 @@ func (a *Access) ListKeysOnTenant(ctx context.Context, d Decision, tenantName st
 			return nil, "", a.failAfter(entry, err)
 		}
 		if bounded {
-			k = master.Key{ID: k.ID, Holder: k.Holder}
+			k = master.Key{ID: k.ID, Holder: k.Holder, Masked: k.Masked}
 		}
 		out = append(out, publicKey(k))
 	}

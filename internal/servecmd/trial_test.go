@@ -19,7 +19,7 @@ func TestATrialReadsAHeldFileOnTheRealServer(t *testing.T) {
 	post(t, s.hc, "/nopacs.v1.ProfileService/CreateProfileVersion",
 		`{"tenant":"`+s.tenant+`","name":"research","document":{"bases":["annex-e/basic:2026d"]}}`)
 	body := post(t, s.hc, "/nopacs.v1.ProfileService/TryProfile",
-		`{"tenant":"`+s.tenant+`","profile":{"version":{"name":"research"}},"quarantineRecords":["`+id+`"]}`)
+		`{"tenant":"`+s.tenant+`","profile":{"version":{"name":"research"}},"quarantineRecords":["`+id+`"],"showValues":true}`)
 	var got struct {
 		Results []struct {
 			QuarantineRecord     string `json:"quarantineRecord"`

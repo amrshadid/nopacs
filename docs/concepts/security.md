@@ -85,6 +85,47 @@ first key is made on the socket (`nopacs key create`, then `nopacs grant set`), 
 why a few commands exist only for the local operator, such as reinstating a
 restored installation's keys. Whoever can become that user owns the installation.
 
+## Keys for AI agents: masked keys
+
+An AI agent driven by an outside model sends whatever a command prints to its
+vendor. Give such an agent, or any other outside service, a **masked key**
+(`nopacs key create --holder "review agent" --masked`). A masked key keeps its role,
+but the server never answers it a value that is not in its archived, de-identified
+form, whatever the client: it is refused (`PERMISSION_DENIED`, exit 3) a
+quarantined file's header, a search of quarantine or of receptions by a UID as
+received, a trial's values, a trial or an explanation of a held file (`--record`:
+which rule matched, a pattern's matches and a value's lengths would let it read a
+held value back one guess at a time; it tries the files it sends), `deid code` and
+lookup imports, an import's paths, the metadata and files of data archived as
+received, and backups and exports; quarantine records and receptions reach it
+without their UIDs as received.
+
+A masked key also never chooses where archived data goes: a send job, attaching or
+filling a replica, adding or changing a storage or a sender, and a receiver made to
+forward (`forward_to` or a route's senders) are refused to it (`PERMISSION_DENIED`,
+"a masked key may not choose where archived data goes; a person does"), each refusal
+in the audit log. Where data goes is a person's choice.
+
+The flag is kept by every rotation and can never be removed (make a new key
+instead), a masked key can make and rotate only masked keys (a plain key's
+successor would hand it a plain secret), and every audit entry it makes carries the
+detail `masked` = `true`, so the log shows what an agent read.
+
+What a person writes into a profile (a rule's name, a pattern, a replacement value)
+is answered as written by `profile get`, `diff` and `describe`, to a masked key too:
+a rule that names a patient is that person's doing, so keep identifiers out of
+profile documents.
+
+Previews hide values from every key by default: `profile try` and
+`quarantine show --header` show each element's tag, VR, length, rule, action and
+whether it changed, but no value, unless `--show-values` asks; the server records
+that in the audit log. `nopacs agent-guide` prints every command and the shape of
+its `--json`, for an agent to read.
+
+What stays the installation's choice: de-identified data can still point to a
+person (dates, rare findings, free text a profile keeps). Which model may see which
+tenant, and under which agreement with its vendor, is decided by the site.
+
 ## Networks and limits
 
 Settings say where requests may come from (`access.allowed-networks`,

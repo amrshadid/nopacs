@@ -91,15 +91,15 @@ func (s *stowSite) waitHeld(reason string) string {
 	return id
 }
 
-// getHeader asks for a held file with its header and returns the answer's
-// header text and too-large flag.
+// getHeader asks for a held file with its header and its values and
+// returns the answer's header text and too-large flag.
 func (s *stowSite) getHeader(id string) (text string, tooLarge bool) {
 	s.t.Helper()
 	var got struct {
 		HeaderJSON     string `json:"headerJson"`
 		HeaderTooLarge bool   `json:"headerTooLarge"`
 	}
-	body := post(s.t, s.hc, "/nopacs.v1.QuarantineService/GetQuarantinedFile", `{"tenant":"`+s.tenant+`","id":"`+id+`","includeHeader":true}`)
+	body := post(s.t, s.hc, "/nopacs.v1.QuarantineService/GetQuarantinedFile", `{"tenant":"`+s.tenant+`","id":"`+id+`","includeHeader":true,"showValues":true}`)
 	if err := json.Unmarshal(body, &got); err != nil {
 		s.t.Fatalf("%v: %s", err, body)
 	}

@@ -167,8 +167,12 @@ func errImportJobRunning(what string) error {
 // mayReadPaths reports whether the caller of d may read the paths under an
 // import root and an import's map: an operator or more on the tenant the
 // request is in, or on the installation (job.proto, "A path can hold what
-// identifies a person").
+// identifies a person"). A masked key never may: a path is an original
+// value, not one the archive de-identified.
 func mayReadPaths(d access.Decision) bool {
+	if d.Masked() {
+		return false
+	}
 	p := d.Principal()
 	if p.Role(master.Installation).Includes(master.RoleOperator) {
 		return true

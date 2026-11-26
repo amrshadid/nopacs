@@ -1026,8 +1026,15 @@ type GetQuarantinedFileRequest struct {
 	// The record's id. Required; at most 64 bytes.
 	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	// Whether to answer the file's DICOM header in header_json. Needs
-	// operator on the tenant.
+	// operator on the tenant; refused to a masked key.
 	IncludeHeader bool `protobuf:"varint,3,opt,name=include_header,json=includeHeader,proto3" json:"include_header,omitempty"`
+	// Whether the header answered holds its values. Unset, header_json holds
+	// each attribute with its VR and, for a sequence, its items, but no
+	// value: what the caller prints may leave the site, as an AI agent's
+	// output does. Set, it is the header as the sender sent it, and the
+	// request's audit entry records it ("show_values"). Only with
+	// include_header.
+	ShowValues    bool `protobuf:"varint,4,opt,name=show_values,json=showValues,proto3" json:"show_values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1083,6 +1090,13 @@ func (x *GetQuarantinedFileRequest) GetIncludeHeader() bool {
 	return false
 }
 
+func (x *GetQuarantinedFileRequest) GetShowValues() bool {
+	if x != nil {
+		return x.ShowValues
+	}
+	return false
+}
+
 // GetQuarantinedFileResponse is the quarantined file named.
 type GetQuarantinedFileResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1093,8 +1107,10 @@ type GetQuarantinedFileResponse struct {
 	// 1 KiB are left out entirely, with no BulkDataURI and no InlineBinary.
 	// Answered only when include_header was true, the file's bytes are held,
 	// its data set could be read, and the result is at most 1 MiB; a longer
-	// one is never cut, but left out, with header_too_large set. It holds
-	// what the sender sent, identifying data included.
+	// one is never cut, but left out, with header_too_large set. With
+	// show_values it holds what the sender sent, identifying data included;
+	// without, every "Value", "InlineBinary" and "BulkDataURI" member is
+	// removed, at every depth of sequences.
 	HeaderJson string `protobuf:"bytes,2,opt,name=header_json,json=headerJson,proto3" json:"header_json,omitempty"`
 	// Whether the header was left out because it is longer than 1 MiB.
 	HeaderTooLarge bool `protobuf:"varint,3,opt,name=header_too_large,json=headerTooLarge,proto3" json:"header_too_large,omitempty"`
@@ -1509,11 +1525,13 @@ const file_nopacs_v1_quarantine_proto_rawDesc = "" +
 	"\x10sop_instance_uid\x18\v \x01(\tR\x0esopInstanceUid\"x\n" +
 	"\x1cListQuarantinedFilesResponse\x120\n" +
 	"\x05files\x18\x01 \x03(\v2\x1a.nopacs.v1.QuarantinedFileR\x05files\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"j\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x8b\x01\n" +
 	"\x19GetQuarantinedFileRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12%\n" +
-	"\x0einclude_header\x18\x03 \x01(\bR\rincludeHeader\"\x97\x01\n" +
+	"\x0einclude_header\x18\x03 \x01(\bR\rincludeHeader\x12\x1f\n" +
+	"\vshow_values\x18\x04 \x01(\bR\n" +
+	"showValues\"\x97\x01\n" +
 	"\x1aGetQuarantinedFileResponse\x12.\n" +
 	"\x04file\x18\x01 \x01(\v2\x1a.nopacs.v1.QuarantinedFileR\x04file\x12\x1f\n" +
 	"\vheader_json\x18\x02 \x01(\tR\n" +

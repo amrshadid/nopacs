@@ -18,6 +18,36 @@
 // grant and is admin on the installation and on every tenant. Each method's
 // comment names the role it needs and on what.
 //
+// A masked key (Key.masked), the key an AI agent or any other outside
+// service holds, keeps its role but is never answered a value that is not
+// in its archived, de-identified form: whatever such a service reads leaves
+// the site. Whatever its role, it is refused PERMISSION_DENIED, with the
+// message "a masked key is never answered an original value", once its grant
+// is found to suffice: a quarantined file's header
+// (GetQuarantinedFile.include_header) and a search of quarantined files by
+// a UID as received; the values of a trial (TryProfileRequest.show_values),
+// and a trial or an explanation of a held file, whose matches and lengths
+// would answer its values one guess at a time (TryProfileRequest
+// .quarantine_records, ExplainProfileRequest.quarantine_record); a search
+// of receptions by a UID as received; DeidService.Code and
+// ImportLookupCodes; the paths an import job read (ListImportFiles,
+// ListImportUnits); the metadata and files of an instance archived as
+// received (MetadataService, DataService, its plain HTTP download and
+// DICOMweb); and a backup or an export. Quarantine records are answered to
+// it without the UIDs as received, the details that hold one, and the
+// import path; receptions without their UIDs, which are the ones received.
+// A masked caller makes and rotates only masked keys, and a rotation keeps
+// the flag, which nothing removes.
+//
+// Where the archive's bytes go is a person's choice, never an outside
+// service's: a masked key is refused PERMISSION_DENIED, with the message "a
+// masked key may not choose where archived data goes; a person does", once
+// its grant is found to suffice, a send job (JobService.CreateJob with
+// send), a replica's attachment and backfill, a storage or a sender added
+// or changed, and a receiver added or changed to forward (forward_to, or a
+// route's senders). Every audit entry such a key makes, a refusal
+// included, carries the detail "masked" set to "true".
+//
 // The order of checks. Every request is checked in this order, and the first
 // check that fails gives the answer: (1) the caller is authenticated, or the
 // answer is UNAUTHENTICATED; (2) the caller holds the role the method needs,
@@ -237,7 +267,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/access.proto.
  */
 export const file_nopacs_v1_access: GenFile = /*@__PURE__*/
-  fileDesc("ChZub3BhY3MvdjEvYWNjZXNzLnByb3RvEglub3BhY3MudjEiigMKA0tleRIKCgJpZBgBIAEoCRIOCgZob2xkZXIYAiABKAkSLwoLY3JlYXRlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2V4cGlyZV90aW1lGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg1sYXN0X3VzZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtyZXZva2VfdGltZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIbmV0d29ya3MYByADKAkSGgoSY2xpZW50X2NlcnRfc2hhMjU2GAggASgJEhgKEGxhc3RfdXNlX2FkZHJlc3MYCSABKAkSFAoMc3VjY2Vzc29yX2lkGAogASgJEhEKCXN1c3BlbmRlZBgLIAEoCBIwCgxzdXNwZW5kX3RpbWUYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlcKBUdyYW50Eg4KBmtleV9pZBgBIAEoCRIfCgVzY29wZRgCIAEoCzIQLm5vcGFjcy52MS5TY29wZRIdCgRyb2xlGAMgASgOMg8ubm9wYWNzLnYxLlJvbGUiigEKCVByaW5jaXBhbBIdCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5SAASMgoObG9jYWxfb3BlcmF0b3IYAiABKAsyGC5ub3BhY3MudjEuTG9jYWxPcGVyYXRvckgAEiAKBmdyYW50cxgDIAMoCzIQLm5vcGFjcy52MS5HcmFudEIICgZjYWxsZXIiIAoNTG9jYWxPcGVyYXRvchIPCgd1c2VyX2lkGAEgASgJIqUBChBDcmVhdGVLZXlSZXF1ZXN0Eg4KBmhvbGRlchgBIAEoCRIxCgxleHBpcmVfYWZ0ZXIYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb25IABIWCgxuZXZlcl9leHBpcmUYAyABKAhIABIQCghuZXR3b3JrcxgEIAMoCRIaChJjbGllbnRfY2VydF9zaGEyNTYYBSABKAlCCAoGZXhwaXJ5IkUKEUNyZWF0ZUtleVJlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkSEwoGc2VjcmV0GAIgASgJQgOAAQEiGwoNR2V0S2V5UmVxdWVzdBIKCgJpZBgBIAEoCSItCg5HZXRLZXlSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5IkgKD0xpc3RLZXlzUmVxdWVzdBIRCglwYWdlX3NpemUYASABKAUSEgoKcGFnZV90b2tlbhgCIAEoCRIOCgZ0ZW5hbnQYAyABKAkiSQoQTGlzdEtleXNSZXNwb25zZRIcCgRrZXlzGAEgAygLMg4ubm9wYWNzLnYxLktleRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiHgoQUmV2b2tlS2V5UmVxdWVzdBIKCgJpZBgBIAEoCSIwChFSZXZva2VLZXlSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5ImEKD1NldEdyYW50UmVxdWVzdBIOCgZrZXlfaWQYASABKAkSHwoFc2NvcGUYAiABKAsyEC5ub3BhY3MudjEuU2NvcGUSHQoEcm9sZRgDIAEoDjIPLm5vcGFjcy52MS5Sb2xlIlsKEFNldEdyYW50UmVzcG9uc2USHwoFZ3JhbnQYASABKAsyEC5ub3BhY3MudjEuR3JhbnQSJgoNcHJldmlvdXNfcm9sZRgCIAEoDjIPLm5vcGFjcy52MS5Sb2xlInkKEUxpc3RHcmFudHNSZXF1ZXN0EhAKBmtleV9pZBgBIAEoCUgAEiEKBXNjb3BlGAIgASgLMhAubm9wYWNzLnYxLlNjb3BlSAASEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAlCCAoGZmlsdGVyIk8KEkxpc3RHcmFudHNSZXNwb25zZRIgCgZncmFudHMYASADKAsyEC5ub3BhY3MudjEuR3JhbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIkUKElJlbW92ZUdyYW50UmVxdWVzdBIOCgZrZXlfaWQYASABKAkSHwoFc2NvcGUYAiABKAsyEC5ub3BhY3MudjEuU2NvcGUiPQoTUmVtb3ZlR3JhbnRSZXNwb25zZRImCg1wcmV2aW91c19yb2xlGAEgASgOMg8ubm9wYWNzLnYxLlJvbGUiDwoNV2hvQW1JUmVxdWVzdCI5Cg5XaG9BbUlSZXNwb25zZRInCglwcmluY2lwYWwYASABKAsyFC5ub3BhY3MudjEuUHJpbmNpcGFsIkoKEFJvdGF0ZUtleVJlcXVlc3QSCgoCaWQYASABKAkSKgoHb3ZlcmxhcBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJmChFSb3RhdGVLZXlSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5EhMKBnNlY3JldBgCIAEoCUIDgAEBEh8KB3JvdGF0ZWQYAyABKAsyDi5ub3BhY3MudjEuS2V5Ik4KElNldEtleVJ1bGVzUmVxdWVzdBIKCgJpZBgBIAEoCRIQCghuZXR3b3JrcxgCIAMoCRIaChJjbGllbnRfY2VydF9zaGEyNTYYAyABKAkiMgoTU2V0S2V5UnVsZXNSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5IjQKFFJlaW5zdGF0ZUtleXNSZXF1ZXN0Eg8KB2tleV9pZHMYASADKAkSCwoDYWxsGAIgASgIIkkKFVJlaW5zdGF0ZUtleXNSZXNwb25zZRIcCgRrZXlzGAEgAygLMg4ubm9wYWNzLnYxLktleRISCgpyZWluc3RhdGVkGAIgASgDKmEKBFJvbGUSFAoQUk9MRV9VTlNQRUNJRklFRBAAEg8KC1JPTEVfUkVBREVSEAESDwoLUk9MRV9XUklURVIQAhIRCg1ST0xFX09QRVJBVE9SEAMSDgoKUk9MRV9BRE1JThAEMtcGCg1BY2Nlc3NTZXJ2aWNlEkYKCUNyZWF0ZUtleRIbLm5vcGFjcy52MS5DcmVhdGVLZXlSZXF1ZXN0Ghwubm9wYWNzLnYxLkNyZWF0ZUtleVJlc3BvbnNlEkIKBkdldEtleRIYLm5vcGFjcy52MS5HZXRLZXlSZXF1ZXN0Ghkubm9wYWNzLnYxLkdldEtleVJlc3BvbnNlIgOQAgESSAoITGlzdEtleXMSGi5ub3BhY3MudjEuTGlzdEtleXNSZXF1ZXN0Ghsubm9wYWNzLnYxLkxpc3RLZXlzUmVzcG9uc2UiA5ACARJLCglSZXZva2VLZXkSGy5ub3BhY3MudjEuUmV2b2tlS2V5UmVxdWVzdBocLm5vcGFjcy52MS5SZXZva2VLZXlSZXNwb25zZSIDkAICEkgKCFNldEdyYW50Ehoubm9wYWNzLnYxLlNldEdyYW50UmVxdWVzdBobLm5vcGFjcy52MS5TZXRHcmFudFJlc3BvbnNlIgOQAgISTgoKTGlzdEdyYW50cxIcLm5vcGFjcy52MS5MaXN0R3JhbnRzUmVxdWVzdBodLm5vcGFjcy52MS5MaXN0R3JhbnRzUmVzcG9uc2UiA5ACARJRCgtSZW1vdmVHcmFudBIdLm5vcGFjcy52MS5SZW1vdmVHcmFudFJlcXVlc3QaHi5ub3BhY3MudjEuUmVtb3ZlR3JhbnRSZXNwb25zZSIDkAICEkIKBldob0FtSRIYLm5vcGFjcy52MS5XaG9BbUlSZXF1ZXN0Ghkubm9wYWNzLnYxLldob0FtSVJlc3BvbnNlIgOQAgESRgoJUm90YXRlS2V5Ehsubm9wYWNzLnYxLlJvdGF0ZUtleVJlcXVlc3QaHC5ub3BhY3MudjEuUm90YXRlS2V5UmVzcG9uc2USUQoLU2V0S2V5UnVsZXMSHS5ub3BhY3MudjEuU2V0S2V5UnVsZXNSZXF1ZXN0Gh4ubm9wYWNzLnYxLlNldEtleVJ1bGVzUmVzcG9uc2UiA5ACAhJXCg1SZWluc3RhdGVLZXlzEh8ubm9wYWNzLnYxLlJlaW5zdGF0ZUtleXNSZXF1ZXN0GiAubm9wYWNzLnYxLlJlaW5zdGF0ZUtleXNSZXNwb25zZSIDkAICYgZwcm90bzM", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_nopacs_v1_scope]);
+  fileDesc("ChZub3BhY3MvdjEvYWNjZXNzLnByb3RvEglub3BhY3MudjEimgMKA0tleRIKCgJpZBgBIAEoCRIOCgZob2xkZXIYAiABKAkSLwoLY3JlYXRlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2V4cGlyZV90aW1lGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg1sYXN0X3VzZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtyZXZva2VfdGltZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIbmV0d29ya3MYByADKAkSGgoSY2xpZW50X2NlcnRfc2hhMjU2GAggASgJEhgKEGxhc3RfdXNlX2FkZHJlc3MYCSABKAkSFAoMc3VjY2Vzc29yX2lkGAogASgJEhEKCXN1c3BlbmRlZBgLIAEoCBIwCgxzdXNwZW5kX3RpbWUYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBm1hc2tlZBgNIAEoCCJXCgVHcmFudBIOCgZrZXlfaWQYASABKAkSHwoFc2NvcGUYAiABKAsyEC5ub3BhY3MudjEuU2NvcGUSHQoEcm9sZRgDIAEoDjIPLm5vcGFjcy52MS5Sb2xlIooBCglQcmluY2lwYWwSHQoDa2V5GAEgASgLMg4ubm9wYWNzLnYxLktleUgAEjIKDmxvY2FsX29wZXJhdG9yGAIgASgLMhgubm9wYWNzLnYxLkxvY2FsT3BlcmF0b3JIABIgCgZncmFudHMYAyADKAsyEC5ub3BhY3MudjEuR3JhbnRCCAoGY2FsbGVyIiAKDUxvY2FsT3BlcmF0b3ISDwoHdXNlcl9pZBgBIAEoCSK1AQoQQ3JlYXRlS2V5UmVxdWVzdBIOCgZob2xkZXIYASABKAkSMQoMZXhwaXJlX2FmdGVyGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uSAASFgoMbmV2ZXJfZXhwaXJlGAMgASgISAASEAoIbmV0d29ya3MYBCADKAkSGgoSY2xpZW50X2NlcnRfc2hhMjU2GAUgASgJEg4KBm1hc2tlZBgGIAEoCEIICgZleHBpcnkiRQoRQ3JlYXRlS2V5UmVzcG9uc2USGwoDa2V5GAEgASgLMg4ubm9wYWNzLnYxLktleRITCgZzZWNyZXQYAiABKAlCA4ABASIbCg1HZXRLZXlSZXF1ZXN0EgoKAmlkGAEgASgJIi0KDkdldEtleVJlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkiSAoPTGlzdEtleXNSZXF1ZXN0EhEKCXBhZ2Vfc2l6ZRgBIAEoBRISCgpwYWdlX3Rva2VuGAIgASgJEg4KBnRlbmFudBgDIAEoCSJJChBMaXN0S2V5c1Jlc3BvbnNlEhwKBGtleXMYASADKAsyDi5ub3BhY3MudjEuS2V5EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSIeChBSZXZva2VLZXlSZXF1ZXN0EgoKAmlkGAEgASgJIjAKEVJldm9rZUtleVJlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkiYQoPU2V0R3JhbnRSZXF1ZXN0Eg4KBmtleV9pZBgBIAEoCRIfCgVzY29wZRgCIAEoCzIQLm5vcGFjcy52MS5TY29wZRIdCgRyb2xlGAMgASgOMg8ubm9wYWNzLnYxLlJvbGUiWwoQU2V0R3JhbnRSZXNwb25zZRIfCgVncmFudBgBIAEoCzIQLm5vcGFjcy52MS5HcmFudBImCg1wcmV2aW91c19yb2xlGAIgASgOMg8ubm9wYWNzLnYxLlJvbGUieQoRTGlzdEdyYW50c1JlcXVlc3QSEAoGa2V5X2lkGAEgASgJSAASIQoFc2NvcGUYAiABKAsyEC5ub3BhY3MudjEuU2NvcGVIABIRCglwYWdlX3NpemUYAyABKAUSEgoKcGFnZV90b2tlbhgEIAEoCUIICgZmaWx0ZXIiTwoSTGlzdEdyYW50c1Jlc3BvbnNlEiAKBmdyYW50cxgBIAMoCzIQLm5vcGFjcy52MS5HcmFudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiRQoSUmVtb3ZlR3JhbnRSZXF1ZXN0Eg4KBmtleV9pZBgBIAEoCRIfCgVzY29wZRgCIAEoCzIQLm5vcGFjcy52MS5TY29wZSI9ChNSZW1vdmVHcmFudFJlc3BvbnNlEiYKDXByZXZpb3VzX3JvbGUYASABKA4yDy5ub3BhY3MudjEuUm9sZSIPCg1XaG9BbUlSZXF1ZXN0IjkKDldob0FtSVJlc3BvbnNlEicKCXByaW5jaXBhbBgBIAEoCzIULm5vcGFjcy52MS5QcmluY2lwYWwiSgoQUm90YXRlS2V5UmVxdWVzdBIKCgJpZBgBIAEoCRIqCgdvdmVybGFwGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uImYKEVJvdGF0ZUtleVJlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkSEwoGc2VjcmV0GAIgASgJQgOAAQESHwoHcm90YXRlZBgDIAEoCzIOLm5vcGFjcy52MS5LZXkiTgoSU2V0S2V5UnVsZXNSZXF1ZXN0EgoKAmlkGAEgASgJEhAKCG5ldHdvcmtzGAIgAygJEhoKEmNsaWVudF9jZXJ0X3NoYTI1NhgDIAEoCSIyChNTZXRLZXlSdWxlc1Jlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkiNAoUUmVpbnN0YXRlS2V5c1JlcXVlc3QSDwoHa2V5X2lkcxgBIAMoCRILCgNhbGwYAiABKAgiSQoVUmVpbnN0YXRlS2V5c1Jlc3BvbnNlEhwKBGtleXMYASADKAsyDi5ub3BhY3MudjEuS2V5EhIKCnJlaW5zdGF0ZWQYAiABKAMqYQoEUm9sZRIUChBST0xFX1VOU1BFQ0lGSUVEEAASDwoLUk9MRV9SRUFERVIQARIPCgtST0xFX1dSSVRFUhACEhEKDVJPTEVfT1BFUkFUT1IQAxIOCgpST0xFX0FETUlOEAQy1wYKDUFjY2Vzc1NlcnZpY2USRgoJQ3JlYXRlS2V5Ehsubm9wYWNzLnYxLkNyZWF0ZUtleVJlcXVlc3QaHC5ub3BhY3MudjEuQ3JlYXRlS2V5UmVzcG9uc2USQgoGR2V0S2V5Ehgubm9wYWNzLnYxLkdldEtleVJlcXVlc3QaGS5ub3BhY3MudjEuR2V0S2V5UmVzcG9uc2UiA5ACARJICghMaXN0S2V5cxIaLm5vcGFjcy52MS5MaXN0S2V5c1JlcXVlc3QaGy5ub3BhY3MudjEuTGlzdEtleXNSZXNwb25zZSIDkAIBEksKCVJldm9rZUtleRIbLm5vcGFjcy52MS5SZXZva2VLZXlSZXF1ZXN0Ghwubm9wYWNzLnYxLlJldm9rZUtleVJlc3BvbnNlIgOQAgISSAoIU2V0R3JhbnQSGi5ub3BhY3MudjEuU2V0R3JhbnRSZXF1ZXN0Ghsubm9wYWNzLnYxLlNldEdyYW50UmVzcG9uc2UiA5ACAhJOCgpMaXN0R3JhbnRzEhwubm9wYWNzLnYxLkxpc3RHcmFudHNSZXF1ZXN0Gh0ubm9wYWNzLnYxLkxpc3RHcmFudHNSZXNwb25zZSIDkAIBElEKC1JlbW92ZUdyYW50Eh0ubm9wYWNzLnYxLlJlbW92ZUdyYW50UmVxdWVzdBoeLm5vcGFjcy52MS5SZW1vdmVHcmFudFJlc3BvbnNlIgOQAgISQgoGV2hvQW1JEhgubm9wYWNzLnYxLldob0FtSVJlcXVlc3QaGS5ub3BhY3MudjEuV2hvQW1JUmVzcG9uc2UiA5ACARJGCglSb3RhdGVLZXkSGy5ub3BhY3MudjEuUm90YXRlS2V5UmVxdWVzdBocLm5vcGFjcy52MS5Sb3RhdGVLZXlSZXNwb25zZRJRCgtTZXRLZXlSdWxlcxIdLm5vcGFjcy52MS5TZXRLZXlSdWxlc1JlcXVlc3QaHi5ub3BhY3MudjEuU2V0S2V5UnVsZXNSZXNwb25zZSIDkAICElcKDVJlaW5zdGF0ZUtleXMSHy5ub3BhY3MudjEuUmVpbnN0YXRlS2V5c1JlcXVlc3QaIC5ub3BhY3MudjEuUmVpbnN0YXRlS2V5c1Jlc3BvbnNlIgOQAgJiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_nopacs_v1_scope]);
 
 /**
  * Key is a credential held by a person or a system. It never carries its
@@ -346,6 +376,17 @@ export type Key = Message<"nopacs.v1.Key"> & {
    * @generated from field: google.protobuf.Timestamp suspend_time = 12;
    */
   suspendTime?: Timestamp | undefined;
+
+  /**
+   * Whether the key is masked: never answered a value that is not in its
+   * archived, de-identified form (the package's comment says what it is
+   * refused). Set when the key is made (CreateKeyRequest.masked), carried
+   * to its successor by RotateKey, and never removed: a key without it is
+   * made in its place.
+   *
+   * @generated from field: bool masked = 13;
+   */
+  masked: boolean;
 };
 
 /**
@@ -517,6 +558,15 @@ export type CreateKeyRequest = Message<"nopacs.v1.CreateKeyRequest"> & {
    * @generated from field: string client_cert_sha256 = 5;
    */
   clientCertSha256: string;
+
+  /**
+   * Whether the key is masked (Key.masked), for a key an AI agent or any
+   * other outside service will hold. It cannot be changed later. A masked
+   * caller must set it.
+   *
+   * @generated from field: bool masked = 6;
+   */
+  masked: boolean;
 };
 
 /**
@@ -1209,11 +1259,15 @@ export const AccessService: GenService<{
    * CreateKey makes a key and answers its secret, once. The server keeps only
    * the SHA-256 of the secret, so it can never show the secret again.
    *
+   * A masked key makes only masked keys.
+   *
    * Role: admin on the installation.
    * Audit: one entry in the installation's log, with the new key's id as its
-   * object and its holder in details; never its secret.
-   * Errors: unauthenticated, permission denied, invalid, unavailable (the
-   * master database does not answer).
+   * object and its holder in details, and "key_masked" for a masked key;
+   * never its secret.
+   * Errors: unauthenticated, permission denied (also a masked caller asking
+   * for a key that is not masked), invalid, unavailable (the master database
+   * does not answer).
    *
    * @generated from rpc nopacs.v1.AccessService.CreateKey
    */
@@ -1244,7 +1298,8 @@ export const AccessService: GenService<{
    * ListKeys answers every key of the installation, revoked and expired keys
    * included, oldest first; or, with a tenant, the keys that hold a grant on
    * that tenant, in order of key id (ListGrants on the tenant answers their
-   * roles). A tenant's admin is answered only each key's id and holder.
+   * roles). A tenant's admin is answered only each key's id, holder and
+   * masked flag.
    *
    * Role: admin on the installation; with a tenant, admin on the
    * installation or on that tenant.
@@ -1378,7 +1433,7 @@ export const AccessService: GenService<{
   /**
    * RotateKey replaces a key with a new one, its successor, and answers the
    * successor's secret, once. The successor holds the same grants, holder,
-   * networks and client certificate. The rotated key keeps working for the
+   * networks, client certificate and masked flag. The rotated key keeps working for the
    * overlap, or until its own expiry when that is sooner, and then stops:
    * whoever holds it has the overlap to switch, with no moment without a
    * working key. The successor lives as long as the rotated key was made to
@@ -1388,6 +1443,8 @@ export const AccessService: GenService<{
    * once; its successor may be rotated in turn. A key rotating itself,
    * without admin on the installation, keeps working at least an hour beside
    * its successor, so a thief holding it cannot cut its holder off at once.
+   * A masked caller rotates only masked keys: a plain key's successor, and
+   * the secret answered, would be plain.
    *
    * Role: admin on the installation; or the key being rotated itself, so a
    * system renews its own key with no person involved. Any other key is
@@ -1395,7 +1452,8 @@ export const AccessService: GenService<{
    * Audit: one entry in the installation's log, with the rotated key's id as
    * its object, and the successor's id, the rotated key's new end and the
    * overlap in details; never the secret.
-   * Errors: unauthenticated, permission denied, invalid (also an id that is
+   * Errors: unauthenticated, permission denied (also a masked caller
+   * rotating a key that is not masked), invalid (also an id that is
    * not a key id, such as a whole key or more than 12 characters, which is
    * never repeated in the answer or the log), not found (no key has that
    * id), conflict (the key is revoked, has expired, or was already

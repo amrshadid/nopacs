@@ -26,7 +26,7 @@ ROLE_OPERATOR: Role
 ROLE_ADMIN: Role
 
 class Key(_message.Message):
-    __slots__ = ("id", "holder", "create_time", "expire_time", "last_use_time", "revoke_time", "networks", "client_cert_sha256", "last_use_address", "successor_id", "suspended", "suspend_time")
+    __slots__ = ("id", "holder", "create_time", "expire_time", "last_use_time", "revoke_time", "networks", "client_cert_sha256", "last_use_address", "successor_id", "suspended", "suspend_time", "masked")
     ID_FIELD_NUMBER: _ClassVar[int]
     HOLDER_FIELD_NUMBER: _ClassVar[int]
     CREATE_TIME_FIELD_NUMBER: _ClassVar[int]
@@ -39,6 +39,7 @@ class Key(_message.Message):
     SUCCESSOR_ID_FIELD_NUMBER: _ClassVar[int]
     SUSPENDED_FIELD_NUMBER: _ClassVar[int]
     SUSPEND_TIME_FIELD_NUMBER: _ClassVar[int]
+    MASKED_FIELD_NUMBER: _ClassVar[int]
     id: str
     holder: str
     create_time: _timestamp_pb2.Timestamp
@@ -51,7 +52,8 @@ class Key(_message.Message):
     successor_id: str
     suspended: bool
     suspend_time: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., holder: _Optional[str] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expire_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_use_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoke_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., networks: _Optional[_Iterable[str]] = ..., client_cert_sha256: _Optional[str] = ..., last_use_address: _Optional[str] = ..., successor_id: _Optional[str] = ..., suspended: _Optional[bool] = ..., suspend_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    masked: bool
+    def __init__(self, id: _Optional[str] = ..., holder: _Optional[str] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expire_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_use_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoke_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., networks: _Optional[_Iterable[str]] = ..., client_cert_sha256: _Optional[str] = ..., last_use_address: _Optional[str] = ..., successor_id: _Optional[str] = ..., suspended: _Optional[bool] = ..., suspend_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., masked: _Optional[bool] = ...) -> None: ...
 
 class Grant(_message.Message):
     __slots__ = ("key_id", "scope", "role")
@@ -80,18 +82,20 @@ class LocalOperator(_message.Message):
     def __init__(self, user_id: _Optional[str] = ...) -> None: ...
 
 class CreateKeyRequest(_message.Message):
-    __slots__ = ("holder", "expire_after", "never_expire", "networks", "client_cert_sha256")
+    __slots__ = ("holder", "expire_after", "never_expire", "networks", "client_cert_sha256", "masked")
     HOLDER_FIELD_NUMBER: _ClassVar[int]
     EXPIRE_AFTER_FIELD_NUMBER: _ClassVar[int]
     NEVER_EXPIRE_FIELD_NUMBER: _ClassVar[int]
     NETWORKS_FIELD_NUMBER: _ClassVar[int]
     CLIENT_CERT_SHA256_FIELD_NUMBER: _ClassVar[int]
+    MASKED_FIELD_NUMBER: _ClassVar[int]
     holder: str
     expire_after: _duration_pb2.Duration
     never_expire: bool
     networks: _containers.RepeatedScalarFieldContainer[str]
     client_cert_sha256: str
-    def __init__(self, holder: _Optional[str] = ..., expire_after: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., never_expire: _Optional[bool] = ..., networks: _Optional[_Iterable[str]] = ..., client_cert_sha256: _Optional[str] = ...) -> None: ...
+    masked: bool
+    def __init__(self, holder: _Optional[str] = ..., expire_after: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., never_expire: _Optional[bool] = ..., networks: _Optional[_Iterable[str]] = ..., client_cert_sha256: _Optional[str] = ..., masked: _Optional[bool] = ...) -> None: ...
 
 class CreateKeyResponse(_message.Message):
     __slots__ = ("key", "secret")

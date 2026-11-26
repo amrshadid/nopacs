@@ -38,6 +38,10 @@ const (
 // asked for by a key without admin on the installation.
 const reasonNotAdminNorSelf = "the decision carries neither admin on the installation nor the key to rotate"
 
+// reasonMaskedRotatesPlain is the audit reason of a masked key refused the
+// rotation of a plain key, whose successor and its secret would be plain.
+const reasonMaskedRotatesPlain = "a masked key may rotate only masked keys"
+
 // addRuleDetails writes a key's rules into an audit entry's details: the
 // networks as they are written, cut to a detail's bound, and the client
 // certificate's fingerprint, which is not a secret.
@@ -94,16 +98,18 @@ func (a *Access) SetKeyRules(ctx context.Context, d Decision, id string, rules m
 //
 // It needs the installation's admin, or the key id itself: a key may rotate
 // itself, so a system renews its own key with no person involved, with an
-// overlap of at least MinSelfRotationOverlap. Any other caller is Denied. A key revoked, expired or already rotated is Conflict:
+// overlap of at least MinSelfRotationOverlap. Any other caller is Denied. A
+// masked caller may rotate only masked keys: a plain key is refused it as
+// Denied with MessageMasked, since the successor's secret, answered to the
+// caller, would be plain. A key revoked, expired or already rotated is Conflict:
 // a key makes at most one successor. The rotation and its audit entry, which
 // names both keys, are one transaction, and an EventKeyRotated is raised.
 func (a *Access) RotateKey(ctx context.Context, d Decision, id string, overlap, maxLifetime time.Duration) (CreatedKey, master.Key, error) {
 	if !d.checked() {
 		return CreatedKey{}, master.Key{}, fault.New(fault.Denied, MessageDenied)
 	}
-	entry := d.Entry(master.OutcomeDone, "", Facts{})
+	entry := d.Entry(master.OutcomeDone, "", Facts{Details: map[string]string{detailOverlap: overlap.String()}})
 	entry.Object = master.KeyObject(id)
-	entry.Details = map[string]string{detailOverlap: overlap.String()}
 	admin := atLeast(d.principal.Role(master.Installation), master.RoleAdmin)
 	self := d.principal.isKey && d.principal.key.ID == id
 	var by master.Actor
@@ -139,6 +145,13 @@ func (a *Access) RotateKey(ctx context.Context, d Decision, id string, overlap, 
 			err = fault.New(fault.NotFound, "no key has this id")
 		}
 		return CreatedKey{}, master.Key{}, a.failAfter(entry, err)
+	}
+	if d.principal.Masked() && !old.Masked {
+		// A successor keeps the rotated key's flag, and its secret is
+		// answered to the caller: a masked caller rotating a plain key would
+		// hold a plain key, every original its own key is refused.
+		a.record(entry, master.OutcomeRefused, reasonMaskedRotatesPlain)
+		return CreatedKey{}, master.Key{}, fault.New(fault.Denied, MessageMasked)
 	}
 	now := entry.Time
 	var expires time.Time

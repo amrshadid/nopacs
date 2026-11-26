@@ -94,14 +94,16 @@ var (
 // SenderServiceClient is a client for the nopacs.v1.SenderService service.
 type SenderServiceClient interface {
 	// AddSender adds a sender to a tenant. Adding connects to nothing:
-	// TestSender tries the peer.
+	// TestSender tries the peer. A masked key (Key.masked) is refused it:
+	// where the archive's data is sent is a person's choice.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the sender's name as its
 	// object, and its type and destination (host and port, or the URL's host
 	// with its port when the URL names one) in details; never its credential.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid,
+	// does not exist, for a caller who may not list every tenant; also a
+	// masked key), invalid,
 	// not found (a tenant that does not exist, for a caller who may list every
 	// tenant), conflict (the tenant has a sender with that name, or a removed
 	// sender of that name is still named by jobs), precondition (a host or
@@ -148,14 +150,16 @@ type SenderServiceClient interface {
 	// a place it was not given for: a mask that names stow.url or
 	// stow.authentication names stow.credential too, unless the
 	// authentication becomes none, which clears the held credential. A mask
-	// that breaks this rule is invalid.
+	// that breaks this rule is invalid. A masked key (Key.masked) is refused
+	// it, as AddSender.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the sender's name as its
 	// object and the mask's paths in details; never a value of the
 	// credential.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid
+	// does not exist, for a caller who may not list every tenant; also a
+	// masked key), invalid
 	// (also an empty mask, a path that names no field, a read-only field or a
 	// type's whole message, a path into the other type's configuration, a
 	// URL or authentication without the credential, and every rule AddSender
@@ -227,14 +231,16 @@ func NewSenderServiceClient(client *connect.Client) SenderServiceClient {
 // SenderServiceHandler is an implementation of the nopacs.v1.SenderService service.
 type SenderServiceHandler interface {
 	// AddSender adds a sender to a tenant. Adding connects to nothing:
-	// TestSender tries the peer.
+	// TestSender tries the peer. A masked key (Key.masked) is refused it:
+	// where the archive's data is sent is a person's choice.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the sender's name as its
 	// object, and its type and destination (host and port, or the URL's host
 	// with its port when the URL names one) in details; never its credential.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid,
+	// does not exist, for a caller who may not list every tenant; also a
+	// masked key), invalid,
 	// not found (a tenant that does not exist, for a caller who may list every
 	// tenant), conflict (the tenant has a sender with that name, or a removed
 	// sender of that name is still named by jobs), precondition (a host or
@@ -281,14 +287,16 @@ type SenderServiceHandler interface {
 	// a place it was not given for: a mask that names stow.url or
 	// stow.authentication names stow.credential too, unless the
 	// authentication becomes none, which clears the held credential. A mask
-	// that breaks this rule is invalid.
+	// that breaks this rule is invalid. A masked key (Key.masked) is refused
+	// it, as AddSender.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the sender's name as its
 	// object and the mask's paths in details; never a value of the
 	// credential.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid
+	// does not exist, for a caller who may not list every tenant; also a
+	// masked key), invalid
 	// (also an empty mask, a path that names no field, a read-only field or a
 	// type's whole message, a path into the other type's configuration, a
 	// URL or authentication without the credential, and every rule AddSender

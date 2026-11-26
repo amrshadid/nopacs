@@ -190,19 +190,9 @@ func (s quarantineService) ListQuarantinedFiles(ctx context.Context, req *v1.Lis
 	c.done(d, st)
 	out := &v1.ListQuarantinedFilesResponse{Files: make([]*v1.QuarantinedFile, 0, len(items)), NextPageToken: next}
 	for _, it := range items {
-		out.Files = append(out.Files, withImportPath(d, it, fileMessage(it)))
+		out.Files = append(out.Files, recordFor(d, it))
 	}
 	return out, nil
-}
-
-// withImportPath adds to m, the message of f, the path under its import
-// root of a file an import job handed in, for a caller who may read paths
-// (mayReadPaths): a path can name a person, so a reader is answered none.
-func withImportPath(d access.Decision, f tenant.QuarantinedFile, m *v1.QuarantinedFile) *v1.QuarantinedFile {
-	if mayReadPaths(d) {
-		m.ImportPath = f.ImportPath
-	}
-	return m
 }
 
 // GetQuarantinedFile answers one quarantine record and, when asked and when
@@ -213,20 +203,28 @@ func (s quarantineService) GetQuarantinedFile(ctx context.Context, req *v1.GetQu
 	if err != nil {
 		return nil, err
 	}
-	p, st, err := c.inTenant(ctx, d, req.GetTenant(), headerDetails(req.GetIncludeHeader()))
+	p, st, err := c.inTenant(ctx, d, req.GetTenant(), headerDetails(req))
 	if err != nil {
 		return nil, err
 	}
 	if err := serverID("id", req.GetId()); err != nil {
 		return nil, c.failIn(d, st, err)
 	}
+	if req.GetShowValues() && !req.GetIncludeHeader() {
+		return nil, c.failIn(d, st, invalid("show_values", "is set only with include_header"))
+	}
 	f, err := lookupFile(ctx, p, req.GetId())
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}
-	out := &v1.GetQuarantinedFileResponse{File: withImportPath(d, f, fileMessage(f))}
+	out := &v1.GetQuarantinedFileResponse{File: recordFor(d, f)}
 	if req.GetIncludeHeader() && f.ContentKept {
 		text, tooLarge, err := c.headers.Header(ctx, req.GetTenant(), f, MaxHeaderBytes)
+		if err == nil && !tooLarge && len(text) <= MaxHeaderBytes && !req.GetShowValues() {
+			if text, err = headerWithoutValues(text); err != nil {
+				err = ErrNoHeader
+			}
+		}
 		switch {
 		case errors.Is(err, ErrNoHeader):
 			// The contract answers a header it cannot give by leaving it
@@ -247,12 +245,12 @@ func (s quarantineService) GetQuarantinedFile(ctx context.Context, req *v1.GetQu
 }
 
 // headerDetails returns GetQuarantinedFile's audit details: whether the
-// header was asked for.
-func headerDetails(include bool) map[string]string {
-	if include {
-		return map[string]string{detailIncludeHeader: "true"}
+// header was asked for, and whether its values were.
+func headerDetails(r *v1.GetQuarantinedFileRequest) map[string]string {
+	if r.GetIncludeHeader() {
+		return showValuesDetails(r.GetShowValues(), map[string]string{detailIncludeHeader: "true"})
 	}
-	return map[string]string{detailIncludeHeader: "false"}
+	return showValuesDetails(r.GetShowValues(), map[string]string{detailIncludeHeader: "false"})
 }
 
 // ReleaseQuarantinedFile runs a held file through the pipeline again, as it
@@ -320,7 +318,7 @@ func (s quarantineService) ReleaseQuarantinedFile(ctx context.Context, req *v1.R
 	if err != nil {
 		return nil, c.failWith(d, st, facts, err)
 	}
-	return &v1.ReleaseQuarantinedFileResponse{File: withImportPath(d, f, fileMessage(f))}, nil
+	return &v1.ReleaseQuarantinedFileResponse{File: recordFor(d, f)}, nil
 }
 
 // releaseProfile returns the profile version a release names, the zero
@@ -406,5 +404,5 @@ func (s quarantineService) RejectQuarantinedFile(ctx context.Context, req *v1.Re
 			c.log.Warn("api: a rejected file's bytes were not removed yet", "request_id", e.RequestID, "file", f.ID, "error", fault.Message(err))
 		}
 	}
-	return &v1.RejectQuarantinedFileResponse{File: withImportPath(d, f, fileMessage(f))}, nil
+	return &v1.RejectQuarantinedFileResponse{File: recordFor(d, f)}, nil
 }

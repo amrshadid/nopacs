@@ -96,6 +96,11 @@ func (s metadataService) GetScanMetadata(ctx context.Context, req *v1.GetScanMet
 	if err != nil {
 		return nil, c.failIn(d, st, listError(err, page.Cursor))
 	}
+	for _, in := range held {
+		if err := refuseAsReceived(d, in); err != nil {
+			return nil, c.failIn(d, st, err)
+		}
+	}
 	out := &v1.GetScanMetadataResponse{ManifestSha256: scan.ManifestSHA256.String()}
 	// The storages are this method's, so its audit entry names those that
 	// served it, a replica among them when the primary could not.
@@ -170,6 +175,9 @@ func (s metadataService) GetInstanceMetadata(ctx context.Context, req *v1.GetIns
 		err = fault.Wrap(fault.NotFound, err, messageNoInstance)
 	}
 	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
+	if err := refuseAsReceived(d, held); err != nil {
 		return nil, c.failIn(d, st, err)
 	}
 	// The storages are this method's, so its audit entry names those that

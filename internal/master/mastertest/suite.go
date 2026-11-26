@@ -77,6 +77,7 @@ func Run(t *testing.T, open Open) {
 		{"RotateKey", testRotateKey},
 		{"RotateKeyActor", testRotateKeyActor},
 		{"RotatedFrom", testRotatedFrom},
+		{"MaskedKey", testMaskedKey},
 		{"ReinstateKeys", testReinstateKeys},
 		{"ReinstateAllKeys", testReinstateAllKeys},
 		{"ReinstateRevoked", testReinstateRevoked},
@@ -257,6 +258,9 @@ func diffKey(got, want master.Key) string {
 		got.LastAddress != want.LastAddress || got.Successor != want.Successor {
 		d = append(d, fmt.Sprintf("rules/address/successor %+v/%q/%q, want %+v/%q/%q",
 			got.Rules, got.LastAddress, got.Successor, want.Rules, want.LastAddress, want.Successor))
+	}
+	if got.Masked != want.Masked {
+		d = append(d, fmt.Sprintf("masked %v, want %v", got.Masked, want.Masked))
 	}
 	for _, f := range []struct {
 		name      string

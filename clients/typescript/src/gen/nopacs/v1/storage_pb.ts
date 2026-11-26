@@ -1282,13 +1282,16 @@ export const StorageService: GenService<{
    * replica_of is a replica from the start, and the server queues a
    * replicate job that copies what its primary already holds
    * (ReplicaService.AttachReplica says what is checked); the rules of a
-   * replica below answer precondition when they fail.
+   * replica below answer precondition when they fail. A masked key
+   * (Key.masked) is refused it: where the archive's bytes are written is a
+   * person's choice.
    *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the storage's name as its
    * object and its type in details; never its secret.
    * Errors: unauthenticated, permission denied (no grant; also a tenant that
-   * does not exist, for a caller who may not list every tenant), invalid,
+   * does not exist, for a caller who may not list every tenant; also a
+   * masked key), invalid,
    * not found (a tenant that does not exist, for a caller who may list every
    * tenant), conflict (the tenant has a storage with that name),
    * precondition (a root or an endpoint the installation does not list; a
@@ -1372,13 +1375,15 @@ export const StorageService: GenService<{
    * tier is only for a replica. A change of where the files are is a
    * precondition failure too for a replica and for a storage that has
    * replicas, whether or not it holds archived files yet, since a replica
-   * holds its primary's keys and a switch swaps places.
+   * holds its primary's keys and a switch swaps places. A masked key
+   * (Key.masked) is refused it, as AddStorage.
    *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the storage's name as its
    * object and the mask's paths in details; never a value of a secret.
    * Errors: unauthenticated, permission denied (no grant; also a tenant that
-   * does not exist, for a caller who may not list every tenant), invalid
+   * does not exist, for a caller who may not list every tenant; also a
+   * masked key), invalid
    * (also an empty mask, a path that names no field, a read-only field or a
    * type's whole message, a path into the other type's configuration, one
    * of the two credentials without the other, the endpoint without both

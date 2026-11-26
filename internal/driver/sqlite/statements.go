@@ -63,7 +63,7 @@ func prepare(ctx context.Context, p *pools) (*statements, error) {
 		{&s.setTenantState, w, `UPDATE tenants SET state = ?, state_reason = ? WHERE id = ?`},
 		{&s.deleteTenantGrants, w, `DELETE FROM grants WHERE scope = ?`},
 		{&s.deleteTenant, w, `DELETE FROM tenants WHERE id = ?`},
-		{&s.insertKey, w, `INSERT INTO api_keys (id, hash, holder, created, expires, networks, client_cert) VALUES (?, ?, ?, ?, ?, ?, ?)`},
+		{&s.insertKey, w, `INSERT INTO api_keys (id, hash, holder, created, expires, networks, client_cert, masked) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`},
 		{&s.keyRevoked, w, `SELECT revoked FROM api_keys WHERE id = ?`},
 		{&s.revokeKey, w, `UPDATE api_keys SET revoked = ? WHERE id = ? AND revoked IS NULL`},
 		// The throttle is in the WHERE: a row whose last use is within the

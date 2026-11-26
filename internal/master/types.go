@@ -396,6 +396,13 @@ type Key struct {
 	// since a key revoked, or a grant removed, after the backup was made
 	// would otherwise work again.
 	Suspended time.Time
+	// Masked says the key is never answered a value that is not in its
+	// archived, de-identified form: what an AI agent or another outside
+	// service holds, whose output leaves the site. It is set when the key
+	// is made, carried to the key a rotation makes, and never cleared, so
+	// a key handed to such a service cannot be widened afterward; a key
+	// without it is made in its place.
+	Masked bool
 }
 
 // Validate returns an Invalid error when k cannot be created. A new key has

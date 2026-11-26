@@ -51,7 +51,31 @@ func stateOf(step v1.ReceptionStep) (reception.State, bool) {
 	return "", false
 }
 
-// receptionMessage returns a reception as the contract writes it.
+// receptionFor returns a reception as the contract writes it for the caller
+// of d: for a masked key without its Study Instance UID, which is the one
+// received, an original value, whatever the receiver's profile.
+func receptionFor(d access.Decision, r tenant.Reception) *v1.Reception {
+	m := receptionMessage(r)
+	if d.Masked() {
+		m.StudyInstanceUid = ""
+	}
+	return m
+}
+
+// receptionScanFor returns a scan a reception archived into as the contract
+// writes it for the caller of d: for a masked key without its Series
+// Instance UID, the one received.
+func receptionScanFor(d access.Decision, sc tenant.ReceptionScan) *v1.ReceptionScan {
+	m := &v1.ReceptionScan{Label: sc.Label, SeriesInstanceUid: sc.SeriesUID, Files: sc.Instances, Bytes: sc.Bytes}
+	if d.Masked() {
+		m.SeriesInstanceUid = ""
+	}
+	return m
+}
+
+// receptionMessage returns a reception as the contract writes it, the
+// Study Instance UID as received included; receptionFor is the one a
+// caller is answered.
 func receptionMessage(r tenant.Reception) *v1.Reception {
 	c := r.Counts
 	return &v1.Reception{
@@ -170,7 +194,7 @@ func (s receptionService) ListReceptions(ctx context.Context, req *v1.ListRecept
 	c.done(d, st)
 	out := &v1.ListReceptionsResponse{Receptions: make([]*v1.Reception, 0, len(items)), NextPageToken: next}
 	for _, it := range items {
-		out.Receptions = append(out.Receptions, receptionMessage(it))
+		out.Receptions = append(out.Receptions, receptionFor(d, it))
 	}
 	return out, nil
 }
@@ -199,9 +223,9 @@ func (s receptionService) GetReception(ctx context.Context, req *v1.GetReception
 		return nil, c.failIn(d, st, err)
 	}
 	c.done(d, st)
-	out := &v1.GetReceptionResponse{Reception: receptionMessage(r), ScansTruncated: more}
+	out := &v1.GetReceptionResponse{Reception: receptionFor(d, r), ScansTruncated: more}
 	for _, sc := range scans {
-		out.Scans = append(out.Scans, &v1.ReceptionScan{Label: sc.Label, SeriesInstanceUid: sc.SeriesUID, Files: sc.Instances, Bytes: sc.Bytes})
+		out.Scans = append(out.Scans, receptionScanFor(d, sc))
 	}
 	for _, a := range arrivals {
 		out.Arrivals = append(out.Arrivals, &v1.ReceptionArrival{Id: a.ID, Arrival: int32(a.Arrival), Step: stepOf(a.State), StartTime: timestamp(a.Started)}) //nolint:gosec // G115: an arrival number, far below 2^31.
@@ -240,7 +264,7 @@ func (s receptionService) RetryReception(ctx context.Context, req *v1.RetryRecep
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}
-	return &v1.RetryReceptionResponse{Reception: receptionMessage(failed), Retry: receptionMessage(retry)}, nil
+	return &v1.RetryReceptionResponse{Reception: receptionFor(d, failed), Retry: receptionFor(d, retry)}, nil
 }
 
 // DiscardReception records that a failed reception's files left in the
@@ -275,5 +299,5 @@ func (s receptionService) DiscardReception(ctx context.Context, req *v1.DiscardR
 		e := d.Entry(master.OutcomeDone, "", access.Facts{})
 		c.log.Warn("api: the files of a discarded reception were not removed yet", "request_id", e.RequestID, "reception", r.ID, "error", fault.Message(err))
 	}
-	return &v1.DiscardReceptionResponse{Reception: receptionMessage(r)}, nil
+	return &v1.DiscardReceptionResponse{Reception: receptionFor(d, r)}, nil
 }

@@ -24,6 +24,35 @@ type Requirement struct {
 	kind   requirementKind
 	role   master.Role
 	tenant string
+	// originals says the answer holds values that are not in their
+	// archived, de-identified form, which a masked key is refused.
+	originals bool
+	// destination says the request chooses where archived data goes,
+	// which a masked key is refused.
+	destination bool
+}
+
+// ChoosesDestination returns r for a request that decides where the
+// archive's bytes go or who receives them: a send, a replica, a storage, a
+// sender, a receiver's forwarding. Check refuses it to a masked key, once
+// the key's grant is found to suffice, as Denied with
+// MessageMaskedDestination, and records the refusal: a masked key is held
+// by a service outside the site, and where data goes is a person's choice,
+// never that service's, whatever the data's form. For any other caller it
+// is r.
+func (r Requirement) ChoosesDestination() Requirement {
+	r.destination = true
+	return r
+}
+
+// AnswersOriginals returns r for a request whose answer holds values that
+// are not in their archived, de-identified form, whatever it names: a held
+// header, a value's code, a trial's values. Check refuses it to a masked key
+// (master.Key.Masked), once the key's grant is found to suffice, as Denied
+// with MessageMasked, and records the refusal; for any other caller it is r.
+func (r Requirement) AnswersOriginals() Requirement {
+	r.originals = true
+	return r
 }
 
 // Authenticated requires only a good credential: WhoAmI and ListTenants,
@@ -113,6 +142,11 @@ type Request struct {
 }
 
 // MaxRequestDetails bounds Request.Details: the master's bound less the two
-// details a change of grant adds (master.AuditEntry.WithRoleChange) and the
-// one the audit writer adds to an entry it moves to the master's log.
-const MaxRequestDetails = master.MaxAuditDetails - 3
+// details a change of grant adds (master.AuditEntry.WithRoleChange), the
+// one the audit writer adds to an entry it moves to the master's log, and
+// the one every entry of a masked key carries (DetailMasked).
+const MaxRequestDetails = master.MaxAuditDetails - 4
+
+// DetailMasked is the detail every audit entry a masked key makes carries,
+// "true", so the log shows what an outside service read and was refused.
+const DetailMasked = "masked"

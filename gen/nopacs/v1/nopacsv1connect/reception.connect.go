@@ -79,7 +79,9 @@ var (
 // ReceptionServiceClient is a client for the nopacs.v1.ReceptionService service.
 type ReceptionServiceClient interface {
 	// ListReceptions answers a tenant's receptions, newest first by the time
-	// of their first file, filtered by receiver, study, step and time.
+	// of their first file, filtered by receiver, study, step and time. A
+	// masked key (Key.masked) is refused the UID filter: whether a reception
+	// has a UID as received is an original value.
 	//
 	// Role: reader on the tenant; operator on the tenant to filter by Study
 	// Instance UID, since looking a study up by an identifier the caller
@@ -88,7 +90,7 @@ type ReceptionServiceClient interface {
 	// except a Study Instance UID, recorded only as present.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
 	// does not exist, for a caller who may not list every tenant; also a UID
-	// filter from a caller without operator), invalid,
+	// filter from a caller without operator, or from a masked key), invalid,
 	// not found (a tenant that does not exist, for a caller who may list every
 	// tenant), unavailable (the tenant's database does not answer, or the
 	// tenant is not ready).
@@ -156,7 +158,9 @@ func NewReceptionServiceClient(client *connect.Client) ReceptionServiceClient {
 // ReceptionServiceHandler is an implementation of the nopacs.v1.ReceptionService service.
 type ReceptionServiceHandler interface {
 	// ListReceptions answers a tenant's receptions, newest first by the time
-	// of their first file, filtered by receiver, study, step and time.
+	// of their first file, filtered by receiver, study, step and time. A
+	// masked key (Key.masked) is refused the UID filter: whether a reception
+	// has a UID as received is an original value.
 	//
 	// Role: reader on the tenant; operator on the tenant to filter by Study
 	// Instance UID, since looking a study up by an identifier the caller
@@ -165,7 +169,7 @@ type ReceptionServiceHandler interface {
 	// except a Study Instance UID, recorded only as present.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
 	// does not exist, for a caller who may not list every tenant; also a UID
-	// filter from a caller without operator), invalid,
+	// filter from a caller without operator, or from a masked key), invalid,
 	// not found (a tenant that does not exist, for a caller who may list every
 	// tenant), unavailable (the tenant's database does not answer, or the
 	// tenant is not ready).

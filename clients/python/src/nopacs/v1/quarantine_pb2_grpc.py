@@ -100,6 +100,10 @@ class QuarantineServiceServicer:
         by the time they were quarantined, filtered by state, reason, receiver,
         reception, time, and the Study or SOP Instance UID as received.
 
+        A masked key (Key.masked) is refused a UID filter, and is answered each
+        record without its UIDs as received, the details that hold one and its
+        import path.
+
         Role: reader on the tenant; operator on the tenant to filter by a UID,
         since looking a file up by an identifier the caller already holds is a
         search for a person's data.
@@ -107,7 +111,7 @@ class QuarantineServiceServicer:
         UID filter is recorded only as present.
         Errors: unauthenticated, permission denied (no grant; also a tenant that
         does not exist, for a caller who may not list every tenant; also a UID
-        filter from a caller without operator), invalid, not found (a tenant
+        filter from a caller without operator, or from a masked key), invalid, not found (a tenant
         that does not exist, for a caller who may list every tenant),
         unavailable (the tenant's database does not answer, or the tenant is
         not ready).
@@ -118,15 +122,20 @@ class QuarantineServiceServicer:
 
     def GetQuarantinedFile(self, request, context):
         """GetQuarantinedFile answers one quarantined file, and its DICOM header
-        when asked for and when one could be read.
+        when asked for and when one could be read: by default its attributes
+        without their values, with show_values its values too. A masked key
+        (Key.masked) is refused include_header whatever its role, and is
+        answered the record without its UIDs as received.
 
         Role: reader on the tenant; operator on the tenant with include_header,
         since the header holds what the sender sent, identifying data included.
         Audit: one entry in the tenant's log, with the file's id as its object
-        and whether the header was asked for in details.
+        and, in details, whether the header was asked for and whether its
+        values were.
         Errors: unauthenticated, permission denied (no grant; also a tenant that
         does not exist, for a caller who may not list every tenant; also
-        include_header from a caller without operator), invalid, not found (the
+        include_header from a caller without operator, or from a masked key),
+        invalid (also show_values without include_header), not found (the
         tenant has no quarantined file with that id; a tenant that does not
         exist, for a caller who may list every tenant), unavailable (the
         tenant's database does not answer, or the tenant is not ready).

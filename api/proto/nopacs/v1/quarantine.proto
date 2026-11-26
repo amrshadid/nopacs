@@ -31,6 +31,10 @@ service QuarantineService {
   // by the time they were quarantined, filtered by state, reason, receiver,
   // reception, time, and the Study or SOP Instance UID as received.
   //
+  // A masked key (Key.masked) is refused a UID filter, and is answered each
+  // record without its UIDs as received, the details that hold one and its
+  // import path.
+  //
   // Role: reader on the tenant; operator on the tenant to filter by a UID,
   // since looking a file up by an identifier the caller already holds is a
   // search for a person's data.
@@ -38,7 +42,7 @@ service QuarantineService {
   // UID filter is recorded only as present.
   // Errors: unauthenticated, permission denied (no grant; also a tenant that
   // does not exist, for a caller who may not list every tenant; also a UID
-  // filter from a caller without operator), invalid, not found (a tenant
+  // filter from a caller without operator, or from a masked key), invalid, not found (a tenant
   // that does not exist, for a caller who may list every tenant),
   // unavailable (the tenant's database does not answer, or the tenant is
   // not ready).
@@ -47,15 +51,20 @@ service QuarantineService {
   }
 
   // GetQuarantinedFile answers one quarantined file, and its DICOM header
-  // when asked for and when one could be read.
+  // when asked for and when one could be read: by default its attributes
+  // without their values, with show_values its values too. A masked key
+  // (Key.masked) is refused include_header whatever its role, and is
+  // answered the record without its UIDs as received.
   //
   // Role: reader on the tenant; operator on the tenant with include_header,
   // since the header holds what the sender sent, identifying data included.
   // Audit: one entry in the tenant's log, with the file's id as its object
-  // and whether the header was asked for in details.
+  // and, in details, whether the header was asked for and whether its
+  // values were.
   // Errors: unauthenticated, permission denied (no grant; also a tenant that
   // does not exist, for a caller who may not list every tenant; also
-  // include_header from a caller without operator), invalid, not found (the
+  // include_header from a caller without operator, or from a masked key),
+  // invalid (also show_values without include_header), not found (the
   // tenant has no quarantined file with that id; a tenant that does not
   // exist, for a caller who may list every tenant), unavailable (the
   // tenant's database does not answer, or the tenant is not ready).
@@ -598,8 +607,16 @@ message GetQuarantinedFileRequest {
   string id = 2;
 
   // Whether to answer the file's DICOM header in header_json. Needs
-  // operator on the tenant.
+  // operator on the tenant; refused to a masked key.
   bool include_header = 3;
+
+  // Whether the header answered holds its values. Unset, header_json holds
+  // each attribute with its VR and, for a sequence, its items, but no
+  // value: what the caller prints may leave the site, as an AI agent's
+  // output does. Set, it is the header as the sender sent it, and the
+  // request's audit entry records it ("show_values"). Only with
+  // include_header.
+  bool show_values = 4;
 }
 
 // GetQuarantinedFileResponse is the quarantined file named.
@@ -612,8 +629,10 @@ message GetQuarantinedFileResponse {
   // 1 KiB are left out entirely, with no BulkDataURI and no InlineBinary.
   // Answered only when include_header was true, the file's bytes are held,
   // its data set could be read, and the result is at most 1 MiB; a longer
-  // one is never cut, but left out, with header_too_large set. It holds
-  // what the sender sent, identifying data included.
+  // one is never cut, but left out, with header_too_large set. With
+  // show_values it holds what the sender sent, identifying data included;
+  // without, every "Value", "InlineBinary" and "BulkDataURI" member is
+  // removed, at every depth of sequences.
   string header_json = 2;
 
   // Whether the header was left out because it is longer than 1 MiB.

@@ -186,14 +186,16 @@ class ListQuarantinedFilesResponse(_message.Message):
     def __init__(self, files: _Optional[_Iterable[_Union[QuarantinedFile, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
 class GetQuarantinedFileRequest(_message.Message):
-    __slots__ = ("tenant", "id", "include_header")
+    __slots__ = ("tenant", "id", "include_header", "show_values")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     INCLUDE_HEADER_FIELD_NUMBER: _ClassVar[int]
+    SHOW_VALUES_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     id: str
     include_header: bool
-    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., include_header: _Optional[bool] = ...) -> None: ...
+    show_values: bool
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., include_header: _Optional[bool] = ..., show_values: _Optional[bool] = ...) -> None: ...
 
 class GetQuarantinedFileResponse(_message.Message):
     __slots__ = ("file", "header_json", "header_too_large")

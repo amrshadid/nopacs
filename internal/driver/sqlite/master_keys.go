@@ -28,7 +28,7 @@ func (m *Master) CreateKey(ctx context.Context, k master.Key, audit master.Audit
 			return err
 		}
 		_, err := tx.StmtContext(ctx, s.insertKey).ExecContext(ctx,
-			k.ID, k.Hash, k.Holder, micros(k.Created), nullMicros(k.Expires), k.Rules.Networks.String(), k.Rules.ClientCert)
+			k.ID, k.Hash, k.Holder, micros(k.Created), nullMicros(k.Expires), k.Rules.Networks.String(), k.Rules.ClientCert, boolInt(k.Masked))
 		if isUniqueViolation(err) {
 			return fault.Wrap(fault.Conflict, err, "a key with this id exists")
 		}
@@ -39,7 +39,7 @@ func (m *Master) CreateKey(ctx context.Context, k master.Key, audit master.Audit
 	})
 }
 
-const keyColumns = `id, hash, holder, created, expires, last_used, revoked, networks, client_cert, last_address, successor, suspended`
+const keyColumns = `id, hash, holder, created, expires, last_used, revoked, networks, client_cert, last_address, successor, suspended, masked`
 
 // scanKey reads one row of keyColumns.
 func scanKey(row interface{ Scan(...any) error }) (master.Key, error) {
@@ -48,7 +48,7 @@ func scanKey(row interface{ Scan(...any) error }) (master.Key, error) {
 	var expires, lastUsed, revoked, suspended sql.NullInt64
 	var networks string
 	err := row.Scan(&k.ID, &k.Hash, &k.Holder, &created, &expires, &lastUsed, &revoked,
-		&networks, &k.Rules.ClientCert, &k.LastAddress, &k.Successor, &suspended)
+		&networks, &k.Rules.ClientCert, &k.LastAddress, &k.Successor, &suspended, &k.Masked)
 	k.Created = fromMicros(created)
 	k.Expires = setMicros(expires)
 	k.LastUsed = fromNullMicros(lastUsed)
@@ -256,10 +256,9 @@ func (m *Master) RotateKey(ctx context.Context, id string, successor master.Key,
 		if err := master.RotationConflict(old, successor.Created); err != nil {
 			return err
 		}
-		next := successor
-		next.Holder, next.Rules = old.Holder, old.Rules
+		next := master.Successor(old, successor)
 		_, err = tx.StmtContext(ctx, s.insertKey).ExecContext(ctx,
-			next.ID, next.Hash, next.Holder, micros(next.Created), nullMicros(next.Expires), next.Rules.Networks.String(), next.Rules.ClientCert)
+			next.ID, next.Hash, next.Holder, micros(next.Created), nullMicros(next.Expires), next.Rules.Networks.String(), next.Rules.ClientCert, boolInt(next.Masked))
 		if isUniqueViolation(err) {
 			return fault.Wrap(fault.Conflict, err, "a key with this id exists")
 		}

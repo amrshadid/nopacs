@@ -519,13 +519,17 @@ service JobService {
   // contains "a/b" and not "ab") the path of a queued or running import job
   // of the same receiver is refused.
   //
+  // A send job is refused to a masked key (Key.masked): what leaves the
+  // archive, and for whom, is a person's choice.
+  //
   // Role: operator on the tenant.
   // Audit: one entry in the tenant's log, with the new job's id as its
   // object, and its kind, its sender and the path of labels of its target
   // in details; for a scrub, its storage; for a rebuild, its mode; for an
   // import, its receiver and its root's name, never its path or map file.
   // Errors: unauthenticated, permission denied (no grant; also a tenant that
-  // does not exist, for a caller who may not list every tenant), invalid
+  // does not exist, for a caller who may not list every tenant; also a send
+  // job from a masked key), invalid
   // (also no kind, a label that does not pass the label rule, a level named
   // without the one above it, and a reception given, which only the
   // server sets; for an import, a path or map file that breaks the path

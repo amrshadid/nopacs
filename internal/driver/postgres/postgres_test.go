@@ -50,7 +50,7 @@ func TestShippedMigrationsUnchanged(t *testing.T) {
 
 // shippedBaseline is the SHA-256 of migrations/master/0001_baseline.sql as
 // this change ships it.
-const shippedBaseline = "999e34e5889b9f08bff9c54862869ad743daf33f9315ce9fc180f0647737b4fb"
+const shippedBaseline = "d6c5b1f53ca89cee84d380a9235c63c977531f2092479e43ec482042260ef501"
 
 // TestNotMigrated guards that a store used before Migrate fails as
 // Unavailable with a message that says so, instead of a SQL error.

@@ -196,7 +196,7 @@ func (x *webRequest) locate(ctx context.Context) (target, error) {
 	x.object = labelPath(s.SubjectLabel, s.SessionLabel, s.Label)
 	t := target{scans: &rowsOf[tenant.CatalogScan]{rows: []tenant.CatalogScan{s}}, scan: s}
 	if res.Instance != "" {
-		in, err := x.p.HeldInstance(ctx, pathOf(s), res.Instance)
+		in, err := x.heldInstance(ctx, s, res.Instance)
 		if fault.KindOf(err) == fault.NotFound {
 			err = fault.Wrap(fault.NotFound, err, messageNoWebInstance)
 		}

@@ -131,7 +131,8 @@ export type Reception = Message<"nopacs.v1.Reception"> & {
 
   /**
    * The Study Instance UID (0020,000D) of its files, as received (PS3.3
-   * C.7.2.1; 1 to 64 characters of digits and dots, PS3.5 9.1).
+   * C.7.2.1; 1 to 64 characters of digits and dots, PS3.5 9.1). Empty for a
+   * masked key (Key.masked): it is an original value.
    *
    * @generated from field: string study_instance_uid = 3;
    */
@@ -303,7 +304,7 @@ export type ReceptionScan = Message<"nopacs.v1.ReceptionScan"> & {
 
   /**
    * The scan's Series Instance UID (0020,000E), as received (PS3.3
-   * C.7.3.1).
+   * C.7.3.1). Empty for a masked key (Key.masked): it is an original value.
    *
    * @generated from field: string series_instance_uid = 2;
    */
@@ -812,7 +813,9 @@ export const ReceptionStepSchema: GenEnum<ReceptionStep> = /*@__PURE__*/
 export const ReceptionService: GenService<{
   /**
    * ListReceptions answers a tenant's receptions, newest first by the time
-   * of their first file, filtered by receiver, study, step and time.
+   * of their first file, filtered by receiver, study, step and time. A
+   * masked key (Key.masked) is refused the UID filter: whether a reception
+   * has a UID as received is an original value.
    *
    * Role: reader on the tenant; operator on the tenant to filter by Study
    * Instance UID, since looking a study up by an identifier the caller
@@ -821,7 +824,7 @@ export const ReceptionService: GenService<{
    * except a Study Instance UID, recorded only as present.
    * Errors: unauthenticated, permission denied (no grant; also a tenant that
    * does not exist, for a caller who may not list every tenant; also a UID
-   * filter from a caller without operator), invalid,
+   * filter from a caller without operator, or from a masked key), invalid,
    * not found (a tenant that does not exist, for a caller who may list every
    * tenant), unavailable (the tenant's database does not answer, or the
    * tenant is not ready).

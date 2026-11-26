@@ -263,7 +263,8 @@ type Reception struct {
 	// names it.
 	Receiver string `protobuf:"bytes,2,opt,name=receiver,proto3" json:"receiver,omitempty"`
 	// The Study Instance UID (0020,000D) of its files, as received (PS3.3
-	// C.7.2.1; 1 to 64 characters of digits and dots, PS3.5 9.1).
+	// C.7.2.1; 1 to 64 characters of digits and dots, PS3.5 9.1). Empty for a
+	// masked key (Key.masked): it is an original value.
 	StudyInstanceUid string `protobuf:"bytes,3,opt,name=study_instance_uid,json=studyInstanceUid,proto3" json:"study_instance_uid,omitempty"`
 	// Its place among the receptions of the same study in the tenant, from 1,
 	// in the order of their first file: 1 for the first, 2 for a later
@@ -505,7 +506,7 @@ type ReceptionScan struct {
 	// The scan's label.
 	Label string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
 	// The scan's Series Instance UID (0020,000E), as received (PS3.3
-	// C.7.3.1).
+	// C.7.3.1). Empty for a masked key (Key.masked): it is an original value.
 	SeriesInstanceUid string `protobuf:"bytes,2,opt,name=series_instance_uid,json=seriesInstanceUid,proto3" json:"series_instance_uid,omitempty"`
 	// The instances this reception archived into the scan. A scan that a
 	// later arrival added to holds instances of each arrival; this counts

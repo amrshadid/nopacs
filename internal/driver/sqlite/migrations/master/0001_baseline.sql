@@ -25,7 +25,10 @@
 -- since the successor is written in the same transaction and a key is never
 -- deleted. suspended is when the key was suspended (a restore suspends every
 -- key it brings back, since a key revoked after the backup would otherwise
--- work again), NULL while it is not.
+-- work again), NULL while it is not. masked is 1 for a key that is never
+-- answered a value not in its archived, de-identified form (one an outside
+-- service holds); it is written when the key is made and never changed, and
+-- a rotation's successor takes it.
 CREATE TABLE api_keys (
     id        TEXT    NOT NULL PRIMARY KEY,
     hash      BLOB    NOT NULL CHECK (length(hash) = 32),
@@ -38,7 +41,8 @@ CREATE TABLE api_keys (
     client_cert  TEXT NOT NULL DEFAULT '' CHECK (client_cert = '' OR length(client_cert) = 64),
     last_address TEXT NOT NULL DEFAULT '',
     successor    TEXT NOT NULL DEFAULT '',
-    suspended INTEGER
+    suspended INTEGER,
+    masked    INTEGER NOT NULL DEFAULT 0 CHECK (masked IN (0, 1))
 ) STRICT;
 
 -- The list of keys in order of creation, then id.

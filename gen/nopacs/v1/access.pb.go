@@ -20,6 +20,36 @@
 // grant and is admin on the installation and on every tenant. Each method's
 // comment names the role it needs and on what.
 //
+// A masked key (Key.masked), the key an AI agent or any other outside
+// service holds, keeps its role but is never answered a value that is not
+// in its archived, de-identified form: whatever such a service reads leaves
+// the site. Whatever its role, it is refused PERMISSION_DENIED, with the
+// message "a masked key is never answered an original value", once its grant
+// is found to suffice: a quarantined file's header
+// (GetQuarantinedFile.include_header) and a search of quarantined files by
+// a UID as received; the values of a trial (TryProfileRequest.show_values),
+// and a trial or an explanation of a held file, whose matches and lengths
+// would answer its values one guess at a time (TryProfileRequest
+// .quarantine_records, ExplainProfileRequest.quarantine_record); a search
+// of receptions by a UID as received; DeidService.Code and
+// ImportLookupCodes; the paths an import job read (ListImportFiles,
+// ListImportUnits); the metadata and files of an instance archived as
+// received (MetadataService, DataService, its plain HTTP download and
+// DICOMweb); and a backup or an export. Quarantine records are answered to
+// it without the UIDs as received, the details that hold one, and the
+// import path; receptions without their UIDs, which are the ones received.
+// A masked caller makes and rotates only masked keys, and a rotation keeps
+// the flag, which nothing removes.
+//
+// Where the archive's bytes go is a person's choice, never an outside
+// service's: a masked key is refused PERMISSION_DENIED, with the message "a
+// masked key may not choose where archived data goes; a person does", once
+// its grant is found to suffice, a send job (JobService.CreateJob with
+// send), a replica's attachment and backfill, a storage or a sender added
+// or changed, and a receiver added or changed to forward (forward_to, or a
+// route's senders). Every audit entry such a key makes, a refusal
+// included, carries the detail "masked" set to "true".
+//
 // The order of checks. Every request is checked in this order, and the first
 // check that fails gives the answer: (1) the caller is authenticated, or the
 // answer is UNAUTHENTICATED; (2) the caller holds the role the method needs,
@@ -364,7 +394,13 @@ type Key struct {
 	// made would otherwise work again.
 	Suspended bool `protobuf:"varint,11,opt,name=suspended,proto3" json:"suspended,omitempty"`
 	// When it was suspended. Absent while it is not.
-	SuspendTime   *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=suspend_time,json=suspendTime,proto3" json:"suspend_time,omitempty"`
+	SuspendTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=suspend_time,json=suspendTime,proto3" json:"suspend_time,omitempty"`
+	// Whether the key is masked: never answered a value that is not in its
+	// archived, de-identified form (the package's comment says what it is
+	// refused). Set when the key is made (CreateKeyRequest.masked), carried
+	// to its successor by RotateKey, and never removed: a key without it is
+	// made in its place.
+	Masked        bool `protobuf:"varint,13,opt,name=masked,proto3" json:"masked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -481,6 +517,13 @@ func (x *Key) GetSuspendTime() *timestamppb.Timestamp {
 		return x.SuspendTime
 	}
 	return nil
+}
+
+func (x *Key) GetMasked() bool {
+	if x != nil {
+		return x.Masked
+	}
+	return false
 }
 
 // Grant gives one key one role on one scope.
@@ -714,8 +757,12 @@ type CreateKeyRequest struct {
 	// The SHA-256 of the TLS client certificate the key must come with, as
 	// Key.client_cert_sha256 states it. Empty for none.
 	ClientCertSha256 string `protobuf:"bytes,5,opt,name=client_cert_sha256,json=clientCertSha256,proto3" json:"client_cert_sha256,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Whether the key is masked (Key.masked), for a key an AI agent or any
+	// other outside service will hold. It cannot be changed later. A masked
+	// caller must set it.
+	Masked        bool `protobuf:"varint,6,opt,name=masked,proto3" json:"masked,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateKeyRequest) Reset() {
@@ -792,6 +839,13 @@ func (x *CreateKeyRequest) GetClientCertSha256() string {
 		return x.ClientCertSha256
 	}
 	return ""
+}
+
+func (x *CreateKeyRequest) GetMasked() bool {
+	if x != nil {
+		return x.Masked
+	}
+	return false
 }
 
 type isCreateKeyRequest_Expiry interface {
@@ -2005,7 +2059,7 @@ var File_nopacs_v1_access_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_access_proto_rawDesc = "" +
 	"\n" +
-	"\x16nopacs/v1/access.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15nopacs/v1/scope.proto\"\x98\x04\n" +
+	"\x16nopacs/v1/access.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15nopacs/v1/scope.proto\"\xb0\x04\n" +
 	"\x03Key\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06holder\x18\x02 \x01(\tR\x06holder\x12;\n" +
@@ -2022,7 +2076,8 @@ const file_nopacs_v1_access_proto_rawDesc = "" +
 	"\fsuccessor_id\x18\n" +
 	" \x01(\tR\vsuccessorId\x12\x1c\n" +
 	"\tsuspended\x18\v \x01(\bR\tsuspended\x12=\n" +
-	"\fsuspend_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vsuspendTime\"k\n" +
+	"\fsuspend_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vsuspendTime\x12\x16\n" +
+	"\x06masked\x18\r \x01(\bR\x06masked\"k\n" +
 	"\x05Grant\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12&\n" +
 	"\x05scope\x18\x02 \x01(\v2\x10.nopacs.v1.ScopeR\x05scope\x12#\n" +
@@ -2033,13 +2088,14 @@ const file_nopacs_v1_access_proto_rawDesc = "" +
 	"\x06grants\x18\x03 \x03(\v2\x10.nopacs.v1.GrantR\x06grantsB\b\n" +
 	"\x06caller\"(\n" +
 	"\rLocalOperator\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\"\xe3\x01\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"\xfb\x01\n" +
 	"\x10CreateKeyRequest\x12\x16\n" +
 	"\x06holder\x18\x01 \x01(\tR\x06holder\x12>\n" +
 	"\fexpire_after\x18\x02 \x01(\v2\x19.google.protobuf.DurationH\x00R\vexpireAfter\x12#\n" +
 	"\fnever_expire\x18\x03 \x01(\bH\x00R\vneverExpire\x12\x1a\n" +
 	"\bnetworks\x18\x04 \x03(\tR\bnetworks\x12,\n" +
-	"\x12client_cert_sha256\x18\x05 \x01(\tR\x10clientCertSha256B\b\n" +
+	"\x12client_cert_sha256\x18\x05 \x01(\tR\x10clientCertSha256\x12\x16\n" +
+	"\x06masked\x18\x06 \x01(\bR\x06maskedB\b\n" +
 	"\x06expiry\"R\n" +
 	"\x11CreateKeyResponse\x12 \n" +
 	"\x03key\x18\x01 \x01(\v2\x0e.nopacs.v1.KeyR\x03key\x12\x1b\n" +

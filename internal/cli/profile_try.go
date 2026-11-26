@@ -15,6 +15,7 @@ import (
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/cli/output"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/trial"
 )
 
 // The bounds of the files a trial run sends, the server's (profile.proto,
@@ -93,14 +94,15 @@ func (f *trialProfileFlags) reception() *v1.TrialReception {
 func (a *app) newProfileTry() *cobra.Command {
 	var f trialProfileFlags
 	var records []string
-	var failOnHeld, changedOnly, local bool
+	var failOnHeld, changedOnly, local, showValues bool
 	cmd := &cobra.Command{
-		Use:   "try (<tenant> (--profile NAME[@VERSION] | --document FILE|-) [FILE|DIR ...] [--record ID ...] | --local --document FILE|- FILE|DIR ...)",
+		Use:   "try (<tenant> (--profile NAME[@VERSION] | --document FILE|-) [FILE|DIR ...] [--record ID ...] | --local --document FILE|- FILE|DIR ...) [--show-values]",
 		Short: "Run a profile over sample files and show what it would do, storing nothing",
 		Long: `Run a profile over sample files exactly as a receiver naming it would: each file
 is de-identified, written in memory, checked after for every value the profile
-removed, and shown element by element with its value before and after, the
-action, and the rule (or base) that decided it. Each file ends passed (it would
+removed, and shown element by element with its VR, the lengths of its value
+before and after, whether it changed, the action, and the rule (or base) that
+decided it. Each file ends passed (it would
 be archived) or held, with the quarantine reason and its fixed cause. Nothing is
 stored, and none of the tenant's secrets is used: each run has keys of its own,
 so remapped UIDs, hashes, shifted dates and codes never equal the archive's
@@ -116,10 +118,15 @@ says the verdict is de-identification's alone.
 
 Files are named as paths; a directory is read recursively for its DICOM files.
 At most 32 files of up to 3MiB each, 3.5MiB together, go in one run. --record
-tries the held file of a quarantine record instead (repeat for more).
+tries the held file of a quarantine record instead (repeat for more); the
+server refuses it to a masked key, values shown or not, since what a run
+answers of a held file can be read back one guess at a time.
 
-The values shown are the files' own and may identify a person: they go to this
-terminal only. --changed-only shows only the elements that change.
+No value is shown, in the table or with --json, unless --show-values asks for
+them: the values are the files' own and may identify a person, and what this
+command prints may leave the site (an AI agent sends it to its vendor). The
+server records --show-values in its audit log, and refuses it to a masked key.
+--changed-only shows only the elements that change.
 --fail-on-held exits 5 when any file would be held or is undecided, or when no
 receiver could name the profile, for scripts and agents.
 
@@ -146,7 +153,8 @@ people and agents iterating on a profile offline.`,
 				if err != nil {
 					return err
 				}
-				return a.trialOut(res, changedOnly, failOnHeld)
+				trial.HideValues(res.GetResults(), showValues)
+				return a.trialOut(res, changedOnly, failOnHeld, showValues)
 			}
 			p, err := a.trialProfile(&f)
 			if err != nil {
@@ -165,17 +173,21 @@ people and agents iterating on a profile offline.`,
 			}
 			defer closeClient()
 			res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.TryProfileResponse, error) {
-				return c.Profiles.TryProfile(ctx, &v1.TryProfileRequest{Tenant: args[0], Profile: p, Files: files, QuarantineRecords: records, Reception: f.reception()})
+				return c.Profiles.TryProfile(ctx, &v1.TryProfileRequest{Tenant: args[0], Profile: p, Files: files, QuarantineRecords: records, Reception: f.reception(), ShowValues: showValues})
 			})
 			if err != nil {
 				return a.withProblems(err)
 			}
-			return a.trialOut(res, changedOnly, failOnHeld)
+			// The server hides the values unless asked; hidden here too, so
+			// a server that answered them anyway prints none.
+			trial.HideValues(res.GetResults(), showValues)
+			return a.trialOut(res, changedOnly, failOnHeld, showValues)
 		}),
 	}
+	cmd.Flags().BoolVar(&showValues, "show-values", false, "show each element's values before and after (audited by the server; refused to a masked key)")
 	f.add(cmd)
 	cmd.Flags().BoolVar(&local, "local", false, "run the engine and the check in this command, with no server: every argument is a file or directory, the profile a --document or a version's export")
-	cmd.Flags().StringArrayVar(&records, "record", nil, "the id of a quarantine record whose held file to try; repeat for more")
+	cmd.Flags().StringArrayVar(&records, "record", nil, "the id of a quarantine record whose held file to try; repeat for more (refused to a masked key)")
 	cmd.Flags().BoolVar(&failOnHeld, "fail-on-held", false, "exit 5 when any file would be held or is undecided, or no receiver could name the profile")
 	cmd.Flags().BoolVar(&changedOnly, "changed-only", false, "show only the elements whose value or presence changes")
 	return cmd
@@ -184,8 +196,8 @@ people and agents iterating on a profile offline.`,
 // trialOut writes a trial run's answer and, with failOnHeld, fails when a
 // file would be held or is undecided, or no receiver could name the
 // profile.
-func (a *app) trialOut(res *v1.TryProfileResponse, changedOnly, failOnHeld bool) error {
-	if err := messageOut(a, res, func(w io.Writer) error { return a.trialText(w, res, changedOnly) }); err != nil {
+func (a *app) trialOut(res *v1.TryProfileResponse, changedOnly, failOnHeld, showValues bool) error {
+	if err := messageOut(a, res, func(w io.Writer) error { return a.trialText(w, res, changedOnly, showValues) }); err != nil {
 		return err
 	}
 	if !failOnHeld {
@@ -227,9 +239,41 @@ func ruleText(rule int32, name, origin string) string {
 	return t
 }
 
+// trialRow is one element of a trial's table: with showValues its values
+// before and after; without, its VR, the lengths of its values and whether
+// it changed, and no value, since what this command prints may leave the
+// site (an AI agent sends it to its vendor).
+func trialRow(e *v1.TrialElement, held, showValues bool) []string {
+	rule := ruleText(e.GetRule(), e.GetRuleName(), e.GetOrigin())
+	if !showValues {
+		length := strconv.Itoa(int(e.GetBeforeLength())) + " -> "
+		switch {
+		case held:
+			length += "-"
+		case !e.GetPresentAfter():
+			length += "(absent)"
+		default:
+			length += strconv.Itoa(int(e.GetAfterLength()))
+		}
+		changed := "no"
+		if e.GetChanged() {
+			changed = "yes"
+		}
+		return []string{e.GetPath(), output.Dash(e.GetKeyword()), output.Dash(e.GetVr()), e.GetAction(), length, changed, rule}
+	}
+	after := output.Clean(e.GetAfter())
+	if !e.GetPresentAfter() {
+		after = "(absent)"
+	}
+	if held {
+		after = "-"
+	}
+	return []string{e.GetPath(), output.Dash(e.GetKeyword()), e.GetAction(), output.Dash(output.Clean(e.GetBefore())), output.Dash(after), rule}
+}
+
 // trialText writes a trial run for a person: per file its verdict, then a
 // table of its elements, then the summary.
-func (a *app) trialText(w io.Writer, res *v1.TryProfileResponse, changedOnly bool) error {
+func (a *app) trialText(w io.Writer, res *v1.TryProfileResponse, changedOnly, showValues bool) error {
 	head := []output.Pair{{Label: "Checksum", Value: res.GetChecksum()}}
 	if v := res.GetVersion(); v != nil {
 		head = append([]output.Pair{{Label: "Profile", Value: v.GetName() + "@" + strconv.Itoa(int(v.GetVersion()))}}, head...)
@@ -268,22 +312,19 @@ func (a *app) trialText(w io.Writer, res *v1.TryProfileResponse, changedOnly boo
 		}
 		_, _ = fmt.Fprintf(w, "\n%s: %s\n", a.style().Bold(name), verdict)
 		rows := [][]string{}
+		held := r.GetVerdict() == v1.TrialVerdict_TRIAL_VERDICT_HELD
 		for _, e := range r.GetElements() {
 			if changedOnly && !e.GetChanged() {
 				continue
 			}
-			after := output.Clean(e.GetAfter())
-			if !e.GetPresentAfter() {
-				after = "(absent)"
-			}
-			if r.GetVerdict() == v1.TrialVerdict_TRIAL_VERDICT_HELD {
-				after = "-"
-			}
-			rows = append(rows, []string{e.GetPath(), output.Dash(e.GetKeyword()), e.GetAction(), output.Dash(output.Clean(e.GetBefore())), output.Dash(after),
-				ruleText(e.GetRule(), e.GetRuleName(), e.GetOrigin())})
+			rows = append(rows, trialRow(e, held, showValues))
 		}
 		if len(rows) > 0 {
-			if err := output.Table(w, a.style(), []string{"PATH", "KEYWORD", "ACTION", "BEFORE", "AFTER", "RULE"}, rows); err != nil {
+			head := []string{"PATH", "KEYWORD", "VR", "ACTION", "LENGTH", "CHANGED", "RULE"}
+			if showValues {
+				head = []string{"PATH", "KEYWORD", "ACTION", "BEFORE", "AFTER", "RULE"}
+			}
+			if err := output.Table(w, a.style(), head, rows); err != nil {
 				return err
 			}
 		}
@@ -377,7 +418,7 @@ of the file is shown. Nothing is stored.`,
 		}),
 	}
 	f.add(cmd)
-	cmd.Flags().StringVar(&record, "record", "", "the id of a quarantine record whose held file to explain")
+	cmd.Flags().StringVar(&record, "record", "", "the id of a quarantine record whose held file to explain (refused to a masked key)")
 	return cmd
 }
 

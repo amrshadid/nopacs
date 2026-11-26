@@ -19,7 +19,7 @@ func TestTrialShowsRedactionsAndPatterns(t *testing.T) {
 		{Name: "model", Selector: &v1.ProfileSelector{Kind: &v1.ProfileSelector_ValuePattern{ValuePattern: &v1.ValuePatternSelector{Pattern: `LightSpeed Ultra`}}},
 			Action: &v1.ProfileAction{Kind: &v1.ProfileAction_Remove{Remove: &v1.RemoveAction{}}}},
 	}
-	res := mustCall[*v1.TryProfileResponse](t, "try", tryFiles(unsaved(doc), corpusFile(t, "ct5n-2062.dcm"))(f.as(f.lab1Operator)))
+	res := mustCall[*v1.TryProfileResponse](t, "try", tryShowing(unsaved(doc), corpusFile(t, "ct5n-2062.dcm"))(f.as(f.lab1Operator)))
 	r := res.GetResults()[0]
 	if r.GetVerdict() != v1.TrialVerdict_TRIAL_VERDICT_PASSED {
 		t.Fatalf("result %v", r)

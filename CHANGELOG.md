@@ -459,6 +459,16 @@ scan, keeps it whole, and serves it through an API with keys.
   creator, person names by any component group); a compiler to SQL from bound
   parameters and registered columns only, which refuses a search no index
   serves; and the QIDO-RS matching rules mapped onto it.
+- Masked keys for AI agents (`nopacs key create --masked`): the server never
+  answers a masked key an original value (held headers, quarantine and
+  reception UIDs as received, trials and explanations of held files, value
+  codes, import lookups and paths, data archived as received, backups and
+  exports); a masked key rotates only masked keys and may not choose where
+  data goes (send, replicas, storages, senders, forwarding routes); the mark
+  is kept through rotation and on every audit entry. For every key, a held
+  header and a trial answer no values unless `--show-values`, which is
+  audited. `nopacs agent-guide` describes the commands and their JSON for an
+  agent.
 - Quarantine warnings: tenant status and the status screen warn when the
   oldest held file passes `quarantine.warn-age` or the bytes held pass
   `quarantine.warn-bytes`, with gauges and an event when a warning starts and

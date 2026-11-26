@@ -12,7 +12,10 @@ import (
 	"github.com/amrshadid/nopacs/internal/master"
 )
 
-const keyColumns = `id, hash, holder, created, expires, last_used, revoked, networks, client_cert, last_address, successor, suspended`
+const keyColumns = `id, hash, holder, created, expires, last_used, revoked, networks, client_cert, last_address, successor, suspended, masked`
+
+// insertKeySQL adds a key: a new one, or a rotation's successor.
+const insertKeySQL = `INSERT INTO api_keys (id, hash, holder, created, expires, networks, client_cert, masked) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
 // scanKey reads one row of keyColumns.
 func scanKey(row scanner) (master.Key, error) {
@@ -21,7 +24,7 @@ func scanKey(row scanner) (master.Key, error) {
 	var expires, lastUsed, revoked, suspended *time.Time
 	var networks string
 	err := row.Scan(&k.ID, &k.Hash, &k.Holder, &created, &expires, &lastUsed, &revoked,
-		&networks, &k.Rules.ClientCert, &k.LastAddress, &k.Successor, &suspended)
+		&networks, &k.Rules.ClientCert, &k.LastAddress, &k.Successor, &suspended, &k.Masked)
 	k.Created = created.UTC()
 	k.Expires = setMicros(expires)
 	k.LastUsed = fromNullMicros(lastUsed)
@@ -48,8 +51,8 @@ func (m *Master) CreateKey(ctx context.Context, k master.Key, audit master.Audit
 		if err := checkActor(ctx, tx, by, tenantLock{}); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO api_keys (id, hash, holder, created, expires, networks, client_cert) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			k.ID, k.Hash, k.Holder, micros(k.Created), nullMicros(k.Expires), k.Rules.Networks.String(), k.Rules.ClientCert)
+		_, err := tx.Exec(ctx, insertKeySQL,
+			k.ID, k.Hash, k.Holder, micros(k.Created), nullMicros(k.Expires), k.Rules.Networks.String(), k.Rules.ClientCert, k.Masked)
 		if isUniqueViolation(err) {
 			return fault.Wrap(fault.Conflict, m.red.scrub(err), "a key with this id exists")
 		}
@@ -287,10 +290,9 @@ func (m *Master) RotateKey(ctx context.Context, id string, successor master.Key,
 		if err := master.RotationConflict(old, successor.Created); err != nil {
 			return err
 		}
-		next := successor
-		next.Holder, next.Rules = old.Holder, old.Rules
-		_, err = tx.Exec(ctx, `INSERT INTO api_keys (id, hash, holder, created, expires, networks, client_cert) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			next.ID, next.Hash, next.Holder, micros(next.Created), nullMicros(next.Expires), next.Rules.Networks.String(), next.Rules.ClientCert)
+		next := master.Successor(old, successor)
+		_, err = tx.Exec(ctx, insertKeySQL,
+			next.ID, next.Hash, next.Holder, micros(next.Created), nullMicros(next.Expires), next.Rules.Networks.String(), next.Rules.ClientCert, next.Masked)
 		if isUniqueViolation(err) {
 			return fault.Wrap(fault.Conflict, m.red.scrub(err), "a key with this id exists")
 		}

@@ -164,6 +164,103 @@ var operatorWhen = map[string][]string{
 	"reader on the tenant; operator on the tenant with include_header, since the header holds what the sender sent, identifying data included.":                                         {"include_header"},
 }
 
+// originalsWhen names, for each method whose answer can hold a value not in
+// its archived, de-identified form, the fields of the request whose presence
+// makes it so, which a masked key is refused (access.Requirement
+// .AnswersOriginals); no field means every request of the method. A method
+// not here never answers one by its requirement.
+var originalsWhen = map[string][]string{
+	nopacsv1connect.QuarantineServiceGetQuarantinedFileProcedure:   {"include_header"},
+	nopacsv1connect.QuarantineServiceListQuarantinedFilesProcedure: {"study_instance_uid", "sop_instance_uid"},
+	nopacsv1connect.ProfileServiceTryProfileProcedure:              {"show_values", "quarantine_records"},
+	nopacsv1connect.ProfileServiceExplainProfileProcedure:          {"quarantine_record"},
+	nopacsv1connect.ReceptionServiceListReceptionsProcedure:        {"study_instance_uid"},
+	nopacsv1connect.DeidServiceCodeProcedure:                       nil,
+	nopacsv1connect.DeidServiceImportLookupCodesProcedure:          nil,
+	nopacsv1connect.JobServiceListImportFilesProcedure:             nil,
+	nopacsv1connect.JobServiceListImportUnitsProcedure:             nil,
+	nopacsv1connect.BackupServiceCreateBackupProcedure:             nil,
+	nopacsv1connect.BackupServiceExportTenantProcedure:             nil,
+}
+
+// answersOriginals reports whether a request to proc answers original
+// values by originalsWhen.
+func answersOriginals(proc string, req proto.Message) bool {
+	fields, ok := originalsWhen[proc]
+	if !ok {
+		return false
+	}
+	if len(fields) == 0 {
+		return true
+	}
+	if req == nil {
+		return false
+	}
+	m := req.ProtoReflect()
+	for _, f := range fields {
+		if fd := m.Descriptor().Fields().ByName(protoreflect.Name(f)); fd != nil && m.Has(fd) {
+			return true
+		}
+	}
+	return false
+}
+
+// destinationWhen names, for each method that can decide where the
+// archive's bytes go, when a request does, which a masked key is refused
+// (access.Requirement.ChoosesDestination); nil means every request of the
+// method. A method not here never does by its requirement.
+var destinationWhen = map[string]func(proto.Message) bool{
+	nopacsv1connect.StorageServiceAddStorageProcedure:      nil,
+	nopacsv1connect.StorageServiceSetStorageProcedure:      nil,
+	nopacsv1connect.SenderServiceAddSenderProcedure:        nil,
+	nopacsv1connect.SenderServiceSetSenderProcedure:        nil,
+	nopacsv1connect.ReplicaServiceAttachReplicaProcedure:   nil,
+	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: nil,
+	nopacsv1connect.JobServiceCreateJobProcedure: func(m proto.Message) bool {
+		r, _ := m.(*v1.CreateJobRequest)
+		return r.GetSend() != nil
+	},
+	nopacsv1connect.ReceiverServiceAddReceiverProcedure: func(m proto.Message) bool {
+		r, _ := m.(*v1.AddReceiverRequest)
+		return forwards(r.GetReceiver())
+	},
+	nopacsv1connect.ReceiverServiceSetReceiverProcedure: func(m proto.Message) bool {
+		r, _ := m.(*v1.SetReceiverRequest)
+		return forwards(r.GetReceiver())
+	},
+}
+
+// forwards reports whether a receiver names a sender to forward to, by
+// forward_to or in a route.
+func forwards(r *v1.Receiver) bool {
+	if len(r.GetForwardTo()) > 0 {
+		return true
+	}
+	for _, rt := range r.GetRouting().GetRoutes() {
+		if len(rt.GetForwardTo().GetSenders()) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// choosesDestination reports whether a request to proc chooses where
+// archived data goes by destinationWhen.
+func choosesDestination(proc string, req proto.Message) bool {
+	when, ok := destinationWhen[proc]
+	if !ok {
+		return false
+	}
+	return when == nil || when(req)
+}
+
+// norm returns r as marked to answer original values and to choose a
+// destination, so two requirements are compared by kind, role and tenant
+// alone; the marks are checked apart.
+func norm(r access.Requirement) access.Requirement {
+	return r.AnswersOriginals().ChoosesDestination()
+}
+
 // withField returns msg with the top-level field named name set: a string
 // to a value it could hold (a UID, a name), a bool to true.
 func withField(t *testing.T, msg proto.Message, name, value string) proto.Message {
@@ -214,7 +311,7 @@ func checkTenantRole(t *testing.T, proc string, need func(proto.Message) access.
 		if c.tenant == "" {
 			named = msg
 		}
-		if got := need(named); got != c.want {
+		if got := need(named); got != norm(c.want) {
 			t.Errorf("%s with %s: %+v, want %+v", proc, c.name, got, c.want)
 		}
 	}
@@ -290,7 +387,15 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 		}
 		need := func(req proto.Message) access.Requirement {
 			r, _ := m.Requirement(proc, req)
-			return r
+			// Whether the request answers originals, which a masked key is
+			// refused, is checked here; the role is compared below.
+			if has, want := r.AnswersOriginals() == r, answersOriginals(proc, req); has != want {
+				t.Errorf("%s: answers original values %v, want %v (request %v)", proc, has, want, req)
+			}
+			if has, want := r.ChoosesDestination() == r, choosesDestination(proc, req); has != want {
+				t.Errorf("%s: chooses a destination %v, want %v (request %v)", proc, has, want, req)
+			}
+			return norm(r)
 		}
 		switch shape {
 		case fixedAdmin, fixedAuthenticated:
@@ -301,7 +406,7 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 			if msg != nil {
 				t.Errorf("%s: a fixed Role line, but the table reads the request", proc)
 			}
-			if got := need(nil); got != want {
+			if got := need(nil); got != norm(want) {
 				t.Errorf("%s: %+v, want %+v", proc, got, want)
 			}
 		case registration:
@@ -310,10 +415,10 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 			}
 			named := proto.Clone(msg)
 			named.ProtoReflect().Set(named.ProtoReflect().Descriptor().Fields().ByName("name"), protoreflect.ValueOfString("lab1"))
-			if got := need(named); got != access.TenantRegistration("lab1") {
+			if got := need(named); got != norm(access.TenantRegistration("lab1")) {
 				t.Errorf("%s with a tenant: %+v", proc, got)
 			}
-			if got := need(msg); got != access.OnInstallation(master.RoleReader) {
+			if got := need(msg); got != norm(access.OnInstallation(master.RoleReader)) {
 				t.Errorf("%s with no name: %+v", proc, got)
 			}
 		case scopeReader, scopeAdmin:
@@ -334,7 +439,7 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 				{"a malformed tenant", tenantScope("Lab 1"), access.OnInstallation(role)},
 				{"no scope", nil, access.OnInstallation(role)},
 			} {
-				if got := need(withScope(t, msg, c.scope)); got != c.want {
+				if got := need(withScope(t, msg, c.scope)); got != norm(c.want) {
 					t.Errorf("%s with %s: %+v, want %+v", proc, c.name, got, c.want)
 				}
 			}
@@ -361,7 +466,7 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 				case c.tenant != "":
 					named = withField(t, msg, "tenant", c.tenant)
 				}
-				if got := need(named); got != c.want {
+				if got := need(named); got != norm(c.want) {
 					t.Errorf("%s with %s: %+v, want %+v", proc, c.name, got, c.want)
 				}
 			}
@@ -379,7 +484,7 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 				{"a malformed tenant", tenantScope("Lab 1"), access.OnInstallation(master.RoleOperator)},
 				{"no scope", nil, access.OnInstallation(master.RoleOperator)},
 			} {
-				if got := need(withScope(t, msg, c.scope)); got != c.want {
+				if got := need(withScope(t, msg, c.scope)); got != norm(c.want) {
 					t.Errorf("%s with %s: %+v, want %+v", proc, c.name, got, c.want)
 				}
 			}
@@ -399,7 +504,7 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 				{"a malformed tenant", tenantScope("Lab 1"), access.OnInstallation(master.RoleAdmin)},
 				{"no scope", nil, access.OnInstallation(master.RoleAdmin)},
 			} {
-				if got := need(withScope(t, ordinary, c.scope)); got != c.want {
+				if got := need(withScope(t, ordinary, c.scope)); got != norm(c.want) {
 					t.Errorf("%s of an ordinary setting with %s: %+v, want %+v", proc, c.name, got, c.want)
 				}
 			}
@@ -408,7 +513,7 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 			for _, n := range []string{settings.ReceiverPorts, settings.IncomingLimit} {
 				named := withSettingName(t, msg, n)
 				for _, sc := range []*v1.Scope{tenantScope("lab1"), installation(), tenantScope("Lab 1"), nil} {
-					if got := need(withScope(t, named, sc)); got != access.OnInstallation(master.RoleAdmin) {
+					if got := need(withScope(t, named, sc)); got != norm(access.OnInstallation(master.RoleAdmin)) {
 						t.Errorf("%s of %s with scope %v: %+v, want admin on the installation", proc, n, sc, got)
 					}
 				}

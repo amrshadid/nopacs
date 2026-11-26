@@ -269,7 +269,7 @@ func (s profileService) TryProfile(ctx context.Context, req *v1.TryProfileReques
 	if err != nil {
 		return nil, err
 	}
-	pipe, st, err := c.inTenant(ctx, d, req.GetTenant(), nil)
+	pipe, st, err := c.inTenant(ctx, d, req.GetTenant(), showValuesDetails(req.GetShowValues(), nil))
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,8 @@ func (s profileService) TryProfile(ctx context.Context, req *v1.TryProfileReques
 		}
 		return nil, problemsError(c.failIn(d, st, trial.SafeError(err)), ps)
 	}
-	facts := access.Facts{Object: object, Details: trialDetails(sum, out.GetChecksum(), len(req.GetQuarantineRecords()))}
+	trial.HideValues(out.GetResults(), req.GetShowValues())
+	facts := access.Facts{Object: object, Details: showValuesDetails(req.GetShowValues(), trialDetails(sum, out.GetChecksum(), len(req.GetQuarantineRecords())))}
 	entry := d.Entry(master.OutcomeDone, "", facts)
 	c.log.Info("api: a profile was tried; nothing was stored", "request_id", entry.RequestID, "key_id", entry.KeyID,
 		"profile", object, "files", len(out.GetResults()), "held", sum.Held)

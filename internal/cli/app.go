@@ -318,6 +318,7 @@ that can no longer be answered, 7 a bound of the server reached.`,
 
 	root.AddCommand(
 		a.newVersion(),
+		a.newAgentGuide(),
 		moved("init", "nopacs-server init"), moved("serve", "nopacs-server serve"),
 		a.newWhoami(),
 		a.newContext(),

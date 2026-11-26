@@ -132,7 +132,7 @@ def local_trial(p, st):
     p.stop()
     try:
         alive = p.run("whoami").returncode == 0
-        out = subprocess.run([p.bin, "profile", "try", "--local", "--document", doc, st["files"]["rich"], "--json"], capture_output=True,
+        out = subprocess.run([p.bin, "profile", "try", "--local", "--document", doc, st["files"]["rich"], "--json", "--show-values"], capture_output=True,
                              text=True, timeout=180)
     finally:
         p.serve()

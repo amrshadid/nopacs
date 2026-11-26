@@ -267,8 +267,10 @@ type ProfileServiceClient interface {
 	// lookup is answered with the code UNASSIGNED, and counted; a lookup
 	// whose missing value a receiver would hold the file for makes the
 	// verdict TRIAL_VERDICT_UNDECIDED. No file is written to a storage and
-	// no record is made. The before values are the caller's own data, and
-	// are answered; no log line, audit entry or event carries one.
+	// no record is made. The values are answered only when the request sets
+	// show_values, which a masked key is refused; without it each element
+	// carries the lengths of its values and whether it changed. No log line,
+	// audit entry or event carries a value.
 	//
 	// A sent file tried with a receiver named (TrialReception.receiver), and
 	// a held file (with the receiver that held it, while it exists), runs
@@ -283,16 +285,22 @@ type ProfileServiceClient interface {
 	// checks (its AE titles, a file's size against the receiver's bound, the
 	// UIDs a C-STORE announced) are left out.
 	//
-	// Reading a held file needs what reading its header needs: operator.
+	// Reading a held file needs what reading its header needs: operator, and
+	// a masked key (Key.masked) is refused it, values hidden or not: what a
+	// run answers of a file (the rule that decided, a value pattern's
+	// matches, whether a value changed, its lengths) answers one question of
+	// each value, so a caller who writes the rules can read a held value back
+	// one guess at a time. A masked key tries the files it sends.
 	//
 	// Role: operator on the tenant.
 	// Audit: one entry in the tenant's log, with the profile version tried
 	// (or the unsaved document's checksum) as its object and, in details,
-	// the number of files, how many passed and were held, and the counts
-	// per rule and per reason: the evidence that the version was tried,
-	// never a value.
+	// the number of files, how many passed and were held, the counts per
+	// rule and per reason, and "show_values" when the values were answered:
+	// the evidence that the version was tried, never a value.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant
-	// that does not exist, for a caller who may not list every tenant),
+	// that does not exist, for a caller who may not list every tenant; also
+	// show_values or quarantine_records from a masked key),
 	// invalid (no profile, or both kinds; a document with a problem; no file
 	// and no record, or more than 32 of them together; a file empty or
 	// larger than 3 MiB, or files together larger than 3.5 MiB; a malformed
@@ -313,12 +321,14 @@ type ProfileServiceClient interface {
 	// selector matches it, each with why it does not decide (a more specific
 	// or a later rule decides, or its conditions do not hold). The file is
 	// processed as TryProfile processes it, in memory, and nothing is
-	// stored, under keys made for the request as TryProfile's.
+	// stored, under keys made for the request as TryProfile's. A masked key
+	// (Key.masked) is refused a held file's explanation, as TryProfile's.
 	//
 	// Role: operator on the tenant.
 	// Audit: one entry in the tenant's log, with the profile version (or the
 	// unsaved document's checksum) as its object.
-	// Errors: as TryProfile, for one file or one record.
+	// Errors: as TryProfile, for one file or one record (permission denied
+	// also for quarantine_record from a masked key).
 	ExplainProfile(context.Context, *v1.ExplainProfileRequest) (*v1.ExplainProfileResponse, error)
 	// DiffProfileVersions answers what changes between two versions: their
 	// bases, their defaults, their rules one by one (a rule is the same rule
@@ -507,8 +517,10 @@ type ProfileServiceHandler interface {
 	// lookup is answered with the code UNASSIGNED, and counted; a lookup
 	// whose missing value a receiver would hold the file for makes the
 	// verdict TRIAL_VERDICT_UNDECIDED. No file is written to a storage and
-	// no record is made. The before values are the caller's own data, and
-	// are answered; no log line, audit entry or event carries one.
+	// no record is made. The values are answered only when the request sets
+	// show_values, which a masked key is refused; without it each element
+	// carries the lengths of its values and whether it changed. No log line,
+	// audit entry or event carries a value.
 	//
 	// A sent file tried with a receiver named (TrialReception.receiver), and
 	// a held file (with the receiver that held it, while it exists), runs
@@ -523,16 +535,22 @@ type ProfileServiceHandler interface {
 	// checks (its AE titles, a file's size against the receiver's bound, the
 	// UIDs a C-STORE announced) are left out.
 	//
-	// Reading a held file needs what reading its header needs: operator.
+	// Reading a held file needs what reading its header needs: operator, and
+	// a masked key (Key.masked) is refused it, values hidden or not: what a
+	// run answers of a file (the rule that decided, a value pattern's
+	// matches, whether a value changed, its lengths) answers one question of
+	// each value, so a caller who writes the rules can read a held value back
+	// one guess at a time. A masked key tries the files it sends.
 	//
 	// Role: operator on the tenant.
 	// Audit: one entry in the tenant's log, with the profile version tried
 	// (or the unsaved document's checksum) as its object and, in details,
-	// the number of files, how many passed and were held, and the counts
-	// per rule and per reason: the evidence that the version was tried,
-	// never a value.
+	// the number of files, how many passed and were held, the counts per
+	// rule and per reason, and "show_values" when the values were answered:
+	// the evidence that the version was tried, never a value.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant
-	// that does not exist, for a caller who may not list every tenant),
+	// that does not exist, for a caller who may not list every tenant; also
+	// show_values or quarantine_records from a masked key),
 	// invalid (no profile, or both kinds; a document with a problem; no file
 	// and no record, or more than 32 of them together; a file empty or
 	// larger than 3 MiB, or files together larger than 3.5 MiB; a malformed
@@ -553,12 +571,14 @@ type ProfileServiceHandler interface {
 	// selector matches it, each with why it does not decide (a more specific
 	// or a later rule decides, or its conditions do not hold). The file is
 	// processed as TryProfile processes it, in memory, and nothing is
-	// stored, under keys made for the request as TryProfile's.
+	// stored, under keys made for the request as TryProfile's. A masked key
+	// (Key.masked) is refused a held file's explanation, as TryProfile's.
 	//
 	// Role: operator on the tenant.
 	// Audit: one entry in the tenant's log, with the profile version (or the
 	// unsaved document's checksum) as its object.
-	// Errors: as TryProfile, for one file or one record.
+	// Errors: as TryProfile, for one file or one record (permission denied
+	// also for quarantine_record from a masked key).
 	ExplainProfile(context.Context, *v1.ExplainProfileRequest) (*v1.ExplainProfileResponse, error)
 	// DiffProfileVersions answers what changes between two versions: their
 	// bases, their defaults, their rules one by one (a rule is the same rule

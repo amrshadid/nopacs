@@ -224,3 +224,70 @@ func testMarkKeyUsedEdges(e *env) {
 		e.Errorf("last used = %v, want the newest use", got.LastUsed)
 	}
 }
+
+// testMaskedKey guards a key's masked flag: stored as made and read back by
+// every read, left as it is by a change of rules and by a use, and carried
+// to a rotation's successor whatever the successor given holds, so a key an
+// outside service holds can never become, or be rotated into, one that is
+// answered original values.
+func testMaskedKey(e *env) {
+	masked := e.key()
+	masked.Masked = true
+	e.ok("CreateKey, masked", e.s.CreateKey(e.ctx, masked, e.audit(), master.LocalOperator()))
+	plain := e.mustKey()
+	read := func(id string) master.Key {
+		e.Helper()
+		k, err := e.s.Key(e.ctx, id)
+		e.ok("Key", err)
+		return k
+	}
+	if d := diffKey(read(masked.ID), masked); d != "" {
+		e.Errorf("masked key as stored: %s", d)
+	}
+	if read(plain.ID).Masked {
+		e.Error("a key made without the flag reads back masked")
+	}
+	keys, _, err := e.s.ListKeys(e.ctx, master.Page{Limit: master.MaxPageLimit})
+	e.ok("ListKeys", err)
+	seen := 0
+	for _, k := range keys {
+		switch k.ID {
+		case masked.ID:
+			seen++
+			if !k.Masked {
+				e.Error("ListKeys answers the masked key unmasked")
+			}
+		case plain.ID:
+			seen++
+			if k.Masked {
+				e.Error("ListKeys answers the plain key masked")
+			}
+		}
+	}
+	if seen != 2 {
+		e.Errorf("ListKeys listed %d of the two keys", seen)
+	}
+
+	e.ok("SetKeyRules", e.s.SetKeyRules(e.ctx, masked.ID, master.KeyRules{ClientCert: sampleCert}, e.audit(), master.LocalOperator()))
+	_, err = e.s.MarkKeyUsed(e.ctx, masked.ID, T0.Add(time.Minute), "192.0.2.1")
+	e.ok("MarkKeyUsed", err)
+	if !read(masked.ID).Masked {
+		e.Error("a change of rules or a use cleared the masked flag")
+	}
+
+	at := T0.Add(time.Hour)
+	succ := e.successorOf(at, 24*time.Hour)
+	made, err := e.s.RotateKey(e.ctx, masked.ID, succ, at.Add(time.Hour), e.audit(), master.LocalOperator())
+	e.ok("RotateKey, masked", err)
+	if !made.Masked || !read(succ.ID).Masked {
+		e.Errorf("a masked key's successor answered masked=%v, stored masked=%v; want both masked", made.Masked, read(succ.ID).Masked)
+	}
+	widened := e.successorOf(at, 24*time.Hour)
+	widened.Masked = true
+	if _, err := e.s.RotateKey(e.ctx, plain.ID, widened, at.Add(time.Hour), e.audit(), master.LocalOperator()); err != nil {
+		e.Fatalf("RotateKey, plain: %v", err)
+	}
+	if read(widened.ID).Masked {
+		e.Error("a plain key's successor took the flag its caller gave, not the rotated key's")
+	}
+}

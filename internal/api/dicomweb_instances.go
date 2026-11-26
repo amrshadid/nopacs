@@ -51,12 +51,33 @@ func (it *scanInstances) next(ctx context.Context) (instanceRow, bool, error) {
 	}
 }
 
-// heldOf iterates the instances a scan holds.
+// heldOf iterates the instances a scan holds. A page that holds an
+// instance archived as received ends a masked key's request, before
+// anything of it is read (refuseAsReceived).
 func (x *webRequest) heldOf(s tenant.CatalogScan, size int) iterator[tenant.ScanInstance] {
 	path := pathOf(s)
 	return pagesOf(func(ctx context.Context, page master.Page) ([]tenant.ScanInstance, string, error) {
-		return x.p.ListHeldInstances(ctx, path, page)
+		held, next, err := x.p.ListHeldInstances(ctx, path, page)
+		if err != nil {
+			return nil, "", err
+		}
+		for _, in := range held {
+			if err := refuseAsReceived(x.d, in); err != nil {
+				return nil, "", err
+			}
+		}
+		return held, next, nil
 	}, size)
+}
+
+// heldInstance reads one instance a scan holds, as HeldInstance does,
+// refused to a masked key when it was archived as received.
+func (x *webRequest) heldInstance(ctx context.Context, s tenant.CatalogScan, uid string) (tenant.ScanInstance, error) {
+	in, err := x.p.HeldInstance(ctx, pathOf(s), uid)
+	if err != nil {
+		return in, err
+	}
+	return in, refuseAsReceived(x.d, in)
 }
 
 // searchInstances answers a search of instances: of one series, of one
@@ -92,7 +113,7 @@ func (x *webRequest) searchInstances(ctx context.Context, q dicomweb.Query, ls *
 		if bySOP {
 			var rows []instanceRow
 			for _, u := range uidsOf(sopKey) {
-				in, err := x.p.HeldInstance(ctx, pathOf(s), u)
+				in, err := x.heldInstance(ctx, s, u)
 				if fault.KindOf(err) == fault.NotFound {
 					continue
 				}

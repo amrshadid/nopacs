@@ -120,11 +120,15 @@ class AccessServiceServicer:
         """CreateKey makes a key and answers its secret, once. The server keeps only
         the SHA-256 of the secret, so it can never show the secret again.
 
+        A masked key makes only masked keys.
+
         Role: admin on the installation.
         Audit: one entry in the installation's log, with the new key's id as its
-        object and its holder in details; never its secret.
-        Errors: unauthenticated, permission denied, invalid, unavailable (the
-        master database does not answer).
+        object and its holder in details, and "key_masked" for a masked key;
+        never its secret.
+        Errors: unauthenticated, permission denied (also a masked caller asking
+        for a key that is not masked), invalid, unavailable (the master database
+        does not answer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -149,7 +153,8 @@ class AccessServiceServicer:
         """ListKeys answers every key of the installation, revoked and expired keys
         included, oldest first; or, with a tenant, the keys that hold a grant on
         that tenant, in order of key id (ListGrants on the tenant answers their
-        roles). A tenant's admin is answered only each key's id and holder.
+        roles). A tenant's admin is answered only each key's id, holder and
+        masked flag.
 
         Role: admin on the installation; with a tenant, admin on the
         installation or on that tenant.
@@ -265,7 +270,7 @@ class AccessServiceServicer:
     def RotateKey(self, request, context):
         """RotateKey replaces a key with a new one, its successor, and answers the
         successor's secret, once. The successor holds the same grants, holder,
-        networks and client certificate. The rotated key keeps working for the
+        networks, client certificate and masked flag. The rotated key keeps working for the
         overlap, or until its own expiry when that is sooner, and then stops:
         whoever holds it has the overlap to switch, with no moment without a
         working key. The successor lives as long as the rotated key was made to
@@ -275,6 +280,8 @@ class AccessServiceServicer:
         once; its successor may be rotated in turn. A key rotating itself,
         without admin on the installation, keeps working at least an hour beside
         its successor, so a thief holding it cannot cut its holder off at once.
+        A masked caller rotates only masked keys: a plain key's successor, and
+        the secret answered, would be plain.
 
         Role: admin on the installation; or the key being rotated itself, so a
         system renews its own key with no person involved. Any other key is
@@ -282,7 +289,8 @@ class AccessServiceServicer:
         Audit: one entry in the installation's log, with the rotated key's id as
         its object, and the successor's id, the rotated key's new end and the
         overlap in details; never the secret.
-        Errors: unauthenticated, permission denied, invalid (also an id that is
+        Errors: unauthenticated, permission denied (also a masked caller
+        rotating a key that is not masked), invalid (also an id that is
         not a key id, such as a whole key or more than 12 characters, which is
         never repeated in the answer or the log), not found (no key has that
         id), conflict (the key is revoked, has expired, or was already

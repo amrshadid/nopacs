@@ -203,6 +203,7 @@ func keyMessage(k master.Key) *v1.Key {
 		SuccessorId:      k.Successor,
 		Suspended:        !k.Suspended.IsZero(),
 		SuspendTime:      timestamp(k.Suspended),
+		Masked:           k.Masked,
 	}
 }
 

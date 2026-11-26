@@ -85,6 +85,16 @@ func validateSuccessor(k Key) error {
 	return k.Validate()
 }
 
+// Successor returns the key a rotation of old adds, from successor's id,
+// hash and times: old's holder, rules and masked flag, whatever successor
+// holds there. The masked flag is carried so a rotation can never give a
+// key handed to an outside service a successor that is answered original
+// values; every driver makes the successor with this one function.
+func Successor(old, successor Key) Key {
+	successor.Holder, successor.Rules, successor.Masked = old.Holder, old.Rules, old.Masked
+	return successor
+}
+
 // ValidateRotation returns an Invalid error when a rotation that makes
 // successor and ends the rotated key at oldEnds cannot be made, or when its
 // audit entry would be past its bounds once the store adds its details, so a

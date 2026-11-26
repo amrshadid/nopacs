@@ -49,6 +49,17 @@ func tryFiles(p *v1.TrialProfile, files ...[]byte) func(clients) outcome {
 	}
 }
 
+// tryShowing is tryFiles asking for the values (show_values).
+func tryShowing(p *v1.TrialProfile, files ...[]byte) func(clients) outcome {
+	return func(c clients) outcome {
+		req := &v1.TryProfileRequest{Tenant: "lab1", Profile: p, ShowValues: true}
+		for i, b := range files {
+			req.Files = append(req.Files, &v1.TrialFile{Name: fmt.Sprintf("file%d.dcm", i), Content: b})
+		}
+		return call(c.profiles.TryProfile, req)
+	}
+}
+
 // elementAt returns the element at path of a result, or nil.
 func elementAt(r *v1.TrialResult, path string) *v1.TrialElement {
 	for _, e := range r.GetElements() {
@@ -84,7 +95,8 @@ func tenantState(t *testing.T, e *env) string {
 }
 
 // testTryProfile guards TryProfile: operator on the tenant; a corpus file
-// answered element by element with its values before and after (a name
+// answered element by element, with show_values, with its values before
+// and after (a name
 // emptied, a date emptied, a UID remapped), the rule or base and reason of
 // each, and the verdict; the tenant's database as it was (no version, no
 // reception, no event, no lookup code: a lookup answers UNASSIGNED each
@@ -105,9 +117,9 @@ func testTryProfile(t *testing.T) {
 		{name: "no profile", as: f.lab1Operator, call: tryFiles(nil, ct), code: connect.CodeInvalidArgument, msg: "profile"},
 		{name: "no such version", as: f.lab1Operator, call: tryFiles(storedVersion("research", 4), ct), code: connect.CodeNotFound},
 		{name: "an empty file", as: f.lab1Operator, call: tryFiles(storedVersion("research", 1), []byte{}), code: connect.CodeInvalidArgument, msg: "content"},
-		{name: "operator, a corpus file", as: f.lab1Operator, call: tryFiles(storedVersion("research", 0), ct),
+		{name: "operator, a corpus file", as: f.lab1Operator, call: tryShowing(storedVersion("research", 0), ct),
 			audit: &wantAudit{log: "lab1", outcome: master.OutcomeDone, object: "research@1",
-				details: map[string]string{"files": "1", "passed": "1", "held": "0", "checksum": "*", "by_rule": "*", "by_reason": ""}},
+				details: map[string]string{"files": "1", "passed": "1", "held": "0", "checksum": "*", "by_rule": "*", "by_reason": "", "show_values": "true"}},
 			check: func(t *testing.T, o outcome) {
 				requestID = o.requestID
 				res := o.res.(*v1.TryProfileResponse)
@@ -163,7 +175,7 @@ func testTryProfile(t *testing.T) {
 		Action: &v1.ProfileAction{Kind: &v1.ProfileAction_Lookup{Lookup: &v1.LookupAction{Table: "studies",
 			OnMissing: v1.LookupMissing_LOOKUP_MISSING_ASSIGN}}}})
 	for i := range 2 {
-		res := mustCall[*v1.TryProfileResponse](t, "lookup", tryFiles(unsaved(lookup), ct)(f.as(f.lab1Operator)))
+		res := mustCall[*v1.TryProfileResponse](t, "lookup", tryShowing(unsaved(lookup), ct)(f.as(f.lab1Operator)))
 		r := res.GetResults()[0]
 		if e := elementAt(r, "00200010"); e.GetAfter() != "UNASSIGNED" || r.GetLookupsUnassigned() != 1 {
 			t.Errorf("try %d: the study id %v, %d unassigned", i, e, r.GetLookupsUnassigned())
@@ -177,7 +189,7 @@ func testTryProfile(t *testing.T) {
 	// and the values before still answered; nothing after. The MR's Study
 	// ID, which the profile keeps, is its Patient ID "4MR1".
 	mr := corpusFile(t, "MR_small.dcm")
-	if r := mustCall[*v1.TryProfileResponse](t, "residual", tryFiles(unsaved(keepStudyID()), mr)(f.as(f.lab1Operator))).GetResults()[0]; r.GetVerdict() != v1.TrialVerdict_TRIAL_VERDICT_HELD ||
+	if r := mustCall[*v1.TryProfileResponse](t, "residual", tryShowing(unsaved(keepStudyID()), mr)(f.as(f.lab1Operator))).GetResults()[0]; r.GetVerdict() != v1.TrialVerdict_TRIAL_VERDICT_HELD ||
 		r.GetReason() != "residual_value" || r.GetCause() != "identifier" || r.GetPath() != "00200010" ||
 		elementAt(r, "00100010").GetBefore() != "CompressedSamples^MR1" || elementAt(r, "00100010").GetPresentAfter() {
 		t.Errorf("a residual value: %v", r)
@@ -204,7 +216,7 @@ func testTryProfile(t *testing.T) {
 	read := func(tenant.QuarantinedFile) ([]byte, error) { return ct, nil }
 	f.parts.heldFile.Store(&read)
 	got := mustCall[*v1.TryProfileResponse](t, "held", call(f.as(f.lab1Operator).profiles.TryProfile,
-		&v1.TryProfileRequest{Tenant: "lab1", Profile: storedVersion("research", 1), QuarantineRecords: []string{held}}))
+		&v1.TryProfileRequest{Tenant: "lab1", Profile: storedVersion("research", 1), QuarantineRecords: []string{held}, ShowValues: true}))
 	if r := got.GetResults()[0]; r.GetQuarantineRecord() != held || r.GetName() != "" || elementAt(r, "00100010").GetBefore() != ctName {
 		t.Errorf("a held file: %v", r)
 	}
@@ -386,7 +398,7 @@ func TestTrialUsesNoTenantSecret(t *testing.T) {
 	}
 	try := func() *v1.TrialResult {
 		t.Helper()
-		res := mustCall[*v1.TryProfileResponse](t, "try", tryFiles(unsaved(hashStudyID()), ct)(f.as(f.lab1Operator)))
+		res := mustCall[*v1.TryProfileResponse](t, "try", tryShowing(unsaved(hashStudyID()), ct)(f.as(f.lab1Operator)))
 		return res.GetResults()[0]
 	}
 	r1, r2 := try(), try()

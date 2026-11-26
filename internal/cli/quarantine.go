@@ -192,9 +192,9 @@ the audit log as present, not as their value.`,
 
 // newQuarantineShow builds "quarantine show".
 func (a *app) newQuarantineShow() *cobra.Command {
-	var header bool
+	var header, showValues bool
 	cmd := &cobra.Command{
-		Use:   "show <tenant> <id> [--header]",
+		Use:   "show <tenant> <id> [--header [--show-values]]",
 		Short: "Show one quarantined file's record, and its DICOM header on request",
 		Long: `Show the record of one quarantined file: why it was quarantined, with the
 details of that reason, which receiver and reception it belonged to, who sent
@@ -202,21 +202,28 @@ it, its size and checksums, the identifiers read from it, whether the server
 still holds its bytes, and what was decided about it.
 
 --header also shows the file's data set in the DICOM JSON model (PS3.18 Annex F),
-without pixel data or any value longer than 1 KiB. It holds what the sender sent,
-identifying data included, so it needs the operator role and is shown only when
-asked for. It is left out when the file's bytes are gone, its data set cannot be
-read, or it is longer than 1 MiB; the output says which.`,
+without pixel data or any value longer than 1 KiB: each attribute with its VR,
+and no value unless --show-values asks for them. The values are what the sender
+sent, identifying data included, and what this command prints may leave the
+site (an AI agent sends it to its vendor), so --header needs the operator role
+and --show-values is recorded in the server's audit log. A masked key is
+refused --header. The header is left out when the file's bytes are gone, its
+data set cannot be read, or it is longer than 1 MiB; the output says which.`,
 		Example: `  nopacs quarantine show lab1 q_41Ab
-  nopacs quarantine show lab1 q_41Ab --header --json`,
+  nopacs quarantine show lab1 q_41Ab --header --json
+  nopacs quarantine show lab1 q_41Ab --header --show-values`,
 		Args: exactArgs(2),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {
+			if showValues && !header {
+				return fault.New(fault.Invalid, "--show-values shows the header's values; give it with --header")
+			}
 			c, closeClient, err := a.open(cmd)
 			if err != nil {
 				return err
 			}
 			defer closeClient()
 			res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.GetQuarantinedFileResponse, error) {
-				return c.Quarantine.GetQuarantinedFile(ctx, &v1.GetQuarantinedFileRequest{Tenant: args[0], Id: args[1], IncludeHeader: header})
+				return c.Quarantine.GetQuarantinedFile(ctx, &v1.GetQuarantinedFileRequest{Tenant: args[0], Id: args[1], IncludeHeader: header, ShowValues: showValues})
 			})
 			if err != nil {
 				return err
@@ -242,7 +249,8 @@ read, or it is longer than 1 MiB; the output says which.`,
 			})
 		}),
 	}
-	cmd.Flags().BoolVar(&header, "header", false, "also show the file's DICOM header as JSON, without bulk data (needs the operator role)")
+	cmd.Flags().BoolVar(&header, "header", false, "also show the file's DICOM header as JSON, without bulk data or values (needs the operator role; refused to a masked key)")
+	cmd.Flags().BoolVar(&showValues, "show-values", false, "with --header, show the header's values too (audited)")
 	return cmd
 }
 

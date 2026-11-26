@@ -143,13 +143,16 @@ type ReplicaServiceClient interface {
 	// tenant's keys, and its place must not overlap the primary's (the rule
 	// of two storages of a tenant). A storage already a replica of that
 	// primary is answered as it stands, with its replicate job if one is
-	// queued or running, so a repeated call starts nothing more.
+	// queued or running, so a repeated call starts nothing more. A masked key
+	// (Key.masked) is refused it: where copies of the archive go is a
+	// person's choice.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the replica's name as its
 	// object and the primary's in details.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid,
+	// does not exist, for a caller who may not list every tenant; also a
+	// masked key), invalid,
 	// not found (the tenant has no storage with the replica's name; a tenant
 	// that does not exist, for a caller who may list every tenant),
 	// precondition (a primary the tenant does not have, that is itself a
@@ -193,13 +196,15 @@ type ReplicaServiceClient interface {
 	// object of its primary it does not hold verified, as AttachReplica's
 	// does: after a replica was restored from elsewhere, or to make sure
 	// before a switch. A replicate job of the replica already queued or
-	// running is answered instead, so a repeated call starts nothing more.
+	// running is answered instead, so a repeated call starts nothing more. A
+	// masked key (Key.masked) is refused it, as AttachReplica.
 	//
 	// Role: operator on the tenant.
 	// Audit: one entry in the tenant's log, with the replica's name as its
 	// object and the job's id in details.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid,
+	// does not exist, for a caller who may not list every tenant; also a
+	// masked key), invalid,
 	// not found (the tenant has no storage with that name; a tenant that
 	// does not exist, for a caller who may list every tenant), precondition
 	// (the storage is not a replica; the tenant moved or fenced),
@@ -409,13 +414,16 @@ type ReplicaServiceHandler interface {
 	// tenant's keys, and its place must not overlap the primary's (the rule
 	// of two storages of a tenant). A storage already a replica of that
 	// primary is answered as it stands, with its replicate job if one is
-	// queued or running, so a repeated call starts nothing more.
+	// queued or running, so a repeated call starts nothing more. A masked key
+	// (Key.masked) is refused it: where copies of the archive go is a
+	// person's choice.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the replica's name as its
 	// object and the primary's in details.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid,
+	// does not exist, for a caller who may not list every tenant; also a
+	// masked key), invalid,
 	// not found (the tenant has no storage with the replica's name; a tenant
 	// that does not exist, for a caller who may list every tenant),
 	// precondition (a primary the tenant does not have, that is itself a
@@ -459,13 +467,15 @@ type ReplicaServiceHandler interface {
 	// object of its primary it does not hold verified, as AttachReplica's
 	// does: after a replica was restored from elsewhere, or to make sure
 	// before a switch. A replicate job of the replica already queued or
-	// running is answered instead, so a repeated call starts nothing more.
+	// running is answered instead, so a repeated call starts nothing more. A
+	// masked key (Key.masked) is refused it, as AttachReplica.
 	//
 	// Role: operator on the tenant.
 	// Audit: one entry in the tenant's log, with the replica's name as its
 	// object and the job's id in details.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid,
+	// does not exist, for a caller who may not list every tenant; also a
+	// masked key), invalid,
 	// not found (the tenant has no storage with that name; a tenant that
 	// does not exist, for a caller who may list every tenant), precondition
 	// (the storage is not a replica; the tenant moved or fenced),

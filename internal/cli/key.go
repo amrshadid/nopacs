@@ -55,6 +55,9 @@ func (a *app) keyDetails(w io.Writer, k *v1.Key) error {
 	if k.GetSuspended() {
 		pairs = append(pairs, output.Pair{Label: "Suspended", Value: a.whenOr(k.GetSuspendTime(), "yes")})
 	}
+	if k.GetMasked() {
+		pairs = append(pairs, output.Pair{Label: "Masked", Value: "yes: never answered an original value"})
+	}
 	return output.Details(w, a.style(), pairs)
 }
 
@@ -70,10 +73,10 @@ func (a *app) lastUse(k *v1.Key) string {
 // newKeyCreate builds "key create".
 func (a *app) newKeyCreate() *cobra.Command {
 	var holder, expires string
-	var noExpiry bool
+	var noExpiry, masked bool
 	var rules ruleFlags
 	cmd := &cobra.Command{
-		Use:   "create --holder TEXT [--expires 90d | --no-expiry] [--network CIDR]... [--client-cert FILE | --client-cert-sha256 HEX]",
+		Use:   "create --holder TEXT [--masked] [--expires 90d | --no-expiry] [--network CIDR]... [--client-cert FILE | --client-cert-sha256 HEX]",
 		Short: "Make a key and show it once",
 		Long: `Make a key for a person or a system and show it once.
 
@@ -89,14 +92,24 @@ asked for with --no-expiry, which only an admin on the installation can do.
 --network, given once per network, limits where the key may be used from;
 --client-cert (a PEM file) or --client-cert-sha256 makes it work only with
 that TLS client certificate. With --json the whole answer, the key included,
-is written to standard output.`,
+is written to standard output.
+
+--masked makes a key for an AI agent or any other outside service, whose
+output leaves the site: the server never answers it a value that is not in
+its archived, de-identified form (held headers, quarantined originals, trial
+values, trials of held files, received UIDs, value codes, data archived as
+received), whatever its role, and never lets it choose where archived data
+goes (send jobs, replicas, storages, senders, forwarding receivers). The flag
+is kept by every rotation and can never be removed; make a new key instead.
+A masked key can make and rotate only masked keys.`,
 		Example: `  nopacs key create --holder "nightly export"
+  nopacs key create --holder "review agent" --masked --expires 7d
   nopacs key create --holder ci --expires 30d
   nopacs key create --holder service-x --no-expiry
   nopacs key create --holder scanner-bridge --network 10.20.0.0/16 --client-cert bridge.pem`,
 		Args: exactArgs(0),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, _ []string) error {
-			req := &v1.CreateKeyRequest{Holder: holder}
+			req := &v1.CreateKeyRequest{Holder: holder, Masked: masked}
 			nets, cert, err := rules.read(a)
 			if err != nil {
 				return err
@@ -143,6 +156,7 @@ is written to standard output.`,
 	cmd.Flags().StringVar(&holder, "holder", "", "who holds the key: a person or a system, at most 256 bytes (required)")
 	cmd.Flags().StringVar(&expires, "expires", "", "how long the key works: a number and s, m, h, d or w, such as 90d (default: the installation's setting key.default-lifetime, 90 days unless set)")
 	cmd.Flags().BoolVar(&noExpiry, "no-expiry", false, "make a key that never expires (admin on the installation only)")
+	cmd.Flags().BoolVar(&masked, "masked", false, "make a masked key, for an AI agent or another outside service: never answered an original value; cannot be removed later")
 	rules.add(cmd)
 	_ = cmd.MarkFlagRequired("holder")
 	cmd.MarkFlagsMutuallyExclusive("expires", "no-expiry")

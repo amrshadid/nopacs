@@ -44,6 +44,12 @@ Flags every command takes:
 | `--tls-client-cert` | string |  | path of a PEM file of a TLS client certificate to present to --server, for a key that works only with it; needs --tls-client-key (default: NOPACS_TLS_CLIENT_CERT) |
 | `--tls-client-key` | string |  | path of the PEM file of that certificate's private key, private to you (default: NOPACS_TLS_CLIENT_KEY) |
 
+### `nopacs agent-guide`
+
+Print a short description of every command and its JSON, for an AI agent to read
+
+Usage: `nopacs agent-guide`
+
 ### `nopacs audit`
 
 Read, verify and export the audit log
@@ -635,7 +641,7 @@ Usage: `nopacs key`
 
 Make a key and show it once
 
-Usage: `nopacs key create --holder TEXT [--expires 90d | --no-expiry] [--network CIDR]... [--client-cert FILE | --client-cert-sha256 HEX] [flags]`
+Usage: `nopacs key create --holder TEXT [--masked] [--expires 90d | --no-expiry] [--network CIDR]... [--client-cert FILE | --client-cert-sha256 HEX] [flags]`
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
@@ -643,6 +649,7 @@ Usage: `nopacs key create --holder TEXT [--expires 90d | --no-expiry] [--network
 | `--client-cert-sha256` | string |  | the SHA-256 of the TLS client certificate the key must come with, in hexadecimal |
 | `--expires` | string |  | how long the key works: a number and s, m, h, d or w, such as 90d (default: the installation's setting key.default-lifetime, 90 days unless set) |
 | `--holder` | string |  | who holds the key: a person or a system, at most 256 bytes (required) |
+| `--masked` | bool |  | make a masked key, for an AI agent or another outside service: never answered an original value; cannot be removed later |
 | `--network` | stringArray |  | a network the key may be used from, such as 10.0.0.0/8 or 192.0.2.7; give it once per network (default: every network) |
 | `--no-expiry` | bool |  | make a key that never expires (admin on the installation only) |
 
@@ -756,7 +763,7 @@ Usage: `nopacs profile explain <tenant> (--profile NAME[@VERSION] | --document F
 | `--document` | string |  | an unsaved document to run, its file, or - to read it from standard input |
 | `--profile` | string |  | the stored version to run, NAME or NAME@VERSION (the latest without @) |
 | `--receiver` | string |  | one of the tenant's receivers: the sent files are tried as arriving at it, its receiving checks and labels included; without it the verdict is de-identification's alone |
-| `--record` | string |  | the id of a quarantine record whose held file to explain |
+| `--record` | string |  | the id of a quarantine record whose held file to explain (refused to a masked key) |
 
 #### `nopacs profile export`
 
@@ -816,7 +823,7 @@ Usage: `nopacs profile lookup list <tenant> [flags]`
 
 Run a profile over sample files and show what it would do, storing nothing
 
-Usage: `nopacs profile try (<tenant> (--profile NAME[@VERSION] | --document FILE|-) [FILE|DIR ...] [--record ID ...] | --local --document FILE|- FILE|DIR ...) [flags]`
+Usage: `nopacs profile try (<tenant> (--profile NAME[@VERSION] | --document FILE|-) [FILE|DIR ...] [--record ID ...] | --local --document FILE|- FILE|DIR ...) [--show-values] [flags]`
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
@@ -828,7 +835,8 @@ Usage: `nopacs profile try (<tenant> (--profile NAME[@VERSION] | --document FILE
 | `--local` | bool |  | run the engine and the check in this command, with no server: every argument is a file or directory, the profile a --document or a version's export |
 | `--profile` | string |  | the stored version to run, NAME or NAME@VERSION (the latest without @) |
 | `--receiver` | string |  | one of the tenant's receivers: the sent files are tried as arriving at it, its receiving checks and labels included; without it the verdict is de-identification's alone |
-| `--record` | stringArray |  | the id of a quarantine record whose held file to try; repeat for more |
+| `--record` | stringArray |  | the id of a quarantine record whose held file to try; repeat for more (refused to a masked key) |
+| `--show-values` | bool |  | show each element's values before and after (audited by the server; refused to a masked key) |
 
 #### `nopacs profile validate`
 
@@ -904,11 +912,12 @@ Usage: `nopacs quarantine release <tenant> <id> [--receiver NAME] [--storage NAM
 
 Show one quarantined file's record, and its DICOM header on request
 
-Usage: `nopacs quarantine show <tenant> <id> [--header] [flags]`
+Usage: `nopacs quarantine show <tenant> <id> [--header [--show-values]] [flags]`
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
-| `--header` | bool |  | also show the file's DICOM header as JSON, without bulk data (needs the operator role) |
+| `--header` | bool |  | also show the file's DICOM header as JSON, without bulk data or values (needs the operator role; refused to a masked key) |
+| `--show-values` | bool |  | with --header, show the header's values too (audited) |
 
 ### `nopacs receiver`
 

@@ -369,6 +369,20 @@ func (x *webRequest) fillStudy(ctx context.Context, r *dicomweb.Result, s tenant
 // fillFrom puts the attributes want names that r does not hold, from the
 // first line of the scan's metadata file.
 func (x *webRequest) fillFrom(ctx context.Context, r *dicomweb.Result, s tenant.CatalogScan, want map[tag.Tag]bool, ls *lines) error {
+	if x.d.Masked() {
+		// The first line is the first instance's, in order of UID, as the
+		// catalog lists them: one archived as received holds the sender's
+		// values, which a masked key is refused. Read only for such a key.
+		held, _, err := x.p.ListHeldInstances(ctx, pathOf(s), master.Page{Limit: 1})
+		if err != nil {
+			return err
+		}
+		for _, in := range held {
+			if err := refuseAsReceived(x.d, in); err != nil {
+				return err
+			}
+		}
+	}
 	sl, err := ls.of(ctx, s)
 	if err != nil {
 		return err

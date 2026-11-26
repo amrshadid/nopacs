@@ -89,14 +89,17 @@ var (
 // ReceiverServiceClient is a client for the nopacs.v1.ReceiverService service.
 type ReceiverServiceClient interface {
 	// AddReceiver adds a receiver to a tenant. It starts listening when it is
-	// enabled; its health says whether it could.
+	// enabled; its health says whether it could. A receiver that forwards
+	// (forward_to, or a route's senders) is refused to a masked key
+	// (Key.masked): where what arrives is sent on is a person's choice.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the receiver's name as its
 	// object, and its type, port, AE title and storage in details; for an
 	// import receiver, its root's name and its layout, never a path.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid
+	// does not exist, for a caller who may not list every tenant; also a
+	// receiver that forwards, from a masked key), invalid
 	// (also, for an import receiver, a naming template that uses a part
 	// neither its naming pattern nor its layout or map gives, or a part both
 	// would fill; a pattern, a map file or a map configuration that breaks
@@ -150,13 +153,17 @@ type ReceiverServiceClient interface {
 	// period and longest open time also to receptions still receiving. The
 	// fields of an import receiver (root, layout, pattern, unit depth, map
 	// file) cannot change while one of its jobs is queued or running, since
-	// the job's cursor and counts are read by them (precondition).
+	// the job's cursor and counts are read by them (precondition). A change
+	// that makes the receiver forward (forward_to, or routing with a route's
+	// senders, set to name a sender) is refused to a masked key (Key.masked),
+	// as AddReceiver; one that stops forwarding is not.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the receiver's name as its
 	// object and the mask's paths in details.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid
+	// does not exist, for a caller who may not list every tenant; also a
+	// change that forwards, from a masked key), invalid
 	// (also an empty mask, a path that names no field, a read-only field or a
 	// type's whole message, a path into another type's configuration, and
 	// every rule AddReceiver checks on a field), not found (the tenant has no
@@ -200,14 +207,17 @@ func NewReceiverServiceClient(client *connect.Client) ReceiverServiceClient {
 // ReceiverServiceHandler is an implementation of the nopacs.v1.ReceiverService service.
 type ReceiverServiceHandler interface {
 	// AddReceiver adds a receiver to a tenant. It starts listening when it is
-	// enabled; its health says whether it could.
+	// enabled; its health says whether it could. A receiver that forwards
+	// (forward_to, or a route's senders) is refused to a masked key
+	// (Key.masked): where what arrives is sent on is a person's choice.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the receiver's name as its
 	// object, and its type, port, AE title and storage in details; for an
 	// import receiver, its root's name and its layout, never a path.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid
+	// does not exist, for a caller who may not list every tenant; also a
+	// receiver that forwards, from a masked key), invalid
 	// (also, for an import receiver, a naming template that uses a part
 	// neither its naming pattern nor its layout or map gives, or a part both
 	// would fill; a pattern, a map file or a map configuration that breaks
@@ -261,13 +271,17 @@ type ReceiverServiceHandler interface {
 	// period and longest open time also to receptions still receiving. The
 	// fields of an import receiver (root, layout, pattern, unit depth, map
 	// file) cannot change while one of its jobs is queued or running, since
-	// the job's cursor and counts are read by them (precondition).
+	// the job's cursor and counts are read by them (precondition). A change
+	// that makes the receiver forward (forward_to, or routing with a route's
+	// senders, set to name a sender) is refused to a masked key (Key.masked),
+	// as AddReceiver; one that stops forwarding is not.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the receiver's name as its
 	// object and the mask's paths in details.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid
+	// does not exist, for a caller who may not list every tenant; also a
+	// change that forwards, from a masked key), invalid
 	// (also an empty mask, a path that names no field, a read-only field or a
 	// type's whole message, a path into another type's configuration, and
 	// every rule AddReceiver checks on a field), not found (the tenant has no

@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 )
 
@@ -39,6 +40,11 @@ func (p Principal) Key() (master.Key, bool) {
 
 // KeyID returns the caller's key id, or "" for the local operator.
 func (p Principal) KeyID() string { return p.key.ID }
+
+// Masked reports whether the caller is a masked key (master.Key.Masked):
+// one never answered a value that is not in its archived, de-identified
+// form. The local operator is never masked.
+func (p Principal) Masked() bool { return p.isKey && p.key.Masked }
 
 // Role returns the role the caller holds on scope, or "" for none or for a
 // tenant the check did not read. The local operator holds admin on every
@@ -183,5 +189,44 @@ func (d Decision) Entry(outcome master.Outcome, reason string, facts Facts) mast
 	e.Details = maps.Clone(d.entry.Details)
 	e.Outcome = outcome
 	e.Reason = auditText(reason, master.MaxAuditReasonLength)
-	return facts.apply(e)
+	return d.principal.markMasked(facts.apply(e))
 }
+
+// markMasked returns e with DetailMasked set when p is a masked key, so
+// every entry such a key makes says so, whatever details a handler gave in
+// place of the check's: the log then shows what an outside service read.
+func (p Principal) markMasked(e master.AuditEntry) master.AuditEntry {
+	return markMaskedKey(e, p.Masked())
+}
+
+// markMaskedKey returns e with DetailMasked set when masked, on a copy of
+// its details.
+func markMaskedKey(e master.AuditEntry, masked bool) master.AuditEntry {
+	if !masked {
+		return e
+	}
+	d := make(map[string]string, len(e.Details)+1)
+	maps.Copy(d, e.Details)
+	d[DetailMasked] = "true"
+	e.Details = d
+	return e
+}
+
+// RefuseOriginals returns the error that answers a masked key asking for
+// what holds a value not in its archived, de-identified form (a held
+// header, a quarantined file's original, data archived as received, a
+// value's code, a result a remote node answers), and nil for any other
+// caller. It is the one check every such answer passes, for what only the
+// handler can tell holds originals; a request that holds them whatever it
+// names says so in its requirement instead (Requirement.AnswersOriginals),
+// and Check refuses it. A Decision that did not come from Check is refused
+// too. The handler records the refusal in the request's entry.
+func (d Decision) RefuseOriginals() error {
+	if !d.checked() || d.principal.Masked() {
+		return fault.New(fault.Denied, MessageMasked)
+	}
+	return nil
+}
+
+// Masked reports whether the request's caller is a masked key.
+func (d Decision) Masked() bool { return d.principal.Masked() }

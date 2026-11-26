@@ -87,6 +87,9 @@ func (c *core) downloadAnswer(ctx context.Context, w http.ResponseWriter, r *htt
 	if err != nil {
 		return c.failIn(d, st, err)
 	}
+	if err := refuseAsReceived(d, in); err != nil {
+		return c.failIn(d, st, err)
+	}
 	stores := c.newReadStores(p, name)
 	defer stores.Close()
 	obj := checkedread.InstanceObject(in, "", path)

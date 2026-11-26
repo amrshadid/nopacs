@@ -69,7 +69,7 @@ func TestShippedMigrationsUnchanged(t *testing.T) {
 
 // shippedBaseline is the SHA-256 of migrations/master/0001_baseline.sql as
 // this change ships it.
-const shippedBaseline = "ab555b2ae64feac32d21248729a69d4e9b86c13b9e2be48dad04827e77836925"
+const shippedBaseline = "8d9476249d406a4b414ce49fcf675a87de3ea04013873173227c05e5b7c96860"
 
 // openPair opens two stores on one fresh, migrated file, as two processes
 // would, for the suite's tests across instances.

@@ -28,6 +28,13 @@ const (
 	// one that does not exist: such a caller learns nothing new from it, and
 	// an operator who mistypes a name is told so.
 	MessageNoTenant = "no tenant has this name"
+	// MessageMasked answers a masked key that asks for a value not in its
+	// archived, de-identified form. It says only what the key is, never
+	// whether what it named exists or what it holds.
+	MessageMasked = "a masked key is never answered an original value"
+	// MessageMaskedDestination answers a masked key that asks to choose
+	// where archived data goes. It says only what the key is.
+	MessageMaskedDestination = "a masked key may not choose where archived data goes; a person does"
 )
 
 // The reasons a refusal's audit entry records. They are for the admin who
@@ -47,6 +54,8 @@ const (
 	reasonStoreFailure = "the master database failed during the check"
 	reasonTenantRule   = "the tenant's networks could not be read from its database"
 	reasonGone         = "the request ended before the check finished: canceled by the caller or past its deadline"
+	reasonMasked       = "a masked key asked for original values"
+	reasonMaskedPlace  = "a masked key asked to choose where archived data goes"
 )
 
 // maxGrantPages bounds how many pages of a key's grants WhoAmI reads: a
@@ -171,6 +180,15 @@ func (a *Access) Check(ctx context.Context, cred Credential, req Requirement, fa
 	case !allows(p, req, d.tenant.ID):
 		a.record(entry, master.OutcomeRefused, reasonNoGrant)
 		return Decision{}, fault.New(fault.Denied, MessageDenied)
+	case req.originals && p.Masked():
+		// After the grant, so a masked key with no grant is told what any
+		// key with no grant is told, and learns nothing of the tenant.
+		a.record(entry, master.OutcomeRefused, reasonMasked)
+		return Decision{}, fault.New(fault.Denied, MessageMasked)
+	case req.destination && p.Masked():
+		// After the grant, as for originals.
+		a.record(entry, master.OutcomeRefused, reasonMaskedPlace)
+		return Decision{}, fault.New(fault.Denied, MessageMaskedDestination)
 	}
 	// A change of grants an installation's admin makes is a change of the
 	// master, judged by the installation's networks alone, as a tenant's
@@ -267,6 +285,7 @@ func (a *Access) RecordUnchecked(cred Credential, facts Request, reason string) 
 		e.LocalUser = auditText(p.local, master.MaxAuditFieldLength)
 	} else {
 		e.KeyID = p.key.ID
+		e = markMaskedKey(e, p.Masked())
 	}
 	e.Outcome = master.OutcomeFailed
 	e.Reason = auditText(reason, master.MaxAuditReasonLength)
@@ -311,6 +330,7 @@ func (a *Access) authenticate(ctx context.Context, cred Credential, facts Reques
 			return *p, "", nil
 		}
 		entry.KeyID = p.key.ID
+		*entry = markMaskedKey(*entry, p.key.Masked)
 		if reason := keyState(p.key, entry.Time); reason != "" {
 			return Principal{}, reason, nil
 		}
@@ -360,8 +380,13 @@ func (a *Access) authenticate(ctx context.Context, cred Credential, facts Reques
 		return Principal{}, "", err
 	}
 	if reason := a.keyRefusal(k, sec, entry.Time); reason != "" {
+		if reason != reasonWrongSecret {
+			// The caller holds the key: its entry says what key it is.
+			*entry = markMaskedKey(*entry, k.Masked)
+		}
 		return Principal{}, reason, nil
 	}
+	*entry = markMaskedKey(*entry, k.Masked)
 	if reason := a.ruleReason(k, facts, *entry); reason != "" {
 		return Principal{}, reason, nil
 	}

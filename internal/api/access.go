@@ -74,7 +74,11 @@ func (s accessService) CreateKey(ctx context.Context, req *v1.CreateKeyRequest) 
 			exp = access.ExpireAfter(min(lifetime, maxLifetime))
 		}
 	}
-	made, err := c.access.CreateKey(ctx, d, req.GetHolder(), exp, rules)
+	create := c.access.CreateKey
+	if req.GetMasked() {
+		create = c.access.CreateMaskedKey
+	}
+	made, err := create(ctx, d, req.GetHolder(), exp, rules)
 	if err != nil {
 		return nil, c.toAPI(d, err)
 	}

@@ -136,7 +136,8 @@ func TestProfileCommands(t *testing.T) {
 // TestProfileTryCommand guards "profile try": files sent with their paths
 // as names, a directory read for its DICOM files only, records and the
 // reception passed on; the elements shown with their values before and
-// after and the rule that decided them; --changed-only; --json; the
+// after with --show-values, and with their lengths and no value without it,
+// and the rule that decided them; --changed-only; --json; the
 // verdict of a held file and --fail-on-held's exit 5; and the bounds
 // checked before anything is sent.
 func TestProfileTryCommand(t *testing.T) {
@@ -167,7 +168,7 @@ func TestProfileTryCommand(t *testing.T) {
 		},
 		Summary: &v1.TrialSummary{Files: 2, Passed: 1, Held: 1, ByReason: []*v1.TrialCount{{Key: "residual_value/name", Count: 1}}},
 	})
-	res := r.run("profile", "try", "lab1", "--profile", "research@2", one, sub, "--record", "id-1", "--calling-aet", "PRISMA1")
+	res := r.run("profile", "try", "lab1", "--profile", "research@2", one, sub, "--record", "id-1", "--calling-aet", "PRISMA1", "--show-values")
 	if res.code != 0 {
 		t.Fatalf("try: %+v", res)
 	}
@@ -183,8 +184,26 @@ func TestProfileTryCommand(t *testing.T) {
 	}
 	req := reqs[0]
 	if len(req.GetFiles()) != 2 || req.GetFiles()[0].GetName() != one || string(req.GetFiles()[1].GetContent()) != string(ct) ||
-		req.GetQuarantineRecords()[0] != "id-1" || req.GetReception().GetCallingAeTitle() != "PRISMA1" || req.GetProfile().GetVersion().GetVersion() != 2 {
-		t.Errorf("the request: %d files, %v", len(req.GetFiles()), req.GetQuarantineRecords())
+		req.GetQuarantineRecords()[0] != "id-1" || req.GetReception().GetCallingAeTitle() != "PRISMA1" || req.GetProfile().GetVersion().GetVersion() != 2 || !req.GetShowValues() {
+		t.Errorf("the request: %d files, %v, show_values %v", len(req.GetFiles()), req.GetQuarantineRecords(), req.GetShowValues())
+	}
+	// Without --show-values no value is printed, in the table or the JSON,
+	// even from a server that answered them: each element shows its VR, the
+	// lengths of its values and whether it changed.
+	hidden := r.run("profile", "try", "lab1", "--profile", "research", one)
+	hiddenJSON := r.run("profile", "try", "lab1", "--profile", "research", one, "--json")
+	for _, out := range []string{hidden.stdout, hiddenJSON.stdout} {
+		if strings.Contains(out, "Doe^Peter") {
+			t.Errorf("a value was printed without --show-values:\n%s", out)
+		}
+	}
+	for _, want := range []string{"LENGTH", "CHANGED", "PN", "9 -> 0", "yes"} {
+		if !strings.Contains(hidden.stdout, want) {
+			t.Errorf("try without values lacks %q:\n%s", want, hidden.stdout)
+		}
+	}
+	if last := r.fake.TrialRequests(); last[len(last)-1].GetShowValues() {
+		t.Error("a run without --show-values asked the server for values")
 	}
 	if changed := r.run("profile", "try", "lab1", "--profile", "research", one, "--changed-only"); strings.Contains(changed.stdout, "Modality") {
 		t.Errorf("--changed-only shows an element that does not change:\n%s", changed.stdout)

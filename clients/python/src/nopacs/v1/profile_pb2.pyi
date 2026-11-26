@@ -636,18 +636,20 @@ class TrialReception(_message.Message):
     def __init__(self, receiver: _Optional[str] = ..., calling_ae_title: _Optional[str] = ..., called_ae_title: _Optional[str] = ...) -> None: ...
 
 class TryProfileRequest(_message.Message):
-    __slots__ = ("tenant", "profile", "files", "quarantine_records", "reception")
+    __slots__ = ("tenant", "profile", "files", "quarantine_records", "reception", "show_values")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     PROFILE_FIELD_NUMBER: _ClassVar[int]
     FILES_FIELD_NUMBER: _ClassVar[int]
     QUARANTINE_RECORDS_FIELD_NUMBER: _ClassVar[int]
     RECEPTION_FIELD_NUMBER: _ClassVar[int]
+    SHOW_VALUES_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     profile: TrialProfile
     files: _containers.RepeatedCompositeFieldContainer[TrialFile]
     quarantine_records: _containers.RepeatedScalarFieldContainer[str]
     reception: TrialReception
-    def __init__(self, tenant: _Optional[str] = ..., profile: _Optional[_Union[TrialProfile, _Mapping]] = ..., files: _Optional[_Iterable[_Union[TrialFile, _Mapping]]] = ..., quarantine_records: _Optional[_Iterable[str]] = ..., reception: _Optional[_Union[TrialReception, _Mapping]] = ...) -> None: ...
+    show_values: bool
+    def __init__(self, tenant: _Optional[str] = ..., profile: _Optional[_Union[TrialProfile, _Mapping]] = ..., files: _Optional[_Iterable[_Union[TrialFile, _Mapping]]] = ..., quarantine_records: _Optional[_Iterable[str]] = ..., reception: _Optional[_Union[TrialReception, _Mapping]] = ..., show_values: _Optional[bool] = ...) -> None: ...
 
 class TryProfileResponse(_message.Message):
     __slots__ = ("version", "checksum", "reception_refusal", "results", "summary")
@@ -726,7 +728,7 @@ class TrialPixels(_message.Message):
     def __init__(self, at_risk: _Optional[bool] = ..., risk_cause: _Optional[str] = ..., rule: _Optional[str] = ..., origin: _Optional[str] = ..., action: _Optional[str] = ..., regions: _Optional[_Iterable[_Union[PixelRectangle, _Mapping]]] = ..., frames: _Optional[int] = ..., decoded_bytes: _Optional[int] = ..., decoded: _Optional[bool] = ..., segments_removed: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class TrialElement(_message.Message):
-    __slots__ = ("path", "keyword", "vr", "action", "rule", "rule_name", "origin", "reason", "changed", "before", "after", "present_after", "redactions", "pattern_matches")
+    __slots__ = ("path", "keyword", "vr", "action", "rule", "rule_name", "origin", "reason", "changed", "before", "after", "present_after", "redactions", "pattern_matches", "before_length", "after_length")
     PATH_FIELD_NUMBER: _ClassVar[int]
     KEYWORD_FIELD_NUMBER: _ClassVar[int]
     VR_FIELD_NUMBER: _ClassVar[int]
@@ -741,6 +743,8 @@ class TrialElement(_message.Message):
     PRESENT_AFTER_FIELD_NUMBER: _ClassVar[int]
     REDACTIONS_FIELD_NUMBER: _ClassVar[int]
     PATTERN_MATCHES_FIELD_NUMBER: _ClassVar[int]
+    BEFORE_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    AFTER_LENGTH_FIELD_NUMBER: _ClassVar[int]
     path: str
     keyword: str
     vr: str
@@ -755,7 +759,9 @@ class TrialElement(_message.Message):
     present_after: bool
     redactions: int
     pattern_matches: int
-    def __init__(self, path: _Optional[str] = ..., keyword: _Optional[str] = ..., vr: _Optional[str] = ..., action: _Optional[str] = ..., rule: _Optional[int] = ..., rule_name: _Optional[str] = ..., origin: _Optional[str] = ..., reason: _Optional[str] = ..., changed: _Optional[bool] = ..., before: _Optional[str] = ..., after: _Optional[str] = ..., present_after: _Optional[bool] = ..., redactions: _Optional[int] = ..., pattern_matches: _Optional[int] = ...) -> None: ...
+    before_length: int
+    after_length: int
+    def __init__(self, path: _Optional[str] = ..., keyword: _Optional[str] = ..., vr: _Optional[str] = ..., action: _Optional[str] = ..., rule: _Optional[int] = ..., rule_name: _Optional[str] = ..., origin: _Optional[str] = ..., reason: _Optional[str] = ..., changed: _Optional[bool] = ..., before: _Optional[str] = ..., after: _Optional[str] = ..., present_after: _Optional[bool] = ..., redactions: _Optional[int] = ..., pattern_matches: _Optional[int] = ..., before_length: _Optional[int] = ..., after_length: _Optional[int] = ...) -> None: ...
 
 class TrialSummary(_message.Message):
     __slots__ = ("files", "passed", "held", "by_rule", "by_reason", "undecided")

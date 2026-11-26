@@ -636,6 +636,9 @@ export const DeidService: GenService<{
    * Not served over HTTP GET (it has no idempotency level), since a GET
    * carries its request in the URL, which proxies log and browsers repeat.
    *
+   * A masked key (Key.masked) is refused, whatever its role: the answer
+   * joins an identity to its pseudonym.
+   *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the attribute's tag as its
    * object and, in details, the number of subject labels and lookup codes
@@ -683,6 +686,9 @@ export const DeidService: GenService<{
    * At most 10 imports an hour by one key (a bucket of 10 that fills again
    * at one each 6 minutes), whether they store or not; past it the call is
    * refused as exhausted.
+   *
+   * A masked key (Key.masked) is refused, whatever its role: an import of
+   * one entry tells whether the table holds its value.
    *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the table as its object and,

@@ -239,9 +239,10 @@ var rules = map[string]rule{
 
 	// BackupService: admin on the installation. An export's handler names
 	// the tenant it hands off in its entries; a backup's names the tenants
-	// it holds.
-	nopacsv1connect.BackupServiceExportTenantProcedure: fixed(installationAdmin),
-	nopacsv1connect.BackupServiceCreateBackupProcedure: fixed(installationAdmin),
+	// it holds. Either carries whatever the archive holds, data archived as
+	// received and held files included, so a masked key is refused both.
+	nopacsv1connect.BackupServiceExportTenantProcedure: fixed(installationAdmin.AnswersOriginals()),
+	nopacsv1connect.BackupServiceCreateBackupProcedure: fixed(installationAdmin.AnswersOriginals()),
 
 	// SettingsService: reader to read, admin to change, on the scope asked
 	// for. The object is the setting's name, never its value.
@@ -293,9 +294,11 @@ var rules = map[string]rule{
 	}),
 
 	// StorageService: admin on the tenant to change, reader to read. The
-	// object is the storage's name.
+	// object is the storage's name. Adding or changing a storage decides
+	// where the archive's bytes are written, which a masked key may not
+	// choose (access.Requirement.ChoosesDestination).
 	nopacsv1connect.StorageServiceAddStorageProcedure: byMessage(func(r *v1.AddStorageRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetStorage().GetName(), Details: map[string]string{detailType: storageType(r.GetStorage())}}
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{Object: r.GetStorage().GetName(), Details: map[string]string{detailType: storageType(r.GetStorage())}}
 	}),
 	nopacsv1connect.StorageServiceGetStorageProcedure: byMessage(func(r *v1.GetStorageRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: r.GetName()}
@@ -304,7 +307,7 @@ var rules = map[string]rule{
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{}
 	}),
 	nopacsv1connect.StorageServiceSetStorageProcedure: byMessage(func(r *v1.SetStorageRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetStorage().GetName(), Details: maskDetails(r.GetUpdateMask().GetPaths())}
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{Object: r.GetStorage().GetName(), Details: maskDetails(r.GetUpdateMask().GetPaths())}
 	}),
 	nopacsv1connect.StorageServiceRemoveStorageProcedure: byMessage(func(r *v1.RemoveStorageRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetName()}
@@ -314,9 +317,12 @@ var rules = map[string]rule{
 	}),
 
 	// ReceiverService: admin on the tenant to change, reader to read. The
-	// object is the receiver's name.
+	// object is the receiver's name. A receiver that forwards, by forward_to
+	// or a route's senders, sends what it receives to a peer, which a masked
+	// key may not choose (access.Requirement.ChoosesDestination); a change
+	// that stops forwarding is not refused it.
 	nopacsv1connect.ReceiverServiceAddReceiverProcedure: byMessage(func(r *v1.AddReceiverRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetReceiver().GetName(), Details: requestReceiverDetails(r.GetReceiver())}
+		return receiverChangeNeed(r.GetTenant(), r.GetReceiver(), nil), access.Request{Object: r.GetReceiver().GetName(), Details: requestReceiverDetails(r.GetReceiver())}
 	}),
 	nopacsv1connect.ReceiverServiceGetReceiverProcedure: byMessage(func(r *v1.GetReceiverRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: r.GetName()}
@@ -325,20 +331,22 @@ var rules = map[string]rule{
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{}
 	}),
 	nopacsv1connect.ReceiverServiceSetReceiverProcedure: byMessage(func(r *v1.SetReceiverRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetReceiver().GetName(), Details: maskDetails(r.GetUpdateMask().GetPaths())}
+		return receiverChangeNeed(r.GetTenant(), r.GetReceiver(), r.GetUpdateMask().GetPaths()), access.Request{Object: r.GetReceiver().GetName(), Details: maskDetails(r.GetUpdateMask().GetPaths())}
 	}),
 	nopacsv1connect.ReceiverServiceRemoveReceiverProcedure: byMessage(func(r *v1.RemoveReceiverRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetName()}
 	}),
 
 	// ReceptionService: reader to read, operator to settle a failed
-	// reception, and operator to look a study up by its UID.
+	// reception, and operator to look a study up by its UID. A reception's
+	// Study Instance UID is the one received, so a search by it tells
+	// whether an original value is in the archive, which a masked key is
+	// refused.
 	nopacsv1connect.ReceptionServiceListReceptionsProcedure: byMessage(func(r *v1.ListReceptionsRequest) (access.Requirement, access.Request) {
-		role := master.RoleReader
 		if r.GetStudyInstanceUid() != "" {
-			role = master.RoleOperator
+			return onTenantNamed(r.GetTenant(), master.RoleOperator).AnswersOriginals(), access.Request{Details: receptionFilterDetails(r)}
 		}
-		return onTenantNamed(r.GetTenant(), role), access.Request{Details: receptionFilterDetails(r)}
+		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Details: receptionFilterDetails(r)}
 	}),
 	nopacsv1connect.ReceptionServiceGetReceptionProcedure: byMessage(func(r *v1.GetReceptionRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: r.GetId()}
@@ -352,19 +360,20 @@ var rules = map[string]rule{
 
 	// QuarantineService: reader to read the records; operator for a file's
 	// header, a search by UID, and a release or a rejection.
+	// A search by a UID as received and a held header hold originals, which
+	// a masked key is refused (access.Requirement.AnswersOriginals).
 	nopacsv1connect.QuarantineServiceListQuarantinedFilesProcedure: byMessage(func(r *v1.ListQuarantinedFilesRequest) (access.Requirement, access.Request) {
-		role := master.RoleReader
 		if r.GetStudyInstanceUid() != "" || r.GetSopInstanceUid() != "" {
-			role = master.RoleOperator
+			return onTenantNamed(r.GetTenant(), master.RoleOperator).AnswersOriginals(), access.Request{Details: quarantineFilterDetails(r)}
 		}
-		return onTenantNamed(r.GetTenant(), role), access.Request{Details: quarantineFilterDetails(r)}
+		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Details: quarantineFilterDetails(r)}
 	}),
 	nopacsv1connect.QuarantineServiceGetQuarantinedFileProcedure: byMessage(func(r *v1.GetQuarantinedFileRequest) (access.Requirement, access.Request) {
-		role := master.RoleReader
+		facts := access.Request{Object: r.GetId(), Details: headerDetails(r)}
 		if r.GetIncludeHeader() {
-			role = master.RoleOperator
+			return onTenantNamed(r.GetTenant(), master.RoleOperator).AnswersOriginals(), facts
 		}
-		return onTenantNamed(r.GetTenant(), role), access.Request{Object: r.GetId(), Details: headerDetails(r.GetIncludeHeader())}
+		return onTenantNamed(r.GetTenant(), master.RoleReader), facts
 	}),
 	nopacsv1connect.QuarantineServiceReleaseQuarantinedFileProcedure: byMessage(func(r *v1.ReleaseQuarantinedFileRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), releaseRole(r)), access.Request{Object: r.GetId(), Details: releaseDetails(r, "")}
@@ -422,9 +431,11 @@ var rules = map[string]rule{
 	// passes the rule of a sender's name. JobService: operator on the tenant
 	// to make, cancel and retry a job, reader to read jobs and their
 	// failures; the object is the job's id, recorded only when it has the
-	// form of one.
+	// form of one. Adding or changing a sender decides where it sends, and a
+	// send job what is sent: neither is a masked key's to choose
+	// (access.Requirement.ChoosesDestination).
 	nopacsv1connect.SenderServiceAddSenderProcedure: byMessage(func(r *v1.AddSenderRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: senderObject(r.GetSender().GetName()), Details: map[string]string{detailType: senderType(r.GetSender())}}
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{Object: senderObject(r.GetSender().GetName()), Details: map[string]string{detailType: senderType(r.GetSender())}}
 	}),
 	nopacsv1connect.SenderServiceGetSenderProcedure: byMessage(func(r *v1.GetSenderRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: senderObject(r.GetName())}
@@ -433,7 +444,7 @@ var rules = map[string]rule{
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{}
 	}),
 	nopacsv1connect.SenderServiceSetSenderProcedure: byMessage(func(r *v1.SetSenderRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: senderObject(r.GetSender().GetName()), Details: maskDetails(r.GetUpdateMask().GetPaths())}
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{Object: senderObject(r.GetSender().GetName()), Details: maskDetails(r.GetUpdateMask().GetPaths())}
 	}),
 	nopacsv1connect.SenderServiceRemoveSenderProcedure: byMessage(func(r *v1.RemoveSenderRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: senderObject(r.GetName()), Details: removeSenderDetails(r)}
@@ -443,7 +454,11 @@ var rules = map[string]rule{
 	}),
 
 	nopacsv1connect.JobServiceCreateJobProcedure: byMessage(func(r *v1.CreateJobRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Details: createJobDetails(r)}
+		need := onTenantNamed(r.GetTenant(), master.RoleOperator)
+		if r.GetSend() != nil {
+			need = need.ChoosesDestination()
+		}
+		return need, access.Request{Details: createJobDetails(r)}
 	}),
 	nopacsv1connect.JobServiceGetJobProcedure: byMessage(func(r *v1.GetJobRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: jobObject(r.GetId())}
@@ -462,12 +477,13 @@ var rules = map[string]rule{
 	}),
 	// ListImportFiles and ListImportUnits: operator on the tenant, since
 	// they answer paths, which can name a person; the object is the job's
-	// id, and no path is recorded.
+	// id, and no path is recorded. A path is an original value, refused to
+	// a masked key.
 	nopacsv1connect.JobServiceListImportFilesProcedure: byMessage(func(r *v1.ListImportFilesRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetId())}
+		return onTenantNamed(r.GetTenant(), master.RoleOperator).AnswersOriginals(), access.Request{Object: jobObject(r.GetId())}
 	}),
 	nopacsv1connect.JobServiceListImportUnitsProcedure: byMessage(func(r *v1.ListImportUnitsRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetId())}
+		return onTenantNamed(r.GetTenant(), master.RoleOperator).AnswersOriginals(), access.Request{Object: jobObject(r.GetId())}
 	}),
 
 	// ProfileService: operator on the tenant to read profiles, to check a
@@ -493,11 +509,27 @@ var rules = map[string]rule{
 	}),
 	// "Role: none; any caller the server authenticates."
 	nopacsv1connect.ProfileServiceListProfileBasesProcedure: fixed(access.Authenticated()),
+	// A trial's values are answered only when asked for, and never to a
+	// masked key.
+	// A trial or an explanation of a held file is refused it too, values
+	// hidden or not: a held file is the sender's original, and what a run
+	// answers of it (which rule matched, the pattern matches, whether a
+	// value changed, its lengths) answers one question about each value per
+	// run, so a caller who chooses the rules reads the value back. A masked
+	// key tries only files it sends, which it already holds.
 	nopacsv1connect.ProfileServiceTryProfileProcedure: byMessage(func(r *v1.TryProfileRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: trialObject(r.GetProfile())}
+		need := onTenantNamed(r.GetTenant(), master.RoleOperator)
+		if r.GetShowValues() || len(r.GetQuarantineRecords()) > 0 {
+			need = need.AnswersOriginals()
+		}
+		return need, access.Request{Object: trialObject(r.GetProfile()), Details: showValuesDetails(r.GetShowValues(), nil)}
 	}),
 	nopacsv1connect.ProfileServiceExplainProfileProcedure: byMessage(func(r *v1.ExplainProfileRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: trialObject(r.GetProfile())}
+		need := onTenantNamed(r.GetTenant(), master.RoleOperator)
+		if r.GetQuarantineRecord() != "" {
+			need = need.AnswersOriginals()
+		}
+		return need, access.Request{Object: trialObject(r.GetProfile())}
 	}),
 	nopacsv1connect.ProfileServiceDiffProfileVersionsProcedure: byMessage(func(r *v1.DiffProfileVersionsRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: profileObject(r.GetName()), Details: map[string]string{
@@ -507,12 +539,14 @@ var rules = map[string]rule{
 	// DeidService: admin on the tenant for the forward lookup and for an
 	// import, each joining a value to its codes; operator to list the
 	// tables' sizes. The object is the attribute's tag, or the table's
-	// name, never a value.
+	// name, never a value. Both are refused to a masked key: a code joins an
+	// identity to its pseudonym, and an import of one entry tells whether a
+	// table holds a value.
 	nopacsv1connect.DeidServiceCodeProcedure: byMessage(func(r *v1.CodeRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: attributeObject(r.GetAttribute())}
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).AnswersOriginals(), access.Request{Object: attributeObject(r.GetAttribute())}
 	}),
 	nopacsv1connect.DeidServiceImportLookupCodesProcedure: byMessage(func(r *v1.ImportLookupCodesRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: profileObject(r.GetTable())}
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).AnswersOriginals(), access.Request{Object: profileObject(r.GetTable())}
 	}),
 	nopacsv1connect.DeidServiceListLookupTablesProcedure: byMessage(func(r *v1.ListLookupTablesRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
@@ -568,12 +602,14 @@ var rules = map[string]rule{
 	// installation for every tenant) to confirm the clock; reader for rules
 	// and due sessions; operator for holds, whose reasons are a person's
 	// words about a subject. The object of a storage, rule or hold method is
-	// its name or id.
+	// its name or id. Attaching a replica decides where copies of the
+	// archive's bytes go, which a masked key may not choose
+	// (access.Requirement.ChoosesDestination).
 	nopacsv1connect.ReplicaServiceListReplicasProcedure: byMessage(func(r *v1.ListReplicasRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{}
 	}),
 	nopacsv1connect.ReplicaServiceAttachReplicaProcedure: byMessage(func(r *v1.AttachReplicaRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetReplica()}
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{Object: r.GetReplica()}
 	}),
 	nopacsv1connect.ReplicaServiceDetachReplicaProcedure: byMessage(func(r *v1.DetachReplicaRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetReplica(),
@@ -642,12 +678,14 @@ var rules = map[string]rule{
 // that serves a method moves its line into rules and its name off the
 // list, and the tests fail until both are done.
 //
-// BackfillReplica: operator, as copying is the server's own work. Recall:
+// BackfillReplica: operator, as copying is the server's own work, and
+// refused to a masked key, since it fills the replica the request names
+// with the archive's bytes (access.Requirement.ChoosesDestination). Recall:
 // operator, since a recall costs the site money and is previewed first.
 // VerifySample: operator, since it answers keys that hold UIDs.
 var pendingRules = map[string]rule{
 	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: byMessage(func(r *v1.BackfillReplicaRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetReplica()}
+		return onTenantNamed(r.GetTenant(), master.RoleOperator).ChoosesDestination(), access.Request{Object: r.GetReplica()}
 	}),
 	nopacsv1connect.ReplicaServiceRecallProcedure: byMessage(func(r *v1.RecallRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: labelPath(r.GetSubjectLabel(), r.GetSessionLabel(), r.GetScanLabel()),

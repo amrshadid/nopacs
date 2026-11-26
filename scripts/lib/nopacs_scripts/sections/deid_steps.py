@@ -308,7 +308,7 @@ def trial_agrees(p, st, version):
         return
     path = st["files"]["rich"]
     _, archived = st["arch"]["rich"]
-    t = p.mj("profile", "try", "lab", "--profile", version, "--receiver", "deid", "--calling-aet", "PROVE", "--called-aet", "ARCHIVE", path)
+    t = p.mj("profile", "try", "lab", "--profile", version, "--receiver", "deid", "--calling-aet", "PROVE", "--called-aet", "ARCHIVE", "--show-values", path)
     res = t["results"][0]
     keyed, equal, differ, absent_bad, compared = 0, 0, [], [], 0
     actions = {}

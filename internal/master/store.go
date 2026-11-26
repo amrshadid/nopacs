@@ -124,8 +124,9 @@ type Store interface {
 	// transaction.
 	SetKeyRules(ctx context.Context, id string, rules KeyRules, audit AuditEntry, by Actor) error
 	// RotateKey replaces the key id with successor, in one transaction: the
-	// successor is added with the rotated key's holder and rules (read
-	// inside the change; successor's own are ignored) and a copy of every
+	// successor is added with the rotated key's holder, rules and masked
+	// flag (read inside the change, as Successor sets them; successor's
+	// own are ignored) and a copy of every
 	// grant the rotated key holds, and the rotated key is set to stop
 	// working at oldEnds, or at its own expiry when that is sooner
 	// (RotatedExpiry), with Successor naming the new key. It returns the

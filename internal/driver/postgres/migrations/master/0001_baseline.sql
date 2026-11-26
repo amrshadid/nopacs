@@ -40,7 +40,10 @@
 -- since the successor is written in the same transaction and a key is never
 -- deleted. suspended is when the key was suspended (a restore suspends every
 -- key it brings back, since a key revoked after the backup would otherwise
--- work again), NULL while it is not.
+-- work again), NULL while it is not. masked is true for a key that is never
+-- answered a value not in its archived, de-identified form (one an outside
+-- service holds); it is written when the key is made and never changed, and
+-- a rotation's successor takes it.
 CREATE TABLE api_keys (
     id           text        COLLATE "C" NOT NULL,
     hash         bytea       NOT NULL,
@@ -54,6 +57,7 @@ CREATE TABLE api_keys (
     last_address text        NOT NULL DEFAULT '',
     successor    text        COLLATE "C" NOT NULL DEFAULT '',
     suspended    timestamptz,
+    masked       boolean     NOT NULL DEFAULT false,
     CONSTRAINT api_keys_pkey PRIMARY KEY (id),
     CONSTRAINT api_keys_hash_check CHECK (octet_length(hash) = 32),
     CONSTRAINT api_keys_client_cert_check CHECK (client_cert = '' OR octet_length(client_cert) = 64)
