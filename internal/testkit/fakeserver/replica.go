@@ -31,6 +31,9 @@ type replicas struct {
 	backfillServed bool
 	// used is the confirm tokens a switch already took, so a token works once.
 	used map[string]bool
+	// drain is how long the copy of a primary takes to drain, by tenant and
+	// primary; a switch whose drain timeout is shorter is refused.
+	drain map[string]time.Duration
 }
 
 // replicaHandler is the fake's ReplicaService; the methods it does not
@@ -78,6 +81,19 @@ func (s *Server) SetSwitchBlockers(tenant, primary string, blockers ...string) {
 		s.repl.blockers = map[string][]string{}
 	}
 	s.repl.blockers[key(tenant, primary)] = blockers
+}
+
+// SetSwitchDrain makes the copy of a primary take d to drain: a switch whose
+// drain_timeout (ten minutes when absent) is shorter is refused as unavailable
+// with nothing changed, as the server refuses when the writes in flight do not
+// end in time.
+func (s *Server) SetSwitchDrain(tenant, primary string, d time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.repl.drain == nil {
+		s.repl.drain = map[string]time.Duration{}
+	}
+	s.repl.drain[key(tenant, primary)] = d
 }
 
 // SetStorageStatus makes the tenant's status change a storage's entry by fn
@@ -317,6 +333,16 @@ func (h replicaHandler) SwitchStorage(_ context.Context, req *v1.SwitchStorageRe
 	}
 	if len(blockers) > 0 && !req.GetSkipVerification() {
 		return nil, fault.New(fault.Precondition, "the switch is refused: "+blockers[0])
+	}
+	drainBound := 10 * time.Minute
+	if req.GetDrainTimeout() != nil {
+		drainBound = req.GetDrainTimeout().AsDuration()
+		if drainBound < time.Second || drainBound > time.Hour {
+			return nil, fault.New(fault.Invalid, "drain_timeout: is 1 second to 1 hour")
+		}
+	}
+	if s.repl.drain[key(req.GetTenant(), req.GetPrimary())] > drainBound {
+		return nil, fault.New(fault.Unavailable, "the writes in flight did not end within the drain timeout")
 	}
 	if s.repl.used == nil {
 		s.repl.used = map[string]bool{}

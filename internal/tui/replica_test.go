@@ -237,6 +237,22 @@ func TestSwitchRefusalShowsItsReason(t *testing.T) {
 	r.expect("switch: STORAGE_SWITCHING: a switch of this storage is already running (try again in 20s)", "refused: every write resumes on the old place")
 }
 
+// TestSwitchUnavailableAnswerIsARefusal guards the state of the switch screen:
+// the server uses "unavailable" for refusals (the drain ran out, another switch
+// runs), and an answer it sent is a refusal with its reason, never "goes on in
+// the server"; only a call the client's own deadline ended is that.
+func TestSwitchUnavailableAnswerIsARefusal(t *testing.T) {
+	r := newRig(t, 140, 30, replicaSetup)
+	openReplicas(r)
+	r.key("s")
+	r.key("c")
+	r.fake.FailWithReason(nopacsv1connect.ReplicaServiceSwitchStorageProcedure, fault.Unavailable, "the writes in flight did not end within the drain timeout", "STORAGE_SWITCHING", 20*time.Second)
+	r.typeText("main")
+	r.key("enter", "enter", "enter")
+	r.expect("refused: every write resumes on the old place", "the writes in flight did not end within the drain timeout")
+	r.refuse("goes on in the server")
+}
+
 // TestStatusShowsTierReplicaSwitchEncryptionAndCoverage guards the status of a
 // tenant: each storage says its tier, its primary, whether a switch is running,
 // encryption at rest no more strongly than the storage or its admin said, and

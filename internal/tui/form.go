@@ -42,6 +42,11 @@ type formScreen struct {
 	// want, when set, is the text the first field must hold for the form to be
 	// submitted.
 	want string
+	// confirms marks a confirmation: it can be submitted only when the first
+	// field holds want, so an empty want (a name or an id the server left out)
+	// can never be matched and the form refuses, instead of skipping the check
+	// and letting enter go ahead on one key.
+	confirms bool
 	// verb names what enter does on the last field, for the key hints.
 	verb string
 	// pop is how many screens to leave when the change is made.
@@ -137,6 +142,10 @@ func (f formScreen) send(c *ctx) (screen, tea.Cmd) {
 			return f, nil
 		}
 	}
+	if f.confirms && f.want == "" {
+		f.msg = "not done: there is nothing to type to confirm, so nothing is sent; go back and reload the screen"
+		return f, nil
+	}
 	if f.want != "" && f.fields[0].in.value() != f.want {
 		f.msg = "not done: type " + f.want + " exactly, as shown, to go ahead"
 		return f, nil
@@ -173,10 +182,10 @@ func (f formScreen) layoutLines(c *ctx) (lines []string, cx, cy int) {
 	lines = append(lines, "")
 	labelW := 0
 	for _, fld := range f.fields {
-		labelW = max(labelW, width(fld.label))
+		labelW = max(labelW, width(clean(fld.label)))
 	}
 	for i, fld := range f.fields {
-		label := c.st.bold(padRight(fld.label, labelW))
+		label := c.st.bold(padRight(clean(fld.label), labelW))
 		prefix := "  "
 		if i == f.focus {
 			prefix = "> "
@@ -212,7 +221,7 @@ func (f formScreen) layoutLines(c *ctx) (lines []string, cx, cy int) {
 		}
 		lines = append(lines, prefix+label+"  "+text)
 		if fld.hint != "" {
-			lines = append(lines, "  "+padRight("", labelW)+"  "+c.st.faint(trunc(fld.hint, max(avail, 1))))
+			lines = append(lines, "  "+padRight("", labelW)+"  "+c.st.faint(trunc(clean(fld.hint), max(avail, 1))))
 		}
 	}
 	lines = append(lines, "")

@@ -368,10 +368,11 @@ func newRejectFile(c *ctx, tenant, id string) screen {
 		intro: []string{
 			"This removes the file's bytes for good; its record stays, with the reason.",
 		},
-		fields: []formField{{label: "Type the id", hint: id}, {label: "Reason", hint: "why it is rejected"}},
-		want:   id,
-		verb:   "reject",
-		pop:    2,
+		fields:   []formField{{label: "Type the id", hint: id}, {label: "Reason", hint: "why it is rejected"}},
+		want:     id,
+		confirms: true,
+		verb:     "reject",
+		pop:      2,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		reason := f.value(1)

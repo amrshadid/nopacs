@@ -390,10 +390,11 @@ func newCancelJob(c *ctx, tenant, id string) screen {
 		intro: []string{
 			"This ends the job as canceled: what the peer has answered stays counted, and what was not sent can be sent again with retry.",
 		},
-		fields: []formField{{label: "Type the id", hint: id}},
-		want:   id,
-		verb:   "cancel",
-		pop:    1,
+		fields:   []formField{{label: "Type the id", hint: id}},
+		want:     id,
+		confirms: true,
+		verb:     "cancel",
+		pop:      1,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) { return cancelJob(c, f.id, tenant, id), nil }
 	return f
@@ -409,10 +410,11 @@ func newRetryJob(c *ctx, tenant, id string) screen {
 			"This makes a new job that sends the instances this ended job did not send, to the same sender.",
 			"The ended job stays as it is and names the new one.",
 		},
-		fields: []formField{{label: "Type the id", hint: id}},
-		want:   id,
-		verb:   "retry",
-		pop:    1,
+		fields:   []formField{{label: "Type the id", hint: id}},
+		want:     id,
+		confirms: true,
+		verb:     "retry",
+		pop:      1,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		if id == "" {

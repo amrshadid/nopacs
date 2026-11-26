@@ -113,9 +113,10 @@ func newDetachReplica(c *ctx, tenant, replica string) screen {
 			{label: "Abandon purges", choices: []string{"no", "yes"}},
 			{label: "Reason", hint: "only with abandon: why, kept in the audit log"},
 		},
-		want: replica,
-		verb: "detach",
-		pop:  1,
+		want:     replica,
+		confirms: true,
+		verb:     "detach",
+		pop:      1,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		abandon := f.value(1) == "yes"
@@ -191,10 +192,11 @@ func newRepairForm(c *ctx, tenant, storage string, findings []string, all bool) 
 			"This repairs " + what + ": each object is read whole from a replica in step, checked against the catalog's length and SHA-256,",
 			"put back at the same key and read back; then its finding is cleared. An object no replica holds good is left as it is and counted refused.",
 		},
-		fields: []formField{{label: "Type the name", hint: storage}, {label: "From replica", hint: "empty: any replica in step"}},
-		want:   storage,
-		verb:   "repair",
-		pop:    2,
+		fields:   []formField{{label: "Type the name", hint: storage}, {label: "From replica", hint: "empty: any replica in step"}},
+		want:     storage,
+		confirms: true,
+		verb:     "repair",
+		pop:      2,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		return repairStorage(c, f.id, tenant, storage, f.value(1), findings, all), nil

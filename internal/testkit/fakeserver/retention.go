@@ -30,6 +30,12 @@ type retention struct {
 	// serve them yet.
 	holdsServed bool
 	next        int
+	// maxPerPass is retention.max-per-pass, which bounds a preview's
+	// max_sessions; 0 is the server's 1000.
+	maxPerPass int
+	// statusAs makes a tenant's status answer name another tenant, as a
+	// server that answered for the wrong one would.
+	statusAs map[string]string
 }
 
 // retentionHandler is the fake's RetentionService.
@@ -256,6 +262,25 @@ func (h retentionHandler) ListDueSessions(_ context.Context, req *v1.ListDueSess
 // many sessions are listed, so a session that fell due since is refused.
 func disposeToken(rule string, n int) string { return fmt.Sprintf("dp.%s.%d", rule, n) }
 
+// AnswerStatusAs makes the status asked for a tenant come back holding another
+// tenant's name, for a client that must not take an answer for the one asked.
+func (s *Server) AnswerStatusAs(tenant, other string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ret.statusAs == nil {
+		s.ret.statusAs = map[string]string{}
+	}
+	s.ret.statusAs[tenant] = other
+}
+
+// SetMaxPerPass sets the fake's retention.max-per-pass, the most sessions a
+// preview may ask to list.
+func (s *Server) SetMaxPerPass(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ret.maxPerPass = n
+}
+
 // Dispose answers a preview of what a rule would delete, or queues the job
 // the preview's token was given for.
 func (h retentionHandler) Dispose(_ context.Context, req *v1.DisposeRequest) (*v1.DisposeResponse, error) {
@@ -270,6 +295,15 @@ func (h retentionHandler) Dispose(_ context.Context, req *v1.DisposeRequest) (*v
 	}
 	if strings.TrimSpace(req.GetReason()) == "" {
 		return nil, fault.New(fault.Invalid, "reason: is 1 to 1024 bytes, not only spaces")
+	}
+	if req.GetValidateOnly() {
+		bound := int32(1000)
+		if h.s.ret.maxPerPass > 0 && h.s.ret.maxPerPass < 1000 {
+			bound = int32(h.s.ret.maxPerPass) // #nosec G115 -- below 1000
+		}
+		if n := req.GetMaxSessions(); n < 0 || n > 1000 || n > bound {
+			return nil, fault.New(fault.Invalid, fmt.Sprintf("max_sessions: is 1 to 1000 and no more than retention.max-per-pass (%d); 0 means 100", bound))
+		}
 	}
 	var listed []*v1.DueSession
 	var held int64

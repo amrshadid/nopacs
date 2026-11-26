@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
+	"github.com/amrshadid/nopacs/internal/cli/client"
 	"github.com/amrshadid/nopacs/internal/cli/output"
 	"github.com/amrshadid/nopacs/internal/fault"
 )
@@ -96,7 +97,7 @@ func newSwitchConfirm(c *ctx, tenant, primary, replica string, p *v1.SwitchStora
 			"Once accepted it runs to its end whatever becomes of this screen.",
 		},
 		fields: []formField{
-			{label: "Type to confirm", hint: itoa(int64(n)) + " of the token: " + clean(token[:n]) + " or: " + clean(primary)},
+			{label: "Type to confirm", hint: itoa(int64(n)) + " of the token: " + token[:n] + " or: " + primary},
 			{label: "Pass over checks", choices: []string{"no", "yes"}},
 			{label: "Reason", hint: "only with the checks passed over: why, kept in the audit log"},
 		},
@@ -166,9 +167,11 @@ func (s switchProgress) update(c *ctx, msg tea.Msg) (screen, tea.Cmd) {
 		return n, getStatus(c, n.id, n.tenant)
 	case failMsg:
 		n.why = fault.Message(msg.err)
-		// A call the deadline ended may have left the switch running: say
-		// that, rather than that it failed.
-		if fault.KindOf(msg.err) == fault.Unavailable && n.state == "switching" {
+		// A call the client's own deadline ended may have left the switch
+		// running: say that, rather than that it failed. An answer the server
+		// sent is final even when it is "unavailable" (the drain ran out, another
+		// switch runs): that is a refusal, with its reason.
+		if client.NoAnswer(msg.err) && n.state == "switching" {
 			n.state = "unknown"
 		} else if n.state == "switching" {
 			n.state = "refused"

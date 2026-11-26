@@ -243,6 +243,17 @@ func call[T any](ctx context.Context, c *client.Client, cmd *cobra.Command, fn f
 	return client.Call(ctx, c, what(cmd), fn)
 }
 
+// boundedInt32 converts the value of an integer flag to the 32 bits the contract
+// carries, after checking that it lies in lo..hi: a value outside the range is
+// refused as invalid with the bounds named, so a large number can never wrap
+// into a valid one on its way to the server.
+func boundedInt32(flag string, v, lo, hi int) (int32, error) {
+	if v < lo || v > hi {
+		return 0, fault.New(fault.Invalid, fmt.Sprintf("--%s %d is not from %d to %d", flag, v, lo, hi))
+	}
+	return int32(v), nil // #nosec G115 -- v is within lo..hi, and every bound passed is far below 2^31
+}
+
 // open makes the client for a command and returns it with the function that
 // closes it.
 func (a *app) open(cmd *cobra.Command) (*client.Client, func(), error) {

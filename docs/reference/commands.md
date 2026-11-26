@@ -1643,7 +1643,7 @@ Usage: `nopacs switch <tenant> <primary> <replica> (--validate | --confirm TOKEN
 | `--reason` | string |  | why the checks are passed over, in your own words, kept in the audit entry (with --skip-verification) |
 | `--skip-verification` | bool |  | switch although the replica has no clean scrub since its backfill or no empty compare from it alone; needs --reason |
 | `--validate` | bool |  | say whether the switch could start now and what stands in its way, and show the confirm token; change nothing |
-| `--wait` | bool |  | if the call times out, read the storage's status until the switch is over |
+| `--wait` | bool |  | if the call times out, read the storage's status until the switch is over, and exit 0 only if it happened; a refusal the server sends ends the command at once |
 
 ### `nopacs tenant`
 

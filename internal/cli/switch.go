@@ -43,8 +43,10 @@ copy drains first; if it does not finish within --drain-timeout (1 second to 1
 hour, ten minutes by default) the switch is refused and every write resumes on
 the old place. Once accepted a switch runs to its end or refusal whatever
 becomes of this command, so a call that times out stops nothing: --wait then
-reads the storage's status until the switch is over. "storage status" tells
-how it ended.
+reads the storage's status until the switch is over and exits 0 only when the
+primary's switch generation rose; a switch that did not happen (the server
+refused it, or the status shows no rise) exits non-zero and says why. "storage
+status" tells how it ended.
 
 --skip-verification passes over the two checks (a clean scrub, an empty compare
 from the replica alone) and needs --reason, which goes in the audit log.
@@ -79,12 +81,30 @@ reason, such as STORAGE_SWITCHING when another switch runs.`,
 				return err
 			}
 			defer closeClient()
+			// The primary's generation before the call is how a wait tells a
+			// switch that happened from one that was refused: a switch raises
+			// it, a refusal leaves it.
+			var before int64
+			if wait && !validate {
+				st, _, err := a.storageOf(ctx, c, cmd, args[0], args[1])
+				if err != nil {
+					return err
+				}
+				before = st.GetSwitchGeneration()
+			}
 			res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.SwitchStorageResponse, error) {
 				return c.Replicas.SwitchStorage(ctx, req)
 			})
 			if err != nil {
-				if wait && !validate && fault.KindOf(err) == fault.Unavailable {
-					return a.waitSwitch(ctx, c, cmd, args[0], args[1])
+				switch {
+				case wait && !validate && client.NoAnswer(err):
+					// Only the client's own deadline ended the call: an accepted
+					// switch goes on in the server, so read how it ends.
+					return a.waitSwitch(ctx, c, cmd, args[0], args[1], before, err)
+				case wait && !validate:
+					// The server answered, and an answer of any kind, even
+					// "unavailable", is final: the switch did not start.
+					return fault.New(fault.KindOf(err), "the switch did not happen: "+err.Error())
 				}
 				return a.switchTimedOut(err)
 			}
@@ -103,7 +123,7 @@ reason, such as STORAGE_SWITCHING when another switch runs.`,
 	fl.BoolVar(&skip, "skip-verification", false, "switch although the replica has no clean scrub since its backfill or no empty compare from it alone; needs --reason")
 	fl.StringVar(&reason, "reason", "", "why the checks are passed over, in your own words, kept in the audit entry (with --skip-verification)")
 	fl.DurationVar(&drain, "drain-timeout", 0, "how long the copy may take to drain before the switch is refused, 1s to 1h; the server's ten minutes when not given")
-	fl.BoolVar(&wait, "wait", false, "if the call times out, read the storage's status until the switch is over")
+	fl.BoolVar(&wait, "wait", false, "if the call times out, read the storage's status until the switch is over, and exit 0 only if it happened; a refusal the server sends ends the command at once")
 	cmd.MarkFlagsMutuallyExclusive("validate", "confirm")
 	cmd.MarkFlagsOneRequired("validate", "confirm")
 	return cmd
@@ -113,33 +133,56 @@ reason, such as STORAGE_SWITCHING when another switch runs.`,
 // know when the deadline, not the server, ended the call: the switch itself
 // goes on.
 func (a *app) switchTimedOut(err error) error {
-	if fault.KindOf(err) == fault.Unavailable && strings.Contains(fault.Message(err), "no answer from") {
+	if client.NoAnswer(err) {
 		return fault.New(fault.Unavailable, err.Error()+"; a switch that was accepted goes on in the server: read how it ended with \"nopacs storage status\", or pass --wait")
 	}
 	return err
 }
 
+// storageOf reads a tenant's status and returns the entry of one storage with
+// the tenant's replicas, or a not-found error when the answer lacks the tenant
+// or the storage: a status that does not name what was asked for says nothing
+// about it.
+func (a *app) storageOf(ctx context.Context, c *client.Client, cmd *cobra.Command, tenant, storage string) (*v1.StorageStatus, []*v1.ReplicaStatus, error) {
+	res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.GetStatusResponse, error) {
+		return c.Monitor.GetStatus(ctx, &v1.GetStatusRequest{Scope: optionalScope(tenant)})
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, t := range res.GetTenants() {
+		if t.GetTenant() != tenant {
+			continue
+		}
+		for _, s := range t.GetStorages() {
+			if s.GetStorage() == storage {
+				return s, t.GetReplicas(), nil
+			}
+		}
+	}
+	return nil, nil, fault.New(fault.NotFound, fmt.Sprintf("the server's status holds no storage %s of tenant %s", output.Clean(storage), output.Clean(tenant)))
+}
+
 // waitSwitch reads a tenant's status until the primary's switch is over, then
-// shows the storage's status, which says how it ended.
-func (a *app) waitSwitch(ctx context.Context, c *client.Client, cmd *cobra.Command, tenant, primary string) error {
+// decides how it ended by the primary's switch generation: a rise is a switch
+// that happened, and the storage's status is shown; no rise is a switch that
+// did not, an error that carries why the call got no answer.
+func (a *app) waitSwitch(ctx context.Context, c *client.Client, cmd *cobra.Command, tenant, primary string, before int64, cause error) error {
 	for {
-		res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.GetStatusResponse, error) {
-			return c.Monitor.GetStatus(ctx, &v1.GetStatusRequest{Scope: optionalScope(tenant)})
-		})
+		s, replicas, err := a.storageOf(ctx, c, cmd, tenant, primary)
 		if err != nil {
 			return err
 		}
-		if len(res.GetTenants()) > 0 {
-			for _, s := range res.GetTenants()[0].GetStorages() {
-				if s.GetStorage() == primary && !s.GetSwitching() {
-					return messageOut(a, s, func(w io.Writer) error {
-						if _, err := fmt.Fprintln(w, "the switch is over; the storage as it stands:"); err != nil {
-							return err
-						}
-						return a.storageStatusDetails(w, s, res.GetTenants()[0].GetReplicas())
-					})
-				}
+		if !s.GetSwitching() {
+			if s.GetSwitchGeneration() <= before {
+				return fault.New(fault.Precondition, "the switch did not happen: "+cause.Error()+"; the primary's switch generation is still "+strconv.FormatInt(before, 10))
 			}
+			return messageOut(a, s, func(w io.Writer) error {
+				if _, err := fmt.Fprintln(w, "the switch is over; the storage as it stands:"); err != nil {
+					return err
+				}
+				return a.storageStatusDetails(w, s, replicas)
+			})
 		}
 		select {
 		case <-ctx.Done():

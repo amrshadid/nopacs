@@ -140,10 +140,11 @@ func newDeleteConfirm(c *ctx, m deletePreviewMsg, typed string) screen {
 			"This hides " + itoa(n) + " instances from every read. Their bytes are purged from every storage when the grace period ends.",
 			"If anything changed since the preview, the server refuses and you preview again.",
 		},
-		fields: []formField{{label: "Type the target", hint: typed}},
-		want:   typed,
-		verb:   "delete",
-		pop:    2,
+		fields:   []formField{{label: "Type the target", hint: typed}},
+		want:     typed,
+		confirms: true,
+		verb:     "delete",
+		pop:      2,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		return deleteData(c, f.id, m.req, m.prev.GetConfirm()), nil
@@ -224,10 +225,11 @@ func newUndoForm(c *ctx, tenant, id string) screen {
 			"A committed delete shows its data again as it was; a relabel still copying stops and its copies are removed.",
 			"A delete whose purge has started cannot be undone.",
 		},
-		fields: []formField{{label: "Type the id", hint: id}, {label: "Reason", hint: "why, kept with the correction"}},
-		want:   id,
-		verb:   "undo",
-		pop:    1,
+		fields:   []formField{{label: "Type the id", hint: id}, {label: "Reason", hint: "why, kept with the correction"}},
+		want:     id,
+		confirms: true,
+		verb:     "undo",
+		pop:      1,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		if f.value(1) == "" {
@@ -248,10 +250,11 @@ func newPurgeForm(c *ctx, tenant, id string) screen {
 			"This removes for good the bytes the correction hid or superseded, from every storage, before its grace period ends.",
 			"Once a purge has started nothing is undone.",
 		},
-		fields: []formField{{label: "Type the id", hint: id}},
-		want:   id,
-		verb:   "purge",
-		pop:    1,
+		fields:   []formField{{label: "Type the id", hint: id}},
+		want:     id,
+		confirms: true,
+		verb:     "purge",
+		pop:      1,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) { return purgeCorrection(c, f.id, tenant, id), nil }
 	return f

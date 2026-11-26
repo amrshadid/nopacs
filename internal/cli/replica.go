@@ -215,7 +215,11 @@ func replicaTierChange(cmd *cobra.Command, name, tier string, days int, recallTi
 	if cmd.Flags().Changed("recall-days") || cmd.Flags().Changed("recall-tier") {
 		s3 := &v1.S3Storage{}
 		if cmd.Flags().Changed("recall-days") {
-			s3.RecallDays = int32(days) // #nosec G115 -- the server bounds it to 1..365
+			d, err := boundedInt32("recall-days", days, 1, 365)
+			if err != nil {
+				return nil, nil, err
+			}
+			s3.RecallDays = d
 			paths = append(paths, "s3.recall_days")
 		}
 		if cmd.Flags().Changed("recall-tier") {

@@ -203,7 +203,11 @@ func (f *storageFlags) applyReplication(cmd *cobra.Command, st *v1.Storage) erro
 			return fault.New(fault.Invalid, "--recall-days and --recall-tier belong to an S3 storage of the archive tier")
 		}
 		if cmd.Flags().Changed("recall-days") {
-			s3.RecallDays = int32(f.recallDays) // #nosec G115 -- the server bounds it to 1..365
+			d, err := boundedInt32("recall-days", f.recallDays, 1, 365)
+			if err != nil {
+				return err
+			}
+			s3.RecallDays = d
 		}
 		if cmd.Flags().Changed("recall-tier") {
 			t, err := parseRecallTier(f.recallTier)
@@ -536,7 +540,11 @@ bucket that keeps them, so it may change at any time.`,
 				paths = append(paths, "tier")
 			}
 			if cmd.Flags().Changed("recall-days") {
-				s3.RecallDays = int32(f.recallDays) // #nosec G115 -- the server bounds it to 1..365
+				d, err := boundedInt32("recall-days", f.recallDays, 1, 365)
+				if err != nil {
+					return err
+				}
+				s3.RecallDays = d
 				paths = append(paths, "s3.recall_days")
 			}
 			if cmd.Flags().Changed("recall-tier") {

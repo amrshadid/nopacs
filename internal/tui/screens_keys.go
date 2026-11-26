@@ -150,10 +150,11 @@ func newRevokeKey(c *ctx, k *v1.Key, pop int) (screen, tea.Cmd) {
 			"Revoke key " + output.KeyLabel(k) + ".",
 			"From this moment a request with it is refused. There is no way to undo it; make a new key instead.",
 		},
-		fields: []formField{{label: "Type the key id", hint: id}},
-		want:   id,
-		verb:   "revoke",
-		pop:    pop,
+		fields:   []formField{{label: "Type the key id", hint: id}},
+		want:     id,
+		confirms: true,
+		verb:     "revoke",
+		pop:      pop,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) { return revokeKey(c, f.id, id), nil }
 	return f, nil

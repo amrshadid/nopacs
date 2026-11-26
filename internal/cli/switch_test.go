@@ -197,9 +197,55 @@ func TestSwitchWaitReadsTheStatusAfterATimeout(t *testing.T) {
 	if res.code != 1 || !strings.Contains(res.stderr, "goes on in the server") || !strings.Contains(res.stderr, "nopacs storage status") {
 		t.Errorf("a switch that timed out: %+v", res)
 	}
-	r.fake.SetStorageStatus("lab1", "main", func(s *v1.StorageStatus) { s.LastSwitchTime = timestamppb.New(fixedNow) })
+	// A status that shows no rise of the generation is a switch that did not
+	// happen, however the call ended.
+	res = r.run("switch", "lab1", "main", "copy", "--confirm", "sw.main.copy.0", "--wait")
+	if res.code != 5 || res.stdout != "" || !strings.Contains(res.stderr, "the switch did not happen") || !strings.Contains(res.stderr, "no answer from") {
+		t.Errorf("a switch that timed out and did not happen, with --wait: %+v", res)
+	}
+	// The switch the timed-out call started ends in the server after the
+	// command first reads the generation: the second read shows it risen.
+	reads := 0
+	r.fake.SetStorageStatus("lab1", "main", func(s *v1.StorageStatus) {
+		reads++
+		if reads > 1 {
+			s.LastSwitchTime = timestamppb.New(fixedNow)
+			s.SwitchGeneration = 1
+		}
+	})
 	res = r.run("switch", "lab1", "main", "copy", "--confirm", "sw.main.copy.0", "--wait")
 	if res.code != 0 || !strings.Contains(res.stdout, "the switch is over") || !strings.Contains(res.stdout, "Last switch:") || strings.Contains(res.stdout, "Last switch:        -") {
 		t.Errorf("a switch that timed out, with --wait: %+v", res)
+	}
+}
+
+// TestSwitchWaitTrustsAnAnswerOfTheServer guards --wait against reporting a
+// refused switch as done: the server uses "unavailable" for real refusals (the
+// drain did not finish in time, another switch runs), and an answer it sent is
+// final, so the command exits non-zero with the server's reason and never
+// waits. The drain timeout asked for is the one the refusal depends on.
+func TestSwitchWaitTrustsAnAnswerOfTheServer(t *testing.T) {
+	r := repairRig(t)
+	r.fake.SetSwitchDrain("lab1", "main", 30*time.Minute)
+	res := r.run("switch", "lab1", "main", "copy", "--confirm", "sw.main.copy.0", "--drain-timeout", "1m", "--wait")
+	if res.code != 1 || res.stdout != "" || !strings.Contains(res.stderr, "the switch did not happen") || !strings.Contains(res.stderr, "did not end within the drain timeout") {
+		t.Errorf("a drain that took too long, with --wait: %+v", res)
+	}
+	if out := mustOut(r, "storage", "status", "lab1", "main"); !strings.Contains(out, "Switch generation: 0\n") {
+		t.Errorf("the refused switch changed the generation:\n%s", out)
+	}
+	if res := r.run("switch", "lab1", "main", "copy", "--confirm", "sw.main.copy.0", "--drain-timeout", "2h"); res.code != 2 || !strings.Contains(res.stderr, "drain_timeout") {
+		t.Errorf("a drain timeout above the bound: %+v", res)
+	}
+	res = r.run("switch", "lab1", "main", "copy", "--confirm", "sw.main.copy.0", "--drain-timeout", "1h", "--wait")
+	if res.code != 0 || !strings.Contains(res.stdout, "copy is now the primary main") {
+		t.Errorf("a drain timeout long enough, with --wait: %+v", res)
+	}
+
+	r = repairRig(t)
+	r.fake.FailWithReason(nopacsv1connect.ReplicaServiceSwitchStorageProcedure, fault.Unavailable, "a switch of this storage is already running", "STORAGE_SWITCHING", 20*time.Second)
+	res = r.run("switch", "lab1", "main", "copy", "--confirm", "sw.main.copy.0", "--wait")
+	if res.code != 1 || res.stdout != "" || !strings.Contains(res.stderr, "the switch did not happen") || !strings.Contains(res.stderr, "STORAGE_SWITCHING") {
+		t.Errorf("a switch refused while another runs, with --wait: %+v", res)
 	}
 }

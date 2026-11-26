@@ -160,10 +160,11 @@ func newRemoveTenant(c *ctx, name string, pop int) (screen, tea.Cmd) {
 			"Nothing is deleted: its database and files stay where they are, and the program says where.",
 			"Keys that were granted a role on it keep the grant on the record.",
 		},
-		fields: []formField{{label: "Type the name", hint: name}},
-		want:   name,
-		verb:   "remove",
-		pop:    pop,
+		fields:   []formField{{label: "Type the name", hint: name}},
+		want:     name,
+		confirms: true,
+		verb:     "remove",
+		pop:      pop,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) { return removeTenant(c, f.id, name), nil }
 	return f, nil

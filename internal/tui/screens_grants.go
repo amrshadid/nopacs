@@ -106,9 +106,10 @@ func newRemoveGrant(c *ctx, g *v1.Grant) (screen, tea.Cmd) {
 			"Take away the " + output.Role(g.GetRole()) + " role of key " + g.GetKeyId() + " on " + output.Scope(g.GetScope()) + ".",
 			"The key keeps working for whatever its other grants allow.",
 		},
-		fields: []formField{{label: "Type the key id", hint: g.GetKeyId()}},
-		want:   g.GetKeyId(),
-		verb:   "remove",
+		fields:   []formField{{label: "Type the key id", hint: g.GetKeyId()}},
+		want:     g.GetKeyId(),
+		confirms: true,
+		verb:     "remove",
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		return removeGrant(c, f.id, g.GetKeyId(), g.GetScope()), nil

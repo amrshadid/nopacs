@@ -72,6 +72,9 @@ func (h monitorHandler) GetStatus(_ context.Context, req *v1.GetStatusRequest) (
 		}
 	}
 	st.Retention = s.ret.status[name]
+	if as := s.ret.statusAs[name]; as != "" {
+		st.Tenant = as
+	}
 	for _, k := range forTenant(s.arch.receivers, name) {
 		r := s.arch.receivers[k]
 		st.Receivers = append(st.Receivers, &v1.ReceiverStatus{Receiver: r.GetName(), Health: s.arch.health[k], AnyCaller: r.GetDimse().GetAnyCaller()})

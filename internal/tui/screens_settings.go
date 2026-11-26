@@ -56,12 +56,13 @@ func newSetSetting(c *ctx, scope *v1.Scope) (screen, tea.Cmd) {
 // set on a scope is removed.
 func newUnsetSetting(c *ctx, name string, scope *v1.Scope) (screen, tea.Cmd) {
 	f := formScreen{
-		base:    base{c.newID()},
-		heading: "Unset " + clean(name),
-		intro:   []string{unsetIntro(scope, name)},
-		fields:  []formField{{label: "Type the name", hint: name}},
-		want:    name,
-		verb:    "unset",
+		base:     base{c.newID()},
+		heading:  "Unset " + clean(name),
+		intro:    []string{unsetIntro(scope, name)},
+		fields:   []formField{{label: "Type the name", hint: name}},
+		want:     name,
+		confirms: true,
+		verb:     "unset",
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) { return unsetSetting(c, f.id, name, scope), nil }
 	return f, nil

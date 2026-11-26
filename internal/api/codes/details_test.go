@@ -8,6 +8,7 @@ import (
 	"time"
 
 	connect "connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -107,5 +108,38 @@ func TestPrefixedReasons(t *testing.T) {
 	}
 	if e := ToConnect(fault.New(fault.Invalid, "TENANT_MOVED: a name a caller wrote")); len(e.Details()) != 0 {
 		t.Errorf("a message of another kind carries details %v", e.Details())
+	}
+}
+
+// TestRetryDelayCap guards that a retry delay a server sends beyond a day, a
+// negative one (a varint with its top bit set) and nanoseconds past a second
+// are ignored, while a day exactly is taken.
+func TestRetryDelayCap(t *testing.T) {
+	build := func(secs, nanos uint64, hasNanos bool) *connect.Error {
+		var dur []byte
+		dur = protowire.AppendTag(dur, 1, protowire.VarintType)
+		dur = protowire.AppendVarint(dur, secs)
+		if hasNanos {
+			dur = protowire.AppendTag(dur, 2, protowire.VarintType)
+			dur = protowire.AppendVarint(dur, nanos)
+		}
+		var b []byte
+		b = protowire.AppendTag(b, 1, protowire.BytesType)
+		b = protowire.AppendBytes(b, dur)
+		return connect.NewError(connect.CodeUnavailable, "x").WithDetail(&connect.ErrorDetail{Type: RetryInfoType, Value: b})
+	}
+	if d, ok := RetryOfError(build(86400, 0, false)); !ok || d != 24*time.Hour {
+		t.Errorf("a day: %v %v", d, ok)
+	}
+	for name, e := range map[string]*connect.Error{
+		"above a day":      build(86401, 0, false),
+		"years":            build(1<<40, 0, false),
+		"negative":         build(^uint64(0), 0, false),
+		"wraps to small":   build(1<<63+5, 0, false),
+		"nanos over a sec": build(1, 2_000_000_000, true),
+	} {
+		if d, ok := RetryOfError(e); ok || d != 0 {
+			t.Errorf("%s: delay %v taken", name, d)
+		}
 	}
 }

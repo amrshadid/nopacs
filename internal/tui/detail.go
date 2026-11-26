@@ -72,7 +72,11 @@ func (d detailScreen) key(c *ctx, k tea.KeyPressMsg) (screen, tea.Cmd) {
 
 // lines are every line of the screen, before scrolling.
 func (d detailScreen) lines(c *ctx) []string {
-	pairs := d.pairs(c, d.ref)
+	pairs := append([]pair(nil), d.pairs(c, d.ref)...)
+	for i := range pairs {
+		// A label can be built from a name the server sent.
+		pairs[i].label = clean(pairs[i].label)
+	}
 	labelW := 0
 	for _, p := range pairs {
 		labelW = max(labelW, width(p.label))

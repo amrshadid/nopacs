@@ -139,6 +139,13 @@ server's own bound applies too). --wait follows the job as "job watch" does.`,
 			if err := checkReason(reason); err != nil {
 				return err
 			}
+			if max != 0 {
+				// With 0 the server's own count is used; any other value is
+				// checked here so it cannot wrap into range on its way.
+				if _, err := boundedInt32("max-sessions", max, 1, 1000); err != nil {
+					return err
+				}
+			}
 			c, closeClient, err := a.open(cmd)
 			if err != nil {
 				return err
@@ -151,7 +158,7 @@ server's own bound applies too). --wait follows the job as "job watch" does.`,
 				}
 			}
 			res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.DisposeResponse, error) {
-				return c.Retention.Dispose(ctx, &v1.DisposeRequest{Tenant: args[0], Rule: rule, Reason: reason, ValidateOnly: preview, Confirm: confirm, MaxSessions: int32(max)}) // #nosec G115 -- the server bounds it to 0..1000
+				return c.Retention.Dispose(ctx, &v1.DisposeRequest{Tenant: args[0], Rule: rule, Reason: reason, ValidateOnly: preview, Confirm: confirm, MaxSessions: int32(max)}) // #nosec G115 -- max is 0 or 1..1000, checked above
 			})
 			if err != nil {
 				return err
@@ -245,10 +252,18 @@ from the server, or the check would confirm nothing.`,
 				if err != nil {
 					return err
 				}
-				if len(res.GetTenants()) == 0 || res.GetTenants()[0].GetRetention() == nil {
+				// The answer is searched for the tenant asked for: the first entry
+				// of a list is not necessarily it.
+				var rs *v1.RetentionStatus
+				for _, t := range res.GetTenants() {
+					if t.GetTenant() == args[0] {
+						rs = t.GetRetention()
+						break
+					}
+				}
+				if rs == nil {
 					return fault.New(fault.NotFound, fmt.Sprintf("the server answered no retention state for tenant %s", output.Clean(args[0])))
 				}
-				rs := res.GetTenants()[0].GetRetention()
 				return messageOut(a, rs, func(w io.Writer) error { return output.Details(w, a.style(), a.retentionStatusPairs(rs)) })
 			}
 			if err := checkReason(reason); err != nil {

@@ -322,6 +322,16 @@ func (c *Client) Watch(ctx context.Context, req *v1.WatchRequest, each func(*v1.
 	}
 }
 
+// noAnswerPrefix starts the message of a call the client's own deadline ended.
+const noAnswerPrefix = "no answer from "
+
+// NoAnswer reports whether err is a call that got no answer because the
+// client's deadline ran out, as opposed to an answer the server sent: a
+// server's refusal, even one of the unavailable kind, is not this.
+func NoAnswer(err error) bool {
+	return fault.KindOf(err) == fault.Unavailable && strings.HasPrefix(fault.Message(err), noAnswerPrefix)
+}
+
 // classify turns the error of a call into a fault error. An API error maps
 // through the codes table. Anything else never reached an answer: a refused
 // connection, a certificate the system does not trust, a deadline. Each is
@@ -334,7 +344,7 @@ func (c *Client) Watch(ctx context.Context, req *v1.WatchRequest, each func(*v1.
 func (c *Client) classify(ctx context.Context, err error) error {
 	var ce *connect.Error
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) || (errors.As(err, &ce) && ce.Code() == connect.CodeDeadlineExceeded) {
-		return fault.Wrap(fault.Unavailable, err, "no answer from "+c.target+" within "+c.timeout.String()+" (see --timeout)")
+		return fault.Wrap(fault.Unavailable, err, noAnswerPrefix+c.target+" within "+c.timeout.String()+" (see --timeout)")
 	}
 	if errors.As(err, &ce) && ce.IsRemote() {
 		return remoteError(ce)

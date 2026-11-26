@@ -162,10 +162,11 @@ func newRemoveRule(c *ctx, tenant, name string) screen {
 			"The rule is removed at once. What it kept stays kept until the tenant's notice ends, so a removal never makes data due in a moment.",
 			"Corrections and jobs the rule made keep its name.",
 		},
-		fields: []formField{{label: "Type the name", hint: name}},
-		want:   name,
-		verb:   "remove",
-		pop:    1,
+		fields:   []formField{{label: "Type the name", hint: name}},
+		want:     name,
+		confirms: true,
+		verb:     "remove",
+		pop:      1,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) { return removeRule(c, f.id, tenant, name), nil }
 	return f
@@ -283,10 +284,11 @@ func newDisposeConfirm(c *ctx, tenant string, m disposePreviewMsg) screen {
 			"Each can be undone during its grace period; after it the bytes are purged from every copy.",
 			"If data fell due or a hold was placed since the preview, the server refuses, and you preview again.",
 		},
-		fields: []formField{{label: "Type the rule name", hint: m.rule}},
-		want:   m.rule,
-		verb:   "delete",
-		pop:    2,
+		fields:   []formField{{label: "Type the rule name", hint: m.rule}},
+		want:     m.rule,
+		confirms: true,
+		verb:     "delete",
+		pop:      2,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		return dispose(c, f.id, tenant, m.rule, m.reason, m.res.GetConfirm()), nil
@@ -439,13 +441,14 @@ func newPlaceHold(c *ctx, tenant string) screen {
 // lets what it held be deleted and purged again.
 func newReleaseHold(c *ctx, tenant, id string) screen {
 	f := formScreen{
-		base:    base{c.newID()},
-		heading: "Release hold " + clean(id),
-		intro:   []string{"What the hold covers may then be deleted, purged and disposed of again, as other holds allow."},
-		fields:  []formField{{label: "Type the id", hint: id}, {label: "Reason", hint: "why, kept in the audit log"}},
-		want:    id,
-		verb:    "release",
-		pop:     1,
+		base:     base{c.newID()},
+		heading:  "Release hold " + clean(id),
+		intro:    []string{"What the hold covers may then be deleted, purged and disposed of again, as other holds allow."},
+		fields:   []formField{{label: "Type the id", hint: id}, {label: "Reason", hint: "why, kept in the audit log"}},
+		want:     id,
+		confirms: true,
+		verb:     "release",
+		pop:      1,
 	}
 	f.submit = func(c *ctx, f formScreen) (tea.Cmd, error) {
 		if f.value(1) == "" {

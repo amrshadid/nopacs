@@ -135,6 +135,11 @@ func mapEntry(b []byte) (string, string, bool) {
 	return k, v, true
 }
 
+// maxRetryDelay is the longest retry delay a client believes: a server that
+// names more, or a negative or overflowing value, is ignored, so a hostile
+// answer cannot park a client for days or make it retry at once.
+const maxRetryDelay = 24 * time.Hour
+
 // RetryOfError returns the delay of the google.rpc.RetryInfo detail of an
 // API error, and false when it has none, or none this package can read.
 func RetryOfError(e *connect.Error) (time.Duration, bool) {
@@ -164,10 +169,22 @@ func RetryOfError(e *connect.Error) (time.Duration, bool) {
 			dur = dur[j:]
 			switch f {
 			case 1:
-				out += time.Duration(v) * time.Second //nolint:gosec // G115: a server's retry delay is small.
+				// A value above the cap would wrap when scaled to nanoseconds
+				// (a huge or "negative" varint) and could turn a hostile delay
+				// into no wait or a wait of years.
+				if v > uint64(maxRetryDelay/time.Second) {
+					return 0, false
+				}
+				out += time.Duration(v) * time.Second //nolint:gosec // G115: v is at most 24 hours in seconds.
 			case 2:
-				out += time.Duration(v) //nolint:gosec // G115: nanoseconds below a second.
+				if v >= uint64(time.Second) {
+					return 0, false
+				}
+				out += time.Duration(v) //nolint:gosec // G115: v is below a second.
 			}
+		}
+		if out > maxRetryDelay {
+			return 0, false
 		}
 		return out, true
 	}
