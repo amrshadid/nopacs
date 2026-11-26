@@ -31,6 +31,11 @@ type Object struct {
 	// was archived (tenant.ScanInstance.Damaged): a replica in step is read
 	// instead, and the primary not at all.
 	Damaged bool
+	// SHA256 is the SHA-256 of the whole object the catalog keeps, for a
+	// scan's metadata file whose digest it keeps
+	// (tenant.CatalogScan.SidecarSHA256); zero when the reader knows none,
+	// and then the object is not checked here (checkFile).
+	SHA256 tenant.SHA256
 }
 
 // InstanceObject returns the object of the instance in, of the scan whose
@@ -85,6 +90,9 @@ func (s *Stores) Open(ctx context.Context, obj Object, offset, length int64) (Op
 	if err != nil {
 		return o, err
 	}
+	if o.Replica {
+		body = checkWhole(body, obj, offset, length)
+	}
 	o.Body = body
 	return o, nil
 }
@@ -112,9 +120,15 @@ func (s *Stores) stat(ctx context.Context, obj Object, record bool) (blob.Info, 
 	var (
 		info    blob.Info
 		offline *blob.Info
+		other   *blob.Info
 	)
 	o, err := s.serve(ctx, obj, record, func(st blob.Store) error {
 		got, err := st.Stat(ctx, obj.Key)
+		if err == nil {
+			if err = checkFile(obj, got); err != nil && other == nil {
+				other = &got
+			}
+		}
 		if err == nil && got.State != blob.Online {
 			if offline == nil {
 				offline = &got
@@ -131,6 +145,18 @@ func (s *Stores) stat(ctx context.Context, obj Object, record bool) (blob.Info, 
 		o.store = s.open[obj.Storage]
 		s.servedBy(obj.Storage)
 		return *offline, o, nil
+	}
+	if err != nil && other != nil && !obj.Damaged && errors.Is(err, ErrOtherFile) {
+		// The primary keeps another file than the catalog's digest names and
+		// no replica in step serves the catalog's: the primary's file is
+		// answered, as before digests were kept. A reception into the scan
+		// puts its next file before it commits, so the primary holds a file
+		// newer than the catalog's for a moment, and a read then is not data
+		// loss.
+		o.Storage, o.Replica = obj.Storage, false
+		o.store = s.open[obj.Storage]
+		s.servedBy(obj.Storage)
+		return *other, o, nil
 	}
 	return info, o, err
 }
@@ -212,13 +238,19 @@ func (s *Stores) serve(ctx context.Context, obj Object, record bool, try func(bl
 			if ctx.Err() != nil {
 				return o, first
 			}
-			if record && fault.KindOf(err) == fault.NotFound {
-				// In step and still without the object: the replica's damage,
-				// for the replicator to copy again. Any other failure (the
-				// replica not answering, the object not online) says nothing
-				// of what it holds and records nothing.
+			if record && (fault.KindOf(err) == fault.NotFound || errors.Is(err, ErrOtherFile)) {
+				// In step and still without the object, or holding another
+				// file than the catalog's digest names: the replica's
+				// damage, for the replicator to copy again. Any other
+				// failure (the replica not answering, the object not online)
+				// says nothing of what it holds and records nothing.
+				var size *int64
+				var other *otherFile
+				if errors.As(err, &other) {
+					size = &other.size
+				}
 				cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
-				_ = s.recordDamage(cctx, Opened{Storage: name, Replica: true, obj: obj, series: o.series}, nil) // The read fails over or fails as it would; a record that fails is found again by the next read or scrub.
+				_ = s.recordDamage(cctx, Opened{Storage: name, Replica: true, obj: obj, series: o.series}, size) // The read fails over or fails as it would; a record that fails is found again by the next read or scrub.
 				cancel()
 			}
 			continue
@@ -267,7 +299,7 @@ func turns(ctx context.Context, err error) bool {
 	case fault.NotFound, fault.Unavailable:
 		return true
 	}
-	return errors.Is(err, blob.ErrNotOnline)
+	return errors.Is(err, blob.ErrNotOnline) || errors.Is(err, ErrOtherFile)
 }
 
 // inStep returns the replicas in step for o's scan now, by name, without
@@ -296,14 +328,21 @@ func (s *Stores) inStep(ctx context.Context, o *Opened) ([]string, error) {
 // holding size bytes that are not the catalog's, when the catalog says the
 // replica must hold that object now.
 //
-// Only an instance's object is recorded: a replica in step holds every
-// instance the committed manifest names, but a scan's metadata file is not
-// among them (a scan archived before metadata files were written has none
-// anywhere, and the replicator copies the instances it is checked
-// against), so a metadata file missing or wrong on a replica is not its
-// damage; a scrub, which reads every object of the copy, says what is.
-// Recording it would mark the scan damaged on the replica after each copy
-// and turn off its reads for every instance of the scan.
+// An instance's object is recorded, and a scan's metadata file only when
+// the catalog keeps its digest (Object.SHA256): the replicator then puts
+// the file against that digest, so a replica in step holds it, and one
+// missing or other there is its damage. A metadata file with no digest is
+// not recorded (a scan archived before metadata files were written has
+// none anywhere, and nothing says which file a replica must hold); a
+// scrub, which reads every object of the copy, says what is. Recording it
+// would mark the scan damaged on the replica after each copy and turn off
+// its reads for every instance of the scan.
+//
+// A metadata file is recorded only while the catalog still keeps the
+// digest the reader read it against: a pass that rewrites the file records
+// a new digest and queues the replicas, whose next copy puts the new file,
+// so a reader holding the old digest would otherwise take a good replica
+// for a damaged one.
 //
 // An instance whose key is no longer the catalog's (a correction published
 // a new revision after the reader read the catalog, and the old key may be
@@ -313,7 +352,16 @@ func (s *Stores) inStep(ctx context.Context, o *Opened) ([]string, error) {
 // nothing; the next read or scrub finds a real damage again.
 func (s *Stores) recordDamage(ctx context.Context, o Opened, size *int64) error {
 	if o.obj.SOPInstanceUID == "" {
-		return nil
+		if o.obj.SHA256.IsZero() || o.series == "" || o.obj.Path == (label.Path{}) {
+			return nil
+		}
+		if sc, err := s.replicas.CatalogScan(ctx, o.obj.Path); err != nil || sc.SeriesUID != o.series ||
+			sc.SidecarSHA256 != o.obj.SHA256 {
+			return nil
+		}
+		_, err := s.replicas.RecordReplicaDamage(ctx, tenant.ReplicaDamageRecord{Replica: o.Storage, SeriesUID: o.series,
+			Damage: tenant.ReplicaDamage{FoundSize: size, Found: s.now()}})
+		return err
 	}
 	k, err := layout.Parse(o.obj.Key)
 	if err != nil || k.Kind != layout.Instance {

@@ -94,6 +94,30 @@ func TestTenantPanicInWriteReleasesTheWriter(t *testing.T) {
 	}
 }
 
+// TestFindingClearedWithNoJobNamesItsPrimary guards the schema's rule on a
+// scrub finding cleared with no job: only a finding of a replica's damage
+// (replica_of names its primary), which the replicator's verified copy or a
+// detach clears, may be; any other finding is cleared by the scrub job that
+// read its object good.
+func TestFindingClearedWithNoJobNamesItsPrimary(t *testing.T) {
+	ctx := context.Background()
+	s := openTenantTest(t, "t1").(*Tenant)
+	insert := func(id, replicaOf string) error {
+		return s.writeShared(ctx, "test", func(tx *sql.Tx, _ *sharedStatements) error {
+			_, err := tx.ExecContext(ctx, `INSERT INTO scrub_findings (id, kind, storage, object_key, subject_label, session_label,
+				scan_label, sop_instance_uid, revision, job_id, found_at, last_job, last_seen, cleared_at, clear_job, replica_of)
+				VALUES (?, 'damaged', 'copy', 'data/x', 'S', 'E', 'C', '1.2.3', 1, 'j1', 1, 'j1', 1, 2, '', ?)`, id, replicaOf)
+			return err
+		})
+	}
+	if err := insert("f1", ""); err == nil {
+		t.Error("a finding of no replica was kept cleared with no job")
+	}
+	if err := insert("f2", "store"); err != nil {
+		t.Errorf("a finding of a replica's damage cleared with no job was refused: %v", err)
+	}
+}
+
 // TestTenantFailingFiles guards the kinds and messages of a tenant file the
 // driver must not or cannot use, which the registry turns into the tenant's
 // state: a file that is not a SQLite database (Unavailable), and on Unix a
@@ -165,7 +189,7 @@ func TestShippedTenantMigrationsUnchanged(t *testing.T) {
 
 // shippedTenantBaseline is the SHA-256 of migrations/tenant/0001_baseline.sql
 // as this change ships it.
-const shippedTenantBaseline = "c74f8aa69c0e688fafcd89288a0e94bc5117cb9911baa59884bef9c86bdd5d90"
+const shippedTenantBaseline = "a2a4bbd72453aacd0ba365a2bac049ded8023894e27adfbd58fdbaee943b22eb"
 
 // TestTenantNotMigrated guards that a tenant store used before Migrate
 // fails as Unavailable with a message that says so, instead of a SQL error,

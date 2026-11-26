@@ -35,6 +35,9 @@ type UpgradeCatalog interface {
 	ListHeldInstances(ctx context.Context, path label.Path, page master.Page) ([]tenant.ScanInstance, string, error)
 	// ListProfileVersions is tenant.Profiles.ListProfileVersions.
 	ListProfileVersions(ctx context.Context, name string, page master.Page) ([]tenant.ProfileVersion, string, error)
+	// SidecarRewrites records each sidecar rewritten, with its digest, and
+	// queues the scan's replicas.
+	tenant.SidecarRewrites
 }
 
 // UpgradeConfig is what a rewrite is handed. Every port is given; none is
@@ -163,7 +166,7 @@ func (u *upgrader) scan(ctx context.Context, sc tenant.CatalogScan) error {
 	}
 	switch sidecar.VersionOf(head) {
 	case sidecar.Version:
-		return nil
+		return u.settleDigest(ctx, u.cat, sc.Storage, path, key)
 	case sidecar.VersionFrames:
 	case 1:
 		u.rep.ScansWaiting++
@@ -180,7 +183,9 @@ func (u *upgrader) scan(ctx context.Context, sc tenant.CatalogScan) error {
 		u.rep.ScansLeft++
 		u.cfg.Logger.Warn("upgrade: a scan's metadata is left as it is for the next pass", "subject", path.Subject,
 			"session", path.Session, "scan", path.Scan, "reason", err.Error())
-		return nil
+		// The digest dropped before the put that did not land is the file's
+		// still: recorded again.
+		return u.settleDigest(ctx, u.cat, sc.Storage, path, key)
 	case err != nil:
 		return err
 	case n > 0:
@@ -224,6 +229,11 @@ func (u *upgrader) rewrite(ctx context.Context, storage string, path label.Path,
 		return 0, storageError(err, "the scan's metadata cannot be read")
 	}
 	defer func() { _ = old.Close() }()
+	// The digest of the file replaced is dropped before the put, so a
+	// record that fails after it leaves the file unchecked (forgetDigest).
+	if err := forgetDigest(ctx, u.cat, sc.SeriesUID, storage); err != nil {
+		return 0, err
+	}
 	held := &heldRows{cat: u.cat, path: path}
 	var n int64
 	pr, pw := io.Pipe()
@@ -244,13 +254,16 @@ func (u *upgrader) rewrite(ctx context.Context, storage string, path label.Path,
 		_ = pw.CloseWithError(err)
 		done <- err
 	}()
-	_, perr := store.Put(ctx, key, pr)
+	w, perr := store.Put(ctx, key, pr)
 	_ = pr.CloseWithError(errors.New("the storage stopped reading"))
 	if merr := <-done; merr != nil && !errors.Is(merr, io.ErrClosedPipe) {
 		return 0, merr
 	}
 	if perr != nil {
 		return 0, storageError(perr, "the scan's metadata cannot be written")
+	}
+	if err := recordRewrite(ctx, u.cat, u.cfg.Clock.Now(), sc.SeriesUID, storage, w); err != nil {
+		return 0, err
 	}
 	return n, nil
 }

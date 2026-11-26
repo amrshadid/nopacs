@@ -1198,7 +1198,12 @@ CREATE TABLE scrub_jobs (
 -- manifest's (NULL for an orphan), the found ones what was read (NULL for
 -- an object missing). job_id is the job that found it; last_job and
 -- last_seen the latest job that found it again. cleared_at and clear_job
--- are set when a later scrub read the object good, and then never change.
+-- are set when a later scrub read the object good, and then never change;
+-- a replica's damage is cleared with its replica_damage row, by a scrub
+-- (clear_job its job) or by the replicator's verified copy (clear_job '').
+-- replica_of names the primary of storage when storage was a replica when
+-- the finding was made, '' otherwise: such a finding never marks its
+-- instance, and is the only kind cleared with no job.
 CREATE TABLE scrub_findings (
     id              TEXT    NOT NULL PRIMARY KEY,
     kind            TEXT    NOT NULL CHECK (kind IN ('missing', 'orphan', 'damaged', 'disagreeing', 'manifest_damaged')),
@@ -1219,7 +1224,9 @@ CREATE TABLE scrub_findings (
     last_seen       INTEGER NOT NULL,
     cleared_at      INTEGER,
     clear_job       TEXT    NOT NULL,
-    CHECK ((cleared_at IS NULL) = (clear_job = ''))
+    replica_of      TEXT    NOT NULL DEFAULT '',
+    CHECK (cleared_at IS NOT NULL OR clear_job = ''),
+    CHECK (cleared_at IS NULL OR clear_job <> '' OR replica_of <> '')
 ) STRICT;
 
 -- At most one finding that holds per object and kind; and the list's
@@ -1235,10 +1242,26 @@ CREATE INDEX scrub_findings_of_scan ON scrub_findings (storage, subject_label, s
 -- The findings that hold of an instance and mark it, which the clear of one
 -- of them reads to mark it again with another.
 CREATE INDEX scrub_findings_marking ON scrub_findings (sop_instance_uid)
-    WHERE cleared_at IS NULL AND kind IN ('missing', 'damaged');
+    WHERE cleared_at IS NULL AND kind IN ('missing', 'damaged') AND replica_of = '';
 
 -- A storage's scrubs, for the last one, which a scheduled scrub follows.
 CREATE INDEX scrub_jobs_by_storage ON scrub_jobs (storage);
+
+-- When each scan was last read whole (verified_at) and last checked by
+-- presence only (presence_at) on each storage, its own or a replica, NULL
+-- for never: the ground of a storage's coverage. Keyed by the storage's name
+-- and the scan's Series Instance UID, never an integer id, so it survives a
+-- rebuild; a row whose scan is gone is never read (the coverage reads the
+-- scans, then this), and is dropped when the scan leaves the catalog for
+-- good or its storage is removed. A commit that gives a scan more
+-- instances drops its rows: no read recorded covered them.
+CREATE TABLE scrub_verified (
+    storage     TEXT    NOT NULL,
+    series_uid  TEXT    NOT NULL,
+    verified_at INTEGER,
+    presence_at INTEGER,
+    PRIMARY KEY (storage, series_uid)
+) STRICT, WITHOUT ROWID;
 
 -- What a rebuild job does: the catalog made again from what the tenant's
 -- storages hold (their correction records, manifests and metadata) into a
@@ -1253,13 +1276,16 @@ CREATE INDEX scrub_jobs_by_storage ON scrub_jobs (storage);
 -- shadow the catalog in use, and never changes after. dropped is set once
 -- its shadow is removed, so a shadow a job left when it ended without its
 -- worker (its attempts ran out, or it was canceled while queued) is found
--- and removed.
+-- and removed. from_storage, when not '', is the one storage a compare
+-- reads every scan from (a replica a move is about to switch to).
 CREATE TABLE rebuild_jobs (
-    job_id    TEXT    NOT NULL PRIMARY KEY,
-    mode      TEXT    NOT NULL CHECK (mode IN ('compare', 'replace')),
-    scratch   TEXT    NOT NULL,
-    activated INTEGER NOT NULL CHECK (activated IN (0, 1)),
-    dropped   INTEGER NOT NULL CHECK (dropped IN (0, 1))
+    job_id       TEXT    NOT NULL PRIMARY KEY,
+    mode         TEXT    NOT NULL CHECK (mode IN ('compare', 'replace')),
+    scratch      TEXT    NOT NULL,
+    activated    INTEGER NOT NULL CHECK (activated IN (0, 1)),
+    dropped      INTEGER NOT NULL CHECK (dropped IN (0, 1)),
+    from_storage TEXT    NOT NULL DEFAULT '',
+    CHECK (from_storage = '' OR mode = 'compare')
 ) STRICT, WITHOUT ROWID;
 
 -- The differences a compare job found, by name, the first 1000 in the
@@ -1691,16 +1717,40 @@ CREATE INDEX replica_scans_lagging ON replica_scans (replica, queued_at) WHERE q
 -- An object of a replica a scrub or a read found missing or wrong, to copy
 -- again from the primary: sparse, so a replica that is whole holds none.
 -- sop_instance_uid is '' for the scan's manifest or metadata; the found
--- size and checksum are NULL for an object missing.
+-- size and checksum are NULL for an object missing. finding_id is the scrub
+-- finding recorded with it ('' for damage a read or a copy found), which is
+-- cleared when the damage is; on the scan's row ('') it is the manifest's,
+-- and sidecar_finding_id the metadata file's, so the one row keeps both
+-- and its end clears both.
 CREATE TABLE replica_damage (
-    replica          TEXT    NOT NULL,
-    series_uid       TEXT    NOT NULL,
-    sop_instance_uid TEXT    NOT NULL,
-    revision         INTEGER NOT NULL CHECK (revision >= 0),
-    found_size       INTEGER CHECK (found_size IS NULL OR found_size >= 0),
-    found_sha256     BLOB CHECK (found_sha256 IS NULL OR length(found_sha256) = 32),
-    found_at         INTEGER NOT NULL,
+    replica            TEXT    NOT NULL,
+    series_uid         TEXT    NOT NULL,
+    sop_instance_uid   TEXT    NOT NULL,
+    revision           INTEGER NOT NULL CHECK (revision >= 0),
+    found_size         INTEGER CHECK (found_size IS NULL OR found_size >= 0),
+    found_sha256       BLOB CHECK (found_sha256 IS NULL OR length(found_sha256) = 32),
+    found_at           INTEGER NOT NULL,
+    finding_id         TEXT    NOT NULL DEFAULT '',
+    sidecar_finding_id TEXT    NOT NULL DEFAULT '' CHECK (sidecar_finding_id = '' OR sop_instance_uid = ''),
     PRIMARY KEY (replica, series_uid, sop_instance_uid)
+) STRICT, WITHOUT ROWID;
+
+-- The SHA-256 of each scan's metadata file (its sidecar of headers) as last
+-- written, beside the digest of the manifest written with it: it holds only
+-- while the scan's manifest_sha256 is that manifest's, so a change of the
+-- scan that wrote a new manifest without telling the sidecar's digest (an
+-- older writer, a purge) leaves the sidecar unchecked, as a scan archived
+-- before digests were kept is, never checked against a digest that no
+-- longer describes it; a writer that puts a new file before it can record
+-- its digest (a pass that rewrites it, an instance delete's purge) drops
+-- the row first. Kept apart from scans so a rebuild, which reads the
+-- storages' files and does not hash them, does not compare it (it drops
+-- only the rows of scans it did not find again), and keyed by the Series
+-- Instance UID, never an integer id.
+CREATE TABLE scan_sidecars (
+    series_uid      TEXT NOT NULL PRIMARY KEY,
+    manifest_sha256 BLOB NOT NULL CHECK (length(manifest_sha256) = 32),
+    sha256          BLOB NOT NULL CHECK (length(sha256) = 32)
 ) STRICT, WITHOUT ROWID;
 
 -- A recall of an object of an archive-tier storage: one per object, shared

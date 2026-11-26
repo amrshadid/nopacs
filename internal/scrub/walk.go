@@ -32,6 +32,11 @@ import (
 // the job's scans, whose units each read their own storage. Within one
 // storage the walk is not resumable: a unit given back walks it again.
 func (u *unitRun) walk() outcome {
+	if !u.job.Target.Whole() {
+		// A scrub of one scan reads that scan alone: the look for objects
+		// outside every scan is a whole storage's.
+		return outcome{}
+	}
 	storages := []string{u.job.Storage}
 	if u.job.Storage == "" {
 		var err error

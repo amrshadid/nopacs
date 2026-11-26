@@ -366,21 +366,33 @@ func (s *scanCopy) copyObjects(ctx context.Context, objects []object) error {
 	return first
 }
 
-// copySidecar copies the scan's sidecar of headers, of which neither the
-// manifest nor the catalog holds a checksum: it is read once to learn its
-// size and SHA-256, then put with blob.PutConfirmed against them, so a
-// sidecar rewritten between the two reads is refused, not copied half old.
-// Nothing ties the sidecar read to the claimed manifest, and a reception
-// writes its next sidecar, then its next manifest, then commits: so after
-// the put the primary's manifest is read again and its sidecar measured
-// again, and the copy goes on only when the manifest is still the claim's
-// and the sidecar still the bytes put. Otherwise a reception not yet
-// committed is in flight, and the copy fails as a change. A scan archived
-// before sidecars has none, and none is copied.
+// copySidecar copies the scan's sidecar of headers. When the catalog keeps
+// its digest (the claim's SidecarSHA256, written in the commit that wrote
+// the claimed manifest), the sidecar is put with blob.PutConfirmed against
+// that digest, its size from the primary's Stat: bytes of another sidecar
+// (a reception's next one, put before its commit, or a rewrite) are
+// refused, and the copy fails as a change, so the replica never holds a
+// sidecar the catalog does not name beside the manifest it does.
+//
+// A scan whose digest the catalog does not keep (archived before it was
+// kept, or changed since by a writer that did not tell it) is copied as it
+// always was: the sidecar is read once to learn its size and SHA-256, then
+// put with blob.PutConfirmed against them, so a sidecar rewritten between
+// the two reads is refused, not copied half old. Nothing then ties the
+// sidecar read to the claimed manifest, and a reception writes its next
+// sidecar, then its next manifest, then commits: so after the put the
+// primary's manifest is read again and its sidecar measured again, and the
+// copy goes on only when the manifest is still the claim's and the sidecar
+// still the bytes put. Otherwise a reception not yet committed is in
+// flight, and the copy fails as a change. A scan archived before sidecars
+// has none, and none is copied.
 func (s *scanCopy) copySidecar(ctx context.Context) error {
 	key, err := layout.MetadataKey(s.c.Path)
 	if err != nil {
 		return fault.Wrap(fault.Internal, err, "the scan's labels make no key")
+	}
+	if !s.c.SidecarSHA256.IsZero() {
+		return s.copyKnownSidecar(ctx, key)
 	}
 	size, sum, err := s.measure(ctx, s.primary, key)
 	if fault.KindOf(err) == fault.NotFound {
@@ -410,6 +422,25 @@ func (s *scanCopy) copySidecar(ctx context.Context) error {
 		return changed("the primary's sidecar changed while it was copied")
 	}
 	return nil
+}
+
+// copyKnownSidecar puts the primary's sidecar at key on the replica against
+// the catalog's digest of it (copySidecar).
+func (s *scanCopy) copyKnownSidecar(ctx context.Context, key string) error {
+	info, err := s.primary.Stat(ctx, key)
+	switch {
+	case fault.KindOf(err) == fault.NotFound:
+		return changed("the primary's sidecar is not there though the catalog keeps its digest")
+	case err != nil:
+		return onPrimary(err, "the primary's sidecar of the scan could not be read")
+	}
+	release, err := s.w.slot(ctx, s.c.Fence.Replica)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return s.put(ctx, key, info.Size, [sha256.Size]byte(s.c.SidecarSHA256),
+		func(c context.Context) (io.ReadCloser, error) { return s.primary.Read(c, key, 0, -1) }, "", true)
 }
 
 // putManifest puts the manifest's bytes, read and checked against the

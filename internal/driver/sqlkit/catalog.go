@@ -38,6 +38,11 @@ const (
 		instance_count, bytes, storage, receiver, updated`
 	ScanColumns = `id, created, subject_folded, session_folded, folded, description_folded, subject_label, session_label, label,
 		series_uid, modality, series_description, series_number, instances, bytes, storage, manifest_sha256, receiver, updated`
+	// scanSidecarColumn is the digest of a scan's metadata file that holds
+	// with its manifest digest (scan_sidecars), read beside ScanColumns by
+	// the read of one scan only: scan_sidecars' key, one lookup.
+	scanSidecarColumn = `(SELECT c.sha256 FROM scan_sidecars AS c WHERE c.series_uid = scans.series_uid
+		AND c.manifest_sha256 = scans.manifest_sha256)`
 	// HeldInstanceColumns are what an instance row keeps of
 	// tenant.ScanInstance, as the pipeline's ScanInstances reads them; the
 	// storage and the labels its key is made from are its scan's
@@ -379,7 +384,7 @@ func (c CatalogSQL) ScanByLabels(p label.Path) CatalogRead {
 	b.where("subject_label = %s", p.Subject)
 	b.where("session_label = %s", p.Session)
 	b.where("label = %s", p.Scan)
-	return b.one(ScanColumns, "scans")
+	return b.one(ScanColumns+", "+scanSidecarColumn, "scans")
 }
 
 // SessionsByID returns the read of the sessions of these ids, each a

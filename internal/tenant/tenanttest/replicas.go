@@ -56,6 +56,17 @@ func runReplication(t *testing.T, open OpenEvents, scratch Scratch) {
 		{"PurgeStepsOweRecords", testPurgeStepsOweRecords},
 		{"DropRecordOwed", testDropRecordOwed},
 		{"DetachAbandonsUnseeded", testDetachAbandonsUnseeded},
+		{"ScrubOfAReplica", testScrubOfAReplica},
+		{"ScrubOfOneScan", testScrubOfOneScan},
+		{"ScrubOfOneScanLeavesTheSchedule", testScrubOfOneScanLeavesTheSchedule},
+		{"ScrubVerifications", testScrubVerifications},
+		{"ReplicaDamageFindings", testReplicaDamageFindings},
+		{"SidecarDigest", testSidecarDigest},
+		{"ForgetSidecar", testForgetSidecar},
+		{"PurgeKeepsNoMetadataDigest", testPurgeKeepsNoMetadataDigest},
+		{"VerifiedFollowsTheScan", testVerifiedFollowsTheScan},
+		{"ReplicaScanDamageKeepsBothFindings", testReplicaScanDamageKeepsBothFindings},
+		{"RebuildFromStorage", testRebuildFromStorage},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

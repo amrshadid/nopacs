@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/snapshot"
@@ -174,7 +175,9 @@ func testCorrectionPurgeCopies(e *renv) {
 // testRelabelKeepsReplicaInStep guards a relabel's publish on a replica: a
 // scan the relabel copied to in step, at the new manifest's digest, stays
 // in step there at that digest, so a read may turn to it at once; a scan
-// whose replica manifest is not the new one is queued.
+// whose replica manifest is not the new one is queued; and the metadata
+// digest the publish is told is kept with the new manifest, none for a scan
+// it is not told of.
 func testRelabelKeepsReplicaInStep(e *renv) {
 	e.replicaSetup()
 	e.attach("copy", "store", 10)
@@ -192,8 +195,18 @@ func testRelabelKeepsReplicaInStep(e *renv) {
 	}
 	_, err = e.p.CommitCorrection(e.ctx, tenant.CorrectionCommit{ID: id, Now: at(31), Grace: time.Hour,
 		Manifests:        map[string]tenant.SHA256{seriesA: sum(500), seriesB: sum(501)},
+		Sidecars:         map[string]tenant.SHA256{seriesA: sum(600)},
 		ReplicaManifests: map[string]map[string]tenant.SHA256{"copy": {seriesA: sum(500), seriesB: sum(999)}}})
 	e.ok("CommitCorrection", err)
+	// Each metadata file written with a new manifest keeps its digest; one
+	// not told keeps none.
+	for series, want := range map[string]tenant.SHA256{seriesA: sum(600), seriesB: {}} {
+		sc, err := e.p.CatalogScan(e.ctx, label.Path{Subject: "sub-01", Session: "ses-2", Scan: "scan-" + series})
+		e.ok("CatalogScan", err)
+		if sc.SidecarSHA256 != want {
+			e.Errorf("the relabeled scan of %s reads metadata digest %x, want %x", series, sc.SidecarSHA256[:4], want[:4])
+		}
+	}
 	a, err := e.p.ReplicaScan(e.ctx, "copy", seriesA)
 	e.ok("ReplicaScan", err)
 	if a.State != tenant.ReplicaInStep || a.ManifestSHA256 != sum(500) {

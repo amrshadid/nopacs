@@ -19,62 +19,26 @@ import (
 //
 // It is computed from when each scan was last read whole on each storage,
 // which a scan's unit records at its end on every copy it read
-// (VerificationRecorder), never from the job counts: a scrub of one
-// storage, a scrub of the whole tenant and a request to scrub one instance
-// all read objects, and only the time of the read says whether an object
-// is covered.
+// (tenant.VerificationRecorder, which the tenant's database keeps), never
+// from the job counts: a scrub of one storage, a scrub of the whole tenant
+// and a request to scrub one instance all read objects, and only the time
+// of the read says whether an object is covered.
 
-// ScanVerified is what a scan's unit records of one copy of a scan it read
-// to its end: the scan on the storage, and when.
-type ScanVerified struct {
-	// Fence is the unit's lease, so a unit that lost it records nothing.
-	Fence tenant.WorkFence
-	// Storage names the storage read: the scan's own, or one of its
-	// replicas.
-	Storage string
-	// Path names the scan.
-	Path label.Path
-	// ByPresence says some of its objects were checked by presence only
-	// (the archive tier), not read.
-	ByPresence bool
-	// At is when the unit ended the scan on the storage.
-	At time.Time
-}
+// ScanVerified is tenant.ScanVerified, the record of one copy of a scan a
+// unit read to its end.
+type ScanVerified = tenant.ScanVerified
 
-// VerificationRecorder records when each scan was last read whole on each
-// storage: the ground of coverage.
-type VerificationRecorder interface {
-	// RecordScanVerified records v, replacing what was recorded of the
-	// same scan and storage, under v.Fence; a fence that no longer holds
-	// is tenant.ErrLeaseLost.
-	RecordScanVerified(ctx context.Context, v ScanVerified) error
-}
+// VerificationRecorder is tenant.VerificationRecorder, which records when
+// each scan was last read whole on each storage.
+type VerificationRecorder = tenant.VerificationRecorder
 
-// ScanVerification is what is recorded of one scan on one storage, as
-// Coverage reads it.
-type ScanVerification struct {
-	// Objects counts the scan's objects the catalog holds.
-	Objects int64
-	// Held is when the scan's first object was archived: an object never
-	// verified is overdue once one interval has passed since.
-	Held time.Time
-	// Verified is when the scan was last read whole on the storage; zero
-	// for never.
-	Verified time.Time
-	// Presence is when its objects were last checked by presence only;
-	// zero for never.
-	Presence time.Time
-}
+// ScanVerification is tenant.ScanVerification, what is recorded of one
+// scan on one storage, as Coverage reads it.
+type ScanVerification = tenant.ScanVerification
 
-// VerificationSource answers what is recorded of the scans of a storage,
-// a page at a time.
-type VerificationSource interface {
-	// ScanVerifications answers a page of at most limit of the scans the
-	// storage holds (a replica holds its primary's), after the cursor
-	// ("" for the first page), and the cursor of the next page, "" after
-	// the last.
-	ScanVerifications(ctx context.Context, storage, after string, limit int) ([]ScanVerification, string, error)
-}
+// VerificationSource is tenant.VerificationSource, which answers what is
+// recorded of the scans of a storage, a page at a time.
+type VerificationSource = tenant.VerificationSource
 
 // StorageCoverage is one storage's coverage.
 type StorageCoverage struct {

@@ -150,6 +150,9 @@ func (k Sending) DetachReplica(ctx context.Context, d tenant.ReplicaDetach, audi
 		if err := k.abandonCopies(ctx, tx, r, abandoned, d.Reason, d.Now); err != nil {
 			return err
 		}
+		if err := k.clearDamageFindings(ctx, tx, `replica = ?`, []any{d.Replica}, "", d.Now); err != nil {
+			return err
+		}
 		for _, q := range []string{`DELETE FROM replica_damage WHERE replica = ?`, `DELETE FROM replica_scans WHERE replica = ?`,
 			`DELETE FROM replica_totals WHERE replica = ?`, `DELETE FROM correction_records_owed WHERE storage = ?`} {
 			if _, err := tx.Exec(ctx, q, d.Replica); err != nil {
@@ -450,6 +453,9 @@ func (k Sending) claimOne(ctx context.Context, tx SendingTx, replica, series, ow
 	}
 	c := tenant.ReplicaClaim{Fence: tenant.ReplicaFence{Replica: replica, SeriesUID: series, Attempt: row.Attempt + 1},
 		Primary: primary, StudyUID: s.study, Path: s.path, ManifestSHA256: ToSHA256(s.manifest), Backfill: row.Backfill}
+	if c.SidecarSHA256, err = sidecarOf(ctx, tx, series, s.manifest); err != nil {
+		return c, true, err
+	}
 	err = tx.Query(ctx, `SELECT sop_instance_uid, revision, found_size, found_sha256, found_at FROM replica_damage
 		WHERE replica = ? AND series_uid = ? ORDER BY sop_instance_uid LIMIT ?`, []any{replica, series, tenant.MaxReplicaDamage + 1},
 		func(r Row) error {
@@ -551,6 +557,12 @@ func (k Sending) EndReplicaScan(ctx context.Context, fence tenant.ReplicaFence, 
 		}
 		var t totals
 		if row.seq == row.claimed && ToSHA256(s.manifest) == manifest {
+			// The copy put every damaged object again, verified: the
+			// findings recorded with the damage go with it.
+			if err := k.clearDamageFindings(ctx, tx, `replica = ? AND series_uid = ?`, []any{fence.Replica, fence.SeriesUID}, "",
+				now); err != nil {
+				return err
+			}
 			n, err := tx.Exec(ctx, `DELETE FROM replica_damage WHERE replica = ? AND series_uid = ?`, fence.Replica, fence.SeriesUID)
 			if err != nil {
 				return err

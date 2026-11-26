@@ -195,7 +195,7 @@ func (s *Supervisor) syncTenants() {
 // newTenantRun returns the worker of the tenant named name, not started.
 func (s *Supervisor) newTenantRun(name string) *tenantRun {
 	return &tenantRun{sup: s, name: name, log: s.log.With("tenant", name), poke: make(chan struct{}, 1), retired: make(chan struct{}),
-		pacers: map[string]*pacer{}, requestMade: map[string]time.Time{}, requestWaitLogged: map[string]bool{}}
+		pacers: map[string]*pacer{}}
 }
 
 // retireAll retires every tenant's worker, at Stop.
@@ -230,12 +230,6 @@ type tenantRun struct {
 	// whichever unit reads it.
 	pacersMu sync.Mutex
 	pacers   map[string]*pacer
-
-	// requestMade is when the worker last made, or found made, a scrub for
-	// requests of each storage, and requestWaitLogged says it logged since
-	// that requests wait (requestJob). Used by the worker's goroutine only.
-	requestMade       map[string]time.Time
-	requestWaitLogged map[string]bool
 }
 
 // wake makes the worker look for work at once. It never blocks.
@@ -322,7 +316,7 @@ func (t *tenantRun) claimAll() bool {
 		cancel()
 		if err != nil {
 			<-t.sup.units
-			if fault.KindOf(err) == fault.NotFound && t.requestJob(p, st) {
+			if fault.KindOf(err) == fault.NotFound && t.requestJob(p) {
 				continue // a scrub made for requests waiting: its first unit is due now
 			}
 			if fault.KindOf(err) != fault.NotFound && t.sup.hard.Err() == nil {

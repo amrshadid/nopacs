@@ -166,7 +166,24 @@ func (c CatalogReader[T]) sessionByLabels(ctx context.Context, subjectLabel, ses
 
 // scanByLabels reads the scan with these labels, or NotFound.
 func (c CatalogReader[T]) scanByLabels(ctx context.Context, p label.Path) (scanRow, error) {
-	return one(ctx, c.Run, "the tenant has no scan with these labels", "the scan cannot be read", c.SQL.ScanByLabels(p), c.scanScan)
+	return one(ctx, c.Run, "the tenant has no scan with these labels", "the scan cannot be read", c.SQL.ScanByLabels(p), c.scanOneScan)
+}
+
+// scanOneScan reads a row of ScanColumns and scanSidecarColumn.
+func (c CatalogReader[T]) scanOneScan(row Row, r *scanRow) error {
+	var created, updated T
+	var number *int32
+	var manifest, sidecar []byte
+	err := row.Scan(&r.key.ID, &created, &r.key.SubjectFolded, &r.key.SessionFolded, &r.key.Folded, &r.key.DescriptionFolded,
+		&r.s.SubjectLabel, &r.s.SessionLabel, &r.s.Label, &r.s.SeriesUID, &r.s.Values.Modality, &r.s.Values.SeriesDescription,
+		&number, &r.s.Instances, &r.s.Bytes, &r.s.Storage, &manifest, &r.s.Receiver, &updated, &sidecar)
+	if number != nil {
+		r.s.Values.SeriesNumber, r.s.Values.HasSeriesNumber = *number, true
+	}
+	r.s.ManifestSHA256, r.s.SidecarSHA256 = ToSHA256(manifest), ToSHA256(sidecar)
+	r.key.Created, r.s.Updated = c.Time(created), c.Time(updated)
+	r.s.Created = r.key.Created
+	return err
 }
 
 // tenantTotal returns the tenant's running total that pick chooses.

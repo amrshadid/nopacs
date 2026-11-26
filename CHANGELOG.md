@@ -363,6 +363,20 @@ scan, keeps it whole, and serves it through an API with keys.
   correction of the scan or a switch is under way; if the catalog changed by
   the end, the finding stays open. One repair per storage at a time, with
   counts, tallies and cancel like other jobs. Not yet started by the server.
+- A scrub of a replica reads its primary's scans on the replica; a scrub can
+  name one scan, and a read that finds an instance's bytes wrong makes a scrub
+  of that scan without moving the storage's scheduled scrub; when each scan
+  was last read whole on each storage is kept for coverage; damage a scrub
+  finds on a replica is listed among the scrub findings, naming its primary,
+  and cleared with it.
+- Each scan's metadata file keeps its SHA-256 beside the manifest's: replicas
+  copy the file against it, scrubs and reads served by a replica check it,
+  the pass that adds frame tables records the file it rewrites (a record
+  lost is recovered on the next pass), and a delete's purge leaves the file
+  unchecked rather than wrongly checked.
+- A rebuild compare can read one named storage, a replica among them, alone,
+  against that storage's primary only. Receivers refuse new associations
+  with `storage_switching` while their storage switches, each counted.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

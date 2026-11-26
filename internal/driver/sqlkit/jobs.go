@@ -180,7 +180,7 @@ func (k Sending) CreateJob(ctx context.Context, j tenant.NewJob, audit master.Au
 				return tenant.Precondition("the tenant has no sender named " + j.Sender)
 			}
 		} else if kind == tenant.JobScrub {
-			if err := k.checkScrubJob(ctx, tx, j.Storage); err != nil {
+			if err := k.checkScrubJob(ctx, tx, j.Storage, !j.Target.Whole()); err != nil {
 				return err
 			}
 		} else if kind == tenant.JobRebuild {
@@ -227,8 +227,9 @@ func (k Sending) CreateJob(ctx context.Context, j tenant.NewJob, audit master.Au
 			}
 		}
 		if kind == tenant.JobRebuild {
-			if _, err := tx.Exec(ctx, `INSERT INTO rebuild_jobs (job_id, mode, scratch, activated, dropped) VALUES (?, ?, ?, ?, ?)`,
-				j.ID, string(j.Rebuild.Mode), j.Rebuild.Scratch, k.D.Bool(false), k.D.Bool(false)); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO rebuild_jobs (job_id, mode, scratch, activated, dropped, from_storage)
+				VALUES (?, ?, ?, ?, ?, ?)`, j.ID, string(j.Rebuild.Mode), j.Rebuild.Scratch, k.D.Bool(false), k.D.Bool(false),
+				j.Rebuild.FromStorage); err != nil {
 				return err
 			}
 		}

@@ -26,12 +26,14 @@ type Clock interface {
 	After(d time.Duration) <-chan time.Time
 }
 
-// Catalog lists a tenant's scans and fills in the header values of one
-// archived without them, which is all the pass asks of its database.
+// Catalog lists a tenant's scans, fills in the header values of one
+// archived without them, and keeps the digest of each metadata file
+// (DigestCatalog), which is all the pass asks of its database.
 type Catalog interface {
 	// ListScans is tenant.ScanReads.ListScans.
 	ListScans(ctx context.Context, filter tenant.ScanFilter, page master.Page) (tenant.CatalogPage[tenant.CatalogScan], error)
 	tenant.ScanValueFill
+	DigestCatalog
 }
 
 // The pass's bounds and pace.
@@ -136,7 +138,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 		}
 		for _, sc := range page.Items {
 			path := label.Path{Subject: sc.SubjectLabel, Session: sc.SessionLabel, Scan: sc.Label}
-			if err := r.scan(ctx, sc.Storage, path); err != nil {
+			if err := r.scan(ctx, sc.Storage, path, sc.SeriesUID); err != nil {
 				return r.rep, err
 			}
 			if sc.Values.Modality == "" {
@@ -228,6 +230,24 @@ func (r *runner) event(ctx context.Context, p *tenant.FramesAdded, keyed string)
 	if r.cfg.Wake != nil {
 		r.cfg.Wake()
 	}
+}
+
+// recordRewrite tells the catalog that the metadata file of the scan of
+// series on storage was rewritten as the bytes w, still under the scan's
+// lock and the gate's admission: the catalog keeps the file's digest and
+// queues the scan's replicas, which hold the old file. A file rewritten
+// without its manifest is otherwise news to nothing that copies or checks
+// it. The digest of the file it replaced was dropped before the put
+// (forgetDigest), so a record that fails here leaves the file unchecked
+// until the next pass records it (settleDigest).
+func recordRewrite(ctx context.Context, rec tenant.SidecarRewrites, now time.Time, series, storage string, w blob.Written) error {
+	if rec == nil || tenant.SHA256(w.SHA256).IsZero() {
+		return nil
+	}
+	if _, err := rec.RecordSidecarRewritten(ctx, series, storage, tenant.SHA256(w.SHA256), now); err != nil {
+		return err
+	}
+	return nil
 }
 
 // metadataKey returns the key of the scan's sidecar.

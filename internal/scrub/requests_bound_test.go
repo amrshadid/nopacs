@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,14 +97,21 @@ func TestFailingRequestDoesNotHoldBackTheScrub(t *testing.T) {
 	}
 }
 
-// TestRequestScrubsAreBoundedByTheInterval guards that requests make at
-// most one scrub of a storage per scrub.interval when no scrub runs: a
-// second request-driven scrub within the interval is not made, even once
-// the first has ended, and one is made again once the interval has passed.
-func TestRequestScrubsAreBoundedByTheInterval(t *testing.T) {
+// TestRequestScrubIsScanSized guards that a request, when no scrub runs,
+// makes a scrub of the one scan it names on that scan's storage, not of the
+// whole storage: the job names the scan, its run reads that scan's
+// instances only (another scan of the storage is not read, and no walk for
+// orphans is made), and a later request makes another such scrub once the
+// first has ended, with no wait of a scrub.interval, while one queued
+// already serves.
+func TestRequestScrubIsScanSized(t *testing.T) {
 	f := newFixture(t)
 	files := synthetic("1.2.826.0.1.3680043.10.517", 1)
 	p := f.archiveEntries("s1", "1.2.826.0.1.3680043.10.517.90", "1.2.826.0.1.3680043.10.517.80", files)
+	f.archiveEntries("s2", "1.2.826.0.1.3680043.10.518.90", "1.2.826.0.1.3680043.10.518.80", synthetic("1.2.826.0.1.3680043.10.518", 3))
+	if _, err := f.store.Put(f.ctx, "data/stray.txt", strings.NewReader("an object no scan names")); err != nil {
+		t.Fatal(err)
+	}
 	clock := &stepClock{t: time.Now()}
 	cfg := f.config()
 	cfg.Now = clock.Now
@@ -113,9 +121,6 @@ func TestRequestScrubsAreBoundedByTheInterval(t *testing.T) {
 		t.Fatal(err)
 	}
 	tr := s.newTenantRun("lab")
-	if got := s.requests.add("lab", InstanceRequest{Path: p, SOPInstanceUID: files[0].uid}); got != RequestQueued {
-		t.Fatalf("the request answered %s; want queued", got)
-	}
 	jobs := func() []tenant.Job {
 		t.Helper()
 		js, _, err := f.p.ListJobs(f.ctx, tenant.JobFilter{}, pageOf(10))
@@ -124,27 +129,40 @@ func TestRequestScrubsAreBoundedByTheInterval(t *testing.T) {
 		}
 		return js
 	}
-	endAll := func() {
-		t.Helper()
-		for _, j := range jobs() {
-			if !j.State.Ended() {
-				if _, err := f.p.CancelJob(f.ctx, j.ID, clock.Now(), f.audit(), nil); err != nil {
-					t.Fatal(err)
-				}
-			}
-		}
+	if got := s.requests.add("lab", InstanceRequest{Path: p, SOPInstanceUID: files[0].uid}); got != RequestQueued {
+		t.Fatalf("the request answered %s; want queued", got)
 	}
-	if !tr.requestJob(f.p, f.p) || len(jobs()) != 1 {
+	if !tr.requestJob(f.p) || len(jobs()) != 1 {
 		t.Fatalf("the first request-driven look made %d scrubs; want 1", len(jobs()))
 	}
-	endAll()
-	clock.add(2 * time.Minute)
-	if tr.requestJob(f.p, f.p) || len(jobs()) != 1 {
-		t.Errorf("a look within scrub.interval made %d scrubs in all; want still 1", len(jobs()))
+	j := jobs()[0]
+	want := tenant.JobTarget{SubjectLabel: p.Subject, SessionLabel: p.Session, ScanLabel: p.Scan}
+	if j.Kind != tenant.JobScrub || j.Storage != "main" || j.Target != want {
+		t.Fatalf("the scrub made for a request is %s of %q targeting %+v; want a scrub of main targeting %+v", j.Kind, j.Storage, j.Target, want)
 	}
-	clock.add(time.Hour)
-	if !tr.requestJob(f.p, f.p) || len(jobs()) != 2 {
-		t.Errorf("a look once scrub.interval passed made %d scrubs in all; want 2", len(jobs()))
+	clock.add(time.Second)
+	if tr.requestJob(f.p) || len(jobs()) != 1 {
+		t.Errorf("a look while the request's scrub is queued made %d scrubs in all; want still 1", len(jobs()))
+	}
+	run := f.start(f.config())
+	got := f.waitEnded(run, j.ID)
+	stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := run.Stop(stopCtx); err != nil {
+		t.Fatal(err)
+	}
+	if got.Counts.Scans != 1 || got.Counts.InstancesSent != 1 {
+		t.Errorf("the request's scrub read %d scans and %d instances; want the one scan of 1 instance", got.Counts.Scans,
+			got.Counts.InstancesSent)
+	}
+	if found := f.findings(false); len(found) != 0 {
+		t.Errorf("the request's scrub recorded %v; a scrub of one scan does not walk the storage for orphans", found)
+	}
+	// The request still waits in this supervisor (another ran the job), as a
+	// request made after the first scrub ended would.
+	clock.add(2 * time.Minute)
+	if !tr.requestJob(f.p) || len(jobs()) != 2 {
+		t.Errorf("a request after the first scrub ended made %d scrubs in all; want 2, with no wait of an interval", len(jobs()))
 	}
 }
 

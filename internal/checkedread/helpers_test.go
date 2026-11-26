@@ -302,6 +302,9 @@ type faulty struct {
 	fail          error
 	offline, flip bool
 	reads, stats  int
+	// sum, when set, is the SHA-256 Stat says the storage keeps of every
+	// object, as an S3 server that checked it at put says.
+	sum *tenant.SHA256
 }
 
 // set changes the store's faults under its lock.
@@ -346,7 +349,7 @@ func (s *faulty) Read(ctx context.Context, key string, offset, length int64) (io
 func (s *faulty) Stat(ctx context.Context, key string) (blob.Info, error) {
 	s.mu.Lock()
 	s.stats++
-	fail, offline := s.fail, s.offline
+	fail, offline, sum := s.fail, s.offline, s.sum
 	s.mu.Unlock()
 	if fail != nil {
 		return blob.Info{}, fail
@@ -354,6 +357,9 @@ func (s *faulty) Stat(ctx context.Context, key string) (blob.Info, error) {
 	info, err := s.Store.Stat(ctx, key)
 	if offline {
 		info.State = blob.Archived
+	}
+	if sum != nil {
+		info.SHA256, info.HasSHA256 = [32]byte(*sum), true
 	}
 	return info, err
 }

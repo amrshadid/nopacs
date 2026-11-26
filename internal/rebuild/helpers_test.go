@@ -133,12 +133,20 @@ func (r *rig) audit() master.AuditEntry {
 // until every reception is done.
 func (r *rig) archive(names ...string) {
 	r.t.Helper()
+	r.archiveOn(r.storage, names...)
+}
+
+// archiveOn runs the corpus files named through the real pipeline, every
+// storage name answered with store, and waits until every reception is
+// done.
+func (r *rig) archiveOn(store blob.Store, names ...string) {
+	r.t.Helper()
 	hasher, err := naming.NewHasher(bytes.Repeat([]byte{9}, naming.MinKeyLength))
 	if err != nil {
 		r.t.Fatal(err)
 	}
 	p, err := receive.New(receive.Config{Tenant: "lab", Store: r.p, Hasher: hasher, Clock: r.clock,
-		OpenStorage:  func(context.Context, string) (blob.Store, error) { return r.storage, nil },
+		OpenStorage:  func(context.Context, string) (blob.Store, error) { return store, nil },
 		IncomingRoot: filepath.Join(r.dataDir, "incoming"), Workers: 2, Lease: 30 * time.Second, PollInterval: time.Second,
 		BatchInterval: time.Second, RetryInterval: 5 * time.Second})
 	if err != nil {

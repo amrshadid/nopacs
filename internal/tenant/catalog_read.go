@@ -472,6 +472,12 @@ type CatalogScan struct {
 	Storage string
 	// ManifestSHA256 is the checksum of its manifest as last written.
 	ManifestSHA256 SHA256
+	// SidecarSHA256 is the checksum of its metadata file as written with
+	// that manifest; zero when the catalog keeps none for it (a scan
+	// archived before the digest was kept, or changed since by a writer
+	// that did not tell it), whose metadata file is then not checked
+	// against one.
+	SidecarSHA256 SHA256
 	// Receiver is the receiver whose reception first archived into it.
 	Receiver string
 	// Created is when its first file was archived, the earliest held time

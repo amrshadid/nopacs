@@ -57,6 +57,7 @@ const (
 	PhraseStopping               = "the server is stopping"
 	PhraseCouldNotStart          = "the receiver could not start"
 	PhraseIncomingLimit          = "the tenant's incoming limit is reached"
+	PhraseStorageSwitching       = "the storage is being switched to its replica"
 )
 
 // healthPhrases are the reasons a receiver is down, the contract's
@@ -73,7 +74,7 @@ var healthPhrases = map[ReceiverDownReason][]string{
 	DownNearlyFull:     {PhraseIncomingFull, PhraseStorageFull},
 	DownTenantNotReady: {PhraseTenantNotReady, PhraseTenantUpgrading, PhraseTenantRebuilding},
 	DownStopping:       {PhraseStopping},
-	DownOther:          {PhraseCouldNotStart},
+	DownOther:          {PhraseCouldNotStart, PhraseStorageSwitching},
 	DownIncomingLimit:  {PhraseIncomingLimit},
 }
 

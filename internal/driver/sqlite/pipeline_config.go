@@ -292,6 +292,9 @@ func (t *Tenant) RemoveStorage(ctx context.Context, name string, audit master.Au
 		if _, err := tx.ExecContext(ctx, `DELETE FROM storages WHERE name = ?`, name); err != nil {
 			return err
 		}
+		if err := sqlkit.DropStorageVerifiedInTx(ctx, sendingTx{tx: tx}, name); err != nil {
+			return err
+		}
 		out = stored
 		return audited(ctx, tx, st, audit, guard)
 	})

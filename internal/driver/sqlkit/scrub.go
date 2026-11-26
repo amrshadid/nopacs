@@ -25,7 +25,7 @@ const ListScrubFindings = "tenant-scrub-findings"
 
 // findingColumns are a finding's columns as the store reads them.
 const findingColumns = `id, kind, storage, object_key, subject_label, session_label, scan_label, sop_instance_uid, revision,
-	expected_size, found_size, expected_sha256, found_sha256, job_id, found_at, last_job, last_seen, cleared_at, clear_job`
+	expected_size, found_size, expected_sha256, found_sha256, job_id, found_at, last_job, last_seen, cleared_at, clear_job, replica_of`
 
 // The statements of scrubs that read tables which grow, each a range or a
 // lookup of the index named beside it.
@@ -42,30 +42,37 @@ const (
 		AND session_label = ? AND scan_label = ? AND cleared_at IS NULL AND kind NOT IN ('missing', 'damaged')
 		AND (object_key, kind) > (?, ?) ORDER BY object_key, kind LIMIT ?`
 	// markingFindingSQL reads the first other finding that holds of an
-	// instance and marks it: scrub_findings_marking.
+	// instance and marks it: scrub_findings_marking. A finding of a
+	// replica's copy never marks the instance.
 	markingFindingSQL = `SELECT id FROM scrub_findings WHERE sop_instance_uid = ? AND cleared_at IS NULL
-		AND kind IN ('missing', 'damaged') ORDER BY id LIMIT 1`
-	// lastScrubSQL reads the scrub of a storage made last: scrub_jobs_by_storage,
-	// whose rows are few (one per scrub), each joined to its job by the key.
+		AND kind IN ('missing', 'damaged') AND replica_of = '' ORDER BY id LIMIT 1`
+	// lastScrubSQL reads the scrub of a whole storage made last (a scrub of
+	// one scan names its scan): scrub_jobs_by_storage, whose rows are few
+	// (one per scrub), each joined to its job by the key.
 	lastScrubSQL = `SELECT s.job_id FROM scrub_jobs AS s JOIN jobs AS j ON j.id = s.job_id WHERE s.storage = ?
-		ORDER BY j.created DESC, j.id DESC LIMIT 1`
+		AND j.scan_label = '' ORDER BY j.created DESC, j.id DESC LIMIT 1`
 	// openFindingCountsSQL counts the findings that hold by kind: the
 	// partial index scrub_findings_open, which holds those alone.
 	openFindingCountsSQL = `SELECT kind, count(*) FROM scrub_findings WHERE cleared_at IS NULL GROUP BY kind`
 	// scrubJobsInProgressSQL reads the storages of the scrub jobs not
 	// ended, before its condition on ended: few rows of jobs, then
 	// scrub_jobs' key.
-	scrubJobsInProgressSQL = `SELECT s.storage FROM jobs AS j JOIN scrub_jobs AS s ON s.job_id = j.id WHERE j.kind = 'scrub' AND `
+	scrubJobsInProgressSQL = `SELECT s.storage, j.scan_label FROM jobs AS j JOIN scrub_jobs AS s ON s.job_id = j.id
+		WHERE j.kind = 'scrub' AND `
 	// damageSQL reads the marks of instances: instance_damage's key.
 	damageSQL = `SELECT sop_instance_uid, finding_id FROM instance_damage WHERE sop_instance_uid IN (`
 )
 
 // checkScrubJob refuses a scrub of a storage the tenant does not have, and
 // one while another scrub of the same storage, or of every storage, is
-// queued or running. It serializes with the tenant's changes of
-// configuration, so two scrubs made at once on several writers cannot both
-// pass.
-func (k Sending) checkScrubJob(ctx context.Context, tx SendingTx, storage string) error {
+// queued or running. A scrub of one scan queued or running never refuses a
+// whole scrub: the two run together, each paced by the storage's rate, so
+// the scrub a read asked for cannot hold back the storage's scheduled one.
+// A scrub of one scan is still refused while any scrub of its storage
+// runs, which reads the scan's requests as well. It serializes with the
+// tenant's changes of configuration, so two scrubs made at once on several
+// writers cannot both pass.
+func (k Sending) checkScrubJob(ctx context.Context, tx SendingTx, storage string, oneScan bool) error {
 	if err := tx.LockConfig(ctx); err != nil {
 		return err
 	}
@@ -80,9 +87,12 @@ func (k Sending) checkScrubJob(ctx context.Context, tx SendingTx, storage string
 	}
 	busy := false
 	err := tx.Query(ctx, scrubJobsInProgressSQL+"j.ended = ?", []any{k.D.Bool(false)}, func(r Row) error {
-		var s string
-		if err := r.Scan(&s); err != nil {
+		var s, scan string
+		if err := r.Scan(&s, &scan); err != nil {
 			return err
+		}
+		if scan != "" && !oneScan {
+			return nil
 		}
 		if s == "" || storage == "" || s == storage {
 			busy = true
@@ -134,7 +144,7 @@ func scanFinding(row Row) (tenant.ScrubFinding, error) {
 	var foundAt, lastSeen, cleared DBTime
 	err := row.Scan(&f.ID, &kind, &f.Storage, &f.Key, &f.Path.Subject, &f.Path.Session, &f.Path.Scan, &f.SOPInstanceUID,
 		&f.Revision, &f.ExpectedSize, &f.FoundSize, &expected, &found, &f.Job, &foundAt, &f.LastJob, &lastSeen, &cleared,
-		&f.ClearJob)
+		&f.ClearJob, &f.ReplicaOf)
 	f.Kind = tenant.ScrubFindingKind(kind)
 	f.ExpectedSHA256, f.FoundSHA256 = ToSHA256(expected), ToSHA256(found)
 	f.Found, f.LastSeen, f.Cleared = foundAt.T, lastSeen.T, cleared.T
@@ -206,84 +216,98 @@ func (k Sending) RecordScrubFinding(ctx context.Context, rec tenant.ScrubFinding
 	if err := rec.Validate(); err != nil {
 		return tenant.ScrubFinding{}, false, err
 	}
-	f := rec.Finding
 	var out tenant.ScrubFinding
 	var made bool
 	err := k.Host.Write(ctx, "the scrub's finding cannot be recorded", func(tx SendingTx) error {
-		out, made = tenant.ScrubFinding{}, false
 		r, err := k.scrubJobOfUnit(ctx, tx, rec.Fence)
 		if err != nil {
 			return err
 		}
-		job := r.job.ID
-		tallies := map[string]int64{}
-		old, held, err := findingIn(ctx, tx, openFindingSQL+k.D.Lock, f.Storage, f.Key, string(f.Kind))
-		if err != nil {
-			return err
-		}
-		if held {
-			out = old
-			if old.LastJob == job {
-				return nil // seen by this job already: a write sent again
-			}
-			if _, err := tx.Exec(ctx, `UPDATE scrub_findings SET last_job = ?, last_seen = ? WHERE id = ?`,
-				job, k.D.Time(rec.Now), old.ID); err != nil {
-				return err
-			}
-			out.LastJob, out.LastSeen = job, rec.Now
-			tallies[tenant.ScrubTally(f.Kind)] = 1
-		} else {
-			insert := func(id string) (int64, error) {
-				return tx.Exec(ctx, `INSERT INTO scrub_findings (`+findingColumns+`)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '') ON CONFLICT (id) DO NOTHING`,
-					id, string(f.Kind), f.Storage, f.Key, f.Path.Subject, f.Path.Session, f.Path.Scan, f.SOPInstanceUID,
-					f.Revision, nullInt(f.ExpectedSize), nullInt(f.FoundSize), nullSHA(f.ExpectedSHA256), nullSHA(f.FoundSHA256),
-					job, k.D.Time(rec.Now), job, k.D.Time(rec.Now))
-			}
-			id := f.ID
-			n, err := insert(id)
-			if err == nil && n == 0 {
-				// The id names a finding no longer holding (the open one
-				// was looked for above): this job cleared it in a later
-				// attempt and finds the object wrong once more.
-				id = tenant.ScrubFindingIDAgain(f.ID, rec.Fence)
-				n, err = insert(id)
-			}
-			if err != nil {
-				return err
-			}
-			if n == 0 {
-				return fault.New(fault.Conflict, "a finding with this id exists and no longer holds")
-			}
-			if out, _, err = findingIn(ctx, tx, findingByIDSQL, id); err != nil {
-				return err
-			}
-			made = true
-			tallies[tenant.ScrubTally(f.Kind)] = 1
-			if f.Kind == tenant.FindingOrphan {
-				tallies[tenant.TallyOrphanObjects] = 1
-			}
-			e, err := tenant.ScrubFindingEvent(out, false, job, rec.Now)
-			if err != nil {
-				return err
-			}
-			if err := tx.WriteEvents(ctx, e); err != nil {
-				return err
-			}
-		}
-		if out.Kind.Marks() && out.SOPInstanceUID != "" {
-			if _, err := tx.Exec(ctx, `INSERT INTO instance_damage (sop_instance_uid, finding_id, marked_at) VALUES (?, ?, ?)
-				ON CONFLICT (sop_instance_uid) DO NOTHING`, out.SOPInstanceUID, out.ID, k.D.Time(rec.Now)); err != nil {
-				return err
-			}
-		}
-		if r.job.State.TakesProgress() {
-			return k.addTallies(ctx, tx, job, tallies)
-		}
-		return nil
+		out, made, err = k.recordFindingInTx(ctx, tx, r, rec)
+		return err
 	})
 	if err != nil {
 		return tenant.ScrubFinding{}, false, err
+	}
+	return out, made, nil
+}
+
+// recordFindingInTx records the finding of rec by the scrub job of r, whose
+// unit's fence was checked, in the caller's transaction, as
+// RecordScrubFinding says, and returns it as it is after and whether this
+// call made it. A finding of a storage that is a replica names its primary
+// (replica_of) and never marks its instance: the instance's reads keep
+// going to the primary.
+func (k Sending) recordFindingInTx(ctx context.Context, tx SendingTx, r jobRow, rec tenant.ScrubFindingRecord) (tenant.ScrubFinding, bool, error) {
+	f := rec.Finding
+	job := r.job.ID
+	tallies := map[string]int64{}
+	out, held, err := findingIn(ctx, tx, openFindingSQL+k.D.Lock, f.Storage, f.Key, string(f.Kind))
+	if err != nil {
+		return tenant.ScrubFinding{}, false, err
+	}
+	made := false
+	if held {
+		if out.LastJob == job {
+			return out, false, nil // seen by this job already: a write sent again
+		}
+		if _, err := tx.Exec(ctx, `UPDATE scrub_findings SET last_job = ?, last_seen = ? WHERE id = ?`,
+			job, k.D.Time(rec.Now), out.ID); err != nil {
+			return tenant.ScrubFinding{}, false, err
+		}
+		out.LastJob, out.LastSeen = job, rec.Now
+		tallies[tenant.ScrubTally(f.Kind)] = 1
+	} else {
+		var replicaOf string
+		if _, err := tx.QueryRow(ctx, `SELECT replica_of FROM storages WHERE name = ?`, []any{f.Storage}, &replicaOf); err != nil {
+			return tenant.ScrubFinding{}, false, err
+		}
+		insert := func(id string) (int64, error) {
+			return tx.Exec(ctx, `INSERT INTO scrub_findings (`+findingColumns+`)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?) ON CONFLICT (id) DO NOTHING`,
+				id, string(f.Kind), f.Storage, f.Key, f.Path.Subject, f.Path.Session, f.Path.Scan, f.SOPInstanceUID,
+				f.Revision, nullInt(f.ExpectedSize), nullInt(f.FoundSize), nullSHA(f.ExpectedSHA256), nullSHA(f.FoundSHA256),
+				job, k.D.Time(rec.Now), job, k.D.Time(rec.Now), replicaOf)
+		}
+		id := f.ID
+		n, err := insert(id)
+		if err == nil && n == 0 {
+			// The id names a finding no longer holding (the open one
+			// was looked for above): this job cleared it in a later
+			// attempt and finds the object wrong once more.
+			id = tenant.ScrubFindingIDAgain(f.ID, rec.Fence)
+			n, err = insert(id)
+		}
+		if err != nil {
+			return tenant.ScrubFinding{}, false, err
+		}
+		if n == 0 {
+			return tenant.ScrubFinding{}, false, fault.New(fault.Conflict, "a finding with this id exists and no longer holds")
+		}
+		if out, _, err = findingIn(ctx, tx, findingByIDSQL, id); err != nil {
+			return tenant.ScrubFinding{}, false, err
+		}
+		made = true
+		tallies[tenant.ScrubTally(f.Kind)] = 1
+		if f.Kind == tenant.FindingOrphan {
+			tallies[tenant.TallyOrphanObjects] = 1
+		}
+		e, err := tenant.ScrubFindingEvent(out, false, job, rec.Now)
+		if err != nil {
+			return tenant.ScrubFinding{}, false, err
+		}
+		if err := tx.WriteEvents(ctx, e); err != nil {
+			return tenant.ScrubFinding{}, false, err
+		}
+	}
+	if out.Kind.Marks() && out.SOPInstanceUID != "" && out.ReplicaOf == "" {
+		if _, err := tx.Exec(ctx, `INSERT INTO instance_damage (sop_instance_uid, finding_id, marked_at) VALUES (?, ?, ?)
+			ON CONFLICT (sop_instance_uid) DO NOTHING`, out.SOPInstanceUID, out.ID, k.D.Time(rec.Now)); err != nil {
+			return tenant.ScrubFinding{}, false, err
+		}
+	}
+	if r.job.State.TakesProgress() {
+		return out, made, k.addTallies(ctx, tx, job, tallies)
 	}
 	return out, made, nil
 }
@@ -527,7 +551,8 @@ func (k Sending) findingBinding(f tenant.ScrubFindingFilter) string {
 	for i, kind := range f.Kinds {
 		kinds[i] = string(kind)
 	}
-	return k.Host.Binding(strings.Join(kinds, ","), f.Storage, strconv.FormatBool(f.IncludeCleared))
+	return k.Host.Binding(strings.Join(kinds, ","), f.Storage, strconv.FormatBool(f.IncludeCleared), f.Path.Subject, f.Path.Session,
+		f.Path.Scan)
 }
 
 // FindingsQuery returns the statement and arguments of one page of
@@ -539,6 +564,10 @@ func (d SendingDialect) FindingsQuery(f tenant.ScrubFindingFilter, after []strin
 	var args []any
 	if f.Storage != "" {
 		where, args = append(where, "storage = ?"), append(args, f.Storage)
+	}
+	if f.Path != (label.Path{}) {
+		where = append(where, "subject_label = ? AND session_label = ? AND scan_label = ?")
+		args = append(args, f.Path.Subject, f.Path.Session, f.Path.Scan)
 	}
 	if !f.IncludeCleared {
 		where = append(where, "cleared_at IS NULL")

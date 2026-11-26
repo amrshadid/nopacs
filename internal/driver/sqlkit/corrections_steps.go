@@ -137,6 +137,13 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 		if err != nil {
 			return err
 		}
+		// Each metadata file written with a new manifest keeps its digest
+		// beside it; one not told keeps none.
+		for series, m := range cc.Manifests {
+			if err := SetSidecarInTx(ctx, tx, series, m, cc.Sidecars[series]); err != nil {
+				return err
+			}
+		}
 		// The publish changes what each scan's replicas must hold: a scan
 		// kept is queued again (but on a replica a relabel copied to in
 		// step), one hidden whole is dropped from them. Each replica is owed
@@ -511,7 +518,14 @@ func (k Sending) StartPurge(ctx context.Context, id string, now time.Time, audit
 	}
 	return k.step(ctx, id, "the correction's purge cannot be started", func(tx SendingTx, c *tenant.Correction) error {
 		switch c.State {
-		case corr.StatePurging, corr.StatePurged:
+		case corr.StatePurged:
+		case corr.StatePurging:
+			// Run again after a stop: a commit of the scan meanwhile kept
+			// no digest (SetSidecarInTx), but one kept before is dropped
+			// again all the same.
+			if err := dropPurgeSidecarsInTx(ctx, tx, c.ID); err != nil {
+				return err
+			}
 		case corr.StateCommitted:
 			if audit == nil && (c.Unresolved || c.PurgeAfter.After(now)) {
 				return tenant.Precondition("the correction's grace period has not ended")
@@ -533,6 +547,13 @@ func (k Sending) StartPurge(ctx context.Context, id string, now time.Time, audit
 				return err
 			}
 			if err := k.setState(ctx, tx, c, corr.StatePurging, now, ""); err != nil {
+				return err
+			}
+			// An instance delete's purge puts each copy's new metadata file
+			// before its end can record the new digest: the old digest kept
+			// until then would make every copy holding the new file read as
+			// damaged.
+			if err := dropPurgeSidecarsInTx(ctx, tx, c.ID); err != nil {
 				return err
 			}
 			// A copy of one of its scans claimed before now may have planned

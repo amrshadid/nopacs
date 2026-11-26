@@ -24,6 +24,9 @@ type gateState struct {
 	overLimit bool
 	// fullStorages are the tenant's storages below the reserve, by name.
 	fullStorages map[string]bool
+	// switching are the tenant's storages being switched to their
+	// replicas, by name: every write to one waits until the switch ends.
+	switching map[string]bool
 }
 
 // setGates replaces the gates with a copy changed by change.
@@ -36,17 +39,24 @@ func (t *tenantRun) setGates(change func(*gateState)) {
 
 // refusal returns why run's receiver refuses new associations and stores
 // now: the tenant's catalog being rebuilt or the tenant not ready, the
-// incoming disk or the receiver's storage below the reserve, the tenant over
-// its incoming limit; "" when none. A rebuild is answered as a tenant not
-// ready: a temporary failure the sender tries again (an association
-// rejected as transient, PS3.8 9.3.4, or a store in an open one answered
-// A700H, PS3.4 B.2.3; PS3.18 10.5.3, 503 with Retry-After), as for every
-// gate here.
+// receiver's storage being switched to its replica, the incoming disk or the
+// receiver's storage below the reserve, the tenant over its incoming limit;
+// "" when none. A rebuild is answered as a tenant not ready: a temporary
+// failure the sender tries again (an association rejected as transient,
+// PS3.8 9.3.4, or a store in an open one answered A700H, PS3.4 B.2.3;
+// PS3.18 10.5.3, 503 with Retry-After), as for every gate here. A refusal
+// for a switch is counted on the switch's gate, which records the count of
+// its pause.
 func (t *tenantRun) refusal(run *receiverRun) tenant.AssociationFailure {
 	g := t.gates.Load()
 	switch {
 	case g.rebuilding, g.notReady:
 		return tenant.FailureTenantNotReady
+	case g.switching[*run.storage.Load()]:
+		if gate := t.switchGate(); gate != nil {
+			gate.CountRefused(*run.storage.Load())
+		}
+		return tenant.FailureStorageSwitching
 	case g.incomingFull:
 		return tenant.FailureNearlyFull
 	case g.fullStorages[*run.storage.Load()]:
@@ -58,7 +68,11 @@ func (t *tenantRun) refusal(run *receiverRun) tenant.AssociationFailure {
 }
 
 // upHealth returns the health of a receiver whose listener runs: up, or
-// down for the gate that holds it, in the order refusal reads them.
+// down for the gate that holds it, in the order refusal reads them. A
+// receiver whose storage is being switched refuses every association until
+// the switch ends, so it is not answered up meanwhile; the contract names
+// no reason of its own for it, so it is down for another reason, with the
+// phrase that says which.
 func (t *tenantRun) upHealth(r tenant.Receiver, now time.Time) Health {
 	g := t.gates.Load()
 	switch {
@@ -66,6 +80,8 @@ func (t *tenantRun) upHealth(r tenant.Receiver, now time.Time) Health {
 		return down(tenant.DownTenantNotReady, tenant.PhraseTenantRebuilding, now)
 	case g.notReady:
 		return down(tenant.DownTenantNotReady, tenant.PhraseTenantNotReady, now)
+	case g.switching[r.Storage]:
+		return down(tenant.DownOther, tenant.PhraseStorageSwitching, now)
 	case g.incomingFull:
 		return down(tenant.DownNearlyFull, tenant.PhraseIncomingFull, now)
 	case g.fullStorages[r.Storage]:
@@ -133,8 +149,40 @@ func (t *tenantRun) checkSpace(st tenant.Store, p tenant.Pipeline, rows []tenant
 	g.fullStorages = full
 	t.space.usage = usage
 	g.overLimit = t.overLimit(ctx, st)
+	g.switching = t.switchingOf(ctx, storagesOf(rows), g.switching)
 	t.gates.Store(&g)
 	t.appendEvents(events, t.sup.cfg.Now())
+}
+
+// switchGate returns the gate of writes to the tenant's storages, nil when
+// the supervisor is given none.
+func (t *tenantRun) switchGate() SwitchGate {
+	if t.sup.cfg.Switches == nil {
+		return nil
+	}
+	return t.sup.cfg.Switches(t.name)
+}
+
+// switchingOf returns which of the storages named are being switched to
+// their replicas now. A storage whose state cannot be read keeps what was
+// last seen of it (was): a gate that does not answer neither opens nor
+// closes the receivers.
+func (t *tenantRun) switchingOf(ctx context.Context, names []string, was map[string]bool) map[string]bool {
+	gate := t.switchGate()
+	if gate == nil {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, name := range names {
+		on, err := gate.Switching(ctx, name)
+		if err != nil {
+			on = was[name]
+		}
+		if on {
+			out[name] = true
+		}
+	}
+	return out
 }
 
 // storageFull reads the space of the storage named name: whether its free

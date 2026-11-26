@@ -497,6 +497,12 @@ type CorrectionCommit struct {
 	// Manifests are, by Series Instance UID, the SHA-256 of the manifest a
 	// relabel or replace wrote for each scan it touches.
 	Manifests map[string]SHA256
+	// Sidecars are, by Series Instance UID, the SHA-256 of the metadata
+	// file written with the manifest of Manifests, kept with it
+	// (CatalogScan.SidecarSHA256). A scan whose manifest is given without
+	// its sidecar's digest keeps none, and its metadata file is not checked
+	// against one.
+	Sidecars map[string]SHA256
 	// Snapshots are, by Series Instance UID, what a delete of scans or a
 	// relabel read of each scan's manifest and metadata under the old labels
 	// before the publish: the objects its purge may remove, and only while

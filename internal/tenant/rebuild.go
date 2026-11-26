@@ -181,6 +181,13 @@ type RebuildJob struct {
 	// Scratch is the Postgres schema its shadow is built in; empty on
 	// SQLite.
 	Scratch string
+	// FromStorage, when not empty, names the one storage the rebuild reads
+	// every scan from, whatever storage the catalog places it on: the new
+	// store a move is about to switch to, read alone so its compare says
+	// whether it holds the whole catalog by itself. It may name a replica,
+	// and only a compare names one: a replace makes its shadow the catalog
+	// in use, which a copy read alone does not vouch for.
+	FromStorage string
 	// Activated says a replace made its shadow the catalog in use.
 	// Answered by a store.
 	Activated bool
@@ -347,6 +354,14 @@ func validateRebuildJob(j NewJob) error {
 	}
 	if j.Rebuild.Activated {
 		return invalid("a rebuild job is made not activated")
+	}
+	if j.Rebuild.FromStorage != "" {
+		if j.Rebuild.Mode != RebuildCompare {
+			return invalid("only a compare rebuild reads from one named storage")
+		}
+		if err := ValidateName("storage", j.Rebuild.FromStorage); err != nil {
+			return err
+		}
 	}
 	if j.Rebuild.Scratch != "" {
 		return ValidateScratch(j.Rebuild.Scratch)

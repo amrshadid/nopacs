@@ -21,6 +21,9 @@ type copyLook struct {
 	// catalog's; manifestGood says it was read and is.
 	manifest     *measured
 	manifestGood bool
+	// sidecar is what was read of the metadata file when the catalog keeps
+	// its digest and the file is not of it (missing, or other bytes).
+	sidecar *measured
 	// lines are the manifest's lines of instances the catalog does not
 	// serve (a delete hides them until its purge) whose object was not as
 	// the line says; linesGood those read good, by SOP Instance UID.
@@ -49,7 +52,9 @@ type lineDiff struct {
 }
 
 // differs reports whether the look found something to record.
-func (r copyLook) differs() bool { return r.manifest != nil || len(r.lines) > 0 || len(r.strays) > 0 }
+func (r copyLook) differs() bool {
+	return r.manifest != nil || r.sidecar != nil || len(r.lines) > 0 || len(r.strays) > 0
+}
 
 // both keeps what r and next both found, as next found it, and what next
 // found good.
@@ -57,6 +62,9 @@ func (r copyLook) both(next copyLook) copyLook {
 	out := next
 	if r.manifest == nil {
 		out.manifest = nil
+	}
+	if r.sidecar == nil {
+		out.sidecar = nil
 	}
 	out.lines = map[string]lineDiff{}
 	for uid, d := range next.lines {
@@ -105,8 +113,15 @@ func (c *copyCheck) files() outcome {
 		if _, out := c.judge("", mk, r.manifest.size, c.manifest, *r.manifest); out != (outcome{}) {
 			return out
 		}
-	} else if r.manifestGood {
+	} else if r.manifestGood && r.sidecar == nil {
+		// The manifest's and the metadata file's damage are one: cleared
+		// only when both were read good.
 		if out := c.good("", mk); out != (outcome{}) {
+			return out
+		}
+	}
+	if r.sidecar != nil {
+		if out := c.sidecarDamaged(*r.sidecar); out != (outcome{}) {
 			return out
 		}
 	}
@@ -236,16 +251,33 @@ func (c *copyCheck) look() (copyLook, outcome) {
 	return r, c.lookStrays(listed, &r)
 }
 
-// lookSidecar reads the replica's sidecar against the catalog, as the
-// scan's storage's is read (scanCheck.lookSidecar), only when a finding
-// that it disagrees holds on the replica's name (a switch moves one there
-// with its place): a replica's sidecar is otherwise not read, since the
-// replicator copies it with the scan. Its lines agreeing clears that
-// finding.
+// lookSidecar reads the replica's sidecar. When the catalog keeps the
+// digest of the scan's metadata file, the replica's file is read whole
+// against it: a file of other bytes, or none, is the replica's damage,
+// recorded and copied again. Otherwise it is read against the catalog's
+// rows, as the scan's storage's is read (scanCheck.lookSidecar), only when
+// a finding that it disagrees holds on the replica's name (a switch moves
+// one there with its place): with no digest to read it against, a
+// replica's sidecar is otherwise not read, since the replicator copies it
+// with the scan. A file read good clears that finding.
 func (c *copyCheck) lookSidecar(v catalogView, r *copyLook) outcome {
 	sk, err := layout.MetadataKey(c.path)
 	if err != nil {
 		return c.u.failure(fault.Wrap(fault.Internal, err, "the scan's labels make no key"), reasonInternal)
+	}
+	if !c.sidecar.IsZero() {
+		m, err := c.u.measure(c.store, c.name, sk, 0, -1)
+		switch {
+		case err != nil:
+			return c.lost(err)
+		case m.presence == notOnline:
+			r.tallies[tenant.TallyNotOnline]++
+		case m.presence == present && m.sum == c.sidecar:
+			r.agrees[sk] = true
+		default:
+			r.sidecar = &m
+		}
+		return outcome{}
 	}
 	if _, held := c.open[findingKey{sk, tenant.FindingDisagreeing}]; !held {
 		return outcome{}
@@ -257,6 +289,32 @@ func (c *copyCheck) lookSidecar(v catalogView, r *copyLook) outcome {
 	if lr.good[findingKey{sk, tenant.FindingDisagreeing}] {
 		r.agrees[sk] = true
 	}
+	return outcome{}
+}
+
+// sidecarDamaged records the replica's metadata file, found as m and not
+// of the digest the catalog keeps, as the replica's damage of the scan's
+// manifest or metadata, with a finding that it disagrees on the replica's
+// name, so the replicator copies it again from the primary.
+func (c *copyCheck) sidecarDamaged(m measured) outcome {
+	held, out := c.sidecarStill()
+	if !held {
+		return out
+	}
+	sk, _ := layout.MetadataKey(c.path)
+	d := tenant.ReplicaDamage{Found: c.u.sup.cfg.Now()}
+	tally := TallyReplicaMissing
+	if m.presence == present {
+		found := m.size
+		d.FoundSize, d.FoundSHA256, tally = &found, m.sum, TallyReplicaDamaged
+	}
+	f := &tenant.ReplicaFinding{Kind: tenant.FindingDisagreeing, Key: sk, Path: c.path, ExpectedSHA256: c.sidecar}
+	if out := c.recordDamage(d, f); out != (outcome{}) {
+		return out
+	}
+	c.tallies[tally]++
+	c.u.log.Error("scrubs: a replica's metadata file is not the one the catalog keeps; the replica is marked damaged and copies it again",
+		"storage", c.name, "found", tally)
 	return outcome{}
 }
 

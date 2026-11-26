@@ -359,6 +359,17 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 				return err
 			}
 		}
+		// A scan given more instances holds objects no recorded read covered.
+		if !newScan && newInstances > 0 {
+			if err := sqlkit.ForgetVerifiedInTx(ctx, sendingTx{tx: tx, t: t}, c.Storage, c.SeriesUID); err != nil {
+				return err
+			}
+		}
+		// The metadata file's digest, kept with the manifest's it was
+		// written with.
+		if err := sqlkit.SetSidecarInTx(ctx, sendingTx{tx: tx}, c.SeriesUID, c.ManifestSHA256, c.SidecarSHA256); err != nil {
+			return err
+		}
 		// The scan's copies on the storage's replicas, queued in the
 		// commit's transaction so a crash after it forgets none; their rows
 		// are locked after the scan's, as a correction's publish locks them.

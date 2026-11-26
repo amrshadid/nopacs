@@ -63,6 +63,56 @@ type catalog struct {
 	scans []tenant.CatalogScan
 	// fills lists each fill asked, in order.
 	fills []fillAsked
+	// rewrites lists each metadata file rewritten that the pass told, in
+	// order, as "<series> <storage> <digest>".
+	rewrites []string
+	// digests are the metadata digests kept, by series, as the tenant port
+	// keeps them: set by a record, dropped by a forget.
+	digests map[string]tenant.SHA256
+	// forgets lists the series of each digest the pass dropped, in order.
+	forgets []string
+	// failRecord, when set, fails each record it returns true for, as a
+	// database that stopped answering after the put does.
+	failRecord func() bool
+}
+
+// RecordSidecarRewritten lists what the pass told of a metadata file it
+// rewrote, and keeps its digest.
+func (c *catalog) RecordSidecarRewritten(_ context.Context, seriesUID, storage string, sidecar tenant.SHA256, _ time.Time) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failRecord != nil && c.failRecord() {
+		return false, fault.New(fault.Unavailable, "the database does not answer")
+	}
+	c.rewrites = append(c.rewrites, seriesUID+" "+storage+" "+sidecar.String())
+	if c.digests == nil {
+		c.digests = map[string]tenant.SHA256{}
+	}
+	c.digests[seriesUID] = sidecar
+	return true, nil
+}
+
+// ForgetSidecar drops the digest kept of the series' metadata file.
+func (c *catalog) ForgetSidecar(_ context.Context, seriesUID, _ string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.forgets = append(c.forgets, seriesUID)
+	_, had := c.digests[seriesUID]
+	delete(c.digests, seriesUID)
+	return had, nil
+}
+
+// CatalogScan answers the scan at p with the metadata digest kept of it.
+func (c *catalog) CatalogScan(_ context.Context, p label.Path) (tenant.CatalogScan, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, sc := range c.scans {
+		if sc.SubjectLabel == p.Subject && sc.SessionLabel == p.Session && sc.Label == p.Scan {
+			sc.SidecarSHA256 = c.digests[sc.SeriesUID]
+			return sc, nil
+		}
+	}
+	return tenant.CatalogScan{}, fault.New(fault.NotFound, "no such scan")
 }
 
 // fillAsked is one FillScanValues asked of the catalog.
@@ -320,7 +370,8 @@ func (a *archive) scan(path label.Path, old bool, files ...file) {
 	// Listed with a modality, as every scan archived since the catalog
 	// kept one is; unvalued lists one without.
 	a.cat.scans = append(a.cat.scans, tenant.CatalogScan{SubjectLabel: path.Subject, SessionLabel: path.Session, Label: path.Scan,
-		Storage: "main", SeriesUID: seriesUIDOf(len(a.cat.scans)), Values: tenant.ScanValues{Modality: "OT"}})
+		Storage: "main", SeriesUID: seriesUIDOf(len(a.cat.scans)), Values: tenant.ScanValues{Modality: "OT"},
+		ManifestSHA256: tenant.SHA256{1}})
 }
 
 // seriesUIDOf returns the Series Instance UID the catalog gives its scan i.

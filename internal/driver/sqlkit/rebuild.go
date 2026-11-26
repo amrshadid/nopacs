@@ -116,8 +116,8 @@ func (k Rebuild) rebuildOf(ctx context.Context, tx SendingTx, fence tenant.WorkF
 func fillRebuild(ctx context.Context, tx SendingTx, j *tenant.Job) error {
 	var mode string
 	r := &tenant.RebuildJob{}
-	found, err := tx.QueryRow(ctx, `SELECT mode, scratch, activated FROM rebuild_jobs WHERE job_id = ?`, []any{j.ID}, &mode, &r.Scratch,
-		&r.Activated)
+	found, err := tx.QueryRow(ctx, `SELECT mode, scratch, activated, from_storage FROM rebuild_jobs WHERE job_id = ?`, []any{j.ID}, &mode,
+		&r.Scratch, &r.Activated, &r.FromStorage)
 	if err != nil {
 		return err
 	}
@@ -167,6 +167,15 @@ func (k Sending) checkRebuildJob(ctx context.Context, tx SendingTx, j tenant.New
 	}
 	if switching {
 		return tenant.Precondition("a switch of a storage is running")
+	}
+	if from := j.Rebuild.FromStorage; from != "" {
+		has, err := exists(ctx, tx, `SELECT 1 FROM storages WHERE name = ?`, from)
+		if err != nil {
+			return err
+		}
+		if !has {
+			return tenant.Precondition("the tenant has no storage named " + from)
+		}
 	}
 	if scratch != "" {
 		return k.Shadow.Claim(ctx, tx, scratch, j.ID)

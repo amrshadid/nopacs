@@ -239,6 +239,9 @@ func (k Sending) dropScan(ctx context.Context, tx SendingTx, series string, now 
 
 // dropRow removes one row and its damage, with their counts.
 func (k Sending) dropRow(ctx context.Context, tx SendingTx, row replicaRow, now time.Time) error {
+	if err := k.clearDamageFindings(ctx, tx, `replica = ? AND series_uid = ?`, []any{row.Replica, row.SeriesUID}, "", now); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM replica_damage WHERE replica = ? AND series_uid = ?`, row.Replica, row.SeriesUID); err != nil {
 		return err
 	}
@@ -330,8 +333,12 @@ func (k Sending) ResyncReplicas(ctx context.Context, tx SendingTx, now time.Time
 		AND p.name = replica_scans.replica)`); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM replica_damage WHERE NOT EXISTS (SELECT 1 FROM replica_scans AS x
-		WHERE x.replica = replica_damage.replica AND x.series_uid = replica_damage.series_uid)`); err != nil {
+	gone := `NOT EXISTS (SELECT 1 FROM replica_scans AS x WHERE x.replica = replica_damage.replica
+		AND x.series_uid = replica_damage.series_uid)`
+	if err := k.clearDamageFindings(ctx, tx, gone, nil, "", now); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM replica_damage WHERE `+gone); err != nil { // #nosec G202 -- gone is a constant above.
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE replica_scans SET state = 'pending', queued_at = ?, due = ?, seq = seq + 1

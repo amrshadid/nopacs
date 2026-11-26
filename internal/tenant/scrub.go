@@ -92,9 +92,11 @@ type Scrubbing interface {
 	// a listing unit finds, which rides on no instance's write. A unit not
 	// of a scrub job is a precondition failure.
 	AddScrubTallies(ctx context.Context, fence WorkFence, tallies map[string]int64) error
-	// LastScrub returns the scrub job of the storage named, or of every
-	// storage, made last, and whether there is one: the scrub a scheduled
-	// one follows.
+	// LastScrub returns the scrub job of the whole storage named, or of
+	// every storage, made last, and whether there is one: the scrub a
+	// scheduled one follows. A scrub of one scan is never it, so a storage
+	// whose reads ask for a scan's scrub each interval is still scrubbed
+	// whole on time.
 	LastScrub(ctx context.Context, storage string) (Job, bool, error)
 	// ListScrubFindings returns a page of the findings the filter keeps, by
 	// storage, then key, then kind, then id.
@@ -106,6 +108,11 @@ type Scrubbing interface {
 	// MaxDamageLookup), those marked, each with the id of the finding that
 	// marked it.
 	DamagedInstances(ctx context.Context, uids []string) (map[string]string, error)
+	// VerificationRecorder records when each scan was last read whole on
+	// each storage, and VerificationSource answers it: the ground of a
+	// storage's coverage.
+	VerificationRecorder
+	VerificationSource
 }
 
 // JobScrub is the kind of a scrub job (scrub.go).
@@ -226,9 +233,17 @@ type ScrubFinding struct {
 	LastJob  string
 	LastSeen time.Time
 	// Cleared is when a later scrub read the object good, ClearJob the job
-	// that did; zero and empty while it holds. Answered by a store.
+	// that did; zero and empty while it holds. A finding of a replica's
+	// damage is cleared with that damage, and its ClearJob is empty when
+	// the replicator's verified copy cleared it rather than a scrub.
+	// Answered by a store.
 	Cleared  time.Time
 	ClearJob string
+	// ReplicaOf names, when Storage was a replica when the finding was
+	// made, its primary; empty for a primary. A finding on a replica never
+	// marks its instance: reads keep going to the primary, and the
+	// replicator copies the object again from it. Answered by a store.
+	ReplicaOf string
 }
 
 // Holds reports whether the finding holds: no scrub cleared it.
@@ -358,6 +373,9 @@ type ScrubFindingFilter struct {
 	Kinds []ScrubFindingKind
 	// Storage keeps the findings on the storage of this name.
 	Storage string
+	// Path, when not zero, keeps the findings of the scan with these
+	// labels.
+	Path label.Path
 	// IncludeCleared keeps the findings cleared too; false keeps only those
 	// that hold.
 	IncludeCleared bool
@@ -371,6 +389,11 @@ func (f ScrubFindingFilter) Validate() error {
 	for _, k := range f.Kinds {
 		if !k.Valid() {
 			return invalid("a finding's kind is one of missing, orphan, damaged, disagreeing, manifest_damaged")
+		}
+	}
+	if f.Path != (label.Path{}) {
+		if err := ValidateScanPath(f.Path); err != nil {
+			return err
 		}
 	}
 	if f.Storage != "" {
@@ -394,11 +417,22 @@ func ValidateDamageLookup(uids []string) error {
 }
 
 // validateScrubJob returns an Invalid error unless a scrub job's fields can
-// be made: no sender, mode, profile or target; a storage by its name, or
-// none for every storage.
+// be made: no sender, mode or profile; a storage by its name, or none for
+// every storage; the whole tenant, or one scan by its labels. A scrub of
+// one scan reads only that scan, on the storage named or on every copy:
+// what a request to scrub one instance makes, so a read that found its
+// bytes wrong costs a scan's read, not a whole storage's.
 func validateScrubJob(j NewJob) error {
-	if j.Sender != "" || j.Mode != "" || !j.Profile.IsZero() || !j.Target.Whole() {
-		return invalid("a scrub job names no sender, mode, profile or target")
+	if j.Sender != "" || j.Mode != "" || !j.Profile.IsZero() {
+		return invalid("a scrub job names no sender, mode or profile")
+	}
+	if t := j.Target; !t.Whole() {
+		if t.ScanLabel == "" {
+			return invalid("a scrub job names the whole tenant or one scan")
+		}
+		if err := t.Validate(); err != nil {
+			return err
+		}
 	}
 	if j.Storage != "" {
 		return ValidateName("storage", j.Storage)

@@ -1314,7 +1314,12 @@ CREATE INDEX scrub_jobs_by_storage ON scrub_jobs (storage);
 -- manifest's (NULL for an orphan), the found ones what was read (NULL for
 -- an object missing). job_id is the job that found it; last_job and
 -- last_seen the latest job that found it again. cleared_at and clear_job
--- are set when a later scrub read the object good, and then never change.
+-- are set when a later scrub read the object good, and then never change;
+-- a replica's damage is cleared with its replica_damage row, by a scrub
+-- (clear_job its job) or by the replicator's verified copy (clear_job '').
+-- replica_of names the primary of storage when storage was a replica when
+-- the finding was made, '' otherwise: such a finding never marks its
+-- instance, and is the only kind cleared with no job.
 CREATE TABLE scrub_findings (
     id               text        COLLATE "C" NOT NULL,
     kind             text        COLLATE "C" NOT NULL,
@@ -1335,12 +1340,14 @@ CREATE TABLE scrub_findings (
     last_seen        timestamptz NOT NULL,
     cleared_at       timestamptz,
     clear_job        text        COLLATE "C" NOT NULL,
+    replica_of       text        COLLATE "C" NOT NULL DEFAULT '',
     CONSTRAINT scrub_findings_pkey PRIMARY KEY (id),
     CONSTRAINT scrub_findings_kind_check CHECK (kind IN ('missing', 'orphan', 'damaged', 'disagreeing', 'manifest_damaged')),
     CONSTRAINT scrub_findings_values_check CHECK (object_key <> '' AND revision >= 0
         AND (expected_size IS NULL OR expected_size >= 0) AND (found_size IS NULL OR found_size >= 0)
         AND (expected_sha256 IS NULL OR length(expected_sha256) = 32) AND (found_sha256 IS NULL OR length(found_sha256) = 32)),
-    CONSTRAINT scrub_findings_cleared_check CHECK ((cleared_at IS NULL) = (clear_job = ''))
+    CONSTRAINT scrub_findings_cleared_check CHECK (cleared_at IS NOT NULL OR clear_job = ''),
+    CONSTRAINT scrub_findings_clear_job_check CHECK (cleared_at IS NULL OR clear_job <> '' OR replica_of <> '')
 );
 
 -- At most one finding that holds per object and kind; and the list's
@@ -1356,7 +1363,23 @@ CREATE INDEX scrub_findings_of_scan ON scrub_findings (storage, subject_label, s
 -- The findings that hold of an instance and mark it, which the clear of one
 -- of them reads to mark it again with another.
 CREATE INDEX scrub_findings_marking ON scrub_findings (sop_instance_uid)
-    WHERE cleared_at IS NULL AND kind IN ('missing', 'damaged');
+    WHERE cleared_at IS NULL AND kind IN ('missing', 'damaged') AND replica_of = '';
+
+-- When each scan was last read whole (verified_at) and last checked by
+-- presence only (presence_at) on each storage, its own or a replica, NULL
+-- for never: the ground of a storage's coverage. Keyed by the storage's name
+-- and the scan's Series Instance UID, never an integer id, so it survives a
+-- rebuild; a row whose scan is gone is never read (the coverage reads the
+-- scans, then this), and is dropped when the scan leaves the catalog for
+-- good or its storage is removed. A commit that gives a scan more
+-- instances drops its rows: no read recorded covered them.
+CREATE TABLE scrub_verified (
+    storage     text        COLLATE "C" NOT NULL,
+    series_uid  text        COLLATE "C" NOT NULL,
+    verified_at timestamptz,
+    presence_at timestamptz,
+    CONSTRAINT scrub_verified_pkey PRIMARY KEY (storage, series_uid)
+);
 
 -- What a rebuild job does: the catalog made again from what the tenant's
 -- storages hold (their correction records, manifests and metadata) into a
@@ -1369,15 +1392,19 @@ CREATE INDEX scrub_findings_marking ON scrub_findings (sop_instance_uid)
 -- activated is set by the transaction that made its shadow the catalog in
 -- use, and never changes after. dropped is set once its shadow is removed,
 -- so a shadow a job left when it ended without its worker (its attempts ran
--- out, or it was canceled while queued) is found and removed.
+-- out, or it was canceled while queued) is found and removed. from_storage,
+-- when not '', is the one storage a compare reads every scan from (a
+-- replica a move is about to switch to).
 CREATE TABLE rebuild_jobs (
-    job_id    text    COLLATE "C" NOT NULL,
-    mode      text    COLLATE "C" NOT NULL,
-    scratch   text    COLLATE "C" NOT NULL,
-    activated boolean NOT NULL,
-    dropped   boolean NOT NULL,
+    job_id       text    COLLATE "C" NOT NULL,
+    mode         text    COLLATE "C" NOT NULL,
+    scratch      text    COLLATE "C" NOT NULL,
+    activated    boolean NOT NULL,
+    dropped      boolean NOT NULL,
+    from_storage text    COLLATE "C" NOT NULL DEFAULT '',
     CONSTRAINT rebuild_jobs_pkey PRIMARY KEY (job_id),
-    CONSTRAINT rebuild_jobs_mode_check CHECK (mode IN ('compare', 'replace'))
+    CONSTRAINT rebuild_jobs_mode_check CHECK (mode IN ('compare', 'replace')),
+    CONSTRAINT rebuild_jobs_from_check CHECK (from_storage = '' OR mode = 'compare')
 );
 
 -- The differences a compare job found, by name, the first 1000 in the
@@ -1847,18 +1874,45 @@ CREATE INDEX replica_scans_lagging ON replica_scans (replica, queued_at) WHERE q
 -- An object of a replica a scrub or a read found missing or wrong, to copy
 -- again from the primary: sparse, so a replica that is whole holds none.
 -- sop_instance_uid is '' for the scan's manifest or metadata; the found
--- size and checksum are NULL for an object missing.
+-- size and checksum are NULL for an object missing. finding_id is the scrub
+-- finding recorded with it ('' for damage a read or a copy found), which is
+-- cleared when the damage is; on the scan's row ('') it is the manifest's,
+-- and sidecar_finding_id the metadata file's, so the one row keeps both
+-- and its end clears both.
 CREATE TABLE replica_damage (
-    replica          text        COLLATE "C" NOT NULL,
-    series_uid       text        COLLATE "C" NOT NULL,
-    sop_instance_uid text        COLLATE "C" NOT NULL,
-    revision         integer     NOT NULL,
-    found_size       bigint,
-    found_sha256     bytea,
-    found_at         timestamptz NOT NULL,
+    replica            text        COLLATE "C" NOT NULL,
+    series_uid         text        COLLATE "C" NOT NULL,
+    sop_instance_uid   text        COLLATE "C" NOT NULL,
+    revision           integer     NOT NULL,
+    found_size         bigint,
+    found_sha256       bytea,
+    found_at           timestamptz NOT NULL,
+    finding_id         text        COLLATE "C" NOT NULL DEFAULT '',
+    sidecar_finding_id text        COLLATE "C" NOT NULL DEFAULT '',
     CONSTRAINT replica_damage_pkey PRIMARY KEY (replica, series_uid, sop_instance_uid),
     CONSTRAINT replica_damage_values_check CHECK (revision >= 0 AND (found_size IS NULL OR found_size >= 0)
-        AND (found_sha256 IS NULL OR length(found_sha256) = 32))
+        AND (found_sha256 IS NULL OR length(found_sha256) = 32)),
+    CONSTRAINT replica_damage_sidecar_check CHECK (sidecar_finding_id = '' OR sop_instance_uid = '')
+);
+
+-- The SHA-256 of each scan's metadata file (its sidecar of headers) as last
+-- written, beside the digest of the manifest written with it: it holds only
+-- while the scan's manifest_sha256 is that manifest's, so a change of the
+-- scan that wrote a new manifest without telling the sidecar's digest (an
+-- older writer, a purge) leaves the sidecar unchecked, as a scan archived
+-- before digests were kept is, never checked against a digest that no
+-- longer describes it; a writer that puts a new file before it can record
+-- its digest (a pass that rewrites it, an instance delete's purge) drops
+-- the row first. Kept apart from scans so a rebuild, which reads the
+-- storages' files and does not hash them, does not compare it (it drops
+-- only the rows of scans it did not find again), and keyed by the Series
+-- Instance UID, never an integer id.
+CREATE TABLE scan_sidecars (
+    series_uid      text  COLLATE "C" NOT NULL,
+    manifest_sha256 bytea NOT NULL,
+    sha256          bytea NOT NULL,
+    CONSTRAINT scan_sidecars_pkey PRIMARY KEY (series_uid),
+    CONSTRAINT scan_sidecars_values_check CHECK (length(manifest_sha256) = 32 AND length(sha256) = 32)
 );
 
 -- A recall of an object of an archive-tier storage: one per object, shared

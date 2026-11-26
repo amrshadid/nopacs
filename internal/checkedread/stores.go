@@ -17,7 +17,9 @@ import (
 // catalog's, and where to record an object of a replica found wrong. A
 // read that its primary serves asks none of it.
 type Replicas interface {
-	// CatalogScan answers the scan with the labels of path.
+	// CatalogScan answers the scan with the labels of path: its series, and
+	// the digest of its metadata file now, asked before a replica's file is
+	// recorded as damaged.
 	CatalogScan(ctx context.Context, path label.Path) (tenant.CatalogScan, error)
 	// InStepReplicas answers, per series, the replicas in step for its scan
 	// at the catalog's manifest digest now.

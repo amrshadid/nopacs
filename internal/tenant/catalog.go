@@ -67,6 +67,11 @@ type ScanCommit struct {
 	// ManifestSHA256 is the checksum of the scan's manifest as written
 	// with this commit; zero keeps the scan's.
 	ManifestSHA256 SHA256
+	// SidecarSHA256 is the checksum of the scan's metadata file as written
+	// with that manifest, kept with it (CatalogScan.SidecarSHA256); zero,
+	// with a manifest given, keeps none, and the metadata file is then not
+	// checked against a digest. Ignored when ManifestSHA256 is zero.
+	SidecarSHA256 SHA256
 	// Values are what the scan's files say of it and of its session
 	// (ScanValues), read from one of them: a scan or session made by this
 	// commit takes them, and one already there fills only those it holds

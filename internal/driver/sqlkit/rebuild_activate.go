@@ -191,6 +191,12 @@ func (k Rebuild) ActivateCatalog(ctx context.Context, fence tenant.WorkFence, no
 		if err := k.ResyncReplicas(ctx, tx, now); err != nil {
 			return err
 		}
+		// The rows kept by Series Instance UID beside the catalog (a
+		// metadata file's digest, a scan's reads) go with a scan the new
+		// catalog does not hold.
+		if err := DropGoneScanRowsInTx(ctx, tx); err != nil {
+			return err
+		}
 		// So are the retention rows, keyed by Study Instance UID: a session
 		// the new catalog shows with no row gets one (tenant.Retention).
 		if err := k.ResyncRetention(ctx, tx, now); err != nil {

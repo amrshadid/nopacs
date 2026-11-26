@@ -185,7 +185,10 @@ func (p *pipedHash) stop() {
 }
 
 // Mismatched reports whether err is one of CopyChecked's findings that the
-// bytes differ from the manifest, or an instance a scrub marked (Marked).
+// bytes differ from the manifest, an instance a scrub marked (Marked), or a
+// file read whole that is not the one the catalog keeps the digest of
+// (ErrOtherFile).
 func Mismatched(err error) bool {
-	return errors.Is(err, ErrShort) || errors.Is(err, ErrLong) || errors.Is(err, ErrChecksum) || errors.Is(err, ErrMarked)
+	return errors.Is(err, ErrShort) || errors.Is(err, ErrLong) || errors.Is(err, ErrChecksum) || errors.Is(err, ErrMarked) ||
+		errors.Is(err, ErrOtherFile)
 }

@@ -147,8 +147,16 @@ type Replication interface {
 	// the scan's manifest or metadata) that a scrub read good again, under
 	// fence when given, and answers whether there was one. A scan left with
 	// no damage is in step again when it holds the catalog's manifest
-	// digest, pending otherwise.
+	// digest, pending otherwise. The scrub finding recorded with the damage
+	// is cleared with it, by the job of the fence's unit when it is a scrub
+	// job's.
 	ClearReplicaDamage(ctx context.Context, fence *WorkFence, replica, seriesUID, sopUID string, now time.Time) (bool, error)
+	// ReplicaDamaged answers the replica's damaged objects of the scan of
+	// the series: by SOP Instance UID ("" for the scan's manifest or
+	// metadata), the id of the scrub finding recorded with each ("" for
+	// none). What a scrub's unit reads once a scan, so an object read good
+	// asks to clear its damage only when it has some.
+	ReplicaDamaged(ctx context.Context, replica, seriesUID string) (map[string]string, error)
 }
 
 // MaxReplicas is the most replicas a primary has, the contract's.
@@ -253,6 +261,10 @@ type ReplicaClaim struct {
 	// ManifestSHA256 is the catalog's manifest digest at the claim: the
 	// digest EndReplicaScan must name for the scan to be in step.
 	ManifestSHA256 SHA256
+	// SidecarSHA256 is the catalog's digest of the scan's metadata file at
+	// the claim, zero when it keeps none (CatalogScan.SidecarSHA256): the
+	// copy puts the file against it.
+	SidecarSHA256 SHA256
 	// Backfill says it is owed to the replica's backfill.
 	Backfill bool
 	// Damaged are the replica's objects of the scan found missing or wrong,
@@ -291,6 +303,31 @@ type ReplicaDamageRecord struct {
 	Replica, SeriesUID string
 	// Damage is what was found; its Found is the record's time.
 	Damage ReplicaDamage
+	// Finding, when not nil, is what a scrub's unit knows of the object
+	// beyond the damage: the damage is then also recorded as a scrub
+	// finding on the replica's name (ScrubFinding.ReplicaOf set, never
+	// marking the instance), seen again when one holds of the same key and
+	// kind, so a list of findings shows a replica's damage as the contract
+	// says; it is cleared with the damage. It needs Fence, of a scrub
+	// job's unit, whose job is the finding's.
+	Finding *ReplicaFinding
+}
+
+// ReplicaFinding is what the scrub finding recorded with a replica's damage
+// says beyond the damage.
+type ReplicaFinding struct {
+	// Kind is what was found: missing or damaged for an object the manifest
+	// names, manifest_damaged for the manifest, disagreeing for a metadata
+	// file not of the digest the catalog holds.
+	Kind ScrubFindingKind
+	// Key is the object's key; Path the scan's labels.
+	Key  string
+	Path label.Path
+	// ExpectedSize and ExpectedSHA256 are what the catalog or the manifest
+	// holds of it: a size for an object missing or damaged, nil and zero
+	// when not known.
+	ExpectedSize   *int64
+	ExpectedSHA256 SHA256
 }
 
 // Validate returns an Invalid error unless r can be recorded.
@@ -298,6 +335,29 @@ func (r ReplicaDamageRecord) Validate() error {
 	if r.Fence != nil {
 		if err := r.Fence.Validate(); err != nil {
 			return err
+		}
+	}
+	if f := r.Finding; f != nil {
+		if r.Fence == nil {
+			return invalid("a replica's damage recorded as a finding is recorded under a scrub unit's lease")
+		}
+		if !f.Kind.Valid() || f.Kind == FindingOrphan {
+			return invalid("a replica's damage is found missing, damaged, manifest_damaged or disagreeing")
+		}
+		if err := ValidateFindingKey(f.Key); err != nil {
+			return err
+		}
+		if err := ValidateScanPath(f.Path); err != nil {
+			return err
+		}
+		if f.Kind.Marks() && f.ExpectedSize == nil {
+			return invalid("a missing or damaged object's finding states the size that was archived")
+		}
+		if f.ExpectedSize != nil && *f.ExpectedSize < 0 {
+			return invalid("a finding's sizes are not negative")
+		}
+		if f.Kind == FindingMissing && r.Damage.FoundSize != nil {
+			return invalid("a missing object's finding states nothing found")
 		}
 	}
 	if err := ValidateName("storage", r.Replica); err != nil {

@@ -74,6 +74,11 @@ func (t *Tenant) ClearReplicaDamage(ctx context.Context, fence *tenant.WorkFence
 	return t.sending().ClearReplicaDamage(ctx, fence, replica, seriesUID, sopUID, now)
 }
 
+// ReplicaDamaged implements tenant.Replication.
+func (t *Tenant) ReplicaDamaged(ctx context.Context, replica, seriesUID string) (map[string]string, error) {
+	return t.sending().ReplicaDamaged(ctx, replica, seriesUID)
+}
+
 // RequestRecalls implements tenant.Recalls.
 func (t *Tenant) RequestRecalls(ctx context.Context, a tenant.RecallAsk) (tenant.RecallAsked, error) {
 	return t.sending().RequestRecalls(ctx, a)

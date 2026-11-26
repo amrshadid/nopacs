@@ -105,6 +105,17 @@ type NewListener func(spec ListenerSpec) (Listener, error)
 // the caller closes it.
 type OpenStorage func(ctx context.Context, tenantName string, st tenant.Pipeline, name string) (blob.Store, error)
 
+// SwitchGate says whether writes to one of a tenant's storages are paused
+// while the storage is switched to its replica, and counts the callers
+// turned away for it: storageswitch.Gate is one.
+type SwitchGate interface {
+	// Switching reports whether writes to storage are paused now.
+	Switching(ctx context.Context, storage string) (bool, error)
+	// CountRefused counts one association refused because storage is
+	// switching.
+	CountRefused(storage string)
+}
+
 // The defaults of a Config.
 const (
 	// DefaultInterval is how often each tenant's receivers are read again,
@@ -152,6 +163,11 @@ type Config struct {
 	// OpenStorage opens a tenant's storage for its free space; nil leaves
 	// every storage's space unknown, which is never full.
 	OpenStorage OpenStorage
+	// Switches returns the gate of writes to the storages of the tenant
+	// named, read at each check of space; nil, or a nil gate, has no
+	// storage switching. A receiver whose storage is switching refuses new
+	// associations as a temporary failure, counted on the gate.
+	Switches func(tenantName string) SwitchGate
 	// Wake is called with a tenant's name after the supervisor wrote events
 	// of it; nil does nothing.
 	Wake func(tenantName string)

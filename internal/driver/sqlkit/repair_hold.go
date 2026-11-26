@@ -128,7 +128,7 @@ func (k Sending) holdEnd(ctx context.Context, tx SendingTx, fence tenant.WorkFen
 func (k Sending) recordStray(ctx context.Context, tx SendingTx, r tenant.Repair, f tenant.ScrubFinding, now time.Time) error {
 	id := tenant.ScrubFindingID(r.ID, r.Storage, r.Key, tenant.FindingOrphan)
 	n, err := tx.Exec(ctx, `INSERT INTO scrub_findings (`+findingColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, '', 0, NULL, NULL, NULL, NULL, ?, ?, ?, ?, NULL, '') ON CONFLICT DO NOTHING`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, '', 0, NULL, NULL, NULL, NULL, ?, ?, ?, ?, NULL, '', '') ON CONFLICT DO NOTHING`,
 		id, string(tenant.FindingOrphan), r.Storage, r.Key, f.Path.Subject, f.Path.Session, f.Path.Scan,
 		r.Job, k.D.Time(now), r.Job, k.D.Time(now))
 	if err != nil || n == 0 {

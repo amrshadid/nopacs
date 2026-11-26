@@ -138,7 +138,7 @@ func (u *unitRun) planCopies(scan tenant.JobScan) (copyPlan, outcome) {
 	}
 	for _, r := range replicas {
 		c := &copyCheck{u: u, name: r.Replica, archive: r.Tier == tenant.TierArchive, seriesUID: sc.SeriesUID, path: scan.Path,
-			manifest: sc.ManifestSHA256, tallies: map[string]int64{}}
+			manifest: sc.ManifestSHA256, sidecar: sc.SidecarSHA256, tallies: map[string]int64{}}
 		row, ok, err := c.row()
 		if err != nil {
 			return plan, u.failure(err, reasonDatabase)
@@ -147,7 +147,15 @@ func (u *unitRun) planCopies(scan tenant.JobScan) (copyPlan, outcome) {
 			plan.tallies[TallyReplicaSkipped]++
 			continue
 		}
-		c.damageLeft = row.Damaged
+		c.attempt = row.Attempt
+		if row.Damaged > 0 {
+			ctx, cancel := context.WithTimeout(u.ctx, opTimeout)
+			c.damaged, err = u.p.ReplicaDamaged(ctx, r.Replica, sc.SeriesUID)
+			cancel()
+			if err != nil {
+				return plan, u.failure(err, reasonDatabase)
+			}
+		}
 		store, err := u.stores.Get(u.ctx, r.Replica)
 		if err != nil {
 			u.log.Warn("scrubs: a replica could not be opened; the scan is read on its other copies", "storage", r.Replica,
@@ -203,11 +211,19 @@ type copyCheck struct {
 	seriesUID string
 	path      label.Path
 	manifest  tenant.SHA256
-	// damageLeft is how many damaged objects the replica's row counted when
-	// planned, less those this unit cleared: an object read good has its
-	// damage cleared only while some is left, so a scan read good with no
-	// damage writes nothing.
-	damageLeft int64
+	// sidecar is the catalog's digest of the scan's metadata file when the
+	// unit planned it, zero when the catalog keeps none: the replica's file
+	// is then read only when a finding that it disagrees holds.
+	sidecar tenant.SHA256
+	// attempt is the replica's row's count of copies claimed when the unit
+	// planned it: a copy claimed since may have put another metadata file.
+	attempt int
+	// damaged are the replica's damaged objects of the scan when planned,
+	// by SOP Instance UID ("" for the manifest or metadata), each with the
+	// id of the finding recorded with it: an object read good has its
+	// damage cleared only when it is listed here, so a scan read good with
+	// no damage writes nothing.
+	damaged map[string]string
 	// open are the findings of the scan on the replica's name that held
 	// when the unit started, of every kind (orphans found before, and
 	// findings a switch moved there with its place); a finding is taken out
@@ -260,15 +276,51 @@ func (c *copyCheck) stillHeld() (bool, outcome) {
 	return ok, outcome{}
 }
 
+// sidecarStill reports whether the metadata file's digest the unit planned
+// with is still the catalog's, at the same manifest digest, and the
+// replica's row of the scan saw no copy claimed since: the check before
+// the replica's metadata file is recorded as damaged. A pass that rewrites
+// a metadata file records a new digest and queues the replica, whose next
+// copy puts the new file, so a file read after both against the digest
+// planned would make a good copy look damaged. A replica whose file may
+// have moved so is dropped from the unit; a later scrub reads it again.
+func (c *copyCheck) sidecarStill() (bool, outcome) {
+	if held, out := c.stillHeld(); !held {
+		return false, out
+	}
+	ctx, cancel := context.WithTimeout(c.u.ctx, opTimeout)
+	sc, err := c.u.p.CatalogScan(ctx, c.path)
+	cancel()
+	if err != nil && fault.KindOf(err) != fault.NotFound {
+		return false, c.u.failure(err, reasonDatabase)
+	}
+	still := err == nil && sc.ManifestSHA256 == c.manifest && sc.SidecarSHA256 == c.sidecar
+	if still {
+		ctx, cancel := context.WithTimeout(c.u.ctx, opTimeout)
+		row, err := c.u.p.ReplicaScan(ctx, c.name, c.seriesUID)
+		cancel()
+		if err != nil && fault.KindOf(err) != fault.NotFound {
+			return false, c.u.failure(err, reasonDatabase)
+		}
+		still = err == nil && row.Attempt == c.attempt
+	}
+	if !still {
+		c.dropped = true
+		c.u.log.Info("scrubs: a scan's metadata file changed while a replica's copy was read; it is read again by a later scrub",
+			"storage", c.name)
+	}
+	return still, outcome{}
+}
+
 // load reads the findings of the scan on the replica's name that hold, of
 // every kind: those of its files (ScanScrubFindings), and those of its
-// instances' objects, which only a switch puts on a replica's name (a
-// scrub records a replica's damage as the replica's, never as a finding),
-// read from the replica's findings of those kinds and kept when they name
-// the scan.
+// instances' objects (the findings recorded with the replica's damage, and
+// those a switch moved there with its place), read from the replica's
+// findings of those kinds that name the scan.
 func (c *copyCheck) load() outcome {
 	c.open = map[findingKey]tenant.ScrubFinding{}
-	filter := tenant.ScrubFindingFilter{Kinds: []tenant.ScrubFindingKind{tenant.FindingMissing, tenant.FindingDamaged}, Storage: c.name}
+	filter := tenant.ScrubFindingFilter{Kinds: []tenant.ScrubFindingKind{tenant.FindingMissing, tenant.FindingDamaged}, Storage: c.name,
+		Path: c.path}
 	page := master.Page{Limit: master.MaxPageLimit}
 	for i := 0; ; i++ {
 		if i == maxListPages {
@@ -281,9 +333,7 @@ func (c *copyCheck) load() outcome {
 			return c.u.failure(err, reasonDatabase)
 		}
 		for _, f := range rows {
-			if f.Path == c.path {
-				c.open[findingKey{f.Key, f.Kind}] = f
-			}
+			c.open[findingKey{f.Key, f.Kind}] = f
 		}
 		if next == "" {
 			break
@@ -360,43 +410,64 @@ func (c *copyCheck) judge(uid, key string, size int64, sum tenant.SHA256, m meas
 	if !held {
 		return verdict{}, out
 	}
+	f := &tenant.ReplicaFinding{Kind: tenant.FindingDamaged, Key: key, Path: c.path, ExpectedSHA256: sum}
+	if uid == "" {
+		f.Kind = tenant.FindingManifestDamaged
+	} else {
+		f.ExpectedSize = &size
+	}
 	d := tenant.ReplicaDamage{SOPInstanceUID: uid, Revision: revisionOf(key), Found: c.u.sup.cfg.Now()}
 	tally := TallyReplicaMissing
 	if m.presence == present {
 		found := m.size
 		d.FoundSize, d.FoundSHA256, tally = &found, m.sum, TallyReplicaDamaged
+	} else if uid != "" {
+		f.Kind = tenant.FindingMissing
 	}
-	ctx, cancel := context.WithTimeout(c.u.ctx, opTimeout)
-	_, err := c.u.p.RecordReplicaDamage(ctx, tenant.ReplicaDamageRecord{Fence: &c.u.fence, Replica: c.name, SeriesUID: c.seriesUID, Damage: d})
-	cancel()
-	if err != nil {
-		return verdict{}, c.u.failure(err, reasonDatabase)
+	if out := c.recordDamage(d, f); out != (outcome{}) {
+		return verdict{}, out
 	}
 	c.tallies[tally]++
-	c.u.sup.cfg.Wake(c.u.t.name)
 	c.u.log.Error("scrubs: a replica's copy of an object is not what was archived; the replica is marked damaged and copies it again",
 		"storage", c.name, "found", tally)
 	return verdict{code: tenant.FailureDamagedInStorage, detail: detailReplica}, outcome{}
 }
 
+// recordDamage records d as the replica's damage of the scan, with the
+// finding f on the replica's name, under the unit's lease.
+func (c *copyCheck) recordDamage(d tenant.ReplicaDamage, f *tenant.ReplicaFinding) outcome {
+	ctx, cancel := context.WithTimeout(c.u.ctx, opTimeout)
+	_, err := c.u.p.RecordReplicaDamage(ctx, tenant.ReplicaDamageRecord{Fence: &c.u.fence, Replica: c.name, SeriesUID: c.seriesUID,
+		Damage: d, Finding: f})
+	cancel()
+	if err != nil {
+		return c.u.failure(err, reasonDatabase)
+	}
+	c.u.sup.cfg.Wake(c.u.t.name)
+	return outcome{}
+}
+
 // good clears, of an object read good on the replica, the damage the
-// replica's row holds of it, while the row has damage left, and the
-// findings on the replica's name that it was missing or damaged (a
-// switch moves them there with the place), when load found one. The row's
-// damage is kept with no list of its objects, so while some is left each
-// object read good asks; once the row's count is cleared nothing more is.
+// replica's row holds of it, when the unit's plan listed it (the finding
+// recorded with it goes with it), and the findings on the replica's name
+// that it was missing or damaged that load found and that are still open.
 func (c *copyCheck) good(uid, key string) outcome {
-	if c.damageLeft > 0 {
+	if finding, listed := c.damaged[uid]; listed {
 		ctx, cancel := context.WithTimeout(c.u.ctx, opTimeout)
 		cleared, err := c.u.p.ClearReplicaDamage(ctx, &c.u.fence, c.name, c.seriesUID, uid, c.u.sup.cfg.Now())
 		cancel()
 		if err != nil {
 			return c.u.failure(err, reasonDatabase)
 		}
+		delete(c.damaged, uid)
 		if cleared {
-			c.damageLeft--
 			c.u.log.Info("scrubs: a replica's copy of an object was read good again; its damage is cleared", "storage", c.name)
 			c.u.sup.cfg.Wake(c.u.t.name)
+			for k, f := range c.open {
+				if finding != "" && f.ID == finding {
+					delete(c.open, k) // cleared with the damage
+				}
+			}
 		}
 	}
 	var kinds []tenant.ScrubFindingKind

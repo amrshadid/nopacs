@@ -132,7 +132,10 @@ func (k Sending) swapPlaces(ctx context.Context, tx SendingTx, primary, replica 
 		}); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE scrub_findings SET storage = ? WHERE storage = ? AND cleared_at IS NULL`, replica, primary); err != nil {
+	// A finding moved to the replica's name is a finding on a replica now:
+	// it names its primary, and never marks its instance again.
+	if _, err := tx.Exec(ctx, `UPDATE scrub_findings SET storage = ?, replica_of = ? WHERE storage = ? AND cleared_at IS NULL`,
+		replica, primary, primary); err != nil {
 		return err
 	}
 	for _, id := range moved {
@@ -166,9 +169,12 @@ func (k Sending) recordInStep(ctx context.Context, tx SendingTx, primary, replic
 		revision    int
 		size        *int64
 		sum         []byte
+		finding     string
+		kind        string
 	}
 	var found []damage
-	err := tx.Query(ctx, `SELECT coalesce(si.series_uid, sl.series_uid, ''), f.sop_instance_uid, f.revision, f.found_size, f.found_sha256
+	err := tx.Query(ctx, `SELECT coalesce(si.series_uid, sl.series_uid, ''), f.sop_instance_uid, f.revision, f.found_size, f.found_sha256,
+		f.id, f.kind
 		FROM scrub_findings AS f
 		LEFT JOIN instances AS i ON f.sop_instance_uid <> '' AND i.sop_instance_uid = f.sop_instance_uid
 		LEFT JOIN scans AS si ON si.id = i.scan_id AND si.storage = ?
@@ -177,7 +183,7 @@ func (k Sending) recordInStep(ctx context.Context, tx SendingTx, primary, replic
 		WHERE f.storage = ? AND f.cleared_at IS NULL AND f.kind <> 'orphan' ORDER BY f.id`, []any{primary, primary, replica},
 		func(r Row) error {
 			var d damage
-			err := r.Scan(&d.series, &d.uid, &d.revision, &d.size, &d.sum)
+			err := r.Scan(&d.series, &d.uid, &d.revision, &d.size, &d.sum, &d.finding, &d.kind)
 			if d.series != "" {
 				found = append(found, d)
 			}
@@ -187,9 +193,18 @@ func (k Sending) recordInStep(ctx context.Context, tx SendingTx, primary, replic
 		return err
 	}
 	for _, d := range found {
-		if _, err := tx.Exec(ctx, `INSERT INTO replica_damage (replica, series_uid, sop_instance_uid, revision, found_size, found_sha256,
-			found_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (replica, series_uid, sop_instance_uid) DO NOTHING`, replica, d.series,
-			d.uid, d.revision, nullInt(d.size), d.sum, k.D.Time(now)); err != nil {
+		// The damage keeps the finding it came from, so the copy that mends
+		// it clears that finding with it; the scan's row keeps its
+		// manifest's finding and its metadata file's apart.
+		q := `INSERT INTO replica_damage (replica, series_uid, sop_instance_uid, revision, found_size, found_sha256, found_at, finding_id,
+			sidecar_finding_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '') ON CONFLICT (replica, series_uid, sop_instance_uid)
+			DO UPDATE SET finding_id = excluded.finding_id WHERE replica_damage.finding_id = ''`
+		if d.uid == "" && d.kind == string(tenant.FindingDisagreeing) {
+			q = `INSERT INTO replica_damage (replica, series_uid, sop_instance_uid, revision, found_size, found_sha256, found_at, finding_id,
+				sidecar_finding_id) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?) ON CONFLICT (replica, series_uid, sop_instance_uid)
+				DO UPDATE SET sidecar_finding_id = excluded.sidecar_finding_id WHERE replica_damage.sidecar_finding_id = ''`
+		}
+		if _, err := tx.Exec(ctx, q, replica, d.series, d.uid, d.revision, nullInt(d.size), d.sum, k.D.Time(now), d.finding); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE replica_scans SET state = 'damaged', queued_at = ?, due = ? WHERE replica = ?

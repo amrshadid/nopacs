@@ -268,28 +268,51 @@ func (u *unitRun) end() error {
 }
 
 // storageNames returns the names of the tenant's storages a catalog is made
-// from, in order: every storage but a replica, which holds its primary's
-// keys, so a scan read from both would be one series on two storages, and
-// one read from the replica alone would name the replica as where the
-// catalog's files are.
-func (u *unitRun) storageNames() ([]string, error) {
+// from, in order, and the storage each is read from (by name, the storage
+// itself unless named otherwise): every storage but a replica, which holds
+// its primary's keys, so a scan read from both would be one series on two
+// storages, and one read from the replica alone would name the replica as
+// where the catalog's files are.
+//
+// A compare that names the one storage it reads from
+// (tenant.RebuildJob.FromStorage) reads that storage alone: a replica is
+// read for its primary, the scans it holds written under the primary's
+// name, so the compare says whether the replica alone holds the catalog's
+// scans of its primary as the catalog places them (what a switch to it
+// needs); another storage is read for itself.
+func (u *unitRun) storageNames() ([]string, map[string]string, error) {
 	var names []string
+	readFrom := map[string]string{}
+	from := ""
+	if u.job.Rebuild != nil {
+		from = u.job.Rebuild.FromStorage
+	}
 	cursor := ""
 	for {
 		ctx, cancel := u.op()
 		page, next, err := u.p.ListStorages(ctx, master.Page{Limit: 1000, Cursor: cursor})
 		cancel()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, s := range page {
-			if s.ReplicaOf == "" {
+			switch {
+			case from == "":
+				if s.ReplicaOf == "" {
+					names = append(names, s.Name)
+				}
+			case s.Name == from && s.ReplicaOf != "":
+				names, readFrom[s.ReplicaOf] = append(names, s.ReplicaOf), s.Name
+			case s.Name == from:
 				names = append(names, s.Name)
 			}
 		}
 		if cursor = next; cursor == "" {
+			if from != "" && len(names) == 0 {
+				return nil, nil, fault.New(fault.Precondition, "rebuild: the tenant has no storage named "+from+" to read from")
+			}
 			slices.Sort(names)
-			return names, nil
+			return names, readFrom, nil
 		}
 	}
 }
@@ -306,7 +329,7 @@ func (u *unitRun) build() error {
 	if prog.Complete {
 		return nil
 	}
-	names, err := u.storageNames()
+	names, readFrom, err := u.storageNames()
 	if err != nil {
 		return err
 	}
@@ -334,7 +357,11 @@ func (u *unitRun) build() error {
 				return err
 			}
 		}
-		bs, err := stores.Get(u.ctx, name)
+		source := name
+		if r, ok := readFrom[name]; ok {
+			source = r
+		}
+		bs, err := stores.Get(u.ctx, source)
 		if err != nil {
 			return storageErr(err)
 		}

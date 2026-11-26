@@ -194,9 +194,10 @@ func (r *replicaRig) archiveTwo(scan, base string) (label.Path, string, []string
 
 // TestReplicaDamageIsTheReplicasNeverTheInstances guards that a scrub of
 // the whole tenant reads a replica in step like the primary: an object
-// changed on the replica becomes the replica's damage (its row damaged),
-// never a mark on the instance nor a scrub finding, and none of the
-// replica's objects is taken for an orphan; and that a later scrub that
+// changed on the replica becomes the replica's damage (its row damaged,
+// and a finding on the replica's name), never a mark on the instance nor a
+// finding on the primary, and none of the replica's objects is taken for
+// an orphan; and that a later scrub that
 // reads it good clears the damage and puts the row in step again.
 func TestReplicaDamageIsTheReplicasNeverTheInstances(t *testing.T) {
 	r := newReplicaRig(t)
@@ -219,8 +220,11 @@ func TestReplicaDamageIsTheReplicasNeverTheInstances(t *testing.T) {
 			t.Errorf("the instance %s is marked; a replica's damage marks no instance", in.SOPInstanceUID)
 		}
 	}
-	if got := r.findings(false); len(got) != 0 {
-		t.Errorf("the scrub holds findings %v; a replica's damage is its own, and its objects are no orphans", got)
+	if got := r.findingsOn("copy"); len(got) != 1 || got[0] != "damaged "+keys[0] {
+		t.Errorf("the scrub holds findings %v on the replica; want its damage alone: its objects are no orphans", got)
+	}
+	if got := r.findingsOn("main"); len(got) != 0 {
+		t.Errorf("the scrub holds findings %v on the primary; a replica's damage is its own", got)
 	}
 	if got := r.tallies(j.ID)[TallyReplicaDamaged]; got != 1 {
 		t.Errorf("the scrub tallied %d objects damaged on a replica; want 1", got)

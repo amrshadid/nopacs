@@ -33,7 +33,7 @@ func (f found) matches(in sidecar.Instance) bool {
 // scan checks one scan and, when its sidecar is of version 1, gives every
 // line that lacks a table its table, a batch at a time, the last batch
 // making the sidecar complete.
-func (r *runner) scan(ctx context.Context, storage string, path label.Path) error {
+func (r *runner) scan(ctx context.Context, storage string, path label.Path, series string) error {
 	store, err := r.storage(ctx, storage)
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (r *runner) scan(ctx context.Context, storage string, path label.Path) erro
 	}
 	switch sidecar.VersionOf(head) {
 	case sidecar.VersionFrames, sidecar.Version:
-		return nil
+		return r.settleDigest(ctx, r.cfg.Catalog, storage, path, key)
 	case 1:
 	default:
 		r.cfg.Logger.Warn("frames: a scan's metadata is not in a form this version reads; it is left as it is",
@@ -72,9 +72,14 @@ func (r *runner) scan(ctx context.Context, storage string, path label.Path) erro
 		if err != nil {
 			return r.leave(path, err)
 		}
-		n, err := r.rewrite(ctx, storage, path, key, tables, last)
+		n, err := r.rewrite(ctx, storage, path, series, key, tables, last)
 		if err != nil {
-			return r.leave(path, err)
+			if err := r.leave(path, err); err != nil {
+				return err
+			}
+			// A rewrite cut off after it dropped the file's digest left the
+			// file as it was: its digest is recorded again.
+			return r.settleDigest(ctx, r.cfg.Catalog, storage, path, key)
 		}
 		total += n
 		if last {
@@ -242,8 +247,11 @@ func (c *countReader) Read(p []byte) (int, error) {
 // replaced meanwhile, which has its own table, is kept as the reception
 // wrote it, and a table is given only to a line that still names the file
 // it was read from (its key, size and checksum: the same bytes on whichever
-// place they were read from).
-func (r *runner) rewrite(ctx context.Context, storage string, path label.Path, key string,
+// place they were read from). The digest of the file it replaces is
+// dropped before the put (forgetDigest), and the file put is recorded with
+// the catalog (recordRewrite) before the lock is let go, so no reception's
+// commit of the scan comes between the two.
+func (r *runner) rewrite(ctx context.Context, storage string, path label.Path, series, key string,
 	tables map[string]found, last bool) (int64, error) {
 	store, release, err := r.admit(ctx, storage)
 	if err != nil {
@@ -289,6 +297,9 @@ func (r *runner) rewrite(ctx context.Context, storage string, path label.Path, k
 			}
 		}
 	}
+	if err := forgetDigest(ctx, r.cfg.Catalog, series, storage); err != nil {
+		return 0, err
+	}
 	pr, pw := io.Pipe()
 	done := make(chan error, 1)
 	go func() {
@@ -301,13 +312,16 @@ func (r *runner) rewrite(ctx context.Context, storage string, path label.Path, k
 		_ = pw.CloseWithError(err)
 		done <- err
 	}()
-	_, perr := store.Put(ctx, key, pr)
+	w, perr := store.Put(ctx, key, pr)
 	_ = pr.CloseWithError(errors.New("the storage stopped reading"))
 	if merr := <-done; merr != nil && !errors.Is(merr, io.ErrClosedPipe) {
 		return 0, merr
 	}
 	if perr != nil {
 		return 0, storageError(perr, "the scan's metadata cannot be written")
+	}
+	if err := recordRewrite(ctx, r.cfg.Catalog, r.cfg.Clock.Now(), series, storage, w); err != nil {
+		return 0, err
 	}
 	return given, nil
 }

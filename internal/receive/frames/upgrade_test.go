@@ -42,7 +42,21 @@ type upCatalog struct {
 	onHeld func(scan string) error
 	// heldReads counts the reads of instances.
 	heldReads int
+	// rewrites counts the sidecars rewritten that the pass told.
+	rewrites int
 }
+
+// RecordSidecarRewritten counts what the pass told of a sidecar it rewrote.
+func (c *upCatalog) RecordSidecarRewritten(context.Context, string, string, tenant.SHA256, time.Time) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.rewrites++
+	return true, nil
+}
+
+// ForgetSidecar drops nothing: the scans of this catalog keep no metadata
+// digest.
+func (c *upCatalog) ForgetSidecar(context.Context, string, string) (bool, error) { return false, nil }
 
 func (c *upCatalog) ListScans(_ context.Context, _ tenant.ScanFilter, page master.Page) (tenant.CatalogPage[tenant.CatalogScan], error) {
 	c.mu.Lock()

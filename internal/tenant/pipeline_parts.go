@@ -301,6 +301,31 @@ type ScanValueFill interface {
 	FillScanValues(ctx context.Context, seriesUID string, v ScanValues) error
 }
 
+// SidecarRewrites records a scan's metadata file rewritten without a new
+// manifest: the pass that gives metadata files written before frame tables
+// their tables rewrites each such file whole, and nothing else tells the
+// catalog or the replicas.
+type SidecarRewrites interface {
+	// RecordSidecarRewritten records that the metadata file of the scan of
+	// the series, on the storage named, was rewritten as bytes of digest
+	// sidecar while its manifest was the scan's manifest digest now: the
+	// digest is kept with the scan (CatalogScan.SidecarSHA256), and every
+	// replica of the storage that holds a row of the scan is queued to copy
+	// it again, counted as a change of the scan, so a copy claimed before
+	// does not end in step with the old file. It answers whether it
+	// recorded: a series the catalog does not hold, a scan now on another
+	// storage, or one with no manifest digest records nothing, and so does
+	// a scan an instance delete's purge is rewriting (its purge puts its own
+	// file next).
+	RecordSidecarRewritten(ctx context.Context, seriesUID, storage string, sidecar SHA256, now time.Time) (bool, error)
+	// ForgetSidecar drops the digest kept of the metadata file of the scan
+	// of the series while it is on the storage named, and answers whether
+	// there was one: what a writer calls before it puts a new file whose
+	// digest it records after, so a record that fails leaves the file
+	// unchecked rather than checked against the file it replaced.
+	ForgetSidecar(ctx context.Context, seriesUID, storage string) (bool, error)
+}
+
 // ValidateFillScanValues returns an Invalid error unless a FillScanValues
 // call is well formed.
 func ValidateFillScanValues(seriesUID string, v ScanValues) error {
@@ -326,6 +351,7 @@ type PipelineParts interface {
 	ScanContents
 	CatalogReads
 	ScanValueFill
+	SidecarRewrites
 	Sending
 	Deidentification
 	Importing

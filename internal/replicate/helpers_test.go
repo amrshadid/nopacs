@@ -113,6 +113,9 @@ type fixture struct {
 	// editManifest, when set, changes a scan's next manifest lines before
 	// the manifest is written and its checksum committed.
 	editManifest func(lines []manifest.File) []manifest.File
+	// sidecarDigest, when set, commits each scan with its sidecar's
+	// SHA-256, as a reception does.
+	sidecarDigest bool
 }
 
 // newFixture makes the tenant "lab" with the storages "main" and "copy"
@@ -252,7 +255,8 @@ func (f *fixture) stage(n int, scan string, files []entry) (commit func()) {
 		confirmed = append(confirmed, tenant.ConfirmedInstance{SOPInstanceUID: e.uid, Key: key, Length: e.size, Size: e.size, ArchivedSHA256: sum})
 		lines = append(lines, manifest.File{Key: key, Length: e.size, Size: e.size, SHA256: sum.String(), SOPInstanceUID: e.uid})
 	}
-	f.putPrimary(mustKey(layout.MetadataKey(si.path)), fmt.Appendf(nil, "sidecar of %s with %d files\n", scan, len(lines)))
+	sidecar := fmt.Appendf(nil, "sidecar of %s with %d files\n", scan, len(lines))
+	f.putPrimary(mustKey(layout.MetadataKey(si.path)), sidecar)
 	if f.editManifest != nil {
 		lines = f.editManifest(lines)
 	}
@@ -261,6 +265,9 @@ func (f *fixture) stage(n int, scan string, files []entry) (commit func()) {
 		t.Helper()
 		c := tenant.ScanCommit{ReceptionID: r.ID, StudyUID: si.study, SeriesUID: si.series, SubjectLabel: si.path.Subject,
 			SessionLabel: si.path.Session, ScanLabel: si.path.Scan, Storage: "main", ManifestSHA256: sum, At: r.StepTime, Instances: confirmed}
+		if f.sidecarDigest {
+			c.SidecarSHA256 = tenant.SHA256(sha256.Sum256(sidecar))
+		}
 		if _, err := f.p.CommitScan(f.ctx, c); err != nil {
 			t.Fatal(err)
 		}

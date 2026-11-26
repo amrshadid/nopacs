@@ -348,7 +348,8 @@ func (p *Pipeline) archiveScan(ctx context.Context, w tenant.Work, r tenant.Rece
 	}
 	p.at("archive.before-sidecar")
 	var values tenant.ScanValues
-	if err := p.putSidecar(ctx, store, metadataKey, cat, g.uid, r, at, puts, func(u string) bool { return !inManifest[u] || ours[u] }, &values); err != nil {
+	sidecarSum, err := p.putSidecar(ctx, store, metadataKey, cat, g.uid, r, at, puts, func(u string) bool { return !inManifest[u] || ours[u] }, &values)
+	if err != nil {
 		return res, err
 	}
 	p.at("archive.before-manifest")
@@ -363,7 +364,7 @@ func (p *Pipeline) archiveScan(ctx context.Context, w tenant.Work, r tenant.Rece
 		c := tenant.ScanCommit{
 			ReceptionID: r.ID, StudyUID: r.StudyUID, SeriesUID: g.uid,
 			SubjectLabel: path.Subject, SessionLabel: path.Session, ScanLabel: path.Scan,
-			Storage: r.Storage, ManifestSHA256: manifestSum, Values: values, At: at, Fence: &fence,
+			Storage: r.Storage, ManifestSHA256: manifestSum, SidecarSHA256: sidecarSum, Values: values, At: at, Fence: &fence,
 		}
 		for _, wr := range part {
 			c.Instances = append(c.Instances, tenant.ConfirmedInstance{
@@ -498,7 +499,9 @@ func (p *Pipeline) LockScan(storage, manifestKey string) func() {
 // putSidecar writes the scan's metadata sidecar: the sidecar the storage
 // holds, merged with this reception's instances, streamed to the storage as
 // it is made, each instance's header and frame table read from its
-// incoming copy only when its line is written. It sets values to what the
+// incoming copy only when its line is written. It returns the SHA-256 of
+// the bytes put, which the commit keeps with the manifest's, so a replica's
+// copy and a read of the file are checked against it. It sets values to what the
 // first of those headers says of the scan and its session (scanValues),
 // which the commit gives the catalog, so no header is read twice; that
 // first line is made before the sidecar's header is written, which holds
@@ -509,7 +512,7 @@ func (p *Pipeline) LockScan(storage, manifestKey string) func() {
 // attempt that never committed wrote, and nothing of it is kept, since
 // every line it holds is one the manifest does not list.
 func (p *Pipeline) putSidecar(ctx context.Context, store blob.Store, key string, c scanCatalog, seriesUID string, r tenant.Reception,
-	at time.Time, puts []written, drop func(string) bool, values *tenant.ScanValues) error {
+	at time.Time, puts []written, drop func(string) bool, values *tenant.ScanValues) (tenant.SHA256, error) {
 	var old io.Reader
 	if c.hasScan {
 		rc, err := store.Read(ctx, key, 0, -1)
@@ -518,13 +521,13 @@ func (p *Pipeline) putSidecar(ctx context.Context, store blob.Store, key string,
 			old = rc
 			defer func() { _ = rc.Close() }()
 		case fault.KindOf(err) != fault.NotFound:
-			return storageError(err, "the scan's metadata cannot be read")
+			return tenant.SHA256{}, storageError(err, "the scan's metadata cannot be read")
 		}
 	}
 	meta := p.sidecarMetaFor(ctx, r, c, seriesUID, at)
 	first, h, err := p.sidecarLine(ctx, meta, puts[0])
 	if err != nil {
-		return err
+		return tenant.SHA256{}, err
 	}
 	*values = scanValues(h)
 	meta.withValues(c, *values)
@@ -551,19 +554,19 @@ func (p *Pipeline) putSidecar(ctx context.Context, store blob.Store, key string,
 		_ = pw.CloseWithError(err)
 		done <- err
 	}()
-	_, perr := store.Put(ctx, key, pr)
+	w, perr := store.Put(ctx, key, pr)
 	_ = pr.CloseWithError(errors.New("the storage stopped reading"))
 	merr := <-done
 	if merr != nil && !errors.Is(merr, io.ErrClosedPipe) {
 		if fault.KindOf(merr) == fault.Internal {
-			return fault.Wrap(fault.Internal, merr, "the scan's metadata cannot be made")
+			return tenant.SHA256{}, fault.Wrap(fault.Internal, merr, "the scan's metadata cannot be made")
 		}
-		return merr
+		return tenant.SHA256{}, merr
 	}
 	if perr != nil {
-		return storageError(perr, "the scan's metadata cannot be written")
+		return tenant.SHA256{}, storageError(perr, "the scan's metadata cannot be written")
 	}
-	return nil
+	return tenant.SHA256(w.SHA256), nil
 }
 
 // sidecarLine returns the sidecar line of the written file wr, read from

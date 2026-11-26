@@ -59,3 +59,23 @@ func (t *Tenant) OpenScrubFindings(ctx context.Context) (map[tenant.ScrubFinding
 func (t *Tenant) DamagedInstances(ctx context.Context, uids []string) (map[string]string, error) {
 	return t.sending().DamagedInstances(ctx, uids)
 }
+
+// RecordScanVerified implements tenant.VerificationRecorder.
+func (t *Tenant) RecordScanVerified(ctx context.Context, v tenant.ScanVerified) error {
+	return t.sending().RecordScanVerified(ctx, v)
+}
+
+// ScanVerifications implements tenant.VerificationSource.
+func (t *Tenant) ScanVerifications(ctx context.Context, storage, after string, limit int) ([]tenant.ScanVerification, string, error) {
+	return t.sending().ScanVerifications(ctx, storage, after, limit)
+}
+
+// RecordSidecarRewritten implements tenant.SidecarRewrites.
+func (t *Tenant) RecordSidecarRewritten(ctx context.Context, seriesUID, storage string, sidecar tenant.SHA256, now time.Time) (bool, error) {
+	return t.sending().RecordSidecarRewritten(ctx, seriesUID, storage, sidecar, now)
+}
+
+// ForgetSidecar implements tenant.SidecarRewrites.
+func (t *Tenant) ForgetSidecar(ctx context.Context, seriesUID, storage string) (bool, error) {
+	return t.sending().ForgetSidecar(ctx, seriesUID, storage)
+}

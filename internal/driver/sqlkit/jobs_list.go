@@ -128,10 +128,11 @@ func (k Sending) ListJobScans(ctx context.Context, fence tenant.WorkFence, now t
 
 // listTarget lists the next page of what the job's target holds: a
 // reception's scans for a forward, by reception_scans' key; a storage's
-// scans for a scrub of one storage, by the scans' index on their storage;
-// every scan of the tenant for a deid or scrub job of the whole tenant, by
-// the scans' key; a
-// scan, a session's scans or a subject's scans of the catalog by scans_by_label,
+// scans for a scrub of one storage (a replica's primary's for a replica),
+// by the scans' index on their storage; every scan of the tenant for a deid
+// or scrub job of the whole tenant, by the scans' key; a scan (a scrub of
+// one scan among them), a session's scans or a subject's scans of the
+// catalog by scans_by_label,
 // each with the instances held at or before the job's bound. full says the
 // page was full, so more may follow.
 func (k Sending) listTarget(ctx context.Context, tx SendingTx, r jobRow) ([]listedScan, bool, error) {
@@ -162,8 +163,19 @@ func (k Sending) listTarget(ctx context.Context, tx SendingTx, r jobRow) ([]list
 	}
 	var err error
 	switch {
-	case j.Kind == tenant.JobScrub && j.Storage != "":
-		err = tx.Query(ctx, storageScansSQL, []any{j.Storage, r.listID, tenant.JobListPage}, scanRow)
+	case j.Kind == tenant.JobScrub && j.Storage != "" && t.Whole():
+		// A replica holds its primary's scans, under the same keys: a scrub
+		// of a replica lists the primary's, and each scan's unit reads only
+		// the replica.
+		held := j.Storage
+		var replicaOf string
+		if _, err := tx.QueryRow(ctx, `SELECT replica_of FROM storages WHERE name = ?`, []any{j.Storage}, &replicaOf); err != nil {
+			return nil, false, err
+		}
+		if replicaOf != "" {
+			held = replicaOf
+		}
+		err = tx.Query(ctx, storageScansSQL, []any{held, r.listID, tenant.JobListPage}, scanRow)
 	case t.Whole():
 		err = tx.Query(ctx, tenantScansSQL, []any{r.listID, tenant.JobListPage}, scanRow)
 	case t.ScanLabel != "":

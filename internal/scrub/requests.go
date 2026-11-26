@@ -41,13 +41,13 @@ import (
 // does.
 //
 // Requests are read by the units of scrubs that run anyway. When none runs,
-// the supervisor makes a scrub of the storage that holds the first request
-// waiting, at most one such scrub per storage per scrub.interval
-// (requestInterval when the tenant's scrub.interval is never): a scrub
-// made for requests reads the whole storage, so a stream of requests must
-// not become a stream of whole-storage reads. Requests made after it wait
-// for the next scrub of the tenant, made by the schedule, by a person, or
-// once the interval has passed, and the supervisor logs that they wait.
+// the supervisor makes a scrub of the one scan that holds the first request
+// waiting, on its storage alone: a scan's read, not a whole storage's, so a
+// stream of requests costs what the scans asked for and never becomes a
+// stream of whole-storage reads; the rate and the bound of requests above
+// bound it. Its unit reads the requests waiting first, as every unit does,
+// then the scan. A scrub of the storage already queued or running serves
+// instead, and its next unit reads them.
 
 // The bounds of requests to scrub one instance.
 const (
@@ -63,10 +63,6 @@ const (
 	// maxRequestAttempts is how many times a request is tried before it is
 	// dropped.
 	maxRequestAttempts = 3
-	// requestInterval is the least time between two scrubs a tenant's
-	// server makes of one storage for requests when scrub.interval is
-	// never: the shortest scrub.interval.
-	requestInterval = 24 * time.Hour
 )
 
 // RequestMethod is the method the audit entry of a scrub the server makes
@@ -380,12 +376,11 @@ func (u *unitRun) requestOne(req InstanceRequest) (string, error) {
 }
 
 // requestJob makes, when requests of the tenant wait and no unit of its
-// scrubs was due, a scrub of the storage the catalog holds the first of
-// them on, so they are read now; one already queued or running of that
-// storage serves. It makes at most one per storage per scrub.interval of
-// the tenant (st's), and logs once in that time that requests wait. It
-// reports whether it made one.
-func (t *tenantRun) requestJob(p tenant.Pipeline, st tenant.Store) bool {
+// scrubs was due, a scrub of the scan the first of them names, on the
+// storage the catalog holds it on, so they are read now; a scrub of that
+// storage already queued or running serves. It reports whether it made
+// one.
+func (t *tenantRun) requestJob(p tenant.Pipeline) bool {
 	req, ok := t.sup.requests.first(t.name)
 	if !ok {
 		return false
@@ -406,23 +401,15 @@ func (t *tenantRun) requestJob(p tenant.Pipeline, st tenant.Store) bool {
 		return false
 	}
 	now := t.sup.cfg.Now()
-	every := t.requestEvery(ctx, st)
-	if last, made := t.requestMade[sc.Storage]; made && now.Sub(last) < every {
-		if !t.requestWaitLogged[sc.Storage] {
-			t.requestWaitLogged[sc.Storage] = true
-			t.log.Info("scrubs: requested instances wait for the next scrub of their storage; one was made for requests within scrub.interval",
-				"storage", sc.Storage)
-		}
-		return false
-	}
-	id := requestJobID(sc.Storage, now, every)
+	id := requestJobID(sc.Storage, req.Path, now)
 	audit := master.AuditEntry{ID: t.sup.cfg.NewID(), Time: now, Method: RequestMethod, TenantName: t.name, Object: id,
 		Outcome: master.OutcomeDone, Details: map[string]string{"kind": string(tenant.JobScrub), "storage": sc.Storage}}
-	_, err = p.CreateJob(ctx, tenant.NewJob{ID: id, Kind: tenant.JobScrub, Storage: sc.Storage, Scheduled: true, Created: now}, audit, nil)
+	target := tenant.JobTarget{SubjectLabel: req.Path.Subject, SessionLabel: req.Path.Session, ScanLabel: req.Path.Scan}
+	_, err = p.CreateJob(ctx, tenant.NewJob{ID: id, Kind: tenant.JobScrub, Storage: sc.Storage, Target: target, Scheduled: true,
+		Created: now}, audit, nil)
 	switch fault.KindOf(err) {
 	case fault.Conflict:
-		t.requestMade[sc.Storage] = now // made in this period already, by this server or another
-		return false
+		return false // made at this instant already, by this server or another
 	case fault.Precondition:
 		return false // a scrub of the storage runs: its next unit reads the requests
 	default:
@@ -431,33 +418,15 @@ func (t *tenantRun) requestJob(p tenant.Pipeline, st tenant.Store) bool {
 			return false
 		}
 	}
-	t.requestMade[sc.Storage] = now
-	delete(t.requestWaitLogged, sc.Storage)
-	t.log.Info("scrubs: a scrub was made to read instances reads asked for", "storage", sc.Storage, "job", id)
+	t.log.Info("scrubs: a scrub of one scan was made to read instances reads asked for", "storage", sc.Storage, "job", id)
 	t.sup.cfg.Wake(t.name)
 	return true
 }
 
-// requestEvery returns the least time between two scrubs made for
-// requests of one storage: the tenant's scrub.interval, or requestInterval
-// when it is never or cannot be read.
-func (t *tenantRun) requestEvery(ctx context.Context, st tenant.Store) time.Duration {
-	every, err := t.sup.cfg.TenantSettings(st).ScrubInterval(ctx)
-	if err != nil {
-		t.log.Warn("scrubs: scrub.interval could not be read; scrubs for requests are made at most once a day", "reason", fault.Message(err))
-		return requestInterval
-	}
-	if every <= 0 {
-		return requestInterval
-	}
-	return every
-}
-
-// requestJobID returns the id of the scrub made for requests of a storage
-// at now, for scrubs made at most every so often: one per storage and
-// period, so two servers of the tenant make one.
-func requestJobID(storage string, now time.Time, every time.Duration) string {
-	period := now.UnixNano() / int64(every)
-	sum := sha256.Sum256([]byte(storage + "\x00" + strconv.FormatInt(int64(every), 10) + "\x00" + strconv.FormatInt(period, 10)))
+// requestJobID returns the id of the scrub made at now for requests of the
+// scan at path on storage.
+func requestJobID(storage string, path label.Path, now time.Time) string {
+	sum := sha256.Sum256([]byte(storage + "\x00" + path.Subject + "\x00" + path.Session + "\x00" + path.Scan + "\x00" +
+		strconv.FormatInt(now.UnixNano(), 10)))
 	return "scrub-request-" + hex.EncodeToString(sum[:10])
 }

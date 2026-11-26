@@ -218,12 +218,17 @@ const (
 	FailureTLSFailed                  AssociationFailure = "tls_failed"
 	FailureProtocolError              AssociationFailure = "protocol_error"
 	FailureIncomingLimit              AssociationFailure = "incoming_limit"
+	// FailureStorageSwitching is a caller turned away because the storage
+	// its files would be archived to is being switched to its replica:
+	// every write to it waits until the switch ends, so the caller is told
+	// to send again rather than held.
+	FailureStorageSwitching AssociationFailure = "storage_switching"
 )
 
 // associationFailures is the closed list of failures.
 var associationFailures = []AssociationFailure{FailureCallerNotAllowed, FailureCalledAETitleNotRecognized,
 	FailureNoAcceptableContext, FailureNearlyFull, FailureTenantNotReady, FailureTLSFailed, FailureProtocolError,
-	FailureIncomingLimit}
+	FailureIncomingLimit, FailureStorageSwitching}
 
 // GroupCaller is who called, in an event that groups connections: the AE
 // titles when they were read, and the host's address without its port.

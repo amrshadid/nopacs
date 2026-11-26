@@ -467,6 +467,9 @@ func (k Sending) recountShown(ctx context.Context, tx SendingTx, id string, inst
 
 // dropHidden removes every hidden row of a correction.
 func dropHidden(ctx context.Context, tx SendingTx, id string) error {
+	if err := dropHiddenScanRowsInTx(ctx, tx, id); err != nil {
+		return err
+	}
 	for _, table := range []string{"instances", "reception_scans", "scans", "session_modalities", "sessions", "subjects"} {
 		// #nosec G202 -- table is a constant.
 		if _, err := tx.Exec(ctx, `DELETE FROM hidden_`+table+` WHERE correction_id = ?`, id); err != nil {
