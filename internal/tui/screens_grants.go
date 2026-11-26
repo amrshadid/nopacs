@@ -38,9 +38,10 @@ func newGrantList(c *ctx, f grantFilter) (screen, tea.Cmd) {
 	l.fetch = func(c *ctx, l listScreen, token string) tea.Cmd {
 		return grantsPage(c, l.id, l.gen, token, l.params.(grantFilter))
 	}
-	if f.scope != nil {
+	if f.scope != nil && c.acc.onInstallation(v1.Role_ROLE_ADMIN) {
 		// On a tenant's grants, enter opens the key that holds the grant,
-		// which is where its holder is shown.
+		// which is where its holder is shown. Only an admin on the
+		// installation may read a key; a tenant's admin sees the grant.
 		l.open = func(c *ctx, _ listScreen, r row) tea.Cmd {
 			g, _ := r.ref.(*v1.Grant)
 			s, cmd := newKeyDetail(c, &v1.Key{Id: g.GetKeyId()}, true)

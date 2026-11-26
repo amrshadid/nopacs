@@ -18,7 +18,7 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 // tenantActions are the keys of a tenant's screen that open what it holds:
 // its status, storages, receivers, senders, jobs, receptions and quarantined
 // files. The key for jobs is not j: on a detail screen j scrolls.
-func tenantActions(name string) []action {
+func tenantActions(c *ctx, name string) []action {
 	open := func(make func(c *ctx, tenant string) (screen, tea.Cmd)) func(c *ctx, _ screen, _ any) tea.Cmd {
 		return func(c *ctx, _ screen, _ any) tea.Cmd {
 			s, cmd := make(c, name)
@@ -26,15 +26,41 @@ func tenantActions(name string) []action {
 		}
 	}
 	return []action{
-		{key: "t", help: "status", do: open(newStatus)},
-		{key: "o", help: "storages", do: open(newStorageList)},
-		{key: "r", help: "receivers", do: open(newReceiverList)},
-		{key: "n", help: "senders", do: open(newSenderList)},
-		{key: "w", help: "jobs", do: open(newJobList)},
-		{key: "e", help: "receptions", do: open(newReceptionList)},
-		{key: "h", help: "quarantine", do: open(newQuarantineList)},
-		{key: "c", help: "catalog", do: open(newSubjectList)},
+		{key: "t", help: "status", need: v1.Role_ROLE_READER, do: open(newStatus)},
+		{key: "o", help: "storages", need: v1.Role_ROLE_READER, do: open(newStorageList)},
+		{key: "r", help: "receivers", need: v1.Role_ROLE_READER, do: open(newReceiverList)},
+		{key: "n", help: "senders", need: v1.Role_ROLE_READER, do: open(newSenderList)},
+		{key: "w", help: "jobs", need: v1.Role_ROLE_READER, do: open(newJobList)},
+		{key: "e", help: "receptions", need: v1.Role_ROLE_READER, do: open(newReceptionList)},
+		{key: "h", help: "quarantine", need: v1.Role_ROLE_READER, do: open(newQuarantineList)},
+		{key: "c", help: "catalog", need: v1.Role_ROLE_READER, do: open(newSubjectList)},
+		{key: "b", help: "replicas", need: v1.Role_ROLE_READER, do: open(newReplicaList)},
+		{key: "i", help: "retention", need: v1.Role_ROLE_READER, do: open(newRuleList)},
+		{key: "l", help: "holds", need: v1.Role_ROLE_OPERATOR, do: open(newHoldList)},
+		{key: "x", help: "corrections", need: v1.Role_ROLE_OPERATOR, do: open(newCorrectionList)},
+		{key: "f", help: "findings", need: v1.Role_ROLE_OPERATOR, do: open(newFindingList)},
+		{key: "p", help: "profiles", need: v1.Role_ROLE_OPERATOR, do: open(newProfileList)},
+		{key: "v", help: "audit seal", need: v1.Role_ROLE_ADMIN, do: func(c *ctx, _ screen, _ any) tea.Cmd {
+			s, cmd := newSealVerify(c, tenantScope(name))
+			return push(s, cmd)
+		}},
 	}
+}
+
+// allowed keeps the keys of a tenant's screen that the caller's grants allow:
+// a key that asks a role on the tenant, or on the installation, the caller does
+// not hold is left out, so a reader is not offered what only an admin may do.
+func allowed(c *ctx, tenant string, actions []action) []action {
+	var out []action
+	for _, a := range actions {
+		switch {
+		case a.installation && !c.acc.onInstallation(v1.Role_ROLE_ADMIN):
+		case a.need != 0 && !c.acc.onTenant(tenant, a.need):
+		default:
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // ---- status ----
@@ -138,7 +164,28 @@ func statusPairs(c *ctx, ref any) []pair {
 		if s.GetNearlyFull() {
 			v += ", nearly full"
 		}
+		v += ", " + output.StorageTier(s.GetTier()) + " tier"
+		if s.GetReplicaOf() != "" {
+			v += ", replica of " + s.GetReplicaOf()
+		}
+		if s.GetSwitching() {
+			v += ", SWITCHING: its receivers refuse new data"
+		}
+		v += ", encrypted at rest: " + output.Encryption(s.GetEncryptionAtRest(), s.GetEncryptionAlgorithm())
+		if cv := s.GetCoverage(); cv != nil {
+			v += ", scrubbed: " + output.Coverage(cv)
+		}
 		ps = append(ps, pair{"Storage " + s.GetStorage(), v})
+	}
+	for _, r := range st.GetReplicas() {
+		ps = append(ps, pair{"Replica " + r.GetReplica(), "of " + r.GetPrimary() + ", " + itoa(r.GetScansInStep()) + " scans in step, " + itoa(r.GetScansPending()) + " waiting"})
+	}
+	if rs := st.GetRetention(); rs != nil {
+		v := itoa(rs.GetRules()) + " rules, " + itoa(rs.GetSessionsDue()) + " sessions due, " + itoa(rs.GetActiveHolds()) + " holds"
+		if rs.GetPaused() {
+			v += ", PAUSED: " + rs.GetPauseReason()
+		}
+		ps = append(ps, pair{"Retention", v})
 	}
 	for _, r := range st.GetReceivers() {
 		v := output.ReceiverHealth(r.GetHealth())
@@ -165,6 +212,7 @@ func newStorageList(c *ctx, tenant string) (screen, tea.Cmd) {
 		d := detailScreen{base: base{c.newID()}, heading: "Storage " + clean(st.GetName()), ref: st, pairs: func(c *ctx, ref any) []pair {
 			st, _ := ref.(*v1.Storage)
 			return []pair{{"Name", st.GetName()}, {"Type", output.StorageType(st)}, {"Location", output.StorageWhere(st)},
+				{"Tier", output.StorageTier(st.GetTier())}, {"Replica of", output.Dash(st.GetReplicaOf())},
 				{"Capacity", output.Bytes(st.GetCapacityBytes())}, {"Created", output.Time(st.GetCreateTime(), c.loc)}}
 		}}
 		return push(d, nil)
@@ -208,6 +256,11 @@ func newReceiverList(c *ctx, tenant string) (screen, tea.Cmd) {
 			return []pair{{"Name", rc.GetName()}, {"Enabled", strconv.FormatBool(rc.GetEnabled())}, {"Health", output.ReceiverHealth(rc.GetHealth())},
 				{"Port", itoa(int64(dm.GetPort()))}, {"AE title", dm.GetAeTitle()}, {"Admits", callers}, {"Storage", rc.GetStorage()}}
 		}}
+		d.actions = []action{{key: "u", help: "routes", do: func(c *ctx, _ screen, ref any) tea.Cmd {
+			rc, _ := ref.(*v1.Receiver)
+			s, cmd := newRouteList(c, tenant, rc.GetName())
+			return push(s, cmd)
+		}}}
 		return push(d, nil)
 	}
 	nl, cmd := l.start(c)

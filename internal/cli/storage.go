@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +33,7 @@ installation's to decide (the settings storage.directory-roots and
 storage.s3-endpoints), so a tenant can never reach another tenant's files.
 Every command takes the tenant first. Adding, changing, removing and testing
 need the admin role on the tenant; list and show need the reader role.`,
-		a.newStorageAdd(), a.newStorageList(), a.newStorageShow(), a.newStorageSet(), a.newStorageRemove(), a.newStorageTest())
+		a.newStorageAdd(), a.newStorageList(), a.newStorageShow(), a.newStorageSet(), a.newStorageRemove(), a.newStorageTest(), a.newStorageStatus())
 }
 
 // storageFlags are the flags that describe a storage, for add and for set.
@@ -50,6 +51,11 @@ type storageFlags struct {
 	credEnv     string
 	credFile    string
 	capacity    string
+	replicaOf   string
+	tier        string
+	recallDays  int
+	recallTier  string
+	encrypted   bool
 }
 
 // add registers the flags on a command. For add the type is required and the
@@ -75,6 +81,48 @@ func (f *storageFlags) add(cmd *cobra.Command, forSet bool) {
 	fl.StringVar(&f.credFile, "credential-file", "", "s3: path of a file, readable only by you, that holds the secret access key that goes with --access-key-id")
 	fl.StringVar(&f.capacity, "capacity", "", "the most bytes the storage may hold, a size such as 500GiB; 0 for no limit of its own")
 	cmd.MarkFlagsMutuallyExclusive("credential-env", "credential-file")
+	if !forSet {
+		fl.StringVar(&f.replicaOf, "replica-of", "", "make the storage a replica of this primary of the tenant from the start; the server then copies what the primary holds")
+	} else {
+		fl.StringVar(&f.replicaOf, "replica-of", "", "refused here: a storage becomes a replica when it is added with --replica-of, or by \"replica attach\"")
+	}
+	fl.StringVar(&f.tier, "tier", "", "online (every object reads at once, the default) or archive (some objects must be recalled first; a replica on S3 only)")
+	_ = cmd.RegisterFlagCompletionFunc("tier", cobra.FixedCompletions(storageTierNames, cobra.ShellCompDirectiveNoFileComp))
+	fl.IntVar(&f.recallDays, "recall-days", 0, "s3, archive tier: how many days a recalled object stays readable (1 to 365)")
+	fl.StringVar(&f.recallTier, "recall-tier", "", "s3, archive tier: how fast the store brings an object back: standard, bulk or expedited")
+	_ = cmd.RegisterFlagCompletionFunc("recall-tier", cobra.FixedCompletions(recallTierNames, cobra.ShellCompDirectiveNoFileComp))
+	fl.BoolVar(&f.encrypted, "encrypted-at-rest-declared", false, "dir: state that the volume under the directory encrypts what it holds at rest; the status shows it as declared, never as checked")
+}
+
+// storageTierNames and recallTierNames are what a person may type for the
+// tier flags.
+var (
+	storageTierNames = []string{"online", "archive"}
+	recallTierNames  = []string{"standard", "bulk", "expedited"}
+)
+
+// parseStorageTier reads --tier.
+func parseStorageTier(s string) (v1.StorageTier, error) {
+	switch strings.ToLower(s) {
+	case "online":
+		return v1.StorageTier_STORAGE_TIER_ONLINE, nil
+	case "archive":
+		return v1.StorageTier_STORAGE_TIER_ARCHIVE, nil
+	}
+	return 0, fault.New(fault.Invalid, fmt.Sprintf("--tier %q is not a tier; use online or archive", output.Clean(s)))
+}
+
+// parseRecallTier reads --recall-tier.
+func parseRecallTier(s string) (v1.S3RecallTier, error) {
+	switch strings.ToLower(s) {
+	case "standard":
+		return v1.S3RecallTier_S3_RECALL_TIER_STANDARD, nil
+	case "bulk":
+		return v1.S3RecallTier_S3_RECALL_TIER_BULK, nil
+	case "expedited":
+		return v1.S3RecallTier_S3_RECALL_TIER_EXPEDITED, nil
+	}
+	return 0, fault.New(fault.Invalid, fmt.Sprintf("--recall-tier %q is not a recall tier; use standard, bulk or expedited", output.Clean(s)))
 }
 
 // readCredential reads an S3 secret access key from the environment variable
@@ -136,6 +184,44 @@ var (
 	dirNames = []string{"root", "path"}
 	s3Names  = []string{"endpoint", "region", "bucket", "prefix", "path-style", "purge-versions", "access-key-id", "credential-env", "credential-file"}
 )
+
+// applyReplication puts the replication and encryption flags of an added
+// storage in it. The flags of the other type are refused here, since the
+// server would refuse them with a less direct message.
+func (f *storageFlags) applyReplication(cmd *cobra.Command, st *v1.Storage) error {
+	st.ReplicaOf = f.replicaOf
+	if cmd.Flags().Changed("tier") {
+		t, err := parseStorageTier(f.tier)
+		if err != nil {
+			return err
+		}
+		st.Tier = t
+	}
+	if f.given(cmd, "recall-days", "recall-tier") {
+		s3 := st.GetS3()
+		if s3 == nil {
+			return fault.New(fault.Invalid, "--recall-days and --recall-tier belong to an S3 storage of the archive tier")
+		}
+		if cmd.Flags().Changed("recall-days") {
+			s3.RecallDays = int32(f.recallDays) // #nosec G115 -- the server bounds it to 1..365
+		}
+		if cmd.Flags().Changed("recall-tier") {
+			t, err := parseRecallTier(f.recallTier)
+			if err != nil {
+				return err
+			}
+			s3.RecallTier = t
+		}
+	}
+	if cmd.Flags().Changed("encrypted-at-rest-declared") {
+		d := st.GetDirectory()
+		if d == nil {
+			return fault.New(fault.Invalid, "--encrypted-at-rest-declared belongs to a directory storage: an S3 storage's encryption is read from the bucket")
+		}
+		d.EncryptedAtRestDeclared = f.encrypted
+	}
+	return nil
+}
 
 // newStorageAdd builds "storage add".
 func (a *app) newStorageAdd() *cobra.Command {
@@ -199,6 +285,9 @@ written to and how much room it has.`,
 				}
 				st.CapacityBytes = n
 			}
+			if err := f.applyReplication(cmd, st); err != nil {
+				return err
+			}
 			c, closeClient, err := a.open(cmd)
 			if err != nil {
 				return err
@@ -247,7 +336,8 @@ func (a *app) storageDetails(w io.Writer, st *v1.Storage) error {
 	case *v1.Storage_Directory:
 		pairs = append(pairs,
 			output.Pair{Label: "Root", Value: t.Directory.GetRoot()},
-			output.Pair{Label: "Path", Value: output.Dash(t.Directory.GetPath())})
+			output.Pair{Label: "Path", Value: output.Dash(t.Directory.GetPath())},
+			output.Pair{Label: "Encrypted at rest", Value: declaredText(t.Directory.GetEncryptedAtRestDeclared())})
 	case *v1.Storage_S3:
 		held := "not set"
 		if t.S3.GetSecretAccessKeySet() {
@@ -266,12 +356,28 @@ func (a *app) storageDetails(w io.Writer, st *v1.Storage) error {
 			output.Pair{Label: "Older versions", Value: olderVersionsText(t.S3)},
 			output.Pair{Label: "Access key id", Value: t.S3.GetAccessKeyId()},
 			output.Pair{Label: "Secret access key", Value: held})
+		if st.GetTier() == v1.StorageTier_STORAGE_TIER_ARCHIVE {
+			pairs = append(pairs,
+				output.Pair{Label: "Recall days", Value: strconv.Itoa(int(t.S3.GetRecallDays()))},
+				output.Pair{Label: "Recall tier", Value: output.RecallTier(t.S3.GetRecallTier())})
+		}
 	}
 	pairs = append(pairs,
+		output.Pair{Label: "Tier", Value: output.StorageTier(st.GetTier())},
+		output.Pair{Label: "Replica of", Value: output.Dash(output.Clean(st.GetReplicaOf()))},
+		output.Pair{Label: "Switch generation", Value: strconv.FormatInt(st.GetSwitchGeneration(), 10)},
 		output.Pair{Label: "Capacity", Value: capacityText(st.GetCapacityBytes())},
 		output.Pair{Label: "Created", Value: a.when(st.GetCreateTime())},
 		output.Pair{Label: "Updated", Value: a.when(st.GetUpdateTime())})
 	return output.Details(w, a.style(), pairs)
+}
+
+// declaredText words a directory's own statement about encryption at rest.
+func declaredText(declared bool) string {
+	if declared {
+		return "declared by the admin (not checked by the server)"
+	}
+	return "not declared"
 }
 
 // newStorageList builds "storage list".
@@ -310,10 +416,10 @@ Used and free space are part of the tenant's status.`,
 			return listOut(a, "storages", storages, more, func() error {
 				rows := make([][]string, 0, len(storages))
 				for _, st := range storages {
-					rows = append(rows, []string{st.GetName(), output.StorageType(st), output.StorageWhere(st), capacityText(st.GetCapacityBytes()), a.when(st.GetCreateTime())})
+					rows = append(rows, []string{st.GetName(), output.StorageType(st), output.StorageTier(st.GetTier()), output.Dash(output.Clean(st.GetReplicaOf())), output.StorageWhere(st), capacityText(st.GetCapacityBytes()), a.when(st.GetCreateTime())})
 				}
 				return a.write(func(w io.Writer) error {
-					return output.Table(w, a.style(), []string{"NAME", "TYPE", "LOCATION", "CAPACITY", "CREATED"}, rows)
+					return output.Table(w, a.style(), []string{"NAME", "TYPE", "TIER", "REPLICA OF", "LOCATION", "CAPACITY", "CREATED"}, rows)
 				})
 			})
 		}),
@@ -369,7 +475,9 @@ credentials given for one store are never sent to another, so it is given with
 --purge-versions changes only what later purges do with older versions on a
 bucket that keeps them, so it may change at any time.`,
 		Example: `  nopacs storage set lab1 main --capacity 1TiB
-  nopacs storage set lab1 cold --access-key-id AKIANEW --credential-file /etc/nopacs/new.s3`,
+  nopacs storage set lab1 cold --access-key-id AKIANEW --credential-file /etc/nopacs/new.s3
+  nopacs storage set lab1 cold --recall-days 14 --recall-tier bulk
+  nopacs storage set lab1 main --encrypted-at-rest-declared`,
 		Args: exactArgs(2),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {
 			st := &v1.Storage{Name: args[1]}
@@ -416,13 +524,40 @@ bucket that keeps them, so it may change at any time.`,
 				s3.AccessKeyId, s3.SecretAccessKey = f.accessKeyID, cred
 				paths = append(paths, "s3.access_key_id", "s3.secret_access_key")
 			}
+			if cmd.Flags().Changed("replica-of") {
+				return fault.New(fault.Invalid, "--replica-of cannot be changed here: add the storage with --replica-of, or make an existing empty storage a replica with \"nopacs replica attach\"")
+			}
+			if cmd.Flags().Changed("tier") {
+				t, err := parseStorageTier(f.tier)
+				if err != nil {
+					return err
+				}
+				st.Tier = t
+				paths = append(paths, "tier")
+			}
+			if cmd.Flags().Changed("recall-days") {
+				s3.RecallDays = int32(f.recallDays) // #nosec G115 -- the server bounds it to 1..365
+				paths = append(paths, "s3.recall_days")
+			}
+			if cmd.Flags().Changed("recall-tier") {
+				t, err := parseRecallTier(f.recallTier)
+				if err != nil {
+					return err
+				}
+				s3.RecallTier = t
+				paths = append(paths, "s3.recall_tier")
+			}
+			if cmd.Flags().Changed("encrypted-at-rest-declared") {
+				dir.EncryptedAtRestDeclared = f.encrypted
+				paths = append(paths, "directory.encrypted_at_rest_declared")
+			}
 			if len(paths) == 0 {
 				return fault.New(fault.Invalid, "nothing to change: give at least one flag, such as --capacity")
 			}
 			switch {
-			case f.given(cmd, dirNames...):
+			case f.given(cmd, dirNames...), f.given(cmd, "encrypted-at-rest-declared"):
 				st.Type = &v1.Storage_Directory{Directory: dir}
-			case f.given(cmd, s3Names...):
+			case f.given(cmd, s3Names...), f.given(cmd, "recall-days", "recall-tier"):
 				st.Type = &v1.Storage_S3{S3: s3}
 			}
 			c, closeClient, err := a.open(cmd)

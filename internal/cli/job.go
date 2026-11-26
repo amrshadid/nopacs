@@ -72,6 +72,7 @@ func (a *app) jobDetails(j *v1.Job) []output.Pair {
 	if rj := j.GetRebuild(); rj != nil {
 		pairs = append(pairs, rebuildJobDetails(rj)...)
 	}
+	pairs = append(pairs, output.ReplicationJobPairs(j)...)
 	sentLabel, refusedLabel := countLabels(j)
 	if j.GetReason() != "" {
 		pairs = append(pairs, output.Pair{Label: "Reason", Value: j.GetReason()})

@@ -68,6 +68,10 @@ type Client struct {
 	AuditSeal nopacsv1connect.AuditSealServiceClient
 	// Corrections is the CorrectionService.
 	Corrections nopacsv1connect.CorrectionServiceClient
+	// Replicas is the ReplicaService.
+	Replicas nopacsv1connect.ReplicaServiceClient
+	// Retention is the RetentionService.
+	Retention nopacsv1connect.RetentionServiceClient
 	// Backups is the BackupService.
 	Backups nopacsv1connect.BackupServiceClient
 
@@ -169,6 +173,8 @@ func New(cfg Config) (*Client, error) {
 		// The correction service's client.
 		Corrections: nopacsv1connect.NewCorrectionServiceClient(c),
 		Backups:     nopacsv1connect.NewBackupServiceClient(c),
+		Replicas:    nopacsv1connect.NewReplicaServiceClient(c),
+		Retention:   nopacsv1connect.NewRetentionServiceClient(c),
 		base:        strings.TrimSuffix(base, "/"),
 		key:         bearerK,
 		timeout:     timeout,
@@ -331,7 +337,7 @@ func (c *Client) classify(ctx context.Context, err error) error {
 		return fault.Wrap(fault.Unavailable, err, "no answer from "+c.target+" within "+c.timeout.String()+" (see --timeout)")
 	}
 	if errors.As(err, &ce) && ce.IsRemote() {
-		return codes.FromConnect(ce)
+		return remoteError(ce)
 	}
 	var (
 		unknown x509.UnknownAuthorityError
@@ -346,9 +352,68 @@ func (c *Client) classify(ctx context.Context, err error) error {
 		return fault.Wrap(fault.Unavailable, err, "cannot reach the server at "+c.target+": "+op.Err.Error())
 	}
 	if ce != nil {
-		return codes.FromConnect(ce)
+		return remoteError(ce)
 	}
 	return fault.Wrap(fault.Unavailable, err, "the call to "+c.target+" failed: "+err.Error())
+}
+
+// remoteError turns an API error into a fault error whose message says what
+// the server's details add: the reason (STORAGE_SWITCHING, NOT_ONLINE, HELD,
+// RETENTION_MINIMUM, ...) when the message does not start with it, and how long
+// to wait before trying again when the server gave a delay. A person who reads
+// only the line then knows whether to wait, to change something, or to stop.
+func remoteError(ce *connect.Error) error {
+	err := codes.FromConnect(ce)
+	msg := fault.Message(err)
+	reason, retry := ReasonOf(ce)
+	if reason != "" && !strings.HasPrefix(msg, reason) {
+		msg = reason + ": " + msg
+	}
+	if retry > 0 {
+		msg += " (try again in " + retry.Round(time.Second).String() + ")"
+	}
+	if msg == fault.Message(err) {
+		return err
+	}
+	return fault.Wrap(fault.KindOf(err), ce, msg)
+}
+
+// IsNotServed says whether an error is the server's answer that it does not
+// serve the method called yet (UNIMPLEMENTED), as opposed to a refusal of what
+// was asked.
+func IsNotServed(err error) bool {
+	var ce *connect.Error
+	return errors.As(err, &ce) && ce.Code() == connect.CodeUnimplemented
+}
+
+// OrNotServed turns the server's answer that it does not serve a method yet
+// (UNIMPLEMENTED) into one plain error that names what was asked and says that
+// nothing was changed. Any other error passes as it is. Only code for methods
+// the contract defines before a server serves them uses it, so a served method
+// that answers UNIMPLEMENTED by mistake is still shown as the server worded it.
+func OrNotServed(what string, err error) error {
+	if err == nil || !IsNotServed(err) {
+		return err
+	}
+	return fault.New(fault.Internal, what+": not served: this server does not serve it yet; nothing was changed")
+}
+
+// ReasonOf returns the reason and the retry delay an API error carries in its
+// google.rpc.ErrorInfo and google.rpc.RetryInfo details, found anywhere in the
+// chain of err: empty and zero for an error that carries none, or one from
+// another domain than the server's.
+func ReasonOf(err error) (reason string, retry time.Duration) {
+	var ce *connect.Error
+	if !errors.As(err, &ce) {
+		return "", 0
+	}
+	if r, ok := codes.ReasonOfError(ce); ok && r.Domain == codes.Domain {
+		reason = r.Reason
+	}
+	if d, ok := codes.RetryOfError(ce); ok {
+		retry = d
+	}
+	return reason, retry
 }
 
 // tlsReason is the short text of a certificate failure, without the long

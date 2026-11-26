@@ -163,6 +163,25 @@ func (h storageHandler) SetStorage(_ context.Context, req *v1.SetStorageRequest)
 		switch p {
 		case "capacity_bytes":
 			next.CapacityBytes = in.GetCapacityBytes()
+		case "tier":
+			if in.GetTier() == v1.StorageTier_STORAGE_TIER_ARCHIVE && next.GetReplicaOf() == "" {
+				return nil, fault.New(fault.Precondition, "tier: the archive tier is only for a replica")
+			}
+			next.Tier = in.GetTier()
+		case "s3.recall_days", "s3.recall_tier":
+			if next.GetS3() == nil {
+				return nil, fault.New(fault.Invalid, "update_mask: "+p+" is a field of the other type")
+			}
+			if p == "s3.recall_days" {
+				next.GetS3().RecallDays = in.GetS3().GetRecallDays()
+			} else {
+				next.GetS3().RecallTier = in.GetS3().GetRecallTier()
+			}
+		case "directory.encrypted_at_rest_declared":
+			if next.GetDirectory() == nil {
+				return nil, fault.New(fault.Invalid, "update_mask: "+p+" is a field of the other type")
+			}
+			next.GetDirectory().EncryptedAtRestDeclared = in.GetDirectory().GetEncryptedAtRestDeclared()
 		case "directory.root", "directory.path":
 			if next.GetDirectory() == nil {
 				return nil, fault.New(fault.Invalid, "update_mask: "+p+" is a field of the other type")

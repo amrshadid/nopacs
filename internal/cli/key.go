@@ -152,13 +152,20 @@ is written to standard output.`,
 // newKeyList builds "key list".
 func (a *app) newKeyList() *cobra.Command {
 	var l listFlags
+	var tenant string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List every key, revoked and expired ones included",
+		Use:   "list [--tenant NAME]",
+		Short: "List every key, revoked and expired ones included, or the keys of one tenant",
 		Long: `List the installation's keys, oldest first, with whether each is active,
-expired or revoked. The secrets are not here: the server never has them.`,
+expired or revoked. The secrets are not here: the server never has them.
+
+With --tenant only the keys that hold a grant on that tenant are listed, in
+order of key id, and a tenant's admin may ask for them: it is how it finds the
+key to give a role to. Such a listing shows each key's id and holder only;
+"grant list --tenant" says their roles.`,
 		Example: `  nopacs key list
-  nopacs key list --json`,
+  nopacs key list --json
+  nopacs key list --tenant lab1`,
 		Args: exactArgs(0),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, _ []string) error {
 			if err := l.check(); err != nil {
@@ -171,7 +178,7 @@ expired or revoked. The secrets are not here: the server never has them.`,
 			defer closeClient()
 			keys, more, err := fetchPages(ctx, l, func(ctx context.Context, size int32, token string) ([]*v1.Key, string, error) {
 				res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.ListKeysResponse, error) {
-					return c.Access.ListKeys(ctx, &v1.ListKeysRequest{PageSize: size, PageToken: token})
+					return c.Access.ListKeys(ctx, &v1.ListKeysRequest{PageSize: size, PageToken: token, Tenant: tenant})
 				})
 				if err != nil {
 					return nil, "", err
@@ -182,6 +189,13 @@ expired or revoked. The secrets are not here: the server never has them.`,
 				return err
 			}
 			return listOut(a, "keys", keys, more, func() error {
+				if tenant != "" {
+					rows := make([][]string, 0, len(keys))
+					for _, k := range keys {
+						rows = append(rows, []string{k.GetId(), k.GetHolder()})
+					}
+					return a.write(func(w io.Writer) error { return output.Table(w, a.style(), []string{"ID", "HOLDER"}, rows) })
+				}
 				rows := make([][]string, 0, len(keys))
 				for _, k := range keys {
 					rows = append(rows, []string{k.GetId(), k.GetHolder(), a.keyStatus(k), a.when(k.GetCreateTime()), a.whenOr(k.GetExpireTime(), "never"), a.lastUse(k)})
@@ -192,6 +206,7 @@ expired or revoked. The secrets are not here: the server never has them.`,
 			})
 		}),
 	}
+	cmd.Flags().StringVar(&tenant, "tenant", "", "list only the keys that hold a grant on this tenant")
 	l.add(cmd)
 	return cmd
 }

@@ -60,8 +60,18 @@ func (h monitorHandler) GetStatus(_ context.Context, req *v1.GetStatusRequest) (
 		st.Counts = &v1.TenantCounts{}
 	}
 	for _, k := range forTenant(s.arch.storages, name) {
-		st.Storages = append(st.Storages, &v1.StorageStatus{Storage: s.arch.storages[k].GetName(), CapacityBytes: s.arch.storages[k].GetCapacityBytes()})
+		sto := s.arch.storages[k]
+		ss := &v1.StorageStatus{Storage: sto.GetName(), CapacityBytes: sto.GetCapacityBytes(), Tier: sto.GetTier(), ReplicaOf: sto.GetReplicaOf(),
+			SwitchGeneration: sto.GetSwitchGeneration()}
+		if fn := s.repl.status[k]; fn != nil {
+			fn(ss)
+		}
+		st.Storages = append(st.Storages, ss)
+		if sto.GetReplicaOf() != "" {
+			st.Replicas = append(st.Replicas, s.replicaStatusOf(name, sto))
+		}
 	}
+	st.Retention = s.ret.status[name]
 	for _, k := range forTenant(s.arch.receivers, name) {
 		r := s.arch.receivers[k]
 		st.Receivers = append(st.Receivers, &v1.ReceiverStatus{Receiver: r.GetName(), Health: s.arch.health[k], AnyCaller: r.GetDimse().GetAnyCaller()})

@@ -73,6 +73,8 @@ type Server struct {
 	seal      sealState
 	corr      corrections
 	backup    backupScript
+	repl      replicas
+	ret       retention
 }
 
 // keyRecord is a key and the secret it was made with.
@@ -193,6 +195,8 @@ func (s *Server) Register(srv *connect.Server) {
 	s.registerDeid(srv)
 	s.registerRead(srv)
 	s.registerCorrections(srv)
+	s.registerReplicas(srv)
+	s.registerRetention(srv)
 	nopacsv1connect.RegisterBackupServiceHandler(srv, backupHandler{s})
 }
 

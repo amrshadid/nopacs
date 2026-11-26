@@ -112,7 +112,8 @@ func (h correctionHandler) Delete(_ context.Context, req *v1.DeleteRequest) (*v1
 	}
 	c := s.newCorrection(req.GetTenant(), &v1.Correction{Kind: v1.CorrectionKind_CORRECTION_KIND_DELETE, State: v1.CorrectionState_CORRECTION_STATE_COMMITTED,
 		Target: t, Reason: req.GetReason(), Counts: counts, CommitTime: timestamppb.New(s.now()), PurgeTime: prev.GetPurgeTime(),
-		Holds: []*v1.HeldValue{{Kind: v1.HeldValueKind_HELD_VALUE_KIND_SUBJECT, Value: t.GetSubjectLabel()}}})
+		Holds:             []*v1.HeldValue{{Kind: v1.HeldValueKind_HELD_VALUE_KIND_SUBJECT, Value: t.GetSubjectLabel()}},
+		OverrideRetention: req.GetOverrideRetention(), OverrideReason: req.GetOverrideReason()})
 	prev.Confirm = ""
 	return &v1.DeleteResponse{Preview: prev, Correction: c}, nil
 }
@@ -286,4 +287,16 @@ func (h correctionHandler) ResolveInstances(_ context.Context, req *v1.ResolveIn
 		out.Instances = append(out.Instances, &v1.ResolvedInstance{Member: m, Disposition: v1.InstanceDisposition_INSTANCE_DISPOSITION_UNKNOWN})
 	}
 	return out, nil
+}
+
+// Corrections returns copies of a tenant's corrections as the fake holds them
+// now, oldest first, so a test can show what a screen's change sent.
+func (s *Server) Corrections(tenant string) []*v1.Correction {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*v1.Correction, 0, len(s.corr.byTenant[tenant]))
+	for _, c := range s.corr.byTenant[tenant] {
+		out = append(out, proto.Clone(c).(*v1.Correction))
+	}
+	return out
 }

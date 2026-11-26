@@ -86,11 +86,13 @@ func newTenantList(c *ctx) (screen, tea.Cmd) {
 		}
 		return t.GetName() + " is " + output.State(t.GetState()) + ": " + t.GetStateReason()
 	}
-	l.actions = []action{{key: "d", help: "remove", needsRow: true, do: func(c *ctx, _ screen, ref any) tea.Cmd {
-		t, _ := ref.(*v1.Tenant)
-		s, cmd := newRemoveTenant(c, t.GetName(), 1)
-		return push(s, cmd)
-	}}}
+	if c.acc.onInstallation(v1.Role_ROLE_ADMIN) {
+		l.actions = []action{{key: "d", help: "remove", needsRow: true, do: func(c *ctx, _ screen, ref any) tea.Cmd {
+			t, _ := ref.(*v1.Tenant)
+			s, cmd := newRemoveTenant(c, t.GetName(), 1)
+			return push(s, cmd)
+		}}}
+	}
 	nl, cmd := l.start(c)
 	return nl, cmd
 }
@@ -117,28 +119,29 @@ func newTenantDetail(c *ctx, t *v1.Tenant, fetch bool) (screen, tea.Cmd) {
 		return getTenant(c, id, t.GetName())
 	}
 	d.actions = []action{
-		{key: "g", help: "grants", do: func(c *ctx, _ screen, ref any) tea.Cmd {
+		{key: "g", help: "grants", need: v1.Role_ROLE_ADMIN, do: func(c *ctx, _ screen, ref any) tea.Cmd {
 			t, _ := ref.(*v1.Tenant)
 			s, cmd := newGrantList(c, grantFilter{scope: tenantScope(t.GetName())})
 			return push(s, cmd)
 		}},
-		{key: "s", help: "settings", do: func(c *ctx, _ screen, ref any) tea.Cmd {
+		{key: "s", help: "settings", need: v1.Role_ROLE_READER, do: func(c *ctx, _ screen, ref any) tea.Cmd {
 			t, _ := ref.(*v1.Tenant)
 			s, cmd := newSettingList(c, tenantScope(t.GetName()))
 			return push(s, cmd)
 		}},
-		{key: "a", help: "audit", do: func(c *ctx, _ screen, ref any) tea.Cmd {
+		{key: "a", help: "audit", need: v1.Role_ROLE_ADMIN, do: func(c *ctx, _ screen, ref any) tea.Cmd {
 			t, _ := ref.(*v1.Tenant)
 			s, cmd := newAuditList(c, tenantScope(t.GetName()))
 			return push(s, cmd)
 		}},
-		{key: "d", help: "remove", do: func(c *ctx, _ screen, ref any) tea.Cmd {
+		{key: "d", help: "remove", installation: true, do: func(c *ctx, _ screen, ref any) tea.Cmd {
 			t, _ := ref.(*v1.Tenant)
 			s, cmd := newRemoveTenant(c, t.GetName(), 2)
 			return push(s, cmd)
 		}},
 	}
-	d.actions = append(d.actions, tenantActions(t.GetName())...)
+	d.actions = append(d.actions, tenantActions(c, t.GetName())...)
+	d.actions = allowed(c, t.GetName(), d.actions)
 	if fetch {
 		d.loading = true
 		return d, d.refetch(c, d.id, t)

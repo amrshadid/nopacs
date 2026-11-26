@@ -280,10 +280,12 @@ func (h profileHandler) DiffProfileVersions(_ context.Context, req *v1.DiffProfi
 }
 
 // passThrough reports whether err is an API error the fake answers as it
-// is, details included: a refused document's ProfileProblems.
+// is, details included: a refused document's ProfileProblems. An answer that
+// a method is not served (UNIMPLEMENTED) is passed as it is too, as the real
+// server's router answers it, not as an internal error.
 func passThrough(err error) (*connect.Error, bool) {
 	var ce *connect.Error
-	if errors.As(err, &ce) && len(ce.Details()) > 0 {
+	if errors.As(err, &ce) && (len(ce.Details()) > 0 || ce.Code() == connect.CodeUnimplemented) {
 		return ce, true
 	}
 	return nil, false

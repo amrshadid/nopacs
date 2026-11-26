@@ -134,10 +134,24 @@ func (a *app) correctionDetails(c *v1.Correction) []output.Pair {
 		output.Pair{Label: "Objects removed", Value: strconv.FormatInt(n.GetObjectsRemoved(), 10) + " (" + output.Bytes(n.GetBytesRemoved()) + ")"},
 		output.Pair{Label: "Objects kept", Value: strconv.FormatInt(n.GetObjectsKept(), 10)})
 	for _, d := range c.GetDispositions() {
-		pairs = append(pairs, output.Pair{Label: "  " + output.Clean(d.GetStorage()), Value: purgeClaim(d)})
+		label := "  " + output.Clean(d.GetStorage())
+		if d.GetReplicaOf() != "" {
+			label += " (replica of " + output.Clean(d.GetReplicaOf()) + ")"
+		}
+		pairs = append(pairs, output.Pair{Label: label, Value: purgeClaim(d)})
+	}
+	if len(c.GetCopiesAbandoned()) > 0 {
+		pairs = append(pairs, output.Pair{Label: "Copies abandoned", Value: output.Clean(strings.Join(c.GetCopiesAbandoned(), ", ")) +
+			": a replica was detached before the purge reached it, so its objects are recorded as unknown and may still hold the bytes"})
 	}
 	if c.GetKind() == v1.CorrectionKind_CORRECTION_KIND_DELETE {
 		pairs = append(pairs, output.Pair{Label: "Arrivals allowed", Value: yesNo(c.GetArrivalsAllowed())})
+		if c.GetOrigin() == v1.CorrectionOrigin_CORRECTION_ORIGIN_RETENTION {
+			pairs = append(pairs, output.Pair{Label: "Retention rule", Value: output.Clean(c.GetRetentionRule()) + ", due " + a.whenOr(c.GetRetentionDueTime(), "-")})
+		}
+		if c.GetOverrideRetention() {
+			pairs = append(pairs, output.Pair{Label: "Retention overridden", Value: "yes: " + output.Clean(c.GetOverrideReason())})
+		}
 		for _, h := range c.GetHolds() {
 			pairs = append(pairs, output.Pair{Label: "  holds " + enumWord(h.GetKind().String(), "HELD_VALUE_KIND_"), Value: output.Clean(h.GetValue())})
 		}
@@ -148,27 +162,8 @@ func (a *app) correctionDetails(c *v1.Correction) []output.Pair {
 	return pairs
 }
 
-// purgeClaim says what one storage did with a correction's purged objects,
-// never more strongly than the storage said it.
-func purgeClaim(d *v1.StorageDisposition) string {
-	switch {
-	case d.GetObjectsHidden()+d.GetObjectsRetained()+d.GetObjectsUnknown() == 0:
-		return strconv.FormatInt(d.GetObjectsRemoved(), 10) + " removed: the bytes are gone from this storage"
-	case d.GetObjectsRetained() > 0:
-		return fmt.Sprintf("%d removed, %d retained by object lock until %s, %d hidden, %d unknown", d.GetObjectsRemoved(), d.GetObjectsRetained(),
-			output.Dash(timeText(d.GetRetainUntil().AsTime(), d.GetRetainUntil() != nil)), d.GetObjectsHidden(), d.GetObjectsUnknown())
-	}
-	return fmt.Sprintf("%d removed, %d hidden (older versions kept), %d unknown: the bytes may still be there", d.GetObjectsRemoved(),
-		d.GetObjectsHidden(), d.GetObjectsUnknown())
-}
-
-// timeText writes a time in UTC, or "" when there is none.
-func timeText(t time.Time, ok bool) string {
-	if !ok {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339)
-}
+// purgeClaim says what one storage did with a correction's purged objects.
+func purgeClaim(d *v1.StorageDisposition) string { return output.PurgeClaim(d) }
 
 // correctionOut writes one correction: its JSON document with --json, or
 // the line say writes and its details.

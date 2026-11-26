@@ -4,49 +4,75 @@ import (
 	"strconv"
 
 	tea "charm.land/bubbletea/v2"
+
+	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 )
 
 // menuItem is one line of the menu: what it opens and a few words about it.
 type menuItem struct {
 	label string
 	about string
+	// allow says whether the caller's grants let the screen be used; nil
+	// means any caller with a grant. The server checks every call anyway:
+	// this only keeps the menu from offering what would be refused.
+	allow func(a *access) bool
 	open  func(c *ctx) tea.Cmd
 }
 
 // menuScreen is the first screen: the nouns the program can show.
 type menuScreen struct {
 	base
+	// all is every item the program has; items are those the caller may use.
+	all    []menuItem
 	items  []menuItem
 	cursor int
 }
 
+// visible keeps the items the caller's grants let it use.
+func visible(all []menuItem, a *access) []menuItem {
+	var out []menuItem
+	for _, it := range all {
+		if it.allow == nil && a.anyGrant() || it.allow != nil && it.allow(a) {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
 // newMenu makes the menu, with the screens this version has.
 func newMenu(c *ctx) menuScreen {
-	return menuScreen{base: base{c.newID()}, items: []menuItem{
-		{"Tenants", "the independent archives; open one for its grants, settings and audit log", func(c *ctx) tea.Cmd {
+	all := []menuItem{
+		{"Tenants", "the independent archives; open one for what it holds and what may be done to it", nil, func(c *ctx) tea.Cmd {
 			s, cmd := newTenantList(c)
 			return push(s, cmd)
 		}},
-		{"Keys", "who may call the API; make one, revoke one, see its grants", func(c *ctx) tea.Cmd {
+		{"Keys", "who may call the API; make one, revoke one, see its grants", func(a *access) bool { return a.onInstallation(v1.Role_ROLE_ADMIN) }, func(c *ctx) tea.Cmd {
 			s, cmd := newKeyList(c)
 			return push(s, cmd)
 		}},
-		{"Settings", "the installation's defaults", func(c *ctx) tea.Cmd {
+		{"Settings", "the installation's defaults", func(a *access) bool { return a.onInstallation(v1.Role_ROLE_ADMIN) }, func(c *ctx) tea.Cmd {
 			s, cmd := newSettingList(c, installationScope())
 			return push(s, cmd)
 		}},
-		{"Audit log", "what was done, by which key, newest first", func(c *ctx) tea.Cmd {
+		{"Audit log", "what was done, by which key, newest first; v verifies its seal", func(a *access) bool { return a.onInstallation(v1.Role_ROLE_ADMIN) }, func(c *ctx) tea.Cmd {
 			s, cmd := newAuditList(c, installationScope())
 			return push(s, cmd)
 		}},
-	}}
+	}
+	return menuScreen{base: base{c.newID()}, all: all, items: visible(all, c.acc)}
 }
 
 // update applies a message: keys move the cursor, and enter or a number opens
 // an item.
 func (m menuScreen) update(c *ctx, msg tea.Msg) (screen, tea.Cmd) {
+	if _, ok := msg.(whoamiMsg); ok {
+		// The caller is known now: leave out what its grants do not allow.
+		m.items = visible(m.all, c.acc)
+		m.cursor = max(min(m.cursor, len(m.items)-1), 0)
+		return m, nil
+	}
 	k, ok := msg.(tea.KeyPressMsg)
-	if !ok {
+	if !ok || len(m.items) == 0 {
 		return m, nil
 	}
 	name := k.String()
@@ -75,6 +101,9 @@ func (m menuScreen) update(c *ctx, msg tea.Msg) (screen, tea.Cmd) {
 // view draws the items.
 func (m menuScreen) view(c *ctx) []string {
 	lines := []string{""}
+	if len(m.items) == 0 {
+		return append(lines, "  "+c.st.faint("This key holds no grant, so there is nothing to open. Ask an admin for one."))
+	}
 	for i, it := range m.items {
 		line := "  " + strconv.Itoa(i+1) + "  " + padRight(it.label, 10) + c.st.faint(trunc(it.about, max(c.w-18, 1)))
 		if i == m.cursor {
@@ -92,8 +121,8 @@ func (menuScreen) title(*ctx) string { return "Menu" }
 func (menuScreen) editing() bool { return false }
 
 // keys lists the keys of the menu.
-func (menuScreen) keys() []keyHelp {
-	return []keyHelp{{"up/down", "move"}, {"enter", "open"}, {"1-4", "open"}}
+func (m menuScreen) keys() []keyHelp {
+	return []keyHelp{{"up/down", "move"}, {"enter", "open"}, {"1-" + strconv.Itoa(max(len(m.items), 1)), "open"}}
 }
 
 // helpScreen lists the keys of the screen it was opened over.

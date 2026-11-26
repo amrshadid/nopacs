@@ -91,12 +91,23 @@ func (h accessHandler) GetKey(_ context.Context, req *v1.GetKeyRequest) (*v1.Get
 func (h accessHandler) ListKeys(_ context.Context, req *v1.ListKeysRequest) (*v1.ListKeysResponse, error) {
 	h.s.mu.Lock()
 	defer h.s.mu.Unlock()
-	from, to, next, err := pageOf(len(h.s.keys), req.GetPageSize(), req.GetPageToken())
+	// With a tenant, only the keys that hold a grant on it, answered with
+	// their id and holder alone, as the server answers a tenant's admin.
+	keys := h.s.keys
+	if t := req.GetTenant(); t != "" {
+		keys = nil
+		for _, k := range h.s.keys {
+			if _, ok := h.s.grants[k.key.GetId()+"|tenant:"+t]; ok {
+				keys = append(keys, &keyRecord{key: &v1.Key{Id: k.key.GetId(), Holder: k.key.GetHolder()}})
+			}
+		}
+	}
+	from, to, next, err := pageOf(len(keys), req.GetPageSize(), req.GetPageToken())
 	if err != nil {
 		return nil, err
 	}
 	res := &v1.ListKeysResponse{NextPageToken: next}
-	for _, k := range h.s.keys[from:to] {
+	for _, k := range keys[from:to] {
 		res.Keys = append(res.Keys, k.key)
 	}
 	return res, nil

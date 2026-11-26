@@ -62,10 +62,16 @@ func newAuditList(c *ctx, scope *v1.Scope) (screen, tea.Cmd) {
 		nl, cmd := l.start(c)
 		return nl, cmd, true
 	}
-	l.actions = []action{{key: "f", help: "filter by outcome and key", do: func(c *ctx, self screen, _ any) tea.Cmd {
-		cur, _ := self.(listScreen)
-		return push(newAuditFilter(c, cur.id, cur.params.(auditFilter)), nil)
-	}}}
+	l.actions = []action{
+		{key: "f", help: "filter by outcome and key", do: func(c *ctx, self screen, _ any) tea.Cmd {
+			cur, _ := self.(listScreen)
+			return push(newAuditFilter(c, cur.id, cur.params.(auditFilter)), nil)
+		}},
+		{key: "v", help: "verify seal", do: func(c *ctx, _ screen, _ any) tea.Cmd {
+			s, cmd := newSealVerify(c, scope)
+			return push(s, cmd)
+		}},
+	}
 	nl, cmd := l.start(c)
 	return nl, cmd
 }

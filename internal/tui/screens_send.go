@@ -322,6 +322,15 @@ func jobPairs(c *ctx, ref any) []pair {
 			pair{"Archived", itoa(ic.GetArchived())}, pair{"Already held", itoa(ic.GetAlreadyHeld())},
 			pair{"Processing", itoa(ic.GetProcessing())})
 	}
+	for _, p := range output.ReplicationJobPairs(j) {
+		ps = append(ps, pair{p.Label, p.Value})
+	}
+	if sj := j.GetScrub(); sj != nil {
+		ps = append(ps, pair{"Scrubs", output.Dash(sj.GetStorage())})
+	}
+	if rj := j.GetRebuild(); rj != nil {
+		ps = append(ps, pair{"Rebuilds", "the catalog, " + strings.ToLower(strings.TrimPrefix(rj.GetMode().String(), "REBUILD_JOB_MODE_"))}, pair{"From storage", output.Dash(rj.GetFromStorage())})
+	}
 	if j.GetReason() != "" {
 		ps = append(ps, pair{"Reason", j.GetReason()})
 	}

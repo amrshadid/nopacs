@@ -214,6 +214,12 @@ func JobCountWords(j *v1.Job) (sent, refused string) {
 		return "read good", "with a finding"
 	case *v1.Job_Rebuild:
 		return "cataloged", "left out"
+	case *v1.Job_Replicate:
+		return "copied", "failed"
+	case *v1.Job_Repair:
+		return "repaired", "refused"
+	case *v1.Job_Dispose:
+		return "deleted", "failed"
 	}
 	return "sent", "refused"
 }

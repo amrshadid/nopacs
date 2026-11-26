@@ -17,7 +17,11 @@ func (a *app) newGrant() *cobra.Command {
 		`A grant gives one key one role on one scope: a tenant, or the installation. A
 key holds at most one grant per scope, and a role includes the roles below it:
 reader, writer, operator, admin. The writer role is not given on the
-installation. These commands need the admin role on the installation.`,
+installation. Setting, changing and removing a grant need the admin role on the
+installation, or on the tenant the grant is on: a tenant's admin gives its own
+tenant's grants at reader, writer or operator, and never on its own key, never
+on a key that is admin there, and never the admin role itself. The server
+decides each case and says why when it refuses.`,
 		a.newGrantSet(), a.newGrantList(), a.newGrantRemove())
 }
 

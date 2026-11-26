@@ -28,17 +28,18 @@ func TestStorageCommands(t *testing.T) {
 	r.must("tenant", "create", "lab1")
 
 	expect(t, r.run("storage", "add", "lab1", "main", "--type", "dir", "--root", "fast", "--path", "main"), 0,
-		"Name:     main\nType:     directory\nRoot:     fast\nPath:     main\nCapacity: no limit\n"+
-			"Created:  2026-11-17 15:00:00 +03:00\nUpdated:  2026-11-17 15:00:00 +03:00\n", "")
+		"Name:              main\nType:              directory\nRoot:              fast\nPath:              main\nEncrypted at rest: not declared\n"+
+			"Tier:              online\nReplica of:        -\nSwitch generation: 0\nCapacity:          no limit\n"+
+			"Created:           2026-11-17 15:00:00 +03:00\nUpdated:           2026-11-17 15:00:00 +03:00\n", "")
 	expect(t, r.run(s3Args...), 0,
 		"Name:              cold\nType:              s3\nEndpoint:          https://s3.example\nRegion:            eu-central-1\n"+
 			"Bucket:            lab1-archive\nPrefix:            nopacs/\nAddressing:        host name\nOlder versions:    deleted by a purge\nAccess key id:     AKIAEXAMPLE\n"+
-			"Secret access key: set\nCapacity:          2TiB\nCreated:           2026-11-17 15:00:00 +03:00\nUpdated:           2026-11-17 15:00:00 +03:00\n", "")
+			"Secret access key: set\nTier:              online\nReplica of:        -\nSwitch generation: 0\nCapacity:          2TiB\nCreated:           2026-11-17 15:00:00 +03:00\nUpdated:           2026-11-17 15:00:00 +03:00\n", "")
 
 	expect(t, r.run("storage", "list", "lab1"), 0,
-		"NAME  TYPE       LOCATION                                               CAPACITY  CREATED\n"+
-			"cold  s3         https://s3.example bucket lab1-archive prefix nopacs/  2TiB      2026-11-17 15:00:00 +03:00\n"+
-			"main  directory  root fast, path main                                   no limit  2026-11-17 15:00:00 +03:00\n", "")
+		"NAME  TYPE       TIER    REPLICA OF  LOCATION                                               CAPACITY  CREATED\n"+
+			"cold  s3         online  -           https://s3.example bucket lab1-archive prefix nopacs/  2TiB      2026-11-17 15:00:00 +03:00\n"+
+			"main  directory  online  -           root fast, path main                                   no limit  2026-11-17 15:00:00 +03:00\n", "")
 	list := document(t, r.run("storage", "list", "lab1", "--json"))
 	if ss, _ := list["storages"].([]any); len(ss) != 2 || list["more"] != false {
 		t.Errorf("list --json: %v", list)

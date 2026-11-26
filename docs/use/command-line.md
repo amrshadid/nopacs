@@ -192,8 +192,14 @@ each tenant's grants, settings and audit log, its status that follows its events
 and its storages, receivers, senders with their health and a test of the peer,
 jobs with a progress bar that follows the events, a job's failures, with cancel
 and retry, receptions and quarantine, where a held file is released or
-rejected), the subjects, sessions and scans of a tenant with a scan's
-headers and a download of what is shown, keys, settings and the audit log. It
+rejected, replicas with their repair and switch, retention rules with the sessions
+due and a disposal, holds, corrections with their previews, scrub findings, profiles
+and a receiver's routes, and the audit seal's verification), the subjects,
+sessions and scans of a tenant with a scan's headers and a download of what is
+shown, keys, settings and the audit log. The menu and the keys of each screen
+are built from the caller's grants (a reader sees no Keys or Settings, and a
+tenant's screens offer only what its role on the tenant allows); the server
+checks every call whatever the menu offers. It
 finds the server with the same flags and environment as the commands and is a
 client of the same API ([internal/tui](../../internal/tui/doc.go)). With any
 argument, or with either end not a terminal, `nopacs` prints the usage line and
@@ -207,7 +213,11 @@ exits 2.
 - **A new key** (`n` on the key list) is shown once, alone, and leaving that
   screen asks once more.
 - **Nothing destructive happens on one key.** Revoking a key and removing a
-  grant, a setting override or a tenant need its id or name typed.
+  grant, a setting override or a tenant need its id or name typed; so do
+  deleting, relabeling, replacing, undoing and purging data (a delete shows its
+  preview first), detaching a replica, repairing a primary, removing a rule,
+  releasing a hold and disposing of sessions. A switch is confirmed by typing the
+  first characters of the token its preview showed, or the primary's name.
 - **Terminal.** It fits 80 by 24 and redraws on resize; there is no color when
   `NO_COLOR` is set, with `TERM=dumb`, or on Windows. The terminal is restored
   on quit, on SIGTERM and SIGINT, and on a panic.

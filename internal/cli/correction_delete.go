@@ -11,6 +11,7 @@ import (
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/cli/output"
+	"github.com/amrshadid/nopacs/internal/fault"
 )
 
 // previewDetails lists what a delete would remove as labeled values.
@@ -45,8 +46,8 @@ func (a *app) previewDetails(t *v1.CorrectionTarget, p *v1.DeletePreview) []outp
 
 // newCorrectionDelete builds "correction delete".
 func (a *app) newCorrectionDelete() *cobra.Command {
-	var reason, instance string
-	var yes, preview bool
+	var reason, instance, overrideReason string
+	var yes, preview, override bool
 	cmd := &cobra.Command{
 		Use:   "delete <tenant> <subject>[/<session>[/<scan>]] [--instance UID] --reason TEXT [--preview] [--yes]",
 		Short: "Delete a subject, a session, a scan or one instance, after a preview",
@@ -66,14 +67,31 @@ The delete carries the preview's token, so it acts on what was shown: when
 anything changed since (data arrived under the target, a job was made), the
 server refuses it (exit 5) and the command is run again. The data is hidden at
 once; its bytes stay, unserved, until the tenant's grace period ends
-(delete.grace), and "correction undo" shows it again until then.`,
+(delete.grace), and "correction undo" shows it again until then.
+
+A delete is refused while a hold covers the data (reason HELD) and while a
+retention rule keeps it (reason RETENTION_MINIMUM, with the time it is kept
+until). --override-retention --override-reason deletes data a rule keeps, as for
+a consent withdrawn; the override is recorded with the correction and in the
+audit log. Only an admin on the installation may override: a tenant's admin is
+refused, since the person who wants a delete is not the one who lifts the rule
+that refuses it. A hold is never overridden: release it first.`,
 		Example: `  nopacs correction delete lab1 sub-3f9a --reason "consent withdrawn" --preview
   nopacs correction delete lab1 sub-3f9a/ses-81c2 --reason "wrong patient at the scanner"
-  nopacs correction delete lab1 sub-3f9a --reason "consent withdrawn" --yes --json`,
+  nopacs correction delete lab1 sub-3f9a --reason "consent withdrawn" --yes --json
+  nopacs correction delete lab1 sub-3f9a --reason "consent withdrawn" --override-retention --override-reason "participant withdrew consent in writing" --preview`,
 		Args: exactArgs(2),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {
 			if err := checkReason(reason); err != nil {
 				return err
+			}
+			if override != (overrideReason != "") {
+				return fault.New(fault.Invalid, "--override-retention and --override-reason go together: say why a rule that keeps the data is lifted")
+			}
+			if override {
+				if err := checkReason(overrideReason); err != nil {
+					return err
+				}
 			}
 			target, err := correctionTarget(args[1], instance)
 			if err != nil {
@@ -85,7 +103,8 @@ once; its bytes stay, unserved, until the tenant's grace period ends
 			}
 			defer closeClient()
 			prev, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.DeleteResponse, error) {
-				return c.Corrections.Delete(ctx, &v1.DeleteRequest{Tenant: args[0], Target: target, Reason: reason, ValidateOnly: true})
+				return c.Corrections.Delete(ctx, &v1.DeleteRequest{Tenant: args[0], Target: target, Reason: reason, ValidateOnly: true,
+					OverrideRetention: override, OverrideReason: overrideReason})
 			})
 			if err != nil {
 				return err
@@ -106,7 +125,8 @@ once; its bytes stay, unserved, until the tenant's grace period ends
 				return err
 			}
 			res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.DeleteResponse, error) {
-				return c.Corrections.Delete(ctx, &v1.DeleteRequest{Tenant: args[0], Target: target, Reason: reason, Confirm: prev.GetPreview().GetConfirm()})
+				return c.Corrections.Delete(ctx, &v1.DeleteRequest{Tenant: args[0], Target: target, Reason: reason, Confirm: prev.GetPreview().GetConfirm(),
+					OverrideRetention: override, OverrideReason: overrideReason})
 			})
 			if err != nil {
 				return err
@@ -123,6 +143,8 @@ once; its bytes stay, unserved, until the tenant's grace period ends
 	cmd.Flags().StringVar(&instance, "instance", "", "delete only this instance of the scan, by its id")
 	cmd.Flags().BoolVar(&preview, "preview", false, "show what the delete would remove, and delete nothing")
 	cmd.Flags().BoolVar(&yes, "yes", false, "do not ask for the target to be typed again")
+	cmd.Flags().BoolVar(&override, "override-retention", false, "delete data a retention rule keeps at least until a time to come; needs --override-reason and an admin on the installation")
+	cmd.Flags().StringVar(&overrideReason, "override-reason", "", "why the retention rule is lifted, in your own words, kept with the correction and in the audit entry (with --override-retention)")
 	_ = cmd.MarkFlagRequired("reason")
 	return cmd
 }

@@ -403,6 +403,15 @@ scan, keeps it whole, and serves it through an API with keys.
   the master's transaction. `override_retention` is taken only from an
   installation admin or the local operator, checked again when the delete
   commits.
+- The command line gains `replica`, `repair`, `switch`, `retention` (rules,
+  due sessions, disposal, clock), `hold` and `storage status`; storages take
+  tier, recall and declared-encryption flags; a delete takes a retention
+  override; `key list --tenant` serves a tenant's admin; errors show the
+  server's reason and when to try again. The interactive program builds its
+  menu and a tenant's keys from the caller's grants and gains screens for
+  replicas, repair, switch, retention, holds, corrections, scrub findings,
+  profiles, routes and the audit seal's verification, each destructive step
+  confirmed by typing its target.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

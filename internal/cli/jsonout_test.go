@@ -44,6 +44,13 @@ func TestWriteJSONOutputs(t *testing.T) {
 	}
 	r.fake.AddScrubFinding("lab1", &v1.ScrubFinding{Id: "fnd_1", Kind: v1.ScrubFindingKind_SCRUB_FINDING_KIND_MISSING, Storage: "main", Key: "k", SubjectLabel: "sub-1",
 		SessionLabel: "ses-1", ScanLabel: "scan-1", InstanceId: "i-1", ExpectedSize: proto.Int64(10), Job: "job_2", FindTime: timestamppb.New(fixedNow)})
+	r.fake.AddDueSession("lab1", &v1.DueSession{SubjectLabel: "sub-9", SessionLabel: "ses-1", Rule: "seven-years", Action: v1.RetentionAction_RETENTION_ACTION_DELETE,
+		DueTime: timestamppb.New(fixedNow), Instances: 3, Bytes: 3072})
+	r.fake.AddHold("lab1", &v1.Hold{Id: "hold_a", Target: &v1.HoldTarget{SubjectLabel: "sub-1"}, Reason: "litigation", State: v1.HoldState_HOLD_STATE_ACTIVE,
+		PlacedByKeyId: "k1", PlaceTime: timestamppb.New(fixedNow)})
+	r.fake.SetRetentionStatus("lab1", &v1.RetentionStatus{Rules: 1, SessionsDue: 1})
+	r.fake.ServeBackfill()
+	r.fake.ServeHolds()
 	work := t.TempDir()
 	doc := writeFile(t, work, "research.json", basicJSON)
 	ct, err := os.ReadFile(filepath.Join("..", "receive", "testdata", "ct5n-2062.dcm"))
@@ -138,6 +145,31 @@ func TestWriteJSONOutputs(t *testing.T) {
 		{"correction-allow", []string{"correction", "allow", "lab1", fakeCorrection(2), "--subject", "sub-2", "--reason", "consent given again"}},
 		{"correction-relabel", []string{"correction", "relabel", "lab1", "sub-3", "--to", "sub-4", "--reason", "wrong subject id", "--wait"}},
 		{"correction-replace", []string{"correction", "replace", "lab1", "q-replace", "--reason", "corrected file sent again"}},
+		{"storage-add-replica", []string{"storage", "add", "lab1", "copy", "--type", "dir", "--root", "slow", "--replica-of", "main", "--encrypted-at-rest-declared"}},
+		{"replica-list", []string{"replica", "list", "lab1"}},
+		{"replica-detach", []string{"replica", "detach", "lab1", "copy"}},
+		{"replica-attach", []string{"replica", "attach", "lab1", "copy", "--primary", "main"}},
+		{"replica-backfill", []string{"replica", "backfill", "lab1", "copy"}},
+		{"repair", []string{"repair", "lab1", "main", "--finding", "fnd_1"}},
+		{"switch-validate", []string{"switch", "lab1", "main", "copy", "--validate"}},
+		{"switch", []string{"switch", "lab1", "main", "copy", "--confirm", "sw.main.copy.0"}},
+		{"storage-status", []string{"storage", "status", "lab1"}},
+		{"storage-status-one", []string{"storage", "status", "lab1", "main"}},
+		{"retention-rule-add", []string{"retention", "rule", "add", "lab1", "seven-years", "--dispose-after", "10y", "--action", "delete"}},
+		{"retention-rule-set", []string{"retention", "rule", "set", "lab1", "seven-years", "--keep-at-least", "7y"}},
+		{"retention-rule-list", []string{"retention", "rule", "list", "lab1"}},
+		{"retention-rule-show", []string{"retention", "rule", "show", "lab1", "seven-years"}},
+		{"retention-due", []string{"retention", "due", "lab1"}},
+		{"retention-dispose-preview", []string{"retention", "dispose", "lab1", "--rule", "seven-years", "--reason", "period over", "--preview"}},
+		{"retention-dispose", []string{"retention", "dispose", "lab1", "--rule", "seven-years", "--reason", "period over", "--confirm", "dp.seven-years.1"}},
+		{"retention-clock", []string{"retention", "clock", "lab1"}},
+		{"retention-clock-confirm", []string{"retention", "clock", "lab1", "--confirm", "2026-11-17T12:00:00Z", "--reason", "read from the site clock"}},
+		{"retention-rule-remove", []string{"retention", "rule", "remove", "lab1", "seven-years", "--yes"}},
+		{"hold-list", []string{"hold", "list", "lab1"}},
+		{"hold-show", []string{"hold", "show", "lab1", "hold_a"}},
+		{"hold-place", []string{"hold", "place", "lab1", "sub-2", "--reason", "audit"}},
+		{"hold-release", []string{"hold", "release", "lab1", "hold_1", "--reason", "closed", "--yes"}},
+		{"key-list-tenant", []string{"key", "list", "--tenant", "lab1"}},
 		{"tenant-remove", []string{"tenant", "remove", "lab1", "--yes"}},
 	}
 	for _, s := range steps {

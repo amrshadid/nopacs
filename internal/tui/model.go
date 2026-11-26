@@ -105,6 +105,8 @@ type ctx struct {
 	nextCall int
 	pending  map[int]*pendingCall
 	topID    int
+	// acc is what the caller may do, from who-am-I; nil until known.
+	acc *access
 }
 
 // newID gives the next screen id.
@@ -293,6 +295,9 @@ func (m model) done(d doneMsg) (tea.Model, tea.Cmd) {
 		m.err, m.note = nil, "canceled"
 	case whoamiMsg:
 		m.who = inner.principal
+		m.c.acc = newAccess(inner.principal)
+		// The menu is built from what the caller may do.
+		m, _ = m.deliver(m.stack[0].sid(), inner)
 	}
 	if d.to == rootID {
 		if _, failed := d.msg.(failMsg); failed {

@@ -259,6 +259,8 @@ Usage: `nopacs correction delete <tenant> <subject>[/<session>[/<scan>]] [--inst
 | Flag | Type | Default | What it does |
 |---|---|---|---|
 | `--instance` | string |  | delete only this instance of the scan, by its id |
+| `--override-reason` | string |  | why the retention rule is lifted, in your own words, kept with the correction and in the audit entry (with --override-retention) |
+| `--override-retention` | bool |  | delete data a retention rule keeps at least until a time to come; needs --override-reason and an admin on the installation |
 | `--preview` | bool |  | show what the delete would remove, and delete nothing |
 | `--reason` | string |  | why, in your own words, kept with the correction (required) |
 | `--yes` | bool |  | do not ask for the target to be typed again |
@@ -420,6 +422,53 @@ Usage: `nopacs grant set <key-id> --role ROLE (--tenant NAME | --installation) [
 | `--installation` | bool |  | the installation itself the role acts on, not a tenant |
 | `--role` | string |  | the role to give: reader, writer, operator or admin (required) |
 | `--tenant` | string |  | the tenant the role acts on |
+
+### `nopacs hold`
+
+Place, release, list and show the holds that stop data from going
+
+Usage: `nopacs hold`
+
+#### `nopacs hold list`
+
+List a tenant's holds, newest first
+
+Usage: `nopacs hold list <tenant> [--state active|released]... [--subject LABEL] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+| `--state` | stringArray |  | only holds in this state: active or released; repeat for both |
+| `--subject` | string |  | only the holds on this subject's label |
+
+#### `nopacs hold place`
+
+Place a hold on a subject, a session, a scan or the whole tenant
+
+Usage: `nopacs hold place <tenant> (<subject>[/<session>[/<scan>]] | --whole-tenant) --reason TEXT [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--reason` | string |  | why, in your own words, kept with the hold (required) |
+| `--whole-tenant` | bool |  | hold everything the tenant holds, now and later |
+
+#### `nopacs hold release`
+
+Release a hold, so what it held may be deleted and purged again
+
+Usage: `nopacs hold release <tenant> <id> --reason TEXT [--yes] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--reason` | string |  | why, in your own words, kept in the audit entry (required) |
+| `--yes` | bool |  | do not ask for the hold's id to be typed again |
+
+#### `nopacs hold show`
+
+Show one hold with its reason
+
+Usage: `nopacs hold show <tenant> <id>`
 
 ### `nopacs job`
 
@@ -599,14 +648,15 @@ Usage: `nopacs key create --holder TEXT [--expires 90d | --no-expiry] [--network
 
 #### `nopacs key list`
 
-List every key, revoked and expired ones included
+List every key, revoked and expired ones included, or the keys of one tenant
 
-Usage: `nopacs key list [flags]`
+Usage: `nopacs key list [--tenant NAME] [flags]`
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
 | `--all` | bool |  | fetch every item, page after page |
 | `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+| `--tenant` | string |  | list only the keys that hold a grant on this tenant |
 
 #### `nopacs key reinstate`
 
@@ -1138,6 +1188,182 @@ Show one reception, the scans it archived and the other arrivals of its study
 
 Usage: `nopacs reception show <tenant> <id>`
 
+### `nopacs repair`
+
+Put a primary's missing or damaged objects back from a replica
+
+Usage: `nopacs repair <tenant> <storage> (--finding ID... | --instance ID... | --all) [--from REPLICA] [--wait] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | mend every finding that holds on the storage now, of a kind a repair mends |
+| `--finding` | stringArray |  | the id of a finding to mend, as "job findings" lists it; repeat for more |
+| `--from` | string |  | the replica to read the good bytes from; any replica in step when empty |
+| `--instance` | stringArray |  | the id of an instance whose findings on the storage to mend; repeat for more |
+| `--wait` | bool |  | follow the repair job until it ends, as "job watch" does, with its exit codes |
+
+### `nopacs replica`
+
+List, attach, detach and fill a tenant's replicas
+
+Usage: `nopacs replica`
+
+#### `nopacs replica attach`
+
+Make an empty storage a replica of a primary and copy what the primary holds
+
+Usage: `nopacs replica attach <tenant> <storage> --primary NAME [--tier online|archive] [--recall-days N] [--recall-tier standard|bulk|expedited] [--wait] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--primary` | string |  | the name of the primary storage to copy (required) |
+| `--recall-days` | int |  | s3, archive tier: how many days a recalled object stays readable (1 to 365) |
+| `--recall-tier` | string |  | s3, archive tier: standard, bulk or expedited |
+| `--tier` | string |  | online or archive: set the replica's tier after the attach |
+| `--wait` | bool |  | follow the copy job until it ends, as "job watch" does, with its exit codes |
+
+#### `nopacs replica backfill`
+
+Copy to a replica every object of its primary it does not hold verified
+
+Usage: `nopacs replica backfill <tenant> <replica> [--wait] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--wait` | bool |  | follow the copy job until it ends, as "job watch" does, with its exit codes |
+
+#### `nopacs replica detach`
+
+Make a replica an ordinary storage again; it deletes no file
+
+Usage: `nopacs replica detach <tenant> <replica> [--abandon-purges --reason TEXT] [--yes] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--abandon-purges` | bool |  | detach even while corrections count the replica among their copies; they record its objects as unknown |
+| `--reason` | string |  | why the purges are abandoned, in your own words, kept in the audit entry (with --abandon-purges) |
+| `--yes` | bool |  | with --abandon-purges: do not ask for the replica's name to be typed again |
+
+#### `nopacs replica list`
+
+List a tenant's replicas and how far each is from its primary
+
+Usage: `nopacs replica list <tenant> [--primary NAME] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+| `--primary` | string |  | only the replicas of this primary |
+
+### `nopacs retention`
+
+Keep rules of how long data is kept and when it is due, list what is due, and dispose of it
+
+Usage: `nopacs retention`
+
+#### `nopacs retention clock`
+
+Show a tenant's retention state, or confirm the time after a clock jump
+
+Usage: `nopacs retention clock <tenant> [--confirm TIME --reason TEXT] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--confirm` | string |  | the time you read from a clock you trust, with its offset (RFC 3339), to end a pause for a clock jump |
+| `--reason` | string |  | why the time is right, in your own words, kept in the audit entry (with --confirm) |
+
+#### `nopacs retention dispose`
+
+Delete the sessions due under a rule, exactly as a preview listed them
+
+Usage: `nopacs retention dispose <tenant> --rule NAME --reason TEXT (--preview | --confirm TOKEN) [--max-sessions N] [--wait] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--confirm` | string |  | the confirm token the preview showed, to queue the deletion |
+| `--max-sessions` | int |  | the most sessions to list and delete; the server's bound when 0 |
+| `--preview` | bool |  | list what would be deleted and show the confirm token; delete nothing |
+| `--reason` | string |  | why, in your own words, kept with every delete (required) |
+| `--rule` | string |  | the name of the rule whose due sessions to delete (required) |
+| `--wait` | bool |  | with --confirm: follow the job until it ends, as "job watch" does, with its exit codes |
+
+#### `nopacs retention due`
+
+List the sessions that are due now, oldest due first
+
+Usage: `nopacs retention due <tenant> [--rule NAME] [--held] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--held` | bool |  | list the held sessions too, marked |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+| `--rule` | string |  | only the sessions whose rule has this name |
+
+#### `nopacs retention rule`
+
+Add, change, remove, list and show a tenant's retention rules
+
+Usage: `nopacs retention rule`
+
+##### `nopacs retention rule add`
+
+Add a retention rule to a tenant
+
+Usage: `nopacs retention rule add <tenant> <name> [--receiver R [--route RT] | --storage S] [--keep-at-least P] [--dispose-after P] [--action review|delete] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--action` | string |  | what is done with due sessions: review (list them for a person, the default) or delete (the daily pass deletes them) |
+| `--dispose-after` | string |  | how long after its start a matched session is due, such as 10y; not shorter than --keep-at-least; "none" to only keep |
+| `--keep-at-least` | string |  | how long a matched session is kept at least, such as 7y or 90d; "none" for no minimum |
+| `--receiver` | string |  | match the sessions archived through this receiver; empty for every session |
+| `--route` | string |  | with --receiver: match only the scans archived by this route of it |
+| `--storage` | string |  | match the sessions archived first to this primary storage (not with --receiver) |
+
+##### `nopacs retention rule list`
+
+List a tenant's retention rules
+
+Usage: `nopacs retention rule list <tenant> [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+
+##### `nopacs retention rule remove`
+
+Remove a retention rule
+
+Usage: `nopacs retention rule remove <tenant> <name> [--yes] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--yes` | bool |  | do not ask for the rule's name to be typed again |
+
+##### `nopacs retention rule set`
+
+Change some fields of a retention rule
+
+Usage: `nopacs retention rule set <tenant> <name> [--receiver R [--route RT] | --storage S] [--keep-at-least P] [--dispose-after P] [--action review|delete] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--action` | string |  | what is done with due sessions: review (list them for a person, the default) or delete (the daily pass deletes them) |
+| `--dispose-after` | string |  | how long after its start a matched session is due, such as 10y; not shorter than --keep-at-least; "none" to only keep |
+| `--keep-at-least` | string |  | how long a matched session is kept at least, such as 7y or 90d; "none" for no minimum |
+| `--receiver` | string |  | match the sessions archived through this receiver; empty for every session |
+| `--route` | string |  | with --receiver: match only the scans archived by this route of it |
+| `--storage` | string |  | match the sessions archived first to this primary storage (not with --receiver) |
+
+##### `nopacs retention rule show`
+
+Show one retention rule
+
+Usage: `nopacs retention rule show <tenant> <name>`
+
 ### `nopacs scan`
 
 Show a scan of the archive, and its DICOM headers
@@ -1325,13 +1551,18 @@ Usage: `nopacs storage add <tenant> <name> --type dir --root ROOT [--path PATH] 
 | `--capacity` | string |  | the most bytes the storage may hold, a size such as 500GiB; 0 for no limit of its own |
 | `--credential-env` | string |  | s3: name of the environment variable that holds the secret access key that goes with --access-key-id |
 | `--credential-file` | string |  | s3: path of a file, readable only by you, that holds the secret access key that goes with --access-key-id |
+| `--encrypted-at-rest-declared` | bool |  | dir: state that the volume under the directory encrypts what it holds at rest; the status shows it as declared, never as checked |
 | `--endpoint` | string |  | s3: the store's base URL, one the setting storage.s3-endpoints lists |
 | `--path` | string |  | dir: the directory below the tenant's directory in the root, segments joined by "/"; empty for the tenant's directory itself |
 | `--path-style` | bool |  | s3: address the bucket in the URL's path rather than its host name; most stores other than AWS need it, and the server requires it at an endpoint the installation allows private addresses at |
 | `--prefix` | string |  | s3: the prefix every key is written under, ending in "/", such as nopacs/lab-a/; empty for the whole bucket |
 | `--purge-versions` | bool | `true` | s3: on a bucket that keeps versions, a purge of a correction deletes every older version of each object it removes, so the bytes are gone; --purge-versions=false leaves them, hidden behind a delete marker |
+| `--recall-days` | int |  | s3, archive tier: how many days a recalled object stays readable (1 to 365) |
+| `--recall-tier` | string |  | s3, archive tier: how fast the store brings an object back: standard, bulk or expedited |
 | `--region` | string |  | s3: the region the bucket is in, such as eu-central-1 |
+| `--replica-of` | string |  | make the storage a replica of this primary of the tenant from the start; the server then copies what the primary holds |
 | `--root` | string |  | dir: the name of the root, as the setting storage.directory-roots names it |
+| `--tier` | string |  | online (every object reads at once, the default) or archive (some objects must be recalled first; a replica on S3 only) |
 | `--type` | string |  | the storage's type: dir (a directory on the server) or s3 (a bucket) (required) |
 
 #### `nopacs storage list`
@@ -1368,13 +1599,18 @@ Usage: `nopacs storage set <tenant> <name> [--capacity SIZE] [directory or S3 fl
 | `--capacity` | string |  | the most bytes the storage may hold, a size such as 500GiB; 0 for no limit of its own |
 | `--credential-env` | string |  | s3: name of the environment variable that holds the secret access key that goes with --access-key-id |
 | `--credential-file` | string |  | s3: path of a file, readable only by you, that holds the secret access key that goes with --access-key-id |
+| `--encrypted-at-rest-declared` | bool |  | dir: state that the volume under the directory encrypts what it holds at rest; the status shows it as declared, never as checked |
 | `--endpoint` | string |  | s3: the store's base URL, one the setting storage.s3-endpoints lists |
 | `--path` | string |  | dir: the directory below the tenant's directory in the root, segments joined by "/"; empty for the tenant's directory itself |
 | `--path-style` | bool |  | s3: address the bucket in the URL's path rather than its host name; most stores other than AWS need it, and the server requires it at an endpoint the installation allows private addresses at |
 | `--prefix` | string |  | s3: the prefix every key is written under, ending in "/", such as nopacs/lab-a/; empty for the whole bucket |
 | `--purge-versions` | bool | `true` | s3: on a bucket that keeps versions, a purge of a correction deletes every older version of each object it removes, so the bytes are gone; --purge-versions=false leaves them, hidden behind a delete marker |
+| `--recall-days` | int |  | s3, archive tier: how many days a recalled object stays readable (1 to 365) |
+| `--recall-tier` | string |  | s3, archive tier: how fast the store brings an object back: standard, bulk or expedited |
 | `--region` | string |  | s3: the region the bucket is in, such as eu-central-1 |
+| `--replica-of` | string |  | refused here: a storage becomes a replica when it is added with --replica-of, or by "replica attach" |
 | `--root` | string |  | dir: the name of the root, as the setting storage.directory-roots names it |
+| `--tier` | string |  | online (every object reads at once, the default) or archive (some objects must be recalled first; a replica on S3 only) |
 
 #### `nopacs storage show`
 
@@ -1382,11 +1618,32 @@ Show one storage
 
 Usage: `nopacs storage show <tenant> <name>`
 
+#### `nopacs storage status`
+
+Show a tenant's storages now: space, tier, replicas, switch, encryption and scrub coverage
+
+Usage: `nopacs storage status <tenant> [<name>]`
+
 #### `nopacs storage test`
 
 Write, read back, compare and remove one test object
 
 Usage: `nopacs storage test <tenant> <name>`
+
+### `nopacs switch`
+
+Make a replica the primary, under the primary's name, in one step
+
+Usage: `nopacs switch <tenant> <primary> <replica> (--validate | --confirm TOKEN) [--skip-verification --reason TEXT] [--drain-timeout DURATION] [--wait] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--confirm` | string |  | the confirm token that --validate showed, to do the switch |
+| `--drain-timeout` | duration |  | how long the copy may take to drain before the switch is refused, 1s to 1h; the server's ten minutes when not given |
+| `--reason` | string |  | why the checks are passed over, in your own words, kept in the audit entry (with --skip-verification) |
+| `--skip-verification` | bool |  | switch although the replica has no clean scrub since its backfill or no empty compare from it alone; needs --reason |
+| `--validate` | bool |  | say whether the switch could start now and what stands in its way, and show the confirm token; change nothing |
+| `--wait` | bool |  | if the call times out, read the storage's status until the switch is over |
 
 ### `nopacs tenant`
 

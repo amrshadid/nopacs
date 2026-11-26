@@ -19,7 +19,7 @@ const scrubKindPrefix = "SCRUB_FINDING_KIND_"
 
 // findingWord writes a finding's kind as a word, such as "manifest-damaged".
 func findingWord(k v1.ScrubFindingKind) string {
-	return strings.ReplaceAll(enumWordOf(k.String(), scrubKindPrefix), "_", "-")
+	return output.FindingKind(k)
 }
 
 // findingScan writes the labels of the scan a finding belongs to, "-" for an

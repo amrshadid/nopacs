@@ -81,9 +81,20 @@ type senderTest struct {
 func jobRow(j *v1.Job, when string) row {
 	cn := j.GetCounts()
 	by, what := j.GetSend().GetSender(), output.JobTarget(j.GetSend())
-	if ij := j.GetImportJob(); ij != nil {
+	switch k := j.GetKind().(type) {
+	case *v1.Job_ImportJob:
 		// The path can name a person; the list names the receiver only.
-		by, what = "import "+ij.GetReceiver(), "a directory"
+		by, what = "import "+k.ImportJob.GetReceiver(), "a directory"
+	case *v1.Job_Scrub:
+		by, what = "scrub", "storage "+output.Dash(k.Scrub.GetStorage())
+	case *v1.Job_Rebuild:
+		by, what = "rebuild", "the catalog"
+	case *v1.Job_Replicate:
+		by, what = "replicate", k.Replicate.GetPrimary()+" to "+k.Replicate.GetReplica()
+	case *v1.Job_Repair:
+		by, what = "repair", "storage "+k.Repair.GetStorage()
+	case *v1.Job_Dispose:
+		by, what = "dispose", "rule "+k.Dispose.GetRule()
 	}
 	return row{cells: []string{j.GetId(), by, what, output.JobState(j.GetState()),
 		output.JobBar(cn, 22) + " " + itoa(int64(output.JobPercent(cn))) + "%", itoa(cn.GetInstancesSent() + cn.GetInstancesWarned()), itoa(cn.GetInstancesRefused()), when}, ref: j}

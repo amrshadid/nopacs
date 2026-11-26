@@ -446,6 +446,12 @@ func TestGrammar(t *testing.T) {
 		"correction show": true, "correction undo": true, "correction purge": true, "correction allow": true,
 		"catalog subjects": true, "catalog sessions": true, "catalog scans": true, "scan show": true, "download": true,
 		"watch": true, "backup create": true,
+		"storage status": true,
+		"replica list":   true, "replica attach": true, "replica detach": true, "replica backfill": true,
+		"repair": true, "switch": true,
+		"retention rule add": true, "retention rule set": true, "retention rule remove": true, "retention rule list": true, "retention rule show": true,
+		"retention due": true, "retention dispose": true, "retention clock": true,
+		"hold list": true, "hold show": true, "hold place": true, "hold release": true,
 	}
 	got := map[string]bool{}
 	for _, c := range cli.Command(cli.Env{}).Commands() {

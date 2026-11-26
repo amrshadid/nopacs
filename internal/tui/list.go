@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 )
 
 // pageAhead is how close to the end of the loaded rows the cursor may come
@@ -38,7 +40,13 @@ type action struct {
 	// needsRow says the action works on the row under the cursor and does
 	// nothing when there is none.
 	needsRow bool
-	do       func(c *ctx, self screen, ref any) tea.Cmd
+	// need is the least role on the tenant a detail screen's key asks of the
+	// caller, and installation says it is for an admin on the installation;
+	// allowed leaves out the keys the caller's grants refuse. Zero means
+	// any caller. The server checks every call whatever the keys offer.
+	need         v1.Role
+	installation bool
+	do           func(c *ctx, self screen, ref any) tea.Cmd
 }
 
 // listScreen is every list of the program: tenants, keys, grants, settings,
