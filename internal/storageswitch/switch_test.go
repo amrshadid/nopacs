@@ -162,6 +162,38 @@ func TestWriteInFlightFinishesBeforeTheSwap(t *testing.T) {
 	f.wantServed(f.catalog())
 }
 
+// TestSwapWaitsForACopyInFlight guards a write admitted to the replica
+// before the swap (a copy's put still streaming, its scan in step already
+// by another copy): the switch, every scan in step, does not swap while
+// that write holds the replica's gate, since the write's place would then
+// be named by the primary; it swaps once the write released.
+func TestSwapWaitsForACopyInFlight(t *testing.T) {
+	f := newFixture(t)
+	f.archive(1, "scan-1", 2)
+	f.attach()
+	f.replicate()
+	f.inStep()
+	s := f.switcher(f.config())
+	token := f.preview(s, true).Confirm
+	release, err := s.Gate().Enter(f.ctx, "copy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sw, err := s.Begin(f.ctx, f.request(token))
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if got, err := f.p.Switch(f.ctx, sw.ID); err != nil || got.State != tenant.SwitchAccepted {
+		t.Fatalf("with a copy's put in flight to the replica the switch reads %+v, %v; want it accepted, not swapped", got, err)
+	}
+	release()
+	if done := f.wait(s, sw.ID); done.State != tenant.SwitchDone {
+		t.Fatalf("the switch once the copy's put released ended as %+v; want done", done)
+	}
+	f.wantServed(f.catalog())
+}
+
 // TestWriteDuringTheDrainLandsOnTheNewPlace guards a write that comes while
 // the switch drains: it waits at the gate and is admitted after the swap,
 // on the place the primary's name names then, or is refused; never archived

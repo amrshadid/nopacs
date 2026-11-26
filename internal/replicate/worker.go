@@ -31,9 +31,25 @@ type Queue interface {
 
 // Catalog is the part of the catalog the worker reads: the instances a scan
 // holds now, which a delete's hidden instances are not among, each of
-// whose manifest lines must agree with its row (tenant.InstanceReads).
+// whose manifest lines must agree with its row (tenant.InstanceReads); and
+// the scan's row, for the manifest digest it is committed at
+// (tenant.Catalog), which a copy that did not end reads to tell what it put
+// that the catalog no longer names.
 type Catalog interface {
 	ListHeldInstances(ctx context.Context, path label.Path, page master.Page) ([]tenant.ScanInstance, string, error)
+	CatalogScan(ctx context.Context, path label.Path) (tenant.CatalogScan, error)
+}
+
+// WritePause is the gate every write to a tenant's storage asks before it
+// lands bytes there (storageswitch.Gate): Enter waits while the storage is
+// paused, then admits the write and returns its release, or answers why
+// not. A switch waits for the writes admitted to a replica to release
+// before it swaps the replica's place, so a copy's put never lands on a
+// place the replica's name no longer names.
+type WritePause interface {
+	// Enter admits a write to the storage named and returns its release,
+	// called once after the write's last effect; an error refuses it.
+	Enter(ctx context.Context, storage string) (func(), error)
 }
 
 // OpenFunc opens the tenant's storage of this name for reading and writing.
@@ -43,9 +59,10 @@ type OpenFunc func(ctx context.Context, storage string) (blob.Store, error)
 // The defaults of a Config's bounds.
 const (
 	// DefaultLease is how long a claim holds a scan; the worker renews it
-	// every third of it. Each put and each read back has five sixths of
-	// it, so the lease must be longer than the largest object takes to put
-	// on the slowest replica.
+	// every third of it. Each put ends by the due its lease's last renewal
+	// returned less the margin (Config.PutMargin), so it has at least half
+	// the lease; the lease must be longer than twice the time the largest
+	// object takes to put on the slowest replica.
 	DefaultLease = time.Minute
 	// DefaultBatch is how many scans one claim leases.
 	DefaultBatch = 16
@@ -92,6 +109,17 @@ type Config struct {
 	RetryMin     time.Duration
 	RetryMax     time.Duration
 	ChangedDelay time.Duration
+	// PutMargin is how long before the due its lease's last renewal
+	// returned each put to a replica is cut, by its context: a copy whose
+	// lease a purge's start or a delete's publish ended cannot renew it, so
+	// its puts end before that due, and the purge waits that due plus
+	// tenant.ReplicaPutGrace before it removes anything. Zero is a sixth of
+	// the lease; it is less than half the lease, so a put has time at all.
+	PutMargin time.Duration
+	// Pause, when not nil, is entered for the replica before each put and
+	// each removal on it, and released after its last effect: a switch of
+	// the replica's primary waits for the copies in flight before it swaps.
+	Pause WritePause
 	// Rate, when set, returns replica.rate as it applies on the tenant now:
 	// the most bytes a second put on one replica, 0 for no bound. It is
 	// read at each claim; nil bounds nothing.
@@ -164,6 +192,10 @@ func New(cfg Config) (*Worker, error) {
 	defInt(&cfg.Parallel, DefaultParallel)
 	if cfg.RetryMax < cfg.RetryMin {
 		cfg.RetryMax = cfg.RetryMin
+	}
+	def(&cfg.PutMargin, cfg.Lease/6)
+	if cfg.PutMargin < 0 || cfg.PutMargin >= cfg.Lease/2 {
+		return nil, fault.New(fault.Invalid, "replicate: the margin a put ends by before its lease's due is positive and less than half the lease")
 	}
 	log := cfg.Log
 	if log == nil {
@@ -268,7 +300,10 @@ type Pass struct {
 func (w *Worker) RunOnce(ctx context.Context) (Pass, error) {
 	w.readRate(ctx)
 	cctx, cancel := context.WithTimeout(ctx, opTimeout)
-	claims, err := w.cfg.Queue.ClaimReplicaScans(cctx, w.cfg.Owner, w.cfg.Now(), w.cfg.Lease, w.cfg.Batch)
+	// The claims' leases are due a lease after this time, the database's
+	// lease_until: each put's deadline is counted from it.
+	claimed := w.cfg.Now()
+	claims, err := w.cfg.Queue.ClaimReplicaScans(cctx, w.cfg.Owner, claimed, w.cfg.Lease, w.cfg.Batch)
 	cancel()
 	if err != nil {
 		return Pass{}, err
@@ -287,7 +322,7 @@ func (w *Worker) RunOnce(ctx context.Context) (Pass, error) {
 		wg.Add(1)
 		go func(c tenant.ReplicaClaim) {
 			defer func() { <-sem; wg.Done() }()
-			out, n := w.copyScan(ctx, c, stores)
+			out, n := w.copyScan(ctx, c, claimed, stores)
 			mu.Lock()
 			defer mu.Unlock()
 			pass.Bytes += n

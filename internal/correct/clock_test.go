@@ -22,8 +22,9 @@ func shifted(d time.Duration) func() time.Time { return func() time.Time { retur
 // TestPurgeGoesByTrustedClock guards the purge's clock: a clock set back
 // before the delete's commit refuses the server's purge and an admin's; a
 // clock that jumped forward more than the step since the last trusted pass
-// pauses the server's purges, the delete left committed; an admin's purge
-// then runs and trusts that clock.
+// pauses the server's purges, the delete left committed, and the tenant's
+// retention with them; an admin's purge then runs, and the server's purges
+// go on once a person confirms the time.
 func TestPurgeGoesByTrustedClock(t *testing.T) {
 	r := newRig(t, false)
 	r.archive(crashFiles...)
@@ -52,8 +53,18 @@ func TestPurgeGoesByTrustedClock(t *testing.T) {
 	if p, err := jumped.PurgeNow(r.ctx, c.ID, r.audit(), nil); err != nil || p.State != record.StatePurged {
 		t.Fatalf("an admin's purge after the jump = %+v, %v", p, err)
 	}
+	// The jump the server's pass saw paused retention, and with it every
+	// automatic purge, until a person confirms the time.
+	if _, err := jumped.PurgeDue(r.ctx); !errors.Is(err, tenant.ErrClock) {
+		t.Fatalf("PurgeDue before the time is confirmed answered %v, want the clock's refusal", err)
+	}
+	now := time.Now().Add(3 * 24 * time.Hour)
+	if _, _, err := r.p.(tenant.Retention).ConfirmClock(r.ctx, tenant.ClockConfirm{Observed: now, Now: now, Reason: "checked"}, r.audit(),
+		nil); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := jumped.PurgeDue(r.ctx); err != nil {
-		t.Fatalf("PurgeDue at the clock an admin trusted: %v", err)
+		t.Fatalf("PurgeDue at the clock a person confirmed: %v", err)
 	}
 }
 

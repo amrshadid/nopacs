@@ -905,7 +905,9 @@ message Correction {
   // phrases the server has, such as "storage does not answer" (a primary
   // or a replica, or one still owed the record), "held" (its purge waits
   // for a hold's release), "clock jumped" (its purge waits for an admin to
-  // confirm the server's time) or "copies abandoned"; at most 256
+  // confirm the server's time), "copies in flight" (its purge waits until no
+  // copy to a replica begun before it can still land) or "copies
+  // abandoned"; at most 256
   // bytes. Empty while nothing holds it
   // back, and once purged.
   string state_reason = 14;

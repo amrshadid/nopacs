@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,5 +125,29 @@ func TestAFollowedCallIsNotWaitedFor(t *testing.T) {
 	case <-stopped:
 	case <-time.After(5 * time.Second):
 		t.Fatal("leaving the screen did not stop the followed call")
+	}
+}
+
+// TestStatusShowsAQuarantineWarning guards the status screen's lines: a
+// quarantine past a warning gets a Warning line naming it, and one under both
+// limits, or a status that carries none, gets no such line.
+func TestStatusShowsAQuarantineWarning(t *testing.T) {
+	has := func(st *v1.TenantStatus) (string, bool) {
+		for _, p := range statusPairs(nil, st) {
+			if p.label == "Warning" {
+				return p.value, true
+			}
+		}
+		return "", false
+	}
+	if _, ok := has(&v1.TenantStatus{}); ok {
+		t.Error("a status with no quarantine part has a warning line")
+	}
+	if _, ok := has(&v1.TenantStatus{Quarantine: &v1.QuarantineWarnings{HeldFiles: 3}}); ok {
+		t.Error("a quarantine under both limits has a warning line")
+	}
+	v, ok := has(&v1.TenantStatus{Quarantine: &v1.QuarantineWarnings{AgePassed: true}})
+	if !ok || !strings.Contains(v, "quarantine.warn-age") {
+		t.Errorf("a quarantine past the age has the line %q (present %v); want it to name quarantine.warn-age", v, ok)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/core/label"
@@ -58,10 +59,14 @@ func (o object) uid() string { return o.lines[0].SOPInstanceUID }
 // The copy runs under a context of its own, which a lease that ends
 // cancels with its failure as the cause; that cause, not the bare
 // cancellation the copy's steps saw, is how the copy ended.
-func (w *Worker) copyScan(ctx context.Context, c tenant.ReplicaClaim, stores *storeSet) (outcome, int64) {
+//
+// A copy that did not end (a change published under it, its lease lost, or
+// its scan gone) removes, before its row is written, what it put that the
+// catalog no longer names (sweep).
+func (w *Worker) copyScan(ctx context.Context, c tenant.ReplicaClaim, claimed time.Time, stores *storeSet) (outcome, int64) {
 	sctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	sc := &scanCopy{w: w, c: c, lease: &lease{w: w, fence: c.Fence, ctx: sctx, cancel: cancel, last: w.cfg.Now()}}
+	sc := &scanCopy{w: w, c: c, lease: &lease{w: w, fence: c.Fence, ctx: sctx, cancel: cancel, last: claimed}}
 	stop := sc.lease.hold()
 	err := sc.run(sctx, stores)
 	stop()
@@ -83,6 +88,12 @@ type scanCopy struct {
 	// scan when the replica's row holds that manifest as verified; nil
 	// when nothing on the replica is vouched for (verifiedOnReplica).
 	verified map[string][]manifest.File
+	// mu guards putKeys.
+	mu sync.Mutex
+	// putKeys are the keys this copy asked the replica to put, each
+	// recorded before its put began: a put that failed or was cut may still
+	// land.
+	putKeys []string
 }
 
 // run copies the scan: its objects, then its sidecar, then its manifest.
@@ -463,9 +474,15 @@ func (s *scanCopy) putManifest(ctx context.Context, data []byte) error {
 }
 
 // finish writes the row's end or failure for err and returns the outcome.
+// A copy that did not end in step (a change published under it, its lease
+// lost, its scan gone) first removes what it put that the catalog no
+// longer names (sweep).
 func (s *scanCopy) finish(ctx context.Context, err error) outcome {
 	w, c := s.w, s.c
 	log := w.log.With("replica", c.Fence.Replica, "scan", scanPath(c.Path))
+	if sweeps(err) {
+		s.sweep(ctx)
+	}
 	switch {
 	case errors.Is(err, tenant.ErrLeaseLost):
 		log.Info("replicas: the lease of a scan was lost while it copied; another worker has it, and this copy stops")
@@ -484,12 +501,20 @@ func (s *scanCopy) finish(ctx context.Context, err error) outcome {
 		if eerr != nil {
 			if !errors.Is(eerr, tenant.ErrLeaseLost) {
 				log.Warn("replicas: a scan's copy could not be recorded; its lease runs out and it is copied again", "kind", fault.KindOf(eerr).String())
+			} else if err == nil {
+				// The lease was ended under the copy (its scan deleted, a
+				// purge begun): what it put may be what the catalog dropped.
+				s.sweep(ctx)
 			}
 			return stopped
 		}
 		if state == tenant.ReplicaInStep {
 			w.succeeded(c.Fence.Replica)
 			return endedInStep
+		}
+		if err == nil {
+			// A change was published while the copy ran.
+			s.sweep(ctx)
 		}
 		return endedAgain
 	}
@@ -511,6 +536,9 @@ func (s *scanCopy) finish(ctx context.Context, err error) outcome {
 	if ferr != nil {
 		if !errors.Is(ferr, tenant.ErrLeaseLost) {
 			log.Warn("replicas: a scan's failed copy could not be recorded; its lease runs out", "kind", fault.KindOf(ferr).String())
+		} else if !ce.changed {
+			// The lease was ended under the copy, whose put then failed.
+			s.sweep(ctx)
 		}
 		return stopped
 	}

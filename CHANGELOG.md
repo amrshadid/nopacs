@@ -452,6 +452,29 @@ scan, keeps it whole, and serves it through an API with keys.
   that reads the copy without NoPACs), scrub coverage, encryption at rest,
   retention and holds, and the error reasons and retry delays a client
   receives; the security model says what a tenant's admin may grant.
+- Quarantine warnings: tenant status and the status screen warn when the
+  oldest held file passes `quarantine.warn-age` or the bytes held pass
+  `quarantine.warn-bytes`, with gauges and an event when a warning starts and
+  when it ends.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.
+
+### Fixed
+
+- A copy to a replica under way when a delete was published or purged could
+  leave the deleted data on the replica, a whole deleted scan with no record
+  of it: the purge's start and the delete's publish now end the copy's lease,
+  every put ends before its lease's due, the purge removes nothing until no
+  such put can land (state reason "copies in flight"), copies enter the
+  replica's write gate, a copy that did not end removes what it put that the
+  catalog no longer names, and a scan whose instance delete is purging is not
+  copied until the purge ends.
+- A session archived while the clock was set back could be deleted early once
+  the clock was put right: retention times are never stored earlier than the
+  time last trusted. Automatic purges use `retention.max-clock-step` and pause
+  retention on a jump; a clock run fast in small steps is caught against the
+  process's monotonic clock; a rebuild keeps the retention rows of sessions it
+  leaves out; holds are adopted again after every catalog activation before
+  any disposal; a person's disposal stops when its key is revoked, suspended
+  or no longer an admin of the tenant.

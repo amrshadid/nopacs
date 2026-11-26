@@ -18,13 +18,15 @@ import (
 // damaged objects counted.
 const replicaRowColumns = `replica, series_uid, state, manifest_sha256, queued_at, due, verified_at, backfill, attempt, last_error,
 	seq, claimed_seq, (SELECT count(*) FROM replica_damage AS d WHERE d.replica = replica_scans.replica
-	AND d.series_uid = replica_scans.series_uid)`
+	AND d.series_uid = replica_scans.series_uid), lease_until`
 
 // replicaRow is a row as the store reads it, with what only the store
 // needs.
 type replicaRow struct {
 	tenant.ReplicaScan
 	seq, claimed int64
+	// leaseUntil is the due of a copying row's lease.
+	leaseUntil time.Time
 }
 
 // scanReplicaRow reads one row of replicaRowColumns.
@@ -32,11 +34,11 @@ func scanReplicaRow(r Row) (replicaRow, error) {
 	var out replicaRow
 	var state string
 	var manifest []byte
-	var queued, due, verified DBTime
+	var queued, due, verified, lease DBTime
 	err := r.Scan(&out.Replica, &out.SeriesUID, &state, &manifest, &queued, &due, &verified, &out.Backfill, &out.Attempt,
-		&out.LastError, &out.seq, &out.claimed, &out.Damaged)
+		&out.LastError, &out.seq, &out.claimed, &out.Damaged, &lease)
 	out.State, out.ManifestSHA256 = tenant.ReplicaScanState(state), ToSHA256(manifest)
-	out.Queued, out.Due, out.Verified = queued.T, due.T, verified.T
+	out.Queued, out.Due, out.Verified, out.leaseUntil = queued.T, due.T, verified.T, lease.T
 	return out, err
 }
 
@@ -217,8 +219,11 @@ func (k Sending) queueScan(ctx context.Context, tx SendingTx, replica, series st
 
 // dropScan removes every replica's row of the scan of series, and its
 // damage, with their counts: a scan the catalog no longer holds is nothing a
-// replica is asked to hold.
-func (k Sending) dropScan(ctx context.Context, tx SendingTx, series string, now time.Time) error {
+// replica is asked to hold. A copy of a row it drops loses its lease (its
+// next renewal or write finds no row), and dropScan answers the latest due
+// among the leases of the rows that were being copied, zero for none: a put
+// of such a copy may land until then (tenant.ReplicaPutGrace after it).
+func (k Sending) dropScan(ctx context.Context, tx SendingTx, series string, now time.Time) (time.Time, error) {
 	var rows []replicaRow
 	err := tx.Query(ctx, `SELECT `+replicaRowColumns+` FROM replica_scans WHERE series_uid = ?`+k.D.Lock, []any{series},
 		func(r Row) error {
@@ -227,14 +232,70 @@ func (k Sending) dropScan(ctx context.Context, tx SendingTx, series string, now 
 			return err
 		})
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
+	var latest time.Time
 	for _, row := range rows {
+		if row.State == tenant.ReplicaCopying && row.leaseUntil.After(latest) {
+			latest = row.leaseUntil
+		}
 		if err := k.dropRow(ctx, tx, row, now); err != nil {
-			return err
+			return time.Time{}, err
 		}
 	}
-	return nil
+	return latest, nil
+}
+
+// endCopies ends the lease of every replica's row being copied of the
+// scans a correction touches: the row's attempt moves on, so its copier's
+// next renewal or write is tenant.ErrLeaseLost and it stops; the row is due
+// again now (damaged while damage is left), its change counted, and the
+// next claim copies it as the catalog says then. It answers the latest due
+// among the leases it ended, zero for none.
+func (k Sending) endCopies(ctx context.Context, tx SendingTx, correction string, now time.Time) (time.Time, error) {
+	var rows []replicaRow
+	err := tx.Query(ctx, `SELECT `+replicaRowColumns+` FROM replica_scans WHERE state = 'copying'
+		AND series_uid IN (SELECT series_uid FROM correction_scans WHERE correction_id = ?)
+		ORDER BY replica, series_uid`+k.D.Lock, []any{correction}, func(r Row) error {
+		row, err := scanReplicaRow(r)
+		rows = append(rows, row)
+		return err
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	var latest time.Time
+	for _, row := range rows {
+		if row.leaseUntil.After(latest) {
+			latest = row.leaseUntil
+		}
+		next := afterCopy(row)
+		if _, err := tx.Exec(ctx, `UPDATE replica_scans SET state = ?, seq = seq + 1, attempt = attempt + 1, owner = '',
+			lease_until = NULL, due = ?, queued_at = coalesce(queued_at, ?) WHERE replica = ? AND series_uid = ?`, string(next),
+			k.D.Time(now), k.D.Time(now), row.Replica, row.SeriesUID); err != nil {
+			return time.Time{}, err
+		}
+		var t totals
+		t.move(tenant.ReplicaCopying, next)
+		if err := k.addTotals(ctx, tx, row.Replica, t, now); err != nil {
+			return time.Time{}, err
+		}
+	}
+	return latest, nil
+}
+
+// keepCopiesInFlight keeps, on the correction of id, the last moment a put
+// of a copy ended with its latest lease due at due can land
+// (tenant.CopiesInFlightUntil), unless a later one is kept; a zero due keeps
+// nothing.
+func (k Sending) keepCopiesInFlight(ctx context.Context, tx SendingTx, id string, due time.Time) error {
+	until := tenant.CopiesInFlightUntil(due)
+	if until.IsZero() {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `UPDATE corrections SET copies_in_flight_until = ? WHERE id = ?
+		AND (copies_in_flight_until IS NULL OR copies_in_flight_until < ?)`, k.D.Time(until), id, k.D.Time(until))
+	return err
 }
 
 // dropRow removes one row and its damage, with their counts.
@@ -279,6 +340,7 @@ func (k Sending) QueueCorrectionCopies(ctx context.Context, tx SendingTx, correc
 	if err != nil {
 		return err
 	}
+	var latest time.Time
 	for _, s := range series {
 		var storage string
 		var digest []byte
@@ -287,8 +349,12 @@ func (k Sending) QueueCorrectionCopies(ctx context.Context, tx SendingTx, correc
 			return err
 		}
 		if !found {
-			if err := k.dropScan(ctx, tx, s, now); err != nil {
+			due, err := k.dropScan(ctx, tx, s, now)
+			if err != nil {
 				return err
+			}
+			if due.After(latest) {
+				latest = due
 			}
 			continue
 		}
@@ -312,7 +378,9 @@ func (k Sending) QueueCorrectionCopies(ctx context.Context, tx SendingTx, correc
 			}
 		}
 	}
-	return nil
+	// A copy of a scan hidden whole may still be putting its objects: the
+	// correction's purge waits until none can land.
+	return k.keepCopiesInFlight(ctx, tx, correction, latest)
 }
 
 // sameManifest is the condition that a row's manifest digest is its scan's

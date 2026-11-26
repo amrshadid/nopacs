@@ -168,3 +168,8 @@ func (t *Tenant) RecordDisposed(ctx context.Context, jobID, studyUID string, out
 func (t *Tenant) EndDisposeJob(ctx context.Context, id string, now time.Time) (tenant.Job, error) {
 	return t.sending().EndDisposeJob(ctx, id, now)
 }
+
+// StopDisposeJob implements tenant.Disposal.
+func (t *Tenant) StopDisposeJob(ctx context.Context, id, reason string, now time.Time) (tenant.Job, error) {
+	return t.sending().StopDisposeJob(ctx, id, reason, now)
+}

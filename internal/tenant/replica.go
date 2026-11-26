@@ -114,8 +114,13 @@ type Replication interface {
 	// due first, then those copying whose lease ended. Each moves to
 	// copying with its attempt raised, and is answered with what the copy
 	// needs (ReplicaClaim). A row whose scan the catalog no longer holds is
-	// dropped on the way, not answered. Two claims at once take different
-	// rows. Nothing due answers none.
+	// dropped on the way, not answered. A row of a scan an instance delete
+	// in state purging touches is not claimed, and stays as it is: until
+	// FinishPurge the catalog names the manifest the purge is replacing,
+	// and a copy of it landing after the purge wrote the replica's manifest
+	// and sidecar again would leave the replica naming the deleted instance;
+	// FinishPurge queues the scan again at its new manifest. Two claims at
+	// once take different rows. Nothing due answers none.
 	ClaimReplicaScans(ctx context.Context, owner string, now time.Time, lease time.Duration, limit int) ([]ReplicaClaim, error)
 	// RenewReplicaScan extends a claim's lease to now + lease. A row whose
 	// attempt is not the fence's, or that is not copying, changes nothing

@@ -3,6 +3,7 @@ package correct
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -147,11 +148,12 @@ func (e *Engine) purgeCopies(ctx context.Context, c tenant.Correction) (copySet,
 // checkGone is a purge's last pass before its correction is purged: each
 // key it settled purged is asked of every copy attached now (the primary
 // and its replicas, read again, not the copies the purge began with), and
-// one found there again is removed and recorded. A copy put while the
-// purge ran (a replicator's copy claimed before it began, landing after
-// the replica's removal) would otherwise keep what the correction says is
-// gone. A copy that does not answer, or a hold, stops the pass, and the
-// purge is run again.
+// one found there again is removed and recorded. A put that landed after
+// the replica's removal would otherwise keep what the correction says is
+// gone: the purge removes nothing until the copies its start ended can no
+// longer land (waitCopies), and this pass is the check that none did. A
+// copy that does not answer, or a hold, stops the pass, and the purge is
+// run again.
 func (e *Engine) checkGone(ctx context.Context, c tenant.Correction) error {
 	copies, err := e.cfg.Store.CorrectionCopies(ctx, c.ID)
 	if err != nil {
@@ -211,6 +213,25 @@ func (e *Engine) checkGone(ctx context.Context, c tenant.Correction) error {
 		}
 		after = targets[len(targets)-1]
 	}
+}
+
+// waitCopies answers nil once no put of a copy to a replica that c's start
+// or its delete's publish ended can still land (c.CopiesInFlightUntil, by
+// the engine's clock), and until then records that the purge waits for
+// copies in flight and answers a precondition failure, which the purge pass
+// tries again. A put cannot share a transaction with the catalog: one that
+// a copy had under way when its lease was ended may land after a removal
+// the purge made, and a removal made before that moment would leave the
+// object on the replica after "purged". Every removal of the purge (its
+// objects, a rewrite of a scan's manifest and metadata, the older versions
+// of those, the last check on every copy) is therefore made after it.
+func (e *Engine) waitCopies(ctx context.Context, c tenant.Correction) error {
+	if c.CopiesInFlightUntil.IsZero() || !e.now().Before(c.CopiesInFlightUntil) {
+		return nil
+	}
+	e.note(ctx, c, tenant.StateReasonCopiesInFlight)
+	return fault.New(fault.Precondition, "the purge waits until the copies to a replica its start ended can no longer land, until "+
+		c.CopiesInFlightUntil.UTC().Format(time.RFC3339))
 }
 
 // waitStorage records, for a purge stopped by a storage that does not

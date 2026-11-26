@@ -45,6 +45,8 @@ const tenantWorkStop = 30 * time.Second
 // does (the tenant removed, unreachable, moved), and starts again over a
 // database opened anew; every time it records comes from clock.Now.
 type tenantWork struct {
+	// quarantine holds the running quarantine watches, for the metrics.
+	quarantine   quarantineWatches
 	d            Deps
 	reg          *registry.Registry
 	tenants      workTenants
@@ -492,8 +494,10 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	// tenant's settings at each claim, pass and look, so a change applies
 	// without a restart.
 	values := w.values.OnTenant(st)
+	// Each put of a copy enters the replica's write gate, so a switch waits
+	// for the copies in flight before it swaps the replica's place.
 	repl, err := replicate.New(replicate.Config{Queue: db, Catalog: db, Now: w.now, Owner: w.owner, Log: log, Idle: w.replicaIdle,
-		Rate: values.ReplicaRate,
+		Rate: values.ReplicaRate, Pause: sw.Gate(),
 		Open: func(ctx context.Context, storage string) (blob.Store, error) { return open(ctx, storage) }})
 	if err != nil {
 		return err
@@ -550,6 +554,7 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 		run(func(ctx context.Context) { _ = lag.Run(ctx) })
 	}
 	r := &tenantRepairs{w: w, name: name, st: db, open: open, gate: sw.Gate(), wake: s.repairs, log: log}
+	run(w.quarantine.watch(w, name, st, log))
 	run(r.run)
 	run(r.autoLoop)
 	ret := &tenantRetention{w: w, name: name, st: db, base: st, log: log}

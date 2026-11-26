@@ -12,63 +12,8 @@ import (
 )
 
 // What a purge may remove (correction_keys), what else it clears of a
-// withdrawn subject, the clock it trusts, and what a correction not ended
-// holds for arrivals.
-
-// checkClockIn refuses a purge at now while the clock reads earlier than
-// the latest commit, purge or trusted time the corrections recorded, and an
-// automatic one while it reads more than tenant.MaxClockStep past the last
-// trusted time; else it records now as trusted.
-func (k Sending) checkClockIn(ctx context.Context, tx SendingTx, now time.Time, automatic bool) error {
-	var trusted, committed, ended, purged DBTime
-	if _, err := tx.QueryRow(ctx, `SELECT trusted FROM correction_clock WHERE one = 1`+k.D.Lock, nil, &trusted); err != nil {
-		return err
-	}
-	if _, err := tx.QueryRow(ctx, `SELECT max(committed_at) FROM corrections`, nil, &committed); err != nil {
-		return err
-	}
-	if _, err := tx.QueryRow(ctx, `SELECT max(ended_at) FROM corrections WHERE state = 'purged'`, nil, &ended); err != nil {
-		return err
-	}
-	if _, err := tx.QueryRow(ctx, `SELECT max(purged_at) FROM correction_objects`, nil, &purged); err != nil {
-		return err
-	}
-	for _, t := range []time.Time{trusted.T, committed.T, ended.T, purged.T} {
-		if now.Before(t) {
-			return tenant.ClockError("the server's clock reads earlier than a time the corrections recorded; no purge runs until it is right")
-		}
-	}
-	if automatic && !trusted.T.IsZero() && now.Sub(trusted.T) > tenant.MaxClockStep {
-		return tenant.ClockError("the server's clock reads more than two days past the last time it was trusted; automatic purges wait for an admin's purge")
-	}
-	// A clock retention saw jump pauses every purge its purge time starts
-	// too, until a person confirms the time: a grace that ended by a jump
-	// did not end.
-	if automatic {
-		paused, err := retentionPaused(ctx, tx)
-		if err != nil {
-			return err
-		}
-		if paused {
-			return tenant.ClockError("clock jumped: the tenant's retention is paused until an admin confirms the time; automatic purges wait")
-		}
-	}
-	_, err := tx.Exec(ctx, `UPDATE correction_clock SET trusted = ? WHERE one = 1`, k.D.Time(now))
-	return err
-}
-
-// CheckPurgeClock implements tenant.Corrections.
-func (k Sending) CheckPurgeClock(ctx context.Context, now time.Time) error {
-	if err := master.ValidateTime("time", now); err != nil {
-		return err
-	}
-	return k.Host.Write(ctx, "the purge's clock cannot be checked", func(tx SendingTx) error {
-		if err := tx.LockConfig(ctx); err != nil {
-			return err
-		}
-		return k.checkClockIn(ctx, tx, now, true)
-	})
-}
+// withdrawn subject, and what a correction not ended holds for arrivals.
+// The clock a purge trusts is corrections_clock.go's.
 
 // PurgeTargets implements tenant.Corrections.
 func (k Sending) PurgeTargets(ctx context.Context, id string, limit int) ([]tenant.PurgeTarget, error) {

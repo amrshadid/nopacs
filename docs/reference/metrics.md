@@ -29,6 +29,8 @@ number of series stays bounded whatever callers send.
 | `nopacs_audit_unsealed_oldest_age_seconds` | gauge | - | Age of the oldest audit entry the last sealing pass left unsealed, 0 for none. |
 | `nopacs_replica_lag_seconds` | gauge | `replica`, `tenant` | How long the oldest scan not in step on a replica has waited, by tenant and replica, 0 when every scan is in step. |
 | `nopacs_replica_scans_behind` | gauge | `replica`, `tenant` | Scans not in step on a replica (pending, copying or damaged), by tenant and replica. |
+| `nopacs_quarantine_oldest_seconds` | gauge | `tenant` | How long the oldest quarantined file of a tenant has been held, by tenant, 0 when none is held. |
+| `nopacs_quarantine_held_bytes` | gauge | `tenant` | Bytes a tenant holds in quarantine, by tenant. |
 | `nopacs_scrub_verified_share` | gauge | `storage`, `tenant` | Share of a storage's objects a scrub read whole within scrub.interval, by tenant and storage, as its last scrub left it. |
 | `nopacs_scrub_oldest_unverified_seconds` | gauge | `storage`, `tenant` | How long a storage's object waiting longest has gone unread by a scrub, by tenant and storage, 0 when every one is within scrub.interval. |
 | `nopacs_scrub_overdue_objects` | gauge | `storage`, `tenant` | Objects of a storage not read whole by a scrub within scrub.interval of their last read, by tenant and storage. |

@@ -186,13 +186,18 @@ func (k Sending) writeTimes(ctx context.Context, tx SendingTx, r retentionRow, t
 }
 
 // storeSessions stores again the times of the sessions of the studies
-// named, those the catalog shows, as a change the server makes at now: a
-// hidden one keeps its row as it is.
+// named, those the catalog shows, as a change the server makes at now (or
+// at the time trusted, when the clock reads earlier: storeTime): a hidden
+// one keeps its row as it is.
 func (k Sending) storeSessions(ctx context.Context, tx SendingTx, studies []string, now time.Time) error {
 	if len(studies) == 0 {
 		return nil
 	}
 	if err := orderRetention(ctx, tx, k.D.ShareAll); err != nil {
+		return err
+	}
+	now, err := storeTime(ctx, tx, now)
+	if err != nil {
 		return err
 	}
 	rules, err := retentionRulesIn(ctx, tx)
@@ -251,9 +256,10 @@ func (k Sending) ImportRetentionStart(ctx context.Context, tx SendingTx, recepti
 
 // CommitRetention stores, in a commit's transaction, the retention times
 // of the session of c when the commit made a scan: a new session's row
-// starts at the commit's time, or at given, the retention start of the
-// import job that handed its files in (ImportRetentionStart), then never
-// due before the commit's time plus the notice; a session that has a row
+// starts at the commit's time (the time trusted, when the clock reads
+// earlier: storeTime), or at given, the retention start of the import job
+// that handed its files in (ImportRetentionStart), then never due before
+// the commit's time plus the notice; a session that has a row
 // keeps its start, and its times are stored again from what its scans now
 // arrived through. A commit into a scan that exists changes nothing
 // retention reads. It reads the rules only after it holds retention's row
@@ -270,14 +276,18 @@ func (k Sending) CommitRetention(ctx context.Context, tx SendingTx, c tenant.Sca
 	if err != nil {
 		return err
 	}
+	at, err := storeTime(ctx, tx, c.At)
+	if err != nil {
+		return err
+	}
 	if _, had := rows[c.StudyUID]; !had {
-		row := retentionRow{study: c.StudyUID, start: c.At, archived: c.At}
+		row := retentionRow{study: c.StudyUID, start: at, archived: at}
 		if !given.IsZero() {
 			notice, err := storedNotice(ctx, tx)
 			if err != nil {
 				return err
 			}
-			row.start, row.floor = given, c.At.Add(notice)
+			row.start, row.floor = given, at.Add(notice)
 		}
 		if err := k.insertRetentionRow(ctx, tx, row); err != nil {
 			return err
@@ -293,16 +303,26 @@ func (k Sending) CommitRetention(ctx context.Context, tx SendingTx, c tenant.Sca
 		}
 		return k.writeTimes(ctx, tx, row, tenant.RetentionTimesOf(rules, row.start, row.floor, arrivals[c.StudyUID]))
 	}
-	return k.storeSessions(ctx, tx, []string{c.StudyUID}, c.At)
+	return k.storeSessions(ctx, tx, []string{c.StudyUID}, at)
 }
 
 // ResyncRetention makes the retention rows agree with the catalog in use,
 // in an activation's transaction: a session the catalog shows with no row
 // gets one, started at its earliest held time; every session's times are
-// stored again; a row whose session is neither shown nor hidden by a
-// delete is dropped. A rebuild neither builds nor compares retention
-// state; the rows outlive the catalog's ids since they are keyed by UID.
+// stored again, as a change at now (or at the time trusted: storeTime). A
+// row whose session the new catalog neither shows nor hides is kept as it
+// is, with its start, its clamp and its exemption, as a hidden one's is: a
+// replace activates with the scans it could not read left out, and a
+// session that comes back by a later rebuild must not come back started
+// anew, unclamped and no longer exempt. Only a delete's purge removes a
+// row (dropPurgedRetention), when its session is gone for good. A rebuild
+// neither builds nor compares retention state; the rows outlive the
+// catalog's ids since they are keyed by UID.
 func (k Sending) ResyncRetention(ctx context.Context, tx SendingTx, now time.Time) error {
+	now, err := storeTime(ctx, tx, now)
+	if err != nil {
+		return err
+	}
 	rules, err := retentionRulesIn(ctx, tx)
 	if err != nil {
 		return err
@@ -319,11 +339,7 @@ func (k Sending) ResyncRetention(ctx context.Context, tx SendingTx, now time.Tim
 	if err != nil {
 		return err
 	}
-	if _, err := k.storeRetention(ctx, tx, rules, arrivals, rows, now, notice); err != nil {
-		return err
-	}
-	_, err = tx.Exec(ctx, `DELETE FROM retention_sessions WHERE NOT EXISTS (SELECT 1 FROM sessions AS s WHERE s.study_uid = retention_sessions.study_uid)
-		AND NOT EXISTS (SELECT 1 FROM hidden_sessions AS h WHERE h.study_uid = retention_sessions.study_uid)`)
+	_, err = k.storeRetention(ctx, tx, rules, arrivals, rows, now, notice)
 	return err
 }
 

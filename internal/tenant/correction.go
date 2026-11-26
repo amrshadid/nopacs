@@ -69,8 +69,9 @@ import (
 // A purge is refused while the server's clock reads earlier than the
 // latest commit, purge or trusted time the corrections recorded (a clock
 // set back would purge early); an automatic purge is also paused while the
-// clock reads more than MaxClockStep past the last time it was trusted (a
-// clock that jumped forward would end every grace at once). An admin's
+// clock reads more than retention.max-clock-step (as the last check of
+// retention's clock stored it) past the last time it was trusted (a clock
+// that jumped forward would end every grace at once). An admin's
 // purge trusts the clock it runs at.
 //
 // # Relabel and replace
@@ -163,12 +164,17 @@ type Corrections interface {
 	// that is not unresolved moves; with an audit entry it is an admin's,
 	// and moves now (confirming an unresolved one). Both are refused while
 	// the clock reads earlier than a time recorded; the server's is also
-	// refused while the clock jumped (CheckPurgeClock).
+	// refused while the clock jumped (CheckPurgeClock). Moving to purging
+	// ends the lease of every replica's row of its scans being copied, and
+	// keeps the latest due among them, plus ReplicaPutGrace, as the
+	// correction's CopiesInFlightUntil when it is later than the one kept.
 	StartPurge(ctx context.Context, id string, now time.Time, audit *master.AuditEntry, guard Guard) (Correction, error)
-	// CheckPurgeClock answers a precondition failure, changing nothing,
-	// when an automatic purge may not run at now: the clock reads earlier
-	// than the latest commit, purge or trusted time recorded, or more than
-	// MaxClockStep after the trusted time; else it records now as trusted.
+	// CheckPurgeClock answers a precondition failure when an automatic
+	// purge may not run at now: the clock reads earlier than the latest
+	// commit, purge or trusted time recorded (changing nothing), or more than
+	// retention.max-clock-step after the trusted time, which also pauses
+	// retention, committed before the refusal; else it records now as
+	// trusted.
 	CheckPurgeClock(ctx context.Context, now time.Time) error
 	// PurgeTargets returns, in order (every instance, then each scan's
 	// metadata, then its manifest), at most limit objects of a purging
@@ -260,7 +266,8 @@ type Corrections interface {
 	// that is not a copy, so its row would stay owed for ever.
 	DropRecordOwed(ctx context.Context, id, storage string) (bool, error)
 	// NotePurge sets the state reason of a purging correction to why it
-	// waits (StateReasonStorage, StateReasonHeld), or clears it with "";
+	// waits (StateReasonStorage, StateReasonHeld,
+	// StateReasonCopiesInFlight), or clears it with "";
 	// a correction that is not purging is left as it is.
 	NotePurge(ctx context.Context, id, why string) error
 	// Correction returns the correction of that id, or NotFound.
@@ -318,9 +325,10 @@ const (
 	MaxGrace = 90 * 24 * time.Hour
 	// DefaultGrace is delete.grace when the tenant sets none.
 	DefaultGrace = 7 * 24 * time.Hour
-	// MaxClockStep is how far past the last trusted time the clock may read
-	// for an automatic purge to run. The tenant has no setting for it yet;
-	// two days lets a server be stopped over a weekend without an admin.
+	// MaxClockStep is retention.max-clock-step's built-in default: how far
+	// past the last trusted time the clock may read for an automatic purge
+	// to run before any check of retention's clock stored the setting. Two
+	// days lets a server be stopped over a weekend without an admin.
 	MaxClockStep = 48 * time.Hour
 	// MaxPurgeTargets is the most objects one PurgeTargets answers.
 	MaxPurgeTargets = 1000
@@ -652,6 +660,11 @@ type Correction struct {
 	// for OverrideReason.
 	OverrideRetention bool
 	OverrideReason    string
+	// CopiesInFlightUntil is, once its start or its delete's publish ended
+	// copies to a replica of its scans that were under way, the last moment
+	// a put of one of them can land; its purge removes nothing before it.
+	// Zero when it ended none ("Every copy").
+	CopiesInFlightUntil time.Time
 }
 
 // HasEnded reports whether the correction reached an end.

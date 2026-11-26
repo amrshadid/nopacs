@@ -44,9 +44,22 @@ import (
 //     attached while a correction on its primary is purging
 //     (RefusalAttachPurging): the purge took its copies when it began, and
 //     a backfill would copy what it hid. The replicator skips an instance a
-//     purging correction hides (ReplicaClaim.Purging), and starting a purge
-//     counts a change on every replica's row of its scans being copied, so
-//     a copy claimed before cannot end in step.
+//     purging correction hides (ReplicaClaim.Purging).
+//   - A copy to a replica cannot share a transaction with the catalog, so
+//     its puts may still be streaming when a purge begins. Starting a purge
+//     ends the lease of every replica's row of its scans being copied (the
+//     row's attempt moves on, so the copier's next renewal or write is
+//     ErrLeaseLost), and the publish of a delete that drops a scan's rows
+//     ends theirs the same way. Every put of the replicator ends, by its
+//     own deadline, before the due its lease's last renewal returned; so
+//     the latest due among the claims ended, plus ReplicaPutGrace, is the
+//     last moment a put under one of them can land. That moment is kept
+//     with the correction (Correction.CopiesInFlightUntil), and its purge
+//     removes nothing before it: until then the correction stays purging
+//     with StateReasonCopiesInFlight, and the purge pass tries it again.
+//     A put landing after the purge's removals would otherwise leave the
+//     object on the replica after "purged", which the scrub records as an
+//     orphan at most.
 //   - A replica detached with abandon_purges while a correction counts it
 //     has its objects not yet removed recorded unknown and is named in the
 //     correction's CopiesAbandoned.
@@ -57,6 +70,29 @@ const StateReasonStorage = "storage does not answer"
 
 // StateReasonHeld is the state reason of a purge that waits for a hold.
 const StateReasonHeld = "held"
+
+// StateReasonCopiesInFlight is the state reason of a purge that waits until
+// no put of a copy to a replica that its start, or its delete's publish,
+// ended can still land (Correction.CopiesInFlightUntil).
+const StateReasonCopiesInFlight = "copies in flight"
+
+// ReplicaPutGrace is how long past the due of an ended copy's lease a put
+// that copy made may still land: longer than a storage takes to land a put
+// its writer cut at its deadline (which is before that due), plus the
+// difference between the replicator's clock and the purge's. A purge waits
+// that long after the copies it ended, never less, so their bytes cannot
+// land after its removals.
+const ReplicaPutGrace = 2 * time.Minute
+
+// CopiesInFlightUntil returns the moment a purge waits for after ending
+// copies whose latest lease due was due: due plus ReplicaPutGrace, or the
+// zero time for none.
+func CopiesInFlightUntil(due time.Time) time.Time {
+	if due.IsZero() {
+		return time.Time{}
+	}
+	return due.Add(ReplicaPutGrace)
+}
 
 // ReplicaCopy is a replica of a correction's storage.
 type ReplicaCopy struct {
@@ -112,8 +148,8 @@ func ValidateRecordsOwed(after RecordOwed, limit int) error {
 // ValidatePurgeNote returns an Invalid error unless why is a state reason
 // NotePurge sets: one of the purge's, or empty.
 func ValidatePurgeNote(why string) error {
-	if why != "" && why != StateReasonStorage && why != StateReasonHeld {
-		return invalid("a purge waits for a storage or a hold")
+	if why != "" && why != StateReasonStorage && why != StateReasonHeld && why != StateReasonCopiesInFlight {
+		return invalid("a purge waits for a storage, a hold or copies in flight")
 	}
 	return nil
 }

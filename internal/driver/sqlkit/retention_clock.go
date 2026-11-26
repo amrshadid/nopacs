@@ -31,6 +31,16 @@ func effectiveNow(ctx context.Context, tx SendingTx, now time.Time) (time.Time, 
 	return c.Effective(now), err
 }
 
+// storeTime returns the time a change at now stores retention times at:
+// now, or the latest time retention trusted when the clock reads earlier
+// (tenant.RetentionClock.StoreTime). A session archived, or a rule changed,
+// while the clock was set back is then started and clamped at the trusted
+// time, so it is not due early once the clock is put right.
+func storeTime(ctx context.Context, tx SendingTx, now time.Time) (time.Time, error) {
+	c, err := retentionClockIn(ctx, tx, "")
+	return c.StoreTime(now), err
+}
+
 // CheckRetentionClock implements tenant.Retention.
 func (k Sending) CheckRetentionClock(ctx context.Context, c tenant.RetentionClockCheck) (tenant.RetentionClock, error) {
 	if err := c.Validate(); err != nil {
@@ -58,6 +68,11 @@ func (k Sending) CheckRetentionClock(ctx context.Context, c tenant.RetentionCloc
 			// delays what is due; nothing becomes due by it.
 		case !st.Trusted.IsZero() && c.Now.Sub(st.Trusted) > c.MaxStep:
 			err = k.pauseClock(ctx, tx, tenant.PauseClockJumped, c.Now.Sub(st.Trusted), c.Now)
+		case c.Drift > c.MaxStep:
+			// Small steps, each allowed, that add up to more than the step
+			// allowed beyond the time the process measured: a clock run
+			// fast is a jump spread out.
+			err = k.pauseClock(ctx, tx, tenant.PauseClockJumped, c.Drift, c.Now)
 		default:
 			_, err = tx.Exec(ctx, `UPDATE retention_state SET trusted = ? WHERE one = 1`, k.D.Time(c.Now))
 			if err == nil && c.Pass {
@@ -134,12 +149,6 @@ func (k Sending) RetentionClock(ctx context.Context) (tenant.RetentionClock, err
 		return err
 	})
 	return out, err
-}
-
-// retentionPaused reports whether retention is paused for its clock.
-func retentionPaused(ctx context.Context, tx SendingTx) (bool, error) {
-	c, err := retentionClockIn(ctx, tx, "")
-	return c.Paused, err
 }
 
 // QuarantineOldestSQL reads the oldest file held, the first entry of

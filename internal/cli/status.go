@@ -81,6 +81,9 @@ func (a *app) tenantStatusText(w io.Writer, st *v1.TenantStatus) error {
 	} else {
 		pairs = append(pairs, output.Pair{Label: "Counts", Value: "unknown: the tenant's database did not answer"})
 	}
+	if warn := output.QuarantineWarning(st.GetQuarantine()); warn != "" {
+		pairs = append(pairs, output.Pair{Label: "Warning", Value: warn})
+	}
 	if err := output.Details(w, a.style(), pairs); err != nil {
 		return err
 	}

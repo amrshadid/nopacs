@@ -151,11 +151,26 @@ func (r *replicaRig) attach() {
 // unless every scan of "main" is in step on "copy" then.
 func (r *replicaRig) replicate() {
 	r.t.Helper()
+	r.runReplicator()
+	facts, err := r.p.SwitchFacts(r.ctx, "main", "copy")
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	if facts.ScansNotInStep != 0 {
+		r.t.Fatalf("%d scans of main are not in step on copy after the replicator ran", facts.ScansNotInStep)
+	}
+}
+
+// runReplicator runs the replicator until it claims nothing and returns
+// the scans it claimed in all.
+func (r *replicaRig) runReplicator() int {
+	r.t.Helper()
 	w, err := replicate.New(replicate.Config{Queue: r.p, Catalog: r.p, Owner: "replicator-test",
 		Now: func() time.Time { return time.Now().Add(time.Hour) }, Open: r.open})
 	if err != nil {
 		r.t.Fatal(err)
 	}
+	claimed := 0
 	for range 20 {
 		p, err := w.RunOnce(r.ctx)
 		if err != nil {
@@ -164,14 +179,9 @@ func (r *replicaRig) replicate() {
 		if p.Claimed == 0 {
 			break
 		}
+		claimed += p.Claimed
 	}
-	facts, err := r.p.SwitchFacts(r.ctx, "main", "copy")
-	if err != nil {
-		r.t.Fatal(err)
-	}
-	if facts.ScansNotInStep != 0 {
-		r.t.Fatalf("%d scans of main are not in step on copy after the replicator ran", facts.ScansNotInStep)
-	}
+	return claimed
 }
 
 // copyObjects returns every file of the replica by key, with its SHA-256.

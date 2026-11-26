@@ -17,7 +17,10 @@ import (
 // again after its database was lost is held as before, and the hold's
 // storages are those of the catalog just made. It runs after the
 // activation, whose job has ended, so a failure is logged, not answered:
-// the server's start reads the records again (holds.Writer.Run).
+// the activation made the feed's history again, and the hold-record worker
+// and retention's disposals each wait for an adoption of their own that
+// succeeds after it (holds.Adopted), so no disposal passes a hold this try
+// did not adopt.
 func (u *unitRun) adoptHolds() {
 	if u.sup.cfg.LeaveHolds {
 		return
@@ -34,7 +37,8 @@ func (u *unitRun) adoptHolds() {
 		u.log.Warn("rebuilds: a hold record was found active with no row; the hold holds again", "hold", id)
 	}
 	if err != nil {
-		u.log.Warn("rebuilds: the hold records could not all be adopted; the server's start reads them again", "reason", fault.Message(err))
+		u.log.Warn("rebuilds: the hold records could not all be adopted; they are read again before any disposal",
+			"reason", fault.Message(err))
 	}
 }
 

@@ -21,16 +21,71 @@ const maxOwedPasses = 100
 // again soon after its writer stopped.
 const StaleRelease = 10 * time.Minute
 
+// Activations tells one activation of a tenant's catalog from the next:
+// the id of its event feed's history, which every activation (a rebuild's
+// replace, a restore) makes again (tenant.Rebuilding.EventHistory). A
+// catalog activated is one whose database may lack a hold that its
+// storages' records hold, so the holds found on storage are adopted again
+// after each.
+type Activations interface {
+	// EventHistory answers the id of the event feed's history.
+	EventHistory(ctx context.Context) (string, error)
+}
+
+// ActivationOf answers the mark of the catalog activation st is at now,
+// or "" when st cannot tell one activation from another (it is not
+// Activations); a caller then adopts once after its start.
+func ActivationOf(ctx context.Context, st any) (string, error) {
+	a, ok := st.(Activations)
+	if !ok {
+		return "", nil
+	}
+	return a.EventHistory(ctx)
+}
+
+// Adopted remembers whether the holds found on storage were adopted since
+// the tenant's catalog was last activated: once after the start, and again
+// after every activation (Activations), until an adoption succeeds. Its
+// zero value owes an adoption. It is not safe for concurrent use.
+type Adopted struct {
+	done bool
+	mark string
+}
+
+// Owed reads the activation st is at now and reports whether an adoption
+// is owed, with the mark to pass to Done once one succeeds. A mark that
+// cannot be read owes one: what cannot be told is taken as an activation.
+func (a *Adopted) Owed(ctx context.Context, st any) (bool, string, error) {
+	mark, err := ActivationOf(ctx, st)
+	if err != nil {
+		return true, "", err
+	}
+	return !a.done || mark != a.mark, mark, nil
+}
+
+// Done records an adoption that succeeded at mark, the one Owed answered
+// before it began: an activation during the adoption moved the mark, so
+// the next Owed owes another.
+func (a *Adopted) Done(mark string) { a.done, a.mark = true, mark }
+
 // Run is the tenant's hold-record worker, until ctx ends: it adopts the
-// holds found active on the tenant's storages with no row (AdoptFound),
-// tried again each interval until it has read every storage, and writes
-// the records owed (WriteOwed) every interval.
+// holds found active on the tenant's storages with no row (AdoptFound)
+// after its start and again after every activation of the tenant's
+// catalog (Adopted), tried again each interval until it has read every
+// storage, and writes the records owed (WriteOwed) every interval.
 func (w *Writer) Run(ctx context.Context) {
-	adopted := false
+	var adopted Adopted
 	for {
-		if !adopted {
+		owed, mark, err := adopted.Owed(ctx, w.cfg.Store)
+		if err != nil && ctx.Err() == nil {
+			w.cfg.Log.Warn("holds: the activation of the tenant's catalog could not be read; its holds are adopted again", "tenant",
+				w.cfg.Tenant, "kind", fault.KindOf(err).String(), "reason", fault.Message(err))
+		}
+		if owed && err == nil {
 			a, err := w.AdoptFound(ctx)
-			adopted = err == nil
+			if err == nil {
+				adopted.Done(mark)
+			}
 			if err != nil && ctx.Err() == nil {
 				w.cfg.Log.Warn("holds: the hold records of the tenant's storages could not all be read; read again shortly", "tenant",
 					w.cfg.Tenant, "kind", fault.KindOf(err).String(), "reason", fault.Message(err))

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/blob"
+	"github.com/amrshadid/nopacs/internal/holds"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/registry"
 	"github.com/amrshadid/nopacs/internal/tenant"
@@ -201,6 +202,22 @@ func (d fencedDB) EndDisposeJob(ctx context.Context, id string, now time.Time) (
 		return tenant.Job{}, err
 	}
 	return d.tenantDB.EndDisposeJob(ctx, id, now)
+}
+
+// StopDisposeJob asks the fence, then stops the job.
+func (d fencedDB) StopDisposeJob(ctx context.Context, id, reason string, now time.Time) (tenant.Job, error) {
+	if err := d.fence(); err != nil {
+		return tenant.Job{}, err
+	}
+	return d.tenantDB.StopDisposeJob(ctx, id, reason, now)
+}
+
+// EventHistory reads, unasked, the id of the event feed's history, which
+// every activation of a catalog makes again: the hold-record worker and
+// retention adopt the holds found on storage again after each
+// (holds.Activations).
+func (d fencedDB) EventHistory(ctx context.Context) (string, error) {
+	return holds.ActivationOf(ctx, d.tenantDB)
 }
 
 // AdoptHold asks the fence, then adopts the hold found.

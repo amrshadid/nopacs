@@ -149,6 +149,9 @@ func statusPairs(c *ctx, ref any) []pair {
 	} else {
 		ps = append(ps, pair{"Counts", "not read: the tenant's database does not answer"})
 	}
+	if warn := output.QuarantineWarning(st.GetQuarantine()); warn != "" {
+		ps = append(ps, pair{"Warning", warn})
+	}
 	if limit := st.GetIncomingLimitBytes(); limit > 0 {
 		ps = append(ps, pair{"Incoming limit", output.Bytes(limit)})
 	}

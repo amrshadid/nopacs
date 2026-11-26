@@ -15,8 +15,9 @@ import (
 // 20,000 instances owed; 20,000 tallies of 200 jobs; 2,000 scans of the catalog with 200,000 instances,
 // half of them recording one of 5,000 profile versions, 2,000 of them marked
 // damaged by a scrub; 50,000 finished
-// units of work; 20,000 scans of corrections, of 200 subjects, and
-// 50,000 instances they hide; 40,000 rows of a replica's queue; 40,000
+// units of work; 20,000 instance deletes, one in a thousand purging, the
+// rest purged; their 20,000 scans, of 200 subjects, and 50,000 instances
+// they hide; 40,000 rows of a replica's queue; 40,000
 // sessions' retention times. For the
 // very statements package sqlkit runs (SendingDialect.Plans), Postgres's
 // plan for the values used and its generic plan (the one a prepared
@@ -58,13 +59,21 @@ func TestSendingPlans(t *testing.T) {
 		`INSERT INTO job_tallies SELECT 'j' || (i % 200 + 1), 'rule|r' || i || '|remove', i FROM generate_series(1, 20000) i`,
 		`INSERT INTO job_owed SELECT 'j' || (i % 2000 + 1), i % 2000, '2.25.3.' || i FROM generate_series(1, 20000) i`,
 		`INSERT INTO instance_damage SELECT '2.25.3.' || (i * 97), 'sf-' || i, now() FROM generate_series(1, 2000) i`,
+		`INSERT INTO corrections (id, kind, level, state, records_state, origin, subject_label, session_label, scan_label,
+		   instance_uid, to_label, quarantine_id, reason, key_id, created, committed_at, purge_after, ended_at, state_reason,
+		   old_revision, new_revision, new_size, instance_key, instance_size, arrivals_allowed, undo_reason, unresolved,
+		   subjects, sessions, scans, instances, bytes, objects_copied, objects_superseded)
+		 SELECT lpad('c' || n, 26, '0'), 'delete', 'instance', CASE WHEN n % 1000 = 0 THEN 'purging' ELSE 'purged' END, 'purged',
+		   'person', 'sub-' || (n % 200 + 1), 'ses-' || n, 'scan-' || n, '2.25.3.' || n, '', '', 'x', '', now(), now(), now(),
+		   CASE WHEN n % 1000 = 0 THEN NULL ELSE now() END, '', 0, 0, 0, '', 0, false, '', false, 0, 0, 1, 1, 1000, 0, 0
+		 FROM generate_series(1, 20000) n`,
 		`INSERT INTO correction_scans (correction_id, series_uid, study_uid, storage, subject_label, session_label, scan_label,
 		   new_subject, new_session, new_scan, instances, bytes)
-		 SELECT 'c' || n, '2.25.2.' || n, '2.25.1.' || n, 'store', 'sub-' || (n % 200 + 1), 'ses-' || n, 'scan-' || n, '', '', '', 0, 0
+		 SELECT lpad('c' || n, 26, '0'), '2.25.2.' || n, '2.25.1.' || n, 'store', 'sub-' || (n % 200 + 1), 'ses-' || n, 'scan-' || n, '', '', '', 0, 0
 		 FROM generate_series(1, 20000) n`,
 		`INSERT INTO hidden_instances (correction_id, sop_instance_uid, scan_id, reception_id, sha256, storage_key, byte_offset,
 		   byte_length, size, held_at)
-		 SELECT 'c' || (i % 20000 + 1), '2.25.3.' || i, i % 20000 + 1, 'rc1', sha256(i::text::bytea), '', 0, 1000, 1000, now()
+		 SELECT lpad('c' || (i % 20000 + 1), 26, '0'), '2.25.3.' || i, i % 20000 + 1, 'rc1', sha256(i::text::bytea), '', 0, 1000, 1000, now()
 		 FROM generate_series(1, 50000) i`,
 		// A replica's queue: one row in four pending, one in four copying
 		// with its lease ended, the rest in step; due within a thousand

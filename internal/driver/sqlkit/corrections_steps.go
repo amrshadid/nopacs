@@ -558,11 +558,15 @@ func (k Sending) StartPurge(ctx context.Context, id string, now time.Time, audit
 			}
 			// A copy of one of its scans claimed before now may have planned
 			// an object the purge is about to remove, and put it after the
-			// purge removed it from the replica: a change counted on its row
-			// keeps it from ending in step, and the next claim skips what a
-			// purging correction hides.
-			if _, err := tx.Exec(ctx, `UPDATE replica_scans SET seq = seq + 1 WHERE state = 'copying'
-				AND series_uid IN (SELECT series_uid FROM correction_scans WHERE correction_id = ?)`, c.ID); err != nil {
+			// purge removed it from the replica: its lease ends now, so it
+			// stops at its next renewal and never ends in step, the next
+			// claim skips what a purging correction hides, and the purge
+			// waits until a put the copy had under way can no longer land.
+			due, err := k.endCopies(ctx, tx, c.ID, now)
+			if err != nil {
+				return err
+			}
+			if err := k.keepCopiesInFlight(ctx, tx, c.ID, due); err != nil {
 				return err
 			}
 			// The record at its new state is owed to every replica until it

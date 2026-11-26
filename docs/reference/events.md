@@ -26,3 +26,4 @@ not know and takes its cursor, so a type added in a later version breaks no clie
 | `STORAGE_SWITCHED` | 15 | A switch made a replica the primary (ReplicaService.SwitchStorage), or was refused and every write resumed on the old place. |
 | `HOLD_CHANGED` | 16 | A hold was placed or released, or found on a storage and made active. |
 | `RETENTION_CLOCK` | 17 | The tenant's retention was paused for a clock jump, or resumed when an admin confirmed the time. |
+| `QUARANTINE_AGING` | 18 | What the tenant holds in quarantine passed quarantine.warn-age or quarantine.warn-bytes, or is no longer past one of them. |

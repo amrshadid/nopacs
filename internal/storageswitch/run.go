@@ -64,7 +64,7 @@ func (s *Switcher) run(sw tenant.StorageSwitch, drain time.Duration) {
 			}
 			owned = true
 		}
-		done, err := s.swap(sw, f, max(drained, 0), refused0, start)
+		done, err := s.swapQuiet(sw, f, max(drained, 0), refused0, start, deadline)
 		if err == nil {
 			s.finish(done, log)
 			return
@@ -123,6 +123,25 @@ func (s *Switcher) drain(sw tenant.StorageSwitch, deadline time.Time, drained *i
 			return f, tenant.RefusalRestarted
 		}
 	}
+}
+
+// swapQuiet swaps (swap) once no write admitted to the replica is left:
+// the replica's gate is paused for the swap, so a copy's put or removal
+// admitted before it (a copy whose scan was already in step again, its
+// lease lost, still streaming) ends on the place it opened before that
+// place changes names, and none begins until the swap committed or failed.
+// The drain needs the replicator's writes to the replica, so the gate is
+// paused only here, and resumed when the swap returns; a write that comes
+// meanwhile waits at the gate, or is refused and tried again.
+func (s *Switcher) swapQuiet(sw tenant.StorageSwitch, f tenant.SwitchFacts, drained, refused0 int64, start,
+	deadline time.Time) (tenant.StorageSwitch, error) {
+	if s.gate.pause(sw.Replica) {
+		defer s.gate.resume(sw.Replica)
+	}
+	if err := s.wait(s.gate.idleOf(sw.Replica), deadline); err != nil {
+		return tenant.StorageSwitch{}, err
+	}
+	return s.swap(sw, f, drained, refused0, start)
 }
 
 // swap seals the moving secrets again and swaps the places in one

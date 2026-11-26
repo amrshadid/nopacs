@@ -55,6 +55,13 @@ type Disposal interface {
 	// whose outcome is not recorded refuses it (a precondition failure). Until
 	// the job ends, the daily pass queues no other of its rule.
 	EndDisposeJob(ctx context.Context, id string, now time.Time) (Job, error)
+	// StopDisposeJob ends the dispose job of that id failed, with reason
+	// (1 to 1024 bytes) as its reason and its event, the sessions whose
+	// outcome is not recorded left without one, and answers it; a job ended
+	// already is answered as it is. It is how a person's disposal ends when
+	// the key that confirmed it may no longer delete: its deletes stop
+	// rather than go on in the name of a key revoked or demoted.
+	StopDisposeJob(ctx context.Context, id, reason string, now time.Time) (Job, error)
 }
 
 // The bounds of disposal.

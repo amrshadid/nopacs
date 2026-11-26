@@ -289,13 +289,23 @@ func testClockAndPurgeTargets(e *cenv) {
 	e.ok("CheckPurgeClock", e.p.CheckPurgeClock(e.ctx, at(700)))
 	err = e.p.CheckPurgeClock(e.ctx, at(700).Add(tenant.MaxClockStep+time.Second))
 	e.wantKind("an automatic purge after the clock jumped", err, fault.Precondition)
+	if rc, err := e.p.RetentionClock(e.ctx); err != nil || !rc.Paused || rc.Reason != tenant.PauseClockJumped {
+		e.Fatalf("after an automatic purge saw the clock jump, retention is %+v (%v), want paused", rc, err)
+	}
 	_, err = e.p.StartPurge(e.ctx, c.ID, at(700).Add(grace+tenant.MaxClockStep), nil, nil)
 	e.wantKind("a server's purge after the clock jumped", err, fault.Precondition)
 	when := at(700).Add(grace + tenant.MaxClockStep)
 	_, err = e.p.StartPurge(e.ctx, c.ID, when, &master.AuditEntry{ID: e.id("a"), Time: when, Method: "PurgeCorrection",
 		Outcome: master.OutcomeDone}, nil)
 	e.ok("an admin's purge, trusting the clock", err)
-	e.ok("CheckPurgeClock after an admin's purge", e.p.CheckPurgeClock(e.ctx, when.Add(time.Hour)))
+	// The jump paused retention, so automatic purges wait for a person to
+	// confirm the time, an admin's purge notwithstanding.
+	e.wantKind("an automatic purge before the time is confirmed", e.p.CheckPurgeClock(e.ctx, when.Add(time.Hour)), fault.Precondition)
+	if _, _, err := e.p.ConfirmClock(e.ctx, tenant.ClockConfirm{Observed: when.Add(time.Hour), Now: when.Add(time.Hour), Reason: "checked"},
+		e.audit(), nil); err != nil {
+		e.Fatalf("ConfirmClock: %v", err)
+	}
+	e.ok("CheckPurgeClock after the time is confirmed", e.p.CheckPurgeClock(e.ctx, when.Add(time.Hour)))
 	targets, err := e.p.PurgeTargets(e.ctx, c.ID, 1000)
 	e.ok("PurgeTargets", err)
 	if len(targets) != 4 || targets[0].Ord != tenant.TargetInstance || targets[2].Ord != tenant.TargetMetadata ||

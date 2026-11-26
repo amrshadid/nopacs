@@ -121,10 +121,15 @@ func (s *scanCopy) distrust(ctx context.Context, o object, listed bool, info blo
 // copy fails; where the record itself fails, the copy fails all the same
 // and the object stays unverified (holds never takes it on its size). The
 // put and its read back each have putTimeout, shorter than the lease, so a
-// storage that hangs cannot hold a scan's lease for ever. sidecar says the
-// bytes expected were read from the primary moments before rather than
-// given by the catalog: bytes that differ then are a change in flight, not
-// a damaged primary.
+// storage that hangs cannot hold a scan's lease for ever; and the put is
+// cut, by its context, Config.PutMargin before the due its lease's last
+// renewal returned, so a copy whose lease was ended under it (a purge's
+// start, a delete's publish) lands nothing after that due, which the purge
+// waits for. The put enters the replica's write gate (Config.Pause) before
+// its first byte and leaves it after its last effect, and its key is
+// recorded before it begins (sweep). sidecar says the bytes expected were
+// read from the primary moments before rather than given by the catalog:
+// bytes that differ then are a change in flight, not a damaged primary.
 func (s *scanCopy) put(ctx context.Context, key string, size int64, sum [sha256.Size]byte,
 	open func(context.Context) (io.ReadCloser, error), uid string, sidecar bool) error {
 	if err := s.lease.keep(ctx); err != nil {
@@ -132,14 +137,26 @@ func (s *scanCopy) put(ctx context.Context, key string, size int64, sum [sha256.
 	}
 	// replica.rate paces the bytes put on the replica; the put's limit grows
 	// by the time the bound makes it take, so a bound a site set never makes
-	// a large object miss its limit, while a storage that hangs still fails.
+	// a large object miss its limit, while a storage that hangs still fails;
+	// never past the lease's due less the margin, though.
 	pacer, rate := s.w.pacing(s.c.Fence.Replica)
 	var extra time.Duration
 	if rate > 0 {
 		extra = time.Duration(float64(max(size, 0)) / float64(rate) * float64(time.Second))
 	}
-	pctx, cancel := context.WithTimeout(ctx, s.w.putTimeout()+extra)
+	left := s.lease.due().Add(-s.w.cfg.PutMargin).Sub(s.w.cfg.Now())
+	if left <= 0 {
+		return &copyError{fault: tenant.FaultUnreachable, reason: "the copy's lease leaves no time for a put before its due"}
+	}
+	pctx, cancel := context.WithTimeout(ctx, min(s.w.putTimeout()+extra, left))
 	defer cancel()
+	if s.w.cfg.Pause != nil {
+		release, err := s.w.cfg.Pause.Enter(pctx, s.c.Fence.Replica)
+		if err != nil {
+			return onReplica(err, "the replica's writes are paused")
+		}
+		defer release()
+	}
 	body, err := open(pctx)
 	if err != nil {
 		return onPrimary(err, "an object of the scan could not be read from the primary")
@@ -149,6 +166,7 @@ func (s *scanCopy) put(ctx context.Context, key string, size int64, sum [sha256.
 	if rate > 0 {
 		in = &pace.Reader{Ctx: pctx, R: src, P: pacer, Rate: rate}
 	}
+	s.putting(key)
 	wr, err := blob.PutConfirmed(pctx, s.replica, key, in, size, sum)
 	_ = body.Close() // only read from; nothing to lose
 	if err != nil {
@@ -338,6 +356,14 @@ func (l *lease) keep(ctx context.Context) error {
 		return nil
 	}
 	return l.renewLocked(now)
+}
+
+// due returns when the lease runs out as its claim or its last renewal set
+// it in the database: a lease after the worker's time then.
+func (l *lease) due() time.Time {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.last.Add(l.w.cfg.Lease)
 }
 
 // renewLocked renews the lease at now, l.mu held, and ends it on a failure.

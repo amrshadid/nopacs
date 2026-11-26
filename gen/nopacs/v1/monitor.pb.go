@@ -145,6 +145,9 @@ const (
 	// The tenant's retention was paused for a clock jump, or resumed when an
 	// admin confirmed the time.
 	EventType_EVENT_TYPE_RETENTION_CLOCK EventType = 17
+	// What the tenant holds in quarantine passed quarantine.warn-age or
+	// quarantine.warn-bytes, or is no longer past one of them.
+	EventType_EVENT_TYPE_QUARANTINE_AGING EventType = 18
 )
 
 // Enum value maps for EventType.
@@ -168,6 +171,7 @@ var (
 		15: "EVENT_TYPE_STORAGE_SWITCHED",
 		16: "EVENT_TYPE_HOLD_CHANGED",
 		17: "EVENT_TYPE_RETENTION_CLOCK",
+		18: "EVENT_TYPE_QUARANTINE_AGING",
 	}
 	EventType_value = map[string]int32{
 		"EVENT_TYPE_UNSPECIFIED":        0,
@@ -188,6 +192,7 @@ var (
 		"EVENT_TYPE_STORAGE_SWITCHED":   15,
 		"EVENT_TYPE_HOLD_CHANGED":       16,
 		"EVENT_TYPE_RETENTION_CLOCK":    17,
+		"EVENT_TYPE_QUARANTINE_AGING":   18,
 	}
 )
 
@@ -1271,7 +1276,11 @@ type TenantStatus struct {
 	Recalls *RecallCounts `protobuf:"bytes,20,opt,name=recalls,proto3" json:"recalls,omitempty"`
 	// Where its retention stands: rules, sessions due, the daily pass and its
 	// clock, holds. Absent when its database did not answer.
-	Retention     *RetentionStatus `protobuf:"bytes,21,opt,name=retention,proto3" json:"retention,omitempty"`
+	Retention *RetentionStatus `protobuf:"bytes,21,opt,name=retention,proto3" json:"retention,omitempty"`
+	// What it holds in quarantine, and whether that passed the tenant's
+	// quarantine.warn-age or quarantine.warn-bytes. Absent when its database
+	// did not answer.
+	Quarantine    *QuarantineWarnings `protobuf:"bytes,22,opt,name=quarantine,proto3" json:"quarantine,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1453,6 +1462,99 @@ func (x *TenantStatus) GetRetention() *RetentionStatus {
 	return nil
 }
 
+func (x *TenantStatus) GetQuarantine() *QuarantineWarnings {
+	if x != nil {
+		return x.Quarantine
+	}
+	return nil
+}
+
+// QuarantineWarnings is what a tenant holds in quarantine against its two
+// warning settings. A warning only warns: a quarantine retention rule alone
+// removes files.
+type QuarantineWarnings struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How long the oldest file held has been in quarantine. Zero when none is
+	// held.
+	OldestAge *durationpb.Duration `protobuf:"bytes,1,opt,name=oldest_age,json=oldestAge,proto3" json:"oldest_age,omitempty"`
+	// The files held.
+	HeldFiles int64 `protobuf:"varint,2,opt,name=held_files,json=heldFiles,proto3" json:"held_files,omitempty"`
+	// The bytes kept for them.
+	HeldBytes int64 `protobuf:"varint,3,opt,name=held_bytes,json=heldBytes,proto3" json:"held_bytes,omitempty"`
+	// Whether the oldest file's age is past quarantine.warn-age.
+	AgePassed bool `protobuf:"varint,4,opt,name=age_passed,json=agePassed,proto3" json:"age_passed,omitempty"`
+	// Whether the bytes held are past quarantine.warn-bytes; never set when
+	// that setting is 0, which is no warning.
+	BytesPassed   bool `protobuf:"varint,5,opt,name=bytes_passed,json=bytesPassed,proto3" json:"bytes_passed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuarantineWarnings) Reset() {
+	*x = QuarantineWarnings{}
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuarantineWarnings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuarantineWarnings) ProtoMessage() {}
+
+func (x *QuarantineWarnings) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuarantineWarnings.ProtoReflect.Descriptor instead.
+func (*QuarantineWarnings) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *QuarantineWarnings) GetOldestAge() *durationpb.Duration {
+	if x != nil {
+		return x.OldestAge
+	}
+	return nil
+}
+
+func (x *QuarantineWarnings) GetHeldFiles() int64 {
+	if x != nil {
+		return x.HeldFiles
+	}
+	return 0
+}
+
+func (x *QuarantineWarnings) GetHeldBytes() int64 {
+	if x != nil {
+		return x.HeldBytes
+	}
+	return 0
+}
+
+func (x *QuarantineWarnings) GetAgePassed() bool {
+	if x != nil {
+		return x.AgePassed
+	}
+	return false
+}
+
+func (x *QuarantineWarnings) GetBytesPassed() bool {
+	if x != nil {
+		return x.BytesPassed
+	}
+	return false
+}
+
 // ScrubSummary is a tenant's last scrub, for a status.
 type ScrubSummary struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1472,7 +1574,7 @@ type ScrubSummary struct {
 
 func (x *ScrubSummary) Reset() {
 	*x = ScrubSummary{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[10]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1484,7 +1586,7 @@ func (x *ScrubSummary) String() string {
 func (*ScrubSummary) ProtoMessage() {}
 
 func (x *ScrubSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[10]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1497,7 +1599,7 @@ func (x *ScrubSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScrubSummary.ProtoReflect.Descriptor instead.
 func (*ScrubSummary) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{10}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ScrubSummary) GetJob() string {
@@ -1548,7 +1650,7 @@ type ScrubFindingCount struct {
 
 func (x *ScrubFindingCount) Reset() {
 	*x = ScrubFindingCount{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[11]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1560,7 +1662,7 @@ func (x *ScrubFindingCount) String() string {
 func (*ScrubFindingCount) ProtoMessage() {}
 
 func (x *ScrubFindingCount) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[11]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1573,7 +1675,7 @@ func (x *ScrubFindingCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScrubFindingCount.ProtoReflect.Descriptor instead.
 func (*ScrubFindingCount) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{11}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ScrubFindingCount) GetKind() ScrubFindingKind {
@@ -1610,7 +1712,7 @@ type GetStatusRequest struct {
 
 func (x *GetStatusRequest) Reset() {
 	*x = GetStatusRequest{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[12]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1622,7 +1724,7 @@ func (x *GetStatusRequest) String() string {
 func (*GetStatusRequest) ProtoMessage() {}
 
 func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[12]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1635,7 +1737,7 @@ func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetStatusRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{12}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetStatusRequest) GetScope() *Scope {
@@ -1685,7 +1787,7 @@ type GetStatusResponse struct {
 
 func (x *GetStatusResponse) Reset() {
 	*x = GetStatusResponse{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[13]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1697,7 +1799,7 @@ func (x *GetStatusResponse) String() string {
 func (*GetStatusResponse) ProtoMessage() {}
 
 func (x *GetStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[13]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1710,7 +1812,7 @@ func (x *GetStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetStatusResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{13}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetStatusResponse) GetTenants() []*TenantStatus {
@@ -1778,7 +1880,7 @@ type AssociationFailed struct {
 
 func (x *AssociationFailed) Reset() {
 	*x = AssociationFailed{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[14]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1790,7 +1892,7 @@ func (x *AssociationFailed) String() string {
 func (*AssociationFailed) ProtoMessage() {}
 
 func (x *AssociationFailed) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[14]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1803,7 +1905,7 @@ func (x *AssociationFailed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssociationFailed.ProtoReflect.Descriptor instead.
 func (*AssociationFailed) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{14}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AssociationFailed) GetReceiver() string {
@@ -1874,7 +1976,7 @@ type ReceptionStepReached struct {
 
 func (x *ReceptionStepReached) Reset() {
 	*x = ReceptionStepReached{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[15]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1886,7 +1988,7 @@ func (x *ReceptionStepReached) String() string {
 func (*ReceptionStepReached) ProtoMessage() {}
 
 func (x *ReceptionStepReached) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[15]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1899,7 +2001,7 @@ func (x *ReceptionStepReached) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReceptionStepReached.ProtoReflect.Descriptor instead.
 func (*ReceptionStepReached) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{15}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ReceptionStepReached) GetReception() string {
@@ -1989,7 +2091,7 @@ type FileQuarantined struct {
 
 func (x *FileQuarantined) Reset() {
 	*x = FileQuarantined{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[16]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2001,7 +2103,7 @@ func (x *FileQuarantined) String() string {
 func (*FileQuarantined) ProtoMessage() {}
 
 func (x *FileQuarantined) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[16]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2014,7 +2116,7 @@ func (x *FileQuarantined) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileQuarantined.ProtoReflect.Descriptor instead.
 func (*FileQuarantined) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{16}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *FileQuarantined) GetFile() string {
@@ -2088,7 +2190,7 @@ type QuarantineDecided struct {
 
 func (x *QuarantineDecided) Reset() {
 	*x = QuarantineDecided{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[17]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2100,7 +2202,7 @@ func (x *QuarantineDecided) String() string {
 func (*QuarantineDecided) ProtoMessage() {}
 
 func (x *QuarantineDecided) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[17]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2113,7 +2215,7 @@ func (x *QuarantineDecided) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuarantineDecided.ProtoReflect.Descriptor instead.
 func (*QuarantineDecided) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{17}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *QuarantineDecided) GetFile() string {
@@ -2171,7 +2273,7 @@ type ReceiverHealthChanged struct {
 
 func (x *ReceiverHealthChanged) Reset() {
 	*x = ReceiverHealthChanged{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[18]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2183,7 +2285,7 @@ func (x *ReceiverHealthChanged) String() string {
 func (*ReceiverHealthChanged) ProtoMessage() {}
 
 func (x *ReceiverHealthChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[18]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2196,7 +2298,7 @@ func (x *ReceiverHealthChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReceiverHealthChanged.ProtoReflect.Descriptor instead.
 func (*ReceiverHealthChanged) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{18}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ReceiverHealthChanged) GetReceiver() string {
@@ -2230,7 +2332,7 @@ type StorageSpaceChanged struct {
 
 func (x *StorageSpaceChanged) Reset() {
 	*x = StorageSpaceChanged{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[19]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2242,7 +2344,7 @@ func (x *StorageSpaceChanged) String() string {
 func (*StorageSpaceChanged) ProtoMessage() {}
 
 func (x *StorageSpaceChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[19]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2255,7 +2357,7 @@ func (x *StorageSpaceChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageSpaceChanged.ProtoReflect.Descriptor instead.
 func (*StorageSpaceChanged) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{19}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *StorageSpaceChanged) GetStorage() string {
@@ -2315,7 +2417,7 @@ type FramesAdded struct {
 
 func (x *FramesAdded) Reset() {
 	*x = FramesAdded{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[20]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2327,7 +2429,7 @@ func (x *FramesAdded) String() string {
 func (*FramesAdded) ProtoMessage() {}
 
 func (x *FramesAdded) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[20]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2340,7 +2442,7 @@ func (x *FramesAdded) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FramesAdded.ProtoReflect.Descriptor instead.
 func (*FramesAdded) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{20}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *FramesAdded) GetSubjectLabel() string {
@@ -2424,7 +2526,7 @@ type JobStepReached struct {
 
 func (x *JobStepReached) Reset() {
 	*x = JobStepReached{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[21]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2436,7 +2538,7 @@ func (x *JobStepReached) String() string {
 func (*JobStepReached) ProtoMessage() {}
 
 func (x *JobStepReached) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[21]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2449,7 +2551,7 @@ func (x *JobStepReached) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobStepReached.ProtoReflect.Descriptor instead.
 func (*JobStepReached) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{21}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *JobStepReached) GetJob() string {
@@ -2532,7 +2634,7 @@ type JobProgressed struct {
 
 func (x *JobProgressed) Reset() {
 	*x = JobProgressed{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[22]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2544,7 +2646,7 @@ func (x *JobProgressed) String() string {
 func (*JobProgressed) ProtoMessage() {}
 
 func (x *JobProgressed) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[22]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2557,7 +2659,7 @@ func (x *JobProgressed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobProgressed.ProtoReflect.Descriptor instead.
 func (*JobProgressed) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{22}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *JobProgressed) GetJob() string {
@@ -2594,7 +2696,7 @@ type SenderHealthChanged struct {
 
 func (x *SenderHealthChanged) Reset() {
 	*x = SenderHealthChanged{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[23]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2606,7 +2708,7 @@ func (x *SenderHealthChanged) String() string {
 func (*SenderHealthChanged) ProtoMessage() {}
 
 func (x *SenderHealthChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[23]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2619,7 +2721,7 @@ func (x *SenderHealthChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SenderHealthChanged.ProtoReflect.Descriptor instead.
 func (*SenderHealthChanged) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{23}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SenderHealthChanged) GetSender() string {
@@ -2664,7 +2766,7 @@ type ScrubFindingChanged struct {
 
 func (x *ScrubFindingChanged) Reset() {
 	*x = ScrubFindingChanged{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[24]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2676,7 +2778,7 @@ func (x *ScrubFindingChanged) String() string {
 func (*ScrubFindingChanged) ProtoMessage() {}
 
 func (x *ScrubFindingChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[24]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2689,7 +2791,7 @@ func (x *ScrubFindingChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScrubFindingChanged.ProtoReflect.Descriptor instead.
 func (*ScrubFindingChanged) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{24}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ScrubFindingChanged) GetFinding() string {
@@ -2777,7 +2879,7 @@ type CatalogChanged struct {
 
 func (x *CatalogChanged) Reset() {
 	*x = CatalogChanged{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[25]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2789,7 +2891,7 @@ func (x *CatalogChanged) String() string {
 func (*CatalogChanged) ProtoMessage() {}
 
 func (x *CatalogChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[25]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2802,7 +2904,7 @@ func (x *CatalogChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogChanged.ProtoReflect.Descriptor instead.
 func (*CatalogChanged) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{25}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CatalogChanged) GetCorrection() string {
@@ -2895,7 +2997,7 @@ type ReplicaBehind struct {
 
 func (x *ReplicaBehind) Reset() {
 	*x = ReplicaBehind{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[26]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2907,7 +3009,7 @@ func (x *ReplicaBehind) String() string {
 func (*ReplicaBehind) ProtoMessage() {}
 
 func (x *ReplicaBehind) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[26]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2920,7 +3022,7 @@ func (x *ReplicaBehind) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicaBehind.ProtoReflect.Descriptor instead.
 func (*ReplicaBehind) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{26}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ReplicaBehind) GetReplica() string {
@@ -2993,7 +3095,7 @@ type StorageSwitched struct {
 
 func (x *StorageSwitched) Reset() {
 	*x = StorageSwitched{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[27]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3005,7 +3107,7 @@ func (x *StorageSwitched) String() string {
 func (*StorageSwitched) ProtoMessage() {}
 
 func (x *StorageSwitched) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[27]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3018,7 +3120,7 @@ func (x *StorageSwitched) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageSwitched.ProtoReflect.Descriptor instead.
 func (*StorageSwitched) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{27}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *StorageSwitched) GetPrimary() string {
@@ -3103,7 +3205,7 @@ type HoldChanged struct {
 
 func (x *HoldChanged) Reset() {
 	*x = HoldChanged{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[28]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3115,7 +3217,7 @@ func (x *HoldChanged) String() string {
 func (*HoldChanged) ProtoMessage() {}
 
 func (x *HoldChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[28]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3128,7 +3230,7 @@ func (x *HoldChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HoldChanged.ProtoReflect.Descriptor instead.
 func (*HoldChanged) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{28}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *HoldChanged) GetHold() string {
@@ -3198,7 +3300,7 @@ type RetentionClock struct {
 
 func (x *RetentionClock) Reset() {
 	*x = RetentionClock{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[29]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3210,7 +3312,7 @@ func (x *RetentionClock) String() string {
 func (*RetentionClock) ProtoMessage() {}
 
 func (x *RetentionClock) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[29]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3223,7 +3325,7 @@ func (x *RetentionClock) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetentionClock.ProtoReflect.Descriptor instead.
 func (*RetentionClock) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{29}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RetentionClock) GetPaused() bool {
@@ -3247,6 +3349,100 @@ func (x *RetentionClock) GetLastPassTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// QuarantineAging is what a tenant holds in quarantine passing one of its
+// warnings (quarantine.warn-age, quarantine.warn-bytes), or no longer
+// being past one. One event for each change of which warnings stand, never
+// one per look.
+type QuarantineAging struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How long the oldest file held had been in quarantine then.
+	OldestAge *durationpb.Duration `protobuf:"bytes,1,opt,name=oldest_age,json=oldestAge,proto3" json:"oldest_age,omitempty"`
+	// The files held then.
+	HeldFiles int64 `protobuf:"varint,2,opt,name=held_files,json=heldFiles,proto3" json:"held_files,omitempty"`
+	// The bytes kept for them then.
+	HeldBytes int64 `protobuf:"varint,3,opt,name=held_bytes,json=heldBytes,proto3" json:"held_bytes,omitempty"`
+	// Whether the age warning stands after this change.
+	AgePassed bool `protobuf:"varint,4,opt,name=age_passed,json=agePassed,proto3" json:"age_passed,omitempty"`
+	// Whether the bytes warning stands after this change.
+	BytesPassed bool `protobuf:"varint,5,opt,name=bytes_passed,json=bytesPassed,proto3" json:"bytes_passed,omitempty"`
+	// Set on the event that says no warning stands any more.
+	Recovered     bool `protobuf:"varint,6,opt,name=recovered,proto3" json:"recovered,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuarantineAging) Reset() {
+	*x = QuarantineAging{}
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuarantineAging) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuarantineAging) ProtoMessage() {}
+
+func (x *QuarantineAging) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuarantineAging.ProtoReflect.Descriptor instead.
+func (*QuarantineAging) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *QuarantineAging) GetOldestAge() *durationpb.Duration {
+	if x != nil {
+		return x.OldestAge
+	}
+	return nil
+}
+
+func (x *QuarantineAging) GetHeldFiles() int64 {
+	if x != nil {
+		return x.HeldFiles
+	}
+	return 0
+}
+
+func (x *QuarantineAging) GetHeldBytes() int64 {
+	if x != nil {
+		return x.HeldBytes
+	}
+	return 0
+}
+
+func (x *QuarantineAging) GetAgePassed() bool {
+	if x != nil {
+		return x.AgePassed
+	}
+	return false
+}
+
+func (x *QuarantineAging) GetBytesPassed() bool {
+	if x != nil {
+		return x.BytesPassed
+	}
+	return false
+}
+
+func (x *QuarantineAging) GetRecovered() bool {
+	if x != nil {
+		return x.Recovered
+	}
+	return false
+}
+
 // CatalogRebuilt is a catalog made again from the storages and put in use
 // in one transaction. When it begins a new history (after a restore, an
 // import or a load), it is that history's first event, and a consumer that
@@ -3267,7 +3463,7 @@ type CatalogRebuilt struct {
 
 func (x *CatalogRebuilt) Reset() {
 	*x = CatalogRebuilt{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[30]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3279,7 +3475,7 @@ func (x *CatalogRebuilt) String() string {
 func (*CatalogRebuilt) ProtoMessage() {}
 
 func (x *CatalogRebuilt) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[30]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3292,7 +3488,7 @@ func (x *CatalogRebuilt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogRebuilt.ProtoReflect.Descriptor instead.
 func (*CatalogRebuilt) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{30}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CatalogRebuilt) GetJob() string {
@@ -3351,6 +3547,7 @@ type Event struct {
 	//	*Event_StorageSwitched
 	//	*Event_HoldChanged
 	//	*Event_RetentionClock
+	//	*Event_QuarantineAging
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3358,7 +3555,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[31]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3370,7 +3567,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[31]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3383,7 +3580,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{31}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *Event) GetCursor() string {
@@ -3574,6 +3771,15 @@ func (x *Event) GetRetentionClock() *RetentionClock {
 	return nil
 }
 
+func (x *Event) GetQuarantineAging() *QuarantineAging {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_QuarantineAging); ok {
+			return x.QuarantineAging
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -3663,6 +3869,11 @@ type Event_RetentionClock struct {
 	RetentionClock *RetentionClock `protobuf:"bytes,21,opt,name=retention_clock,json=retentionClock,proto3,oneof"`
 }
 
+type Event_QuarantineAging struct {
+	// What the tenant holds in quarantine passed a warning, or recovered.
+	QuarantineAging *QuarantineAging `protobuf:"bytes,22,opt,name=quarantine_aging,json=quarantineAging,proto3,oneof"`
+}
+
 func (*Event_AssociationFailed) isEvent_Payload() {}
 
 func (*Event_ReceptionStep) isEvent_Payload() {}
@@ -3696,6 +3907,8 @@ func (*Event_StorageSwitched) isEvent_Payload() {}
 func (*Event_HoldChanged) isEvent_Payload() {}
 
 func (*Event_RetentionClock) isEvent_Payload() {}
+
+func (*Event_QuarantineAging) isEvent_Payload() {}
 
 // WatchKeepAlive opens every stream, and is sent again when no event has
 // been sent for 15 seconds.
@@ -3745,7 +3958,7 @@ type WatchKeepAlive struct {
 
 func (x *WatchKeepAlive) Reset() {
 	*x = WatchKeepAlive{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[32]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3757,7 +3970,7 @@ func (x *WatchKeepAlive) String() string {
 func (*WatchKeepAlive) ProtoMessage() {}
 
 func (x *WatchKeepAlive) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[32]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3770,7 +3983,7 @@ func (x *WatchKeepAlive) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchKeepAlive.ProtoReflect.Descriptor instead.
 func (*WatchKeepAlive) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{32}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *WatchKeepAlive) GetTime() *timestamppb.Timestamp {
@@ -3855,7 +4068,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3867,7 +4080,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3880,7 +4093,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{33}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *WatchRequest) GetScope() *Scope {
@@ -3934,7 +4147,7 @@ type WatchResponse struct {
 
 func (x *WatchResponse) Reset() {
 	*x = WatchResponse{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3946,7 +4159,7 @@ func (x *WatchResponse) String() string {
 func (*WatchResponse) ProtoMessage() {}
 
 func (x *WatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3959,7 +4172,7 @@ func (x *WatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
 func (*WatchResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{34}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *WatchResponse) GetKind() isWatchResponse_Kind {
@@ -4082,7 +4295,7 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\breceiver\x18\x01 \x01(\tR\breceiver\x121\n" +
 	"\x06health\x18\x02 \x01(\v2\x19.nopacs.v1.ReceiverHealthR\x06health\x12\x1d\n" +
 	"\n" +
-	"any_caller\x18\x03 \x01(\bR\tanyCaller\"\xd3\b\n" +
+	"any_caller\x18\x03 \x01(\bR\tanyCaller\"\x92\t\n" +
 	"\fTenantStatus\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12=\n" +
 	"\x0edatabase_state\x18\x02 \x01(\x0e2\x16.nopacs.v1.TenantStateR\rdatabaseState\x12J\n" +
@@ -4109,7 +4322,20 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x16unresolved_corrections\x18\x12 \x01(\x03R\x15unresolvedCorrections\x124\n" +
 	"\breplicas\x18\x13 \x03(\v2\x18.nopacs.v1.ReplicaStatusR\breplicas\x121\n" +
 	"\arecalls\x18\x14 \x01(\v2\x17.nopacs.v1.RecallCountsR\arecalls\x128\n" +
-	"\tretention\x18\x15 \x01(\v2\x1a.nopacs.v1.RetentionStatusR\tretention\"\xf7\x01\n" +
+	"\tretention\x18\x15 \x01(\v2\x1a.nopacs.v1.RetentionStatusR\tretention\x12=\n" +
+	"\n" +
+	"quarantine\x18\x16 \x01(\v2\x1d.nopacs.v1.QuarantineWarningsR\n" +
+	"quarantine\"\xce\x01\n" +
+	"\x12QuarantineWarnings\x128\n" +
+	"\n" +
+	"oldest_age\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\toldestAge\x12\x1d\n" +
+	"\n" +
+	"held_files\x18\x02 \x01(\x03R\theldFiles\x12\x1d\n" +
+	"\n" +
+	"held_bytes\x18\x03 \x01(\x03R\theldBytes\x12\x1d\n" +
+	"\n" +
+	"age_passed\x18\x04 \x01(\bR\tagePassed\x12!\n" +
+	"\fbytes_passed\x18\x05 \x01(\bR\vbytesPassed\"\xf7\x01\n" +
 	"\fScrubSummary\x12\x10\n" +
 	"\x03job\x18\x01 \x01(\tR\x03job\x12)\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x13.nopacs.v1.JobStateR\x05state\x129\n" +
@@ -4258,13 +4484,23 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x06paused\x18\x01 \x01(\bR\x06paused\x128\n" +
 	"\n" +
 	"clock_step\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\tclockStep\x12@\n" +
-	"\x0elast_pass_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\flastPassTime\"a\n" +
+	"\x0elast_pass_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\flastPassTime\"\xe9\x01\n" +
+	"\x0fQuarantineAging\x128\n" +
+	"\n" +
+	"oldest_age\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\toldestAge\x12\x1d\n" +
+	"\n" +
+	"held_files\x18\x02 \x01(\x03R\theldFiles\x12\x1d\n" +
+	"\n" +
+	"held_bytes\x18\x03 \x01(\x03R\theldBytes\x12\x1d\n" +
+	"\n" +
+	"age_passed\x18\x04 \x01(\bR\tagePassed\x12!\n" +
+	"\fbytes_passed\x18\x05 \x01(\bR\vbytesPassed\x12\x1c\n" +
+	"\trecovered\x18\x06 \x01(\bR\trecovered\"a\n" +
 	"\x0eCatalogRebuilt\x12\x10\n" +
 	"\x03job\x18\x01 \x01(\tR\x03job\x12\x1c\n" +
 	"\tinstances\x18\x02 \x01(\x03R\tinstances\x12\x1f\n" +
 	"\vnew_history\x18\x03 \x01(\bR\n" +
-	"newHistory\"\xbe\n" +
-	"\n" +
+	"newHistory\"\x87\v\n" +
 	"\x05Event\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\tR\x06cursor\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x16\n" +
@@ -4287,7 +4523,8 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x0ereplica_behind\x18\x12 \x01(\v2\x18.nopacs.v1.ReplicaBehindH\x00R\rreplicaBehind\x12G\n" +
 	"\x10storage_switched\x18\x13 \x01(\v2\x1a.nopacs.v1.StorageSwitchedH\x00R\x0fstorageSwitched\x12;\n" +
 	"\fhold_changed\x18\x14 \x01(\v2\x16.nopacs.v1.HoldChangedH\x00R\vholdChanged\x12D\n" +
-	"\x0fretention_clock\x18\x15 \x01(\v2\x19.nopacs.v1.RetentionClockH\x00R\x0eretentionClockB\t\n" +
+	"\x0fretention_clock\x18\x15 \x01(\v2\x19.nopacs.v1.RetentionClockH\x00R\x0eretentionClock\x12G\n" +
+	"\x10quarantine_aging\x18\x16 \x01(\v2\x1a.nopacs.v1.QuarantineAgingH\x00R\x0fquarantineAgingB\t\n" +
 	"\apayload\"\x8b\x04\n" +
 	"\x0eWatchKeepAlive\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x16\n" +
@@ -4323,7 +4560,7 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x16STORAGE_VERSIONING_OFF\x10\x02\x12\x1e\n" +
 	"\x1aSTORAGE_VERSIONING_ENABLED\x10\x03\x12 \n" +
 	"\x1cSTORAGE_VERSIONING_SUSPENDED\x10\x04\x12\x1e\n" +
-	"\x1aSTORAGE_VERSIONING_UNKNOWN\x10\x05*\xb7\x04\n" +
+	"\x1aSTORAGE_VERSIONING_UNKNOWN\x10\x05*\xd8\x04\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dEVENT_TYPE_ASSOCIATION_FAILED\x10\x01\x12\x1d\n" +
@@ -4343,7 +4580,8 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x19EVENT_TYPE_REPLICA_BEHIND\x10\x0e\x12\x1f\n" +
 	"\x1bEVENT_TYPE_STORAGE_SWITCHED\x10\x0f\x12\x1b\n" +
 	"\x17EVENT_TYPE_HOLD_CHANGED\x10\x10\x12\x1e\n" +
-	"\x1aEVENT_TYPE_RETENTION_CLOCK\x10\x11*\xba\x03\n" +
+	"\x1aEVENT_TYPE_RETENTION_CLOCK\x10\x11\x12\x1f\n" +
+	"\x1bEVENT_TYPE_QUARANTINE_AGING\x10\x12*\xba\x03\n" +
 	"\x12AssociationFailure\x12#\n" +
 	"\x1fASSOCIATION_FAILURE_UNSPECIFIED\x10\x00\x12*\n" +
 	"&ASSOCIATION_FAILURE_CALLER_NOT_ALLOWED\x10\x01\x126\n" +
@@ -4378,7 +4616,7 @@ func file_nopacs_v1_monitor_proto_rawDescGZIP() []byte {
 }
 
 var file_nopacs_v1_monitor_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_nopacs_v1_monitor_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_nopacs_v1_monitor_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_nopacs_v1_monitor_proto_goTypes = []any{
 	(StorageVersioning)(0),        // 0: nopacs.v1.StorageVersioning
 	(EventType)(0),                // 1: nopacs.v1.EventType
@@ -4394,156 +4632,162 @@ var file_nopacs_v1_monitor_proto_goTypes = []any{
 	(*RecallCounts)(nil),          // 11: nopacs.v1.RecallCounts
 	(*ReceiverStatus)(nil),        // 12: nopacs.v1.ReceiverStatus
 	(*TenantStatus)(nil),          // 13: nopacs.v1.TenantStatus
-	(*ScrubSummary)(nil),          // 14: nopacs.v1.ScrubSummary
-	(*ScrubFindingCount)(nil),     // 15: nopacs.v1.ScrubFindingCount
-	(*GetStatusRequest)(nil),      // 16: nopacs.v1.GetStatusRequest
-	(*GetStatusResponse)(nil),     // 17: nopacs.v1.GetStatusResponse
-	(*AssociationFailed)(nil),     // 18: nopacs.v1.AssociationFailed
-	(*ReceptionStepReached)(nil),  // 19: nopacs.v1.ReceptionStepReached
-	(*FileQuarantined)(nil),       // 20: nopacs.v1.FileQuarantined
-	(*QuarantineDecided)(nil),     // 21: nopacs.v1.QuarantineDecided
-	(*ReceiverHealthChanged)(nil), // 22: nopacs.v1.ReceiverHealthChanged
-	(*StorageSpaceChanged)(nil),   // 23: nopacs.v1.StorageSpaceChanged
-	(*FramesAdded)(nil),           // 24: nopacs.v1.FramesAdded
-	(*JobStepReached)(nil),        // 25: nopacs.v1.JobStepReached
-	(*JobProgressed)(nil),         // 26: nopacs.v1.JobProgressed
-	(*SenderHealthChanged)(nil),   // 27: nopacs.v1.SenderHealthChanged
-	(*ScrubFindingChanged)(nil),   // 28: nopacs.v1.ScrubFindingChanged
-	(*CatalogChanged)(nil),        // 29: nopacs.v1.CatalogChanged
-	(*ReplicaBehind)(nil),         // 30: nopacs.v1.ReplicaBehind
-	(*StorageSwitched)(nil),       // 31: nopacs.v1.StorageSwitched
-	(*HoldChanged)(nil),           // 32: nopacs.v1.HoldChanged
-	(*RetentionClock)(nil),        // 33: nopacs.v1.RetentionClock
-	(*CatalogRebuilt)(nil),        // 34: nopacs.v1.CatalogRebuilt
-	(*Event)(nil),                 // 35: nopacs.v1.Event
-	(*WatchKeepAlive)(nil),        // 36: nopacs.v1.WatchKeepAlive
-	(*WatchRequest)(nil),          // 37: nopacs.v1.WatchRequest
-	(*WatchResponse)(nil),         // 38: nopacs.v1.WatchResponse
-	nil,                           // 39: nopacs.v1.WatchKeepAlive.TenantCursorsEntry
-	nil,                           // 40: nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
-	nil,                           // 41: nopacs.v1.WatchRequest.TenantCursorsEntry
-	(ReceptionStep)(0),            // 42: nopacs.v1.ReceptionStep
-	(JobState)(0),                 // 43: nopacs.v1.JobState
-	(*SenderHealth)(nil),          // 44: nopacs.v1.SenderHealth
-	(StorageTier)(0),              // 45: nopacs.v1.StorageTier
-	(*timestamppb.Timestamp)(nil), // 46: google.protobuf.Timestamp
-	(EncryptionAtRest)(0),         // 47: nopacs.v1.EncryptionAtRest
-	(*durationpb.Duration)(nil),   // 48: google.protobuf.Duration
-	(*ReceiverHealth)(nil),        // 49: nopacs.v1.ReceiverHealth
-	(TenantState)(0),              // 50: nopacs.v1.TenantState
-	(*AuditSealStatus)(nil),       // 51: nopacs.v1.AuditSealStatus
-	(*ReplicaStatus)(nil),         // 52: nopacs.v1.ReplicaStatus
-	(*RetentionStatus)(nil),       // 53: nopacs.v1.RetentionStatus
-	(ScrubFindingKind)(0),         // 54: nopacs.v1.ScrubFindingKind
-	(*Scope)(nil),                 // 55: nopacs.v1.Scope
-	(*Key)(nil),                   // 56: nopacs.v1.Key
-	(*Caller)(nil),                // 57: nopacs.v1.Caller
-	(*ReceptionCounts)(nil),       // 58: nopacs.v1.ReceptionCounts
-	(QuarantineReason)(0),         // 59: nopacs.v1.QuarantineReason
-	(QuarantineState)(0),          // 60: nopacs.v1.QuarantineState
-	(ReleaseMode)(0),              // 61: nopacs.v1.ReleaseMode
-	(*JobCounts)(nil),             // 62: nopacs.v1.JobCounts
-	(CorrectionKind)(0),           // 63: nopacs.v1.CorrectionKind
-	(CorrectionState)(0),          // 64: nopacs.v1.CorrectionState
-	(CorrectionOrigin)(0),         // 65: nopacs.v1.CorrectionOrigin
-	(HoldState)(0),                // 66: nopacs.v1.HoldState
+	(*QuarantineWarnings)(nil),    // 14: nopacs.v1.QuarantineWarnings
+	(*ScrubSummary)(nil),          // 15: nopacs.v1.ScrubSummary
+	(*ScrubFindingCount)(nil),     // 16: nopacs.v1.ScrubFindingCount
+	(*GetStatusRequest)(nil),      // 17: nopacs.v1.GetStatusRequest
+	(*GetStatusResponse)(nil),     // 18: nopacs.v1.GetStatusResponse
+	(*AssociationFailed)(nil),     // 19: nopacs.v1.AssociationFailed
+	(*ReceptionStepReached)(nil),  // 20: nopacs.v1.ReceptionStepReached
+	(*FileQuarantined)(nil),       // 21: nopacs.v1.FileQuarantined
+	(*QuarantineDecided)(nil),     // 22: nopacs.v1.QuarantineDecided
+	(*ReceiverHealthChanged)(nil), // 23: nopacs.v1.ReceiverHealthChanged
+	(*StorageSpaceChanged)(nil),   // 24: nopacs.v1.StorageSpaceChanged
+	(*FramesAdded)(nil),           // 25: nopacs.v1.FramesAdded
+	(*JobStepReached)(nil),        // 26: nopacs.v1.JobStepReached
+	(*JobProgressed)(nil),         // 27: nopacs.v1.JobProgressed
+	(*SenderHealthChanged)(nil),   // 28: nopacs.v1.SenderHealthChanged
+	(*ScrubFindingChanged)(nil),   // 29: nopacs.v1.ScrubFindingChanged
+	(*CatalogChanged)(nil),        // 30: nopacs.v1.CatalogChanged
+	(*ReplicaBehind)(nil),         // 31: nopacs.v1.ReplicaBehind
+	(*StorageSwitched)(nil),       // 32: nopacs.v1.StorageSwitched
+	(*HoldChanged)(nil),           // 33: nopacs.v1.HoldChanged
+	(*RetentionClock)(nil),        // 34: nopacs.v1.RetentionClock
+	(*QuarantineAging)(nil),       // 35: nopacs.v1.QuarantineAging
+	(*CatalogRebuilt)(nil),        // 36: nopacs.v1.CatalogRebuilt
+	(*Event)(nil),                 // 37: nopacs.v1.Event
+	(*WatchKeepAlive)(nil),        // 38: nopacs.v1.WatchKeepAlive
+	(*WatchRequest)(nil),          // 39: nopacs.v1.WatchRequest
+	(*WatchResponse)(nil),         // 40: nopacs.v1.WatchResponse
+	nil,                           // 41: nopacs.v1.WatchKeepAlive.TenantCursorsEntry
+	nil,                           // 42: nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
+	nil,                           // 43: nopacs.v1.WatchRequest.TenantCursorsEntry
+	(ReceptionStep)(0),            // 44: nopacs.v1.ReceptionStep
+	(JobState)(0),                 // 45: nopacs.v1.JobState
+	(*SenderHealth)(nil),          // 46: nopacs.v1.SenderHealth
+	(StorageTier)(0),              // 47: nopacs.v1.StorageTier
+	(*timestamppb.Timestamp)(nil), // 48: google.protobuf.Timestamp
+	(EncryptionAtRest)(0),         // 49: nopacs.v1.EncryptionAtRest
+	(*durationpb.Duration)(nil),   // 50: google.protobuf.Duration
+	(*ReceiverHealth)(nil),        // 51: nopacs.v1.ReceiverHealth
+	(TenantState)(0),              // 52: nopacs.v1.TenantState
+	(*AuditSealStatus)(nil),       // 53: nopacs.v1.AuditSealStatus
+	(*ReplicaStatus)(nil),         // 54: nopacs.v1.ReplicaStatus
+	(*RetentionStatus)(nil),       // 55: nopacs.v1.RetentionStatus
+	(ScrubFindingKind)(0),         // 56: nopacs.v1.ScrubFindingKind
+	(*Scope)(nil),                 // 57: nopacs.v1.Scope
+	(*Key)(nil),                   // 58: nopacs.v1.Key
+	(*Caller)(nil),                // 59: nopacs.v1.Caller
+	(*ReceptionCounts)(nil),       // 60: nopacs.v1.ReceptionCounts
+	(QuarantineReason)(0),         // 61: nopacs.v1.QuarantineReason
+	(QuarantineState)(0),          // 62: nopacs.v1.QuarantineState
+	(ReleaseMode)(0),              // 63: nopacs.v1.ReleaseMode
+	(*JobCounts)(nil),             // 64: nopacs.v1.JobCounts
+	(CorrectionKind)(0),           // 65: nopacs.v1.CorrectionKind
+	(CorrectionState)(0),          // 66: nopacs.v1.CorrectionState
+	(CorrectionOrigin)(0),         // 67: nopacs.v1.CorrectionOrigin
+	(HoldState)(0),                // 68: nopacs.v1.HoldState
 }
 var file_nopacs_v1_monitor_proto_depIdxs = []int32{
-	42, // 0: nopacs.v1.ReceptionStepCount.step:type_name -> nopacs.v1.ReceptionStep
+	44, // 0: nopacs.v1.ReceptionStepCount.step:type_name -> nopacs.v1.ReceptionStep
 	4,  // 1: nopacs.v1.TenantCounts.receptions_in_progress:type_name -> nopacs.v1.ReceptionStepCount
 	6,  // 2: nopacs.v1.TenantCounts.jobs_in_progress:type_name -> nopacs.v1.JobStateCount
-	43, // 3: nopacs.v1.JobStateCount.state:type_name -> nopacs.v1.JobState
-	44, // 4: nopacs.v1.SenderStatus.health:type_name -> nopacs.v1.SenderHealth
+	45, // 3: nopacs.v1.JobStateCount.state:type_name -> nopacs.v1.JobState
+	46, // 4: nopacs.v1.SenderStatus.health:type_name -> nopacs.v1.SenderHealth
 	0,  // 5: nopacs.v1.StorageStatus.versioning:type_name -> nopacs.v1.StorageVersioning
-	45, // 6: nopacs.v1.StorageStatus.tier:type_name -> nopacs.v1.StorageTier
-	46, // 7: nopacs.v1.StorageStatus.last_switch_time:type_name -> google.protobuf.Timestamp
-	47, // 8: nopacs.v1.StorageStatus.encryption_at_rest:type_name -> nopacs.v1.EncryptionAtRest
+	47, // 6: nopacs.v1.StorageStatus.tier:type_name -> nopacs.v1.StorageTier
+	48, // 7: nopacs.v1.StorageStatus.last_switch_time:type_name -> google.protobuf.Timestamp
+	49, // 8: nopacs.v1.StorageStatus.encryption_at_rest:type_name -> nopacs.v1.EncryptionAtRest
 	10, // 9: nopacs.v1.StorageStatus.coverage:type_name -> nopacs.v1.ScrubCoverage
-	48, // 10: nopacs.v1.ScrubCoverage.oldest_unverified:type_name -> google.protobuf.Duration
-	49, // 11: nopacs.v1.ReceiverStatus.health:type_name -> nopacs.v1.ReceiverHealth
-	50, // 12: nopacs.v1.TenantStatus.database_state:type_name -> nopacs.v1.TenantState
-	46, // 13: nopacs.v1.TenantStatus.database_state_time:type_name -> google.protobuf.Timestamp
+	50, // 10: nopacs.v1.ScrubCoverage.oldest_unverified:type_name -> google.protobuf.Duration
+	51, // 11: nopacs.v1.ReceiverStatus.health:type_name -> nopacs.v1.ReceiverHealth
+	52, // 12: nopacs.v1.TenantStatus.database_state:type_name -> nopacs.v1.TenantState
+	48, // 13: nopacs.v1.TenantStatus.database_state_time:type_name -> google.protobuf.Timestamp
 	5,  // 14: nopacs.v1.TenantStatus.counts:type_name -> nopacs.v1.TenantCounts
 	8,  // 15: nopacs.v1.TenantStatus.throughput:type_name -> nopacs.v1.Throughput
 	9,  // 16: nopacs.v1.TenantStatus.storages:type_name -> nopacs.v1.StorageStatus
 	12, // 17: nopacs.v1.TenantStatus.receivers:type_name -> nopacs.v1.ReceiverStatus
 	7,  // 18: nopacs.v1.TenantStatus.senders:type_name -> nopacs.v1.SenderStatus
-	14, // 19: nopacs.v1.TenantStatus.last_scrub:type_name -> nopacs.v1.ScrubSummary
-	15, // 20: nopacs.v1.TenantStatus.open_findings:type_name -> nopacs.v1.ScrubFindingCount
-	51, // 21: nopacs.v1.TenantStatus.audit_seal:type_name -> nopacs.v1.AuditSealStatus
-	52, // 22: nopacs.v1.TenantStatus.replicas:type_name -> nopacs.v1.ReplicaStatus
+	15, // 19: nopacs.v1.TenantStatus.last_scrub:type_name -> nopacs.v1.ScrubSummary
+	16, // 20: nopacs.v1.TenantStatus.open_findings:type_name -> nopacs.v1.ScrubFindingCount
+	53, // 21: nopacs.v1.TenantStatus.audit_seal:type_name -> nopacs.v1.AuditSealStatus
+	54, // 22: nopacs.v1.TenantStatus.replicas:type_name -> nopacs.v1.ReplicaStatus
 	11, // 23: nopacs.v1.TenantStatus.recalls:type_name -> nopacs.v1.RecallCounts
-	53, // 24: nopacs.v1.TenantStatus.retention:type_name -> nopacs.v1.RetentionStatus
-	43, // 25: nopacs.v1.ScrubSummary.state:type_name -> nopacs.v1.JobState
-	46, // 26: nopacs.v1.ScrubSummary.start_time:type_name -> google.protobuf.Timestamp
-	46, // 27: nopacs.v1.ScrubSummary.end_time:type_name -> google.protobuf.Timestamp
-	15, // 28: nopacs.v1.ScrubSummary.findings:type_name -> nopacs.v1.ScrubFindingCount
-	54, // 29: nopacs.v1.ScrubFindingCount.kind:type_name -> nopacs.v1.ScrubFindingKind
-	55, // 30: nopacs.v1.GetStatusRequest.scope:type_name -> nopacs.v1.Scope
-	13, // 31: nopacs.v1.GetStatusResponse.tenants:type_name -> nopacs.v1.TenantStatus
-	46, // 32: nopacs.v1.GetStatusResponse.time:type_name -> google.protobuf.Timestamp
-	56, // 33: nopacs.v1.GetStatusResponse.expiring_keys:type_name -> nopacs.v1.Key
-	51, // 34: nopacs.v1.GetStatusResponse.installation_audit_seal:type_name -> nopacs.v1.AuditSealStatus
-	57, // 35: nopacs.v1.AssociationFailed.caller:type_name -> nopacs.v1.Caller
-	2,  // 36: nopacs.v1.AssociationFailed.failure:type_name -> nopacs.v1.AssociationFailure
-	42, // 37: nopacs.v1.ReceptionStepReached.step:type_name -> nopacs.v1.ReceptionStep
-	42, // 38: nopacs.v1.ReceptionStepReached.previous_step:type_name -> nopacs.v1.ReceptionStep
-	58, // 39: nopacs.v1.ReceptionStepReached.counts:type_name -> nopacs.v1.ReceptionCounts
-	59, // 40: nopacs.v1.FileQuarantined.reason:type_name -> nopacs.v1.QuarantineReason
-	60, // 41: nopacs.v1.QuarantineDecided.state:type_name -> nopacs.v1.QuarantineState
-	61, // 42: nopacs.v1.QuarantineDecided.release_mode:type_name -> nopacs.v1.ReleaseMode
-	49, // 43: nopacs.v1.ReceiverHealthChanged.health:type_name -> nopacs.v1.ReceiverHealth
-	3,  // 44: nopacs.v1.StorageSpaceChanged.state:type_name -> nopacs.v1.StorageSpaceState
-	43, // 45: nopacs.v1.JobStepReached.state:type_name -> nopacs.v1.JobState
-	43, // 46: nopacs.v1.JobStepReached.previous_state:type_name -> nopacs.v1.JobState
-	62, // 47: nopacs.v1.JobStepReached.counts:type_name -> nopacs.v1.JobCounts
-	62, // 48: nopacs.v1.JobProgressed.counts:type_name -> nopacs.v1.JobCounts
-	44, // 49: nopacs.v1.SenderHealthChanged.health:type_name -> nopacs.v1.SenderHealth
-	54, // 50: nopacs.v1.ScrubFindingChanged.kind:type_name -> nopacs.v1.ScrubFindingKind
-	63, // 51: nopacs.v1.CatalogChanged.kind:type_name -> nopacs.v1.CorrectionKind
-	64, // 52: nopacs.v1.CatalogChanged.state:type_name -> nopacs.v1.CorrectionState
-	65, // 53: nopacs.v1.CatalogChanged.origin:type_name -> nopacs.v1.CorrectionOrigin
-	48, // 54: nopacs.v1.ReplicaBehind.lag:type_name -> google.protobuf.Duration
-	48, // 55: nopacs.v1.StorageSwitched.pause:type_name -> google.protobuf.Duration
-	66, // 56: nopacs.v1.HoldChanged.state:type_name -> nopacs.v1.HoldState
-	48, // 57: nopacs.v1.RetentionClock.clock_step:type_name -> google.protobuf.Duration
-	46, // 58: nopacs.v1.RetentionClock.last_pass_time:type_name -> google.protobuf.Timestamp
-	46, // 59: nopacs.v1.Event.time:type_name -> google.protobuf.Timestamp
-	1,  // 60: nopacs.v1.Event.type:type_name -> nopacs.v1.EventType
-	18, // 61: nopacs.v1.Event.association_failed:type_name -> nopacs.v1.AssociationFailed
-	19, // 62: nopacs.v1.Event.reception_step:type_name -> nopacs.v1.ReceptionStepReached
-	20, // 63: nopacs.v1.Event.file_quarantined:type_name -> nopacs.v1.FileQuarantined
-	21, // 64: nopacs.v1.Event.quarantine_decided:type_name -> nopacs.v1.QuarantineDecided
-	22, // 65: nopacs.v1.Event.receiver_health:type_name -> nopacs.v1.ReceiverHealthChanged
-	23, // 66: nopacs.v1.Event.storage_space:type_name -> nopacs.v1.StorageSpaceChanged
-	24, // 67: nopacs.v1.Event.frames_added:type_name -> nopacs.v1.FramesAdded
-	25, // 68: nopacs.v1.Event.job_step:type_name -> nopacs.v1.JobStepReached
-	26, // 69: nopacs.v1.Event.job_progress:type_name -> nopacs.v1.JobProgressed
-	27, // 70: nopacs.v1.Event.sender_health:type_name -> nopacs.v1.SenderHealthChanged
-	28, // 71: nopacs.v1.Event.scrub_finding:type_name -> nopacs.v1.ScrubFindingChanged
-	29, // 72: nopacs.v1.Event.catalog_changed:type_name -> nopacs.v1.CatalogChanged
-	34, // 73: nopacs.v1.Event.catalog_rebuilt:type_name -> nopacs.v1.CatalogRebuilt
-	30, // 74: nopacs.v1.Event.replica_behind:type_name -> nopacs.v1.ReplicaBehind
-	31, // 75: nopacs.v1.Event.storage_switched:type_name -> nopacs.v1.StorageSwitched
-	32, // 76: nopacs.v1.Event.hold_changed:type_name -> nopacs.v1.HoldChanged
-	33, // 77: nopacs.v1.Event.retention_clock:type_name -> nopacs.v1.RetentionClock
-	46, // 78: nopacs.v1.WatchKeepAlive.time:type_name -> google.protobuf.Timestamp
-	39, // 79: nopacs.v1.WatchKeepAlive.tenant_cursors:type_name -> nopacs.v1.WatchKeepAlive.TenantCursorsEntry
-	40, // 80: nopacs.v1.WatchKeepAlive.tenant_event_histories:type_name -> nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
-	55, // 81: nopacs.v1.WatchRequest.scope:type_name -> nopacs.v1.Scope
-	1,  // 82: nopacs.v1.WatchRequest.types:type_name -> nopacs.v1.EventType
-	41, // 83: nopacs.v1.WatchRequest.tenant_cursors:type_name -> nopacs.v1.WatchRequest.TenantCursorsEntry
-	35, // 84: nopacs.v1.WatchResponse.event:type_name -> nopacs.v1.Event
-	36, // 85: nopacs.v1.WatchResponse.keep_alive:type_name -> nopacs.v1.WatchKeepAlive
-	16, // 86: nopacs.v1.MonitorService.GetStatus:input_type -> nopacs.v1.GetStatusRequest
-	37, // 87: nopacs.v1.MonitorService.Watch:input_type -> nopacs.v1.WatchRequest
-	17, // 88: nopacs.v1.MonitorService.GetStatus:output_type -> nopacs.v1.GetStatusResponse
-	38, // 89: nopacs.v1.MonitorService.Watch:output_type -> nopacs.v1.WatchResponse
-	88, // [88:90] is the sub-list for method output_type
-	86, // [86:88] is the sub-list for method input_type
-	86, // [86:86] is the sub-list for extension type_name
-	86, // [86:86] is the sub-list for extension extendee
-	0,  // [0:86] is the sub-list for field type_name
+	55, // 24: nopacs.v1.TenantStatus.retention:type_name -> nopacs.v1.RetentionStatus
+	14, // 25: nopacs.v1.TenantStatus.quarantine:type_name -> nopacs.v1.QuarantineWarnings
+	50, // 26: nopacs.v1.QuarantineWarnings.oldest_age:type_name -> google.protobuf.Duration
+	45, // 27: nopacs.v1.ScrubSummary.state:type_name -> nopacs.v1.JobState
+	48, // 28: nopacs.v1.ScrubSummary.start_time:type_name -> google.protobuf.Timestamp
+	48, // 29: nopacs.v1.ScrubSummary.end_time:type_name -> google.protobuf.Timestamp
+	16, // 30: nopacs.v1.ScrubSummary.findings:type_name -> nopacs.v1.ScrubFindingCount
+	56, // 31: nopacs.v1.ScrubFindingCount.kind:type_name -> nopacs.v1.ScrubFindingKind
+	57, // 32: nopacs.v1.GetStatusRequest.scope:type_name -> nopacs.v1.Scope
+	13, // 33: nopacs.v1.GetStatusResponse.tenants:type_name -> nopacs.v1.TenantStatus
+	48, // 34: nopacs.v1.GetStatusResponse.time:type_name -> google.protobuf.Timestamp
+	58, // 35: nopacs.v1.GetStatusResponse.expiring_keys:type_name -> nopacs.v1.Key
+	53, // 36: nopacs.v1.GetStatusResponse.installation_audit_seal:type_name -> nopacs.v1.AuditSealStatus
+	59, // 37: nopacs.v1.AssociationFailed.caller:type_name -> nopacs.v1.Caller
+	2,  // 38: nopacs.v1.AssociationFailed.failure:type_name -> nopacs.v1.AssociationFailure
+	44, // 39: nopacs.v1.ReceptionStepReached.step:type_name -> nopacs.v1.ReceptionStep
+	44, // 40: nopacs.v1.ReceptionStepReached.previous_step:type_name -> nopacs.v1.ReceptionStep
+	60, // 41: nopacs.v1.ReceptionStepReached.counts:type_name -> nopacs.v1.ReceptionCounts
+	61, // 42: nopacs.v1.FileQuarantined.reason:type_name -> nopacs.v1.QuarantineReason
+	62, // 43: nopacs.v1.QuarantineDecided.state:type_name -> nopacs.v1.QuarantineState
+	63, // 44: nopacs.v1.QuarantineDecided.release_mode:type_name -> nopacs.v1.ReleaseMode
+	51, // 45: nopacs.v1.ReceiverHealthChanged.health:type_name -> nopacs.v1.ReceiverHealth
+	3,  // 46: nopacs.v1.StorageSpaceChanged.state:type_name -> nopacs.v1.StorageSpaceState
+	45, // 47: nopacs.v1.JobStepReached.state:type_name -> nopacs.v1.JobState
+	45, // 48: nopacs.v1.JobStepReached.previous_state:type_name -> nopacs.v1.JobState
+	64, // 49: nopacs.v1.JobStepReached.counts:type_name -> nopacs.v1.JobCounts
+	64, // 50: nopacs.v1.JobProgressed.counts:type_name -> nopacs.v1.JobCounts
+	46, // 51: nopacs.v1.SenderHealthChanged.health:type_name -> nopacs.v1.SenderHealth
+	56, // 52: nopacs.v1.ScrubFindingChanged.kind:type_name -> nopacs.v1.ScrubFindingKind
+	65, // 53: nopacs.v1.CatalogChanged.kind:type_name -> nopacs.v1.CorrectionKind
+	66, // 54: nopacs.v1.CatalogChanged.state:type_name -> nopacs.v1.CorrectionState
+	67, // 55: nopacs.v1.CatalogChanged.origin:type_name -> nopacs.v1.CorrectionOrigin
+	50, // 56: nopacs.v1.ReplicaBehind.lag:type_name -> google.protobuf.Duration
+	50, // 57: nopacs.v1.StorageSwitched.pause:type_name -> google.protobuf.Duration
+	68, // 58: nopacs.v1.HoldChanged.state:type_name -> nopacs.v1.HoldState
+	50, // 59: nopacs.v1.RetentionClock.clock_step:type_name -> google.protobuf.Duration
+	48, // 60: nopacs.v1.RetentionClock.last_pass_time:type_name -> google.protobuf.Timestamp
+	50, // 61: nopacs.v1.QuarantineAging.oldest_age:type_name -> google.protobuf.Duration
+	48, // 62: nopacs.v1.Event.time:type_name -> google.protobuf.Timestamp
+	1,  // 63: nopacs.v1.Event.type:type_name -> nopacs.v1.EventType
+	19, // 64: nopacs.v1.Event.association_failed:type_name -> nopacs.v1.AssociationFailed
+	20, // 65: nopacs.v1.Event.reception_step:type_name -> nopacs.v1.ReceptionStepReached
+	21, // 66: nopacs.v1.Event.file_quarantined:type_name -> nopacs.v1.FileQuarantined
+	22, // 67: nopacs.v1.Event.quarantine_decided:type_name -> nopacs.v1.QuarantineDecided
+	23, // 68: nopacs.v1.Event.receiver_health:type_name -> nopacs.v1.ReceiverHealthChanged
+	24, // 69: nopacs.v1.Event.storage_space:type_name -> nopacs.v1.StorageSpaceChanged
+	25, // 70: nopacs.v1.Event.frames_added:type_name -> nopacs.v1.FramesAdded
+	26, // 71: nopacs.v1.Event.job_step:type_name -> nopacs.v1.JobStepReached
+	27, // 72: nopacs.v1.Event.job_progress:type_name -> nopacs.v1.JobProgressed
+	28, // 73: nopacs.v1.Event.sender_health:type_name -> nopacs.v1.SenderHealthChanged
+	29, // 74: nopacs.v1.Event.scrub_finding:type_name -> nopacs.v1.ScrubFindingChanged
+	30, // 75: nopacs.v1.Event.catalog_changed:type_name -> nopacs.v1.CatalogChanged
+	36, // 76: nopacs.v1.Event.catalog_rebuilt:type_name -> nopacs.v1.CatalogRebuilt
+	31, // 77: nopacs.v1.Event.replica_behind:type_name -> nopacs.v1.ReplicaBehind
+	32, // 78: nopacs.v1.Event.storage_switched:type_name -> nopacs.v1.StorageSwitched
+	33, // 79: nopacs.v1.Event.hold_changed:type_name -> nopacs.v1.HoldChanged
+	34, // 80: nopacs.v1.Event.retention_clock:type_name -> nopacs.v1.RetentionClock
+	35, // 81: nopacs.v1.Event.quarantine_aging:type_name -> nopacs.v1.QuarantineAging
+	48, // 82: nopacs.v1.WatchKeepAlive.time:type_name -> google.protobuf.Timestamp
+	41, // 83: nopacs.v1.WatchKeepAlive.tenant_cursors:type_name -> nopacs.v1.WatchKeepAlive.TenantCursorsEntry
+	42, // 84: nopacs.v1.WatchKeepAlive.tenant_event_histories:type_name -> nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
+	57, // 85: nopacs.v1.WatchRequest.scope:type_name -> nopacs.v1.Scope
+	1,  // 86: nopacs.v1.WatchRequest.types:type_name -> nopacs.v1.EventType
+	43, // 87: nopacs.v1.WatchRequest.tenant_cursors:type_name -> nopacs.v1.WatchRequest.TenantCursorsEntry
+	37, // 88: nopacs.v1.WatchResponse.event:type_name -> nopacs.v1.Event
+	38, // 89: nopacs.v1.WatchResponse.keep_alive:type_name -> nopacs.v1.WatchKeepAlive
+	17, // 90: nopacs.v1.MonitorService.GetStatus:input_type -> nopacs.v1.GetStatusRequest
+	39, // 91: nopacs.v1.MonitorService.Watch:input_type -> nopacs.v1.WatchRequest
+	18, // 92: nopacs.v1.MonitorService.GetStatus:output_type -> nopacs.v1.GetStatusResponse
+	40, // 93: nopacs.v1.MonitorService.Watch:output_type -> nopacs.v1.WatchResponse
+	92, // [92:94] is the sub-list for method output_type
+	90, // [90:92] is the sub-list for method input_type
+	90, // [90:90] is the sub-list for extension type_name
+	90, // [90:90] is the sub-list for extension extendee
+	0,  // [0:90] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_monitor_proto_init() }
@@ -4564,8 +4808,8 @@ func file_nopacs_v1_monitor_proto_init() {
 	file_nopacs_v1_storage_proto_init()
 	file_nopacs_v1_tenant_proto_init()
 	file_nopacs_v1_monitor_proto_msgTypes[5].OneofWrappers = []any{}
-	file_nopacs_v1_monitor_proto_msgTypes[19].OneofWrappers = []any{}
-	file_nopacs_v1_monitor_proto_msgTypes[31].OneofWrappers = []any{
+	file_nopacs_v1_monitor_proto_msgTypes[20].OneofWrappers = []any{}
+	file_nopacs_v1_monitor_proto_msgTypes[33].OneofWrappers = []any{
 		(*Event_AssociationFailed)(nil),
 		(*Event_ReceptionStep)(nil),
 		(*Event_FileQuarantined)(nil),
@@ -4583,8 +4827,9 @@ func file_nopacs_v1_monitor_proto_init() {
 		(*Event_StorageSwitched)(nil),
 		(*Event_HoldChanged)(nil),
 		(*Event_RetentionClock)(nil),
+		(*Event_QuarantineAging)(nil),
 	}
-	file_nopacs_v1_monitor_proto_msgTypes[34].OneofWrappers = []any{
+	file_nopacs_v1_monitor_proto_msgTypes[36].OneofWrappers = []any{
 		(*WatchResponse_Event)(nil),
 		(*WatchResponse_KeepAlive)(nil),
 	}
@@ -4594,7 +4839,7 @@ func file_nopacs_v1_monitor_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_monitor_proto_rawDesc), len(file_nopacs_v1_monitor_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   38,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

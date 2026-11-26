@@ -33,6 +33,8 @@ var metricLabels = map[string][]string{
 	"nopacs_scrub_verified_share":            {"tenant", "storage"},
 	"nopacs_scrub_oldest_unverified_seconds": {"tenant", "storage"},
 	"nopacs_scrub_overdue_objects":           {"tenant", "storage"},
+	"nopacs_quarantine_oldest_seconds":       {"tenant"},
+	"nopacs_quarantine_held_bytes":           {"tenant"},
 }
 
 // metric is one family of the text a scrape returns.

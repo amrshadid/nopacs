@@ -483,6 +483,33 @@ message TenantStatus {
   // Where its retention stands: rules, sessions due, the daily pass and its
   // clock, holds. Absent when its database did not answer.
   RetentionStatus retention = 21;
+
+  // What it holds in quarantine, and whether that passed the tenant's
+  // quarantine.warn-age or quarantine.warn-bytes. Absent when its database
+  // did not answer.
+  QuarantineWarnings quarantine = 22;
+}
+
+// QuarantineWarnings is what a tenant holds in quarantine against its two
+// warning settings. A warning only warns: a quarantine retention rule alone
+// removes files.
+message QuarantineWarnings {
+  // How long the oldest file held has been in quarantine. Zero when none is
+  // held.
+  google.protobuf.Duration oldest_age = 1;
+
+  // The files held.
+  int64 held_files = 2;
+
+  // The bytes kept for them.
+  int64 held_bytes = 3;
+
+  // Whether the oldest file's age is past quarantine.warn-age.
+  bool age_passed = 4;
+
+  // Whether the bytes held are past quarantine.warn-bytes; never set when
+  // that setting is 0, which is no warning.
+  bool bytes_passed = 5;
 }
 
 // ScrubSummary is a tenant's last scrub, for a status.
@@ -617,6 +644,10 @@ enum EventType {
   // The tenant's retention was paused for a clock jump, or resumed when an
   // admin confirmed the time.
   EVENT_TYPE_RETENTION_CLOCK = 17;
+
+  // What the tenant holds in quarantine passed quarantine.warn-age or
+  // quarantine.warn-bytes, or is no longer past one of them.
+  EVENT_TYPE_QUARANTINE_AGING = 18;
 }
 
 // AssociationFailure is why a DIMSE receiver turned a caller away. Each
@@ -1071,6 +1102,30 @@ message RetentionClock {
   google.protobuf.Timestamp last_pass_time = 3;
 }
 
+// QuarantineAging is what a tenant holds in quarantine passing one of its
+// warnings (quarantine.warn-age, quarantine.warn-bytes), or no longer
+// being past one. One event for each change of which warnings stand, never
+// one per look.
+message QuarantineAging {
+  // How long the oldest file held had been in quarantine then.
+  google.protobuf.Duration oldest_age = 1;
+
+  // The files held then.
+  int64 held_files = 2;
+
+  // The bytes kept for them then.
+  int64 held_bytes = 3;
+
+  // Whether the age warning stands after this change.
+  bool age_passed = 4;
+
+  // Whether the bytes warning stands after this change.
+  bool bytes_passed = 5;
+
+  // Set on the event that says no warning stands any more.
+  bool recovered = 6;
+}
+
 // CatalogRebuilt is a catalog made again from the storages and put in use
 // in one transaction. When it begins a new history (after a restore, an
 // import or a load), it is that history's first event, and a consumer that
@@ -1157,6 +1212,9 @@ message Event {
 
     // The tenant's retention was paused for a clock jump, or resumed.
     RetentionClock retention_clock = 21;
+
+    // What the tenant holds in quarantine passed a warning, or recovered.
+    QuarantineAging quarantine_aging = 22;
   }
 }
 

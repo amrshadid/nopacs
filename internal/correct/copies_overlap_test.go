@@ -3,7 +3,6 @@ package correct
 import (
 	"bytes"
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +13,6 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
-	"github.com/amrshadid/nopacs/internal/replicate"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -168,17 +166,6 @@ func TestAttachRefusedWhilePurging(t *testing.T) {
 	r.wantGoneFromCopy(s, victim.SOPInstanceUID, key)
 }
 
-// replicator returns a replicator over the rig's two storages.
-func (r *replicaRig) replicator() *replicate.Worker {
-	r.t.Helper()
-	w, err := replicate.New(replicate.Config{Queue: r.p, Catalog: r.p, Owner: "replicator-test",
-		Now: func() time.Time { return time.Now().Add(time.Hour) }, Open: r.open})
-	if err != nil {
-		r.t.Fatal(err)
-	}
-	return w
-}
-
 // removeFromCopy removes the replica's object at key, as a copy would have
 // lost it, so the next copy of its scan puts it.
 func (r *replicaRig) removeFromCopy(key string) {
@@ -188,58 +175,11 @@ func (r *replicaRig) removeFromCopy(key string) {
 	}
 }
 
-// TestCopyInFlightAcrossPurgeStart guards a replicator's copy claimed
-// before an instance's purge began, which puts the hidden instance on the
-// replica after the purge removed it there: the copy does not end in step,
-// since the purge's start counted a change on its row, and the purge
-// checks every removed key on every copy before it says purged, so the
-// object found again is removed.
-func TestCopyInFlightAcrossPurgeStart(t *testing.T) {
-	r := newReplicaRig(t)
-	e := r.engine()
-	c, s, victim, key := r.instanceDelete(e, true)
-	r.removeFromCopy(key)
-	var once sync.Once
-	var purgeErr error
-	r.copy.beforePut = func(k string) {
-		if k != key {
-			return
-		}
-		// The purge runs, while the copy's put waits, up to the rewrite of
-		// the scan's manifest: the object is gone from both copies, and the
-		// manifest is still the one the copy was claimed at.
-		once.Do(func() {
-			e.SetCrashAt(crashAt("meta-read"))
-			_, purgeErr = e.PurgeNow(r.ctx, c.ID, r.audit(), nil)
-		})
-	}
-	if _, err := r.replicator().RunOnce(r.ctx); err != nil {
-		t.Fatal(err)
-	}
-	if !errors.Is(purgeErr, errCrash) {
-		t.Fatalf("the purge run while the copy put the object = %v, want it stopped before the manifest's rewrite", purgeErr)
-	}
-	if _, ok := r.copyObjects()[key]; !ok {
-		t.Fatal("the copy claimed before the purge did not put the hidden instance")
-	}
-	if row, err := r.p.ReplicaScan(r.ctx, "copy", s.SeriesUID); err != nil || row.State == tenant.ReplicaInStep {
-		t.Errorf("a copy claimed before the purge began ended %s, %v; want it not in step", row.State, err)
-	}
-	e.SetCrashAt(func(string) error { return nil })
-	p, err := e.ContinuePurge(r.ctx, c.ID)
-	if err != nil || p.State != record.StatePurged {
-		t.Fatalf("the purge run again = %s, %v", p.State, err)
-	}
-	if _, ok := r.copyObjects()[key]; ok {
-		t.Errorf("the replica keeps %s after the purge said purged", key)
-	}
-	r.replicate()
-	r.wantGoneFromCopy(s, victim.SOPInstanceUID, key)
-}
-
-// TestReplicatorSkipsWhatAPurgeHides guards a copy claimed while an
-// instance's purge is under way: the hidden instance is not put on the
-// replica, whose purge copies were taken when it began.
+// TestReplicatorSkipsWhatAPurgeHides guards the replicator while an
+// instance's purge is under way: it claims no copy of the scan, so the
+// hidden instance is not put on the replica, whose purge copies were taken
+// when it began, nor the manifest the purge is replacing; once the purge
+// ends, the scan is copied at its new manifest.
 func TestReplicatorSkipsWhatAPurgeHides(t *testing.T) {
 	r := newReplicaRig(t)
 	e := r.engine()
@@ -248,7 +188,9 @@ func TestReplicatorSkipsWhatAPurgeHides(t *testing.T) {
 	if _, err := e.StartPurge(r.ctx, c.ID, r.audit(), nil); err != nil {
 		t.Fatal(err)
 	}
-	r.replicate()
+	if n := r.runReplicator(); n != 0 {
+		t.Errorf("the replicator claimed %d copies while the instance's purge was under way, want none", n)
+	}
 	if _, ok := r.copyObjects()[key]; ok {
 		t.Errorf("a copy claimed while the purge was under way put the hidden instance %s", key)
 	}

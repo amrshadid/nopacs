@@ -1,14 +1,84 @@
 package rebuild
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
+
+// TestAReplaceKeepsTheRetentionOfASessionLeftOut guards the retention row
+// of a session a replace leaves out: its files gone from the storage, the
+// replace activates a catalog without it, and its row stays as it was (its
+// start, its clamped times, the exemption a person's undo gave); once its
+// files are back, the next replace shows it again with that same row, not
+// a row started anew, unclamped and no longer exempt.
+func TestAReplaceKeepsTheRetentionOfASessionLeftOut(t *testing.T) {
+	drivers(t, func(t *testing.T, postgres bool) {
+		r := newRig(t, postgres)
+		r.archive(studyFiles...)
+		page, err := r.p.ListSessions(r.ctx, tenant.SessionFilter{Order: tenant.OrderNewest}, master.Page{Limit: 1000})
+		if err != nil || len(page.Items) < 2 {
+			t.Fatalf("the sessions archived are %+v (%v), want two or more", page.Items, err)
+		}
+		// The server's clock, which the activation reads too.
+		now := time.Now().UTC().Truncate(time.Microsecond)
+		// A rule added after the sessions were archived makes them due no
+		// sooner than the notice's end: their times are clamped.
+		if _, err := r.p.AddRetentionRule(r.ctx, tenant.RetentionRule{Name: "short", DisposeAfter: tenant.RetentionPeriod{Days: 1},
+			Action: tenant.RetentionDelete}, tenant.RetentionChange{Now: now, Notice: tenant.DefaultShortenNotice}, r.audit(), nil); err != nil {
+			t.Fatal(err)
+		}
+		left := page.Items[0]
+		r.catalogExec("UPDATE retention_sessions SET exempt_rule = 'short' WHERE study_uid = '" + left.StudyUID + "'")
+		before, err := r.p.SessionRetention(r.ctx, left.StudyUID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if before.ExemptRule != "short" || !before.Due.Equal(now.Add(tenant.DefaultShortenNotice)) {
+			t.Fatalf("the session's row before the replace is %+v, want exempt and clamped to the notice's end", before)
+		}
+		aside := t.TempDir()
+		move := func(from, to string) {
+			t.Helper()
+			for _, root := range []string{layout.DataRoot, layout.MetaRoot} {
+				src := filepath.Join(from, root, left.SubjectLabel, left.Label)
+				dst := filepath.Join(to, root, left.SubjectLabel, left.Label)
+				if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Rename(src, dst); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		storage := filepath.Join(r.dataDir, "storage")
+		move(storage, aside)
+		var writes atomic.Int64
+		if _, tallies := r.run(r.config(&writes), tenant.RebuildReplace); tallies[tenant.TallyActivated] != 1 {
+			t.Fatalf("the replace without the session's files ended with %v", tallies)
+		}
+		if _, err := r.p.CatalogSession(r.ctx, left.SubjectLabel, left.Label); err == nil {
+			t.Fatal("the replace shows the session whose files are gone")
+		}
+		if got, err := r.p.SessionRetention(r.ctx, left.StudyUID); err != nil || got != before {
+			t.Fatalf("after a replace that left the session out its row is %+v (%v), want it kept as %+v", got, err, before)
+		}
+		move(aside, storage)
+		if _, tallies := r.run(r.config(&writes), tenant.RebuildReplace); tallies[tenant.TallyActivated] != 1 {
+			t.Fatalf("the replace with the session's files back ended with %v", tallies)
+		}
+		if got, err := r.p.SessionRetention(r.ctx, left.StudyUID); err != nil || got != before {
+			t.Fatalf("after the session came back its row is %+v (%v), want %+v", got, err, before)
+		}
+	})
+}
 
 // TestRebuildLeavesRetention guards that a rebuild neither builds nor
 // compares retention state: a compare over a catalog with a rule, a hold and

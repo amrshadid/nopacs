@@ -53,13 +53,18 @@ const (
 	// EventReplicaBehind is a replica's lag passing the tenant's
 	// replica.lag-alert, or falling back under it (replica_behind.go).
 	EventReplicaBehind EventType = "replica_behind"
+	// EventQuarantineAging is what a tenant holds in quarantine passing
+	// quarantine.warn-age or quarantine.warn-bytes, or recovering
+	// (quarantine_aging.go).
+	EventQuarantineAging EventType = "quarantine_aging"
 )
 
 // EventTypes returns every event type, in the contract's order.
 func EventTypes() []EventType {
 	return []EventType{EventAssociationFailed, EventReceptionStep, EventFileQuarantined, EventQuarantineDecided,
 		EventReceiverHealth, EventStorageSpace, EventFramesAdded, EventJobStep, EventJobProgress, EventSenderHealth,
-		EventScrubFinding, EventCatalogChanged, EventCatalogRebuilt, EventReplicaBehind, EventStorageSwitched}
+		EventScrubFinding, EventCatalogChanged, EventCatalogRebuilt, EventReplicaBehind, EventStorageSwitched,
+		EventQuarantineAging}
 }
 
 // Valid reports whether t is one of EventTypes.
@@ -70,7 +75,7 @@ func (t EventType) Valid() bool { return slices.Contains(EventTypes(), t) }
 // others are written by the store with the change they report.
 func ServerEventType(t EventType) bool {
 	return t == EventAssociationFailed || t == EventReceiverHealth || t == EventStorageSpace || t == EventFramesAdded ||
-		t == EventSenderHealth || t == EventReplicaBehind
+		t == EventSenderHealth || t == EventReplicaBehind || t == EventQuarantineAging
 }
 
 // ValidateEventTypes returns an Invalid error unless types is a filter a
@@ -81,7 +86,7 @@ func ValidateEventTypes(types []EventType) error {
 	}
 	for _, t := range types {
 		if !t.Valid() {
-			return invalid("an event type is one of association_failed, reception_step, file_quarantined, quarantine_decided, receiver_health, storage_space, frames_added, job_step, job_progress, sender_health, scrub_finding, catalog_changed, catalog_rebuilt, replica_behind, storage_switched")
+			return invalid("an event type is one of association_failed, reception_step, file_quarantined, quarantine_decided, receiver_health, storage_space, frames_added, job_step, job_progress, sender_health, scrub_finding, catalog_changed, catalog_rebuilt, replica_behind, storage_switched, quarantine_aging")
 		}
 	}
 	return nil
@@ -200,6 +205,8 @@ func DecodeEvent(t EventType, payload string) (EventPayload, bool) {
 		p = &StorageSwitched{}
 	case EventReplicaBehind:
 		p = &ReplicaBehind{}
+	case EventQuarantineAging:
+		p = &QuarantineAgingChanged{}
 	default:
 		return nil, true
 	}

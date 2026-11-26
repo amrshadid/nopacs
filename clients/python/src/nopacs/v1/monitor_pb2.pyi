@@ -52,6 +52,7 @@ class EventType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     EVENT_TYPE_STORAGE_SWITCHED: _ClassVar[EventType]
     EVENT_TYPE_HOLD_CHANGED: _ClassVar[EventType]
     EVENT_TYPE_RETENTION_CLOCK: _ClassVar[EventType]
+    EVENT_TYPE_QUARANTINE_AGING: _ClassVar[EventType]
 
 class AssociationFailure(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -95,6 +96,7 @@ EVENT_TYPE_REPLICA_BEHIND: EventType
 EVENT_TYPE_STORAGE_SWITCHED: EventType
 EVENT_TYPE_HOLD_CHANGED: EventType
 EVENT_TYPE_RETENTION_CLOCK: EventType
+EVENT_TYPE_QUARANTINE_AGING: EventType
 ASSOCIATION_FAILURE_UNSPECIFIED: AssociationFailure
 ASSOCIATION_FAILURE_CALLER_NOT_ALLOWED: AssociationFailure
 ASSOCIATION_FAILURE_CALLED_AE_TITLE_NOT_RECOGNIZED: AssociationFailure
@@ -244,7 +246,7 @@ class ReceiverStatus(_message.Message):
     def __init__(self, receiver: _Optional[str] = ..., health: _Optional[_Union[_receiver_pb2.ReceiverHealth, _Mapping]] = ..., any_caller: _Optional[bool] = ...) -> None: ...
 
 class TenantStatus(_message.Message):
-    __slots__ = ("tenant", "database_state", "database_state_time", "event_cursor", "counts", "throughput", "storages", "receivers", "incoming_limit_bytes", "senders", "last_scrub", "open_findings", "audit_seal", "pending_deletions", "pending_deletion_bytes", "event_history", "owner_generation", "unresolved_corrections", "replicas", "recalls", "retention")
+    __slots__ = ("tenant", "database_state", "database_state_time", "event_cursor", "counts", "throughput", "storages", "receivers", "incoming_limit_bytes", "senders", "last_scrub", "open_findings", "audit_seal", "pending_deletions", "pending_deletion_bytes", "event_history", "owner_generation", "unresolved_corrections", "replicas", "recalls", "retention", "quarantine")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     DATABASE_STATE_FIELD_NUMBER: _ClassVar[int]
     DATABASE_STATE_TIME_FIELD_NUMBER: _ClassVar[int]
@@ -266,6 +268,7 @@ class TenantStatus(_message.Message):
     REPLICAS_FIELD_NUMBER: _ClassVar[int]
     RECALLS_FIELD_NUMBER: _ClassVar[int]
     RETENTION_FIELD_NUMBER: _ClassVar[int]
+    QUARANTINE_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     database_state: _tenant_pb2.TenantState
     database_state_time: _timestamp_pb2.Timestamp
@@ -287,7 +290,22 @@ class TenantStatus(_message.Message):
     replicas: _containers.RepeatedCompositeFieldContainer[_storage_pb2.ReplicaStatus]
     recalls: RecallCounts
     retention: _retention_pb2.RetentionStatus
-    def __init__(self, tenant: _Optional[str] = ..., database_state: _Optional[_Union[_tenant_pb2.TenantState, str]] = ..., database_state_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., event_cursor: _Optional[str] = ..., counts: _Optional[_Union[TenantCounts, _Mapping]] = ..., throughput: _Optional[_Union[Throughput, _Mapping]] = ..., storages: _Optional[_Iterable[_Union[StorageStatus, _Mapping]]] = ..., receivers: _Optional[_Iterable[_Union[ReceiverStatus, _Mapping]]] = ..., incoming_limit_bytes: _Optional[int] = ..., senders: _Optional[_Iterable[_Union[SenderStatus, _Mapping]]] = ..., last_scrub: _Optional[_Union[ScrubSummary, _Mapping]] = ..., open_findings: _Optional[_Iterable[_Union[ScrubFindingCount, _Mapping]]] = ..., audit_seal: _Optional[_Union[_audit_seal_pb2.AuditSealStatus, _Mapping]] = ..., pending_deletions: _Optional[int] = ..., pending_deletion_bytes: _Optional[int] = ..., event_history: _Optional[str] = ..., owner_generation: _Optional[int] = ..., unresolved_corrections: _Optional[int] = ..., replicas: _Optional[_Iterable[_Union[_storage_pb2.ReplicaStatus, _Mapping]]] = ..., recalls: _Optional[_Union[RecallCounts, _Mapping]] = ..., retention: _Optional[_Union[_retention_pb2.RetentionStatus, _Mapping]] = ...) -> None: ...
+    quarantine: QuarantineWarnings
+    def __init__(self, tenant: _Optional[str] = ..., database_state: _Optional[_Union[_tenant_pb2.TenantState, str]] = ..., database_state_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., event_cursor: _Optional[str] = ..., counts: _Optional[_Union[TenantCounts, _Mapping]] = ..., throughput: _Optional[_Union[Throughput, _Mapping]] = ..., storages: _Optional[_Iterable[_Union[StorageStatus, _Mapping]]] = ..., receivers: _Optional[_Iterable[_Union[ReceiverStatus, _Mapping]]] = ..., incoming_limit_bytes: _Optional[int] = ..., senders: _Optional[_Iterable[_Union[SenderStatus, _Mapping]]] = ..., last_scrub: _Optional[_Union[ScrubSummary, _Mapping]] = ..., open_findings: _Optional[_Iterable[_Union[ScrubFindingCount, _Mapping]]] = ..., audit_seal: _Optional[_Union[_audit_seal_pb2.AuditSealStatus, _Mapping]] = ..., pending_deletions: _Optional[int] = ..., pending_deletion_bytes: _Optional[int] = ..., event_history: _Optional[str] = ..., owner_generation: _Optional[int] = ..., unresolved_corrections: _Optional[int] = ..., replicas: _Optional[_Iterable[_Union[_storage_pb2.ReplicaStatus, _Mapping]]] = ..., recalls: _Optional[_Union[RecallCounts, _Mapping]] = ..., retention: _Optional[_Union[_retention_pb2.RetentionStatus, _Mapping]] = ..., quarantine: _Optional[_Union[QuarantineWarnings, _Mapping]] = ...) -> None: ...
+
+class QuarantineWarnings(_message.Message):
+    __slots__ = ("oldest_age", "held_files", "held_bytes", "age_passed", "bytes_passed")
+    OLDEST_AGE_FIELD_NUMBER: _ClassVar[int]
+    HELD_FILES_FIELD_NUMBER: _ClassVar[int]
+    HELD_BYTES_FIELD_NUMBER: _ClassVar[int]
+    AGE_PASSED_FIELD_NUMBER: _ClassVar[int]
+    BYTES_PASSED_FIELD_NUMBER: _ClassVar[int]
+    oldest_age: _duration_pb2.Duration
+    held_files: int
+    held_bytes: int
+    age_passed: bool
+    bytes_passed: bool
+    def __init__(self, oldest_age: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., held_files: _Optional[int] = ..., held_bytes: _Optional[int] = ..., age_passed: _Optional[bool] = ..., bytes_passed: _Optional[bool] = ...) -> None: ...
 
 class ScrubSummary(_message.Message):
     __slots__ = ("job", "state", "start_time", "end_time", "findings")
@@ -589,6 +607,22 @@ class RetentionClock(_message.Message):
     last_pass_time: _timestamp_pb2.Timestamp
     def __init__(self, paused: _Optional[bool] = ..., clock_step: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., last_pass_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
+class QuarantineAging(_message.Message):
+    __slots__ = ("oldest_age", "held_files", "held_bytes", "age_passed", "bytes_passed", "recovered")
+    OLDEST_AGE_FIELD_NUMBER: _ClassVar[int]
+    HELD_FILES_FIELD_NUMBER: _ClassVar[int]
+    HELD_BYTES_FIELD_NUMBER: _ClassVar[int]
+    AGE_PASSED_FIELD_NUMBER: _ClassVar[int]
+    BYTES_PASSED_FIELD_NUMBER: _ClassVar[int]
+    RECOVERED_FIELD_NUMBER: _ClassVar[int]
+    oldest_age: _duration_pb2.Duration
+    held_files: int
+    held_bytes: int
+    age_passed: bool
+    bytes_passed: bool
+    recovered: bool
+    def __init__(self, oldest_age: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., held_files: _Optional[int] = ..., held_bytes: _Optional[int] = ..., age_passed: _Optional[bool] = ..., bytes_passed: _Optional[bool] = ..., recovered: _Optional[bool] = ...) -> None: ...
+
 class CatalogRebuilt(_message.Message):
     __slots__ = ("job", "instances", "new_history")
     JOB_FIELD_NUMBER: _ClassVar[int]
@@ -600,7 +634,7 @@ class CatalogRebuilt(_message.Message):
     def __init__(self, job: _Optional[str] = ..., instances: _Optional[int] = ..., new_history: _Optional[bool] = ...) -> None: ...
 
 class Event(_message.Message):
-    __slots__ = ("cursor", "time", "tenant", "type", "association_failed", "reception_step", "file_quarantined", "quarantine_decided", "receiver_health", "storage_space", "frames_added", "job_step", "job_progress", "sender_health", "scrub_finding", "catalog_changed", "catalog_rebuilt", "replica_behind", "storage_switched", "hold_changed", "retention_clock")
+    __slots__ = ("cursor", "time", "tenant", "type", "association_failed", "reception_step", "file_quarantined", "quarantine_decided", "receiver_health", "storage_space", "frames_added", "job_step", "job_progress", "sender_health", "scrub_finding", "catalog_changed", "catalog_rebuilt", "replica_behind", "storage_switched", "hold_changed", "retention_clock", "quarantine_aging")
     CURSOR_FIELD_NUMBER: _ClassVar[int]
     TIME_FIELD_NUMBER: _ClassVar[int]
     TENANT_FIELD_NUMBER: _ClassVar[int]
@@ -622,6 +656,7 @@ class Event(_message.Message):
     STORAGE_SWITCHED_FIELD_NUMBER: _ClassVar[int]
     HOLD_CHANGED_FIELD_NUMBER: _ClassVar[int]
     RETENTION_CLOCK_FIELD_NUMBER: _ClassVar[int]
+    QUARANTINE_AGING_FIELD_NUMBER: _ClassVar[int]
     cursor: str
     time: _timestamp_pb2.Timestamp
     tenant: str
@@ -643,7 +678,8 @@ class Event(_message.Message):
     storage_switched: StorageSwitched
     hold_changed: HoldChanged
     retention_clock: RetentionClock
-    def __init__(self, cursor: _Optional[str] = ..., time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tenant: _Optional[str] = ..., type: _Optional[_Union[EventType, str]] = ..., association_failed: _Optional[_Union[AssociationFailed, _Mapping]] = ..., reception_step: _Optional[_Union[ReceptionStepReached, _Mapping]] = ..., file_quarantined: _Optional[_Union[FileQuarantined, _Mapping]] = ..., quarantine_decided: _Optional[_Union[QuarantineDecided, _Mapping]] = ..., receiver_health: _Optional[_Union[ReceiverHealthChanged, _Mapping]] = ..., storage_space: _Optional[_Union[StorageSpaceChanged, _Mapping]] = ..., frames_added: _Optional[_Union[FramesAdded, _Mapping]] = ..., job_step: _Optional[_Union[JobStepReached, _Mapping]] = ..., job_progress: _Optional[_Union[JobProgressed, _Mapping]] = ..., sender_health: _Optional[_Union[SenderHealthChanged, _Mapping]] = ..., scrub_finding: _Optional[_Union[ScrubFindingChanged, _Mapping]] = ..., catalog_changed: _Optional[_Union[CatalogChanged, _Mapping]] = ..., catalog_rebuilt: _Optional[_Union[CatalogRebuilt, _Mapping]] = ..., replica_behind: _Optional[_Union[ReplicaBehind, _Mapping]] = ..., storage_switched: _Optional[_Union[StorageSwitched, _Mapping]] = ..., hold_changed: _Optional[_Union[HoldChanged, _Mapping]] = ..., retention_clock: _Optional[_Union[RetentionClock, _Mapping]] = ...) -> None: ...
+    quarantine_aging: QuarantineAging
+    def __init__(self, cursor: _Optional[str] = ..., time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tenant: _Optional[str] = ..., type: _Optional[_Union[EventType, str]] = ..., association_failed: _Optional[_Union[AssociationFailed, _Mapping]] = ..., reception_step: _Optional[_Union[ReceptionStepReached, _Mapping]] = ..., file_quarantined: _Optional[_Union[FileQuarantined, _Mapping]] = ..., quarantine_decided: _Optional[_Union[QuarantineDecided, _Mapping]] = ..., receiver_health: _Optional[_Union[ReceiverHealthChanged, _Mapping]] = ..., storage_space: _Optional[_Union[StorageSpaceChanged, _Mapping]] = ..., frames_added: _Optional[_Union[FramesAdded, _Mapping]] = ..., job_step: _Optional[_Union[JobStepReached, _Mapping]] = ..., job_progress: _Optional[_Union[JobProgressed, _Mapping]] = ..., sender_health: _Optional[_Union[SenderHealthChanged, _Mapping]] = ..., scrub_finding: _Optional[_Union[ScrubFindingChanged, _Mapping]] = ..., catalog_changed: _Optional[_Union[CatalogChanged, _Mapping]] = ..., catalog_rebuilt: _Optional[_Union[CatalogRebuilt, _Mapping]] = ..., replica_behind: _Optional[_Union[ReplicaBehind, _Mapping]] = ..., storage_switched: _Optional[_Union[StorageSwitched, _Mapping]] = ..., hold_changed: _Optional[_Union[HoldChanged, _Mapping]] = ..., retention_clock: _Optional[_Union[RetentionClock, _Mapping]] = ..., quarantine_aging: _Optional[_Union[QuarantineAging, _Mapping]] = ...) -> None: ...
 
 class WatchKeepAlive(_message.Message):
     __slots__ = ("time", "cursor", "tenant_cursors", "unanswered_tenants", "full", "event_history", "tenant_event_histories")

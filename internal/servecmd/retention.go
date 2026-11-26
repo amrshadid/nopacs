@@ -8,6 +8,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/correct"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/holds"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/server"
 	"github.com/amrshadid/nopacs/internal/tenant"
@@ -50,10 +51,55 @@ type tenantRetention struct {
 	// before the pass runs, so a pass that failed would otherwise wait a
 	// whole day for its next try rather than the next hourly check.
 	owed bool
-	// holdsBack is set once the hold records of every storage of the tenant
-	// were read after this start and each hold found active with no row
-	// adopted (adoptHolds).
-	holdsBack bool
+	// adopted says whether the hold records of every storage of the tenant
+	// were read, and each hold found active with no row adopted
+	// (adoptHolds), since this start and since the catalog's last
+	// activation: a rebuild's replace or a restore makes a catalog whose
+	// database may lack a hold its records hold, and nothing is disposed
+	// of until they are adopted again.
+	adopted holds.Adopted
+	// anchor is the first check trusted since this start or since the last
+	// pause: the time trusted after it and the process's monotonic clock
+	// read with it, from which each check measures how far the server's
+	// clock ran ahead of the time that passed (tenant.RetentionClockCheck.
+	// Drift).
+	anchor retentionAnchor
+	seams  retentionSeams
+}
+
+// retentionAnchor is a reading of the time trusted and of the process's
+// monotonic clock taken together; set says it was taken.
+type retentionAnchor struct {
+	trusted, mono time.Time
+	set           bool
+}
+
+// retentionSeams are what a test changes of a tenant's retention.
+type retentionSeams struct {
+	// monotonic reads the process's monotonic clock; nil is time.Now,
+	// whose reading carries it. Only differences between its readings
+	// count.
+	monotonic func() time.Time
+}
+
+// monotonic reads the process's monotonic clock (retentionSeams).
+func (r *tenantRetention) monotonic() time.Time {
+	if r.seams.monotonic != nil {
+		return r.seams.monotonic()
+	}
+	return time.Now()
+}
+
+// drift returns how far the server's clock at now ran ahead of the time
+// the monotonic clock at mono says passed since the anchor, zero before
+// the anchor is taken. The server's clock is measured from the time
+// trusted at the anchor, not from its own reading then, so a clock that was
+// behind at the anchor and is put right drifts by nothing.
+func (r *tenantRetention) drift(now, mono time.Time) time.Duration {
+	if !r.anchor.set {
+		return 0
+	}
+	return now.Round(0).Sub(r.anchor.trusted.Round(0)) - mono.Sub(r.anchor.mono)
 }
 
 // run checks the clock, and passes when a day has gone since the last
@@ -90,12 +136,13 @@ func (r *tenantRetention) once(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	now := r.w.now()
+	now, mono := r.w.now(), r.monotonic()
 	pass := r.owed || cur.LastPass.IsZero() || now.Sub(cur.LastPass) >= retentionPassInterval
 	if pass {
 		r.owed = true
 	}
-	rc, err := r.st.CheckRetentionClock(ctx, tenant.RetentionClockCheck{Now: now, MaxStep: step, Notice: notice, Pass: pass})
+	rc, err := r.st.CheckRetentionClock(ctx, tenant.RetentionClockCheck{Now: now, MaxStep: step, Notice: notice, Pass: pass,
+		Drift: r.drift(now, mono)})
 	if err != nil {
 		return err
 	}
@@ -104,13 +151,23 @@ func (r *tenantRetention) once(ctx context.Context) error {
 			"time are paused until an admin confirms the time", "step", rc.Step.String(), "paused_at", rc.PausedAt)
 	}
 	if rc.Paused {
+		// After a confirmation the drift is measured afresh, from the time
+		// a person confirmed.
+		r.anchor = retentionAnchor{}
 		return nil
 	}
-	if !r.holdsBack {
+	if !r.anchor.set {
+		r.anchor = retentionAnchor{trusted: rc.StoreTime(now), mono: mono, set: true}
+	}
+	owed, mark, err := r.adopted.Owed(ctx, r.st)
+	if err != nil {
+		return err
+	}
+	if owed {
 		if err := r.adoptHolds(ctx); err != nil {
 			return err
 		}
-		r.holdsBack = true
+		r.adopted.Done(mark)
 	}
 	es := r.w.engines.Load()
 	if es == nil {
@@ -132,12 +189,13 @@ func (r *tenantRetention) once(ctx context.Context) error {
 
 // adoptHolds reads the hold records of every storage of the tenant and
 // adopts each hold found active with no row (holds.Writer.AdoptFound), as
-// the hold-record worker does at the start, before the first disposal
-// after a start: a database lost and made again, or restored from before a
-// hold was placed, has no row of that hold until its record is adopted, and
-// a disposal before then would delete what the hold keeps. A storage that
-// cannot be read is the error, and no disposal runs until every storage
-// was read; adopting a hold the worker adopted already changes nothing.
+// the hold-record worker does, before the first disposal after a start and
+// after each activation of the catalog: a database lost and made again,
+// or restored from before a hold was placed, has no row of that hold until
+// its record is adopted, and a disposal before then would delete what the
+// hold keeps. A storage that cannot be read is the error, and no disposal
+// runs until every storage was read; adopting a hold the worker adopted
+// already changes nothing.
 func (r *tenantRetention) adoptHolds(ctx context.Context) error {
 	base := r.base
 	if base == nil {
@@ -149,7 +207,7 @@ func (r *tenantRetention) adoptHolds(ctx context.Context) error {
 	}
 	a, err := hw.AdoptFound(ctx)
 	for _, id := range a.Adopted {
-		r.log.Warn("holds: a hold record was found active with no row before retention's first disposal; the hold holds again", "hold", id)
+		r.log.Warn("holds: a hold record was found active with no row before retention's next disposal; the hold holds again", "hold", id)
 	}
 	return err
 }
@@ -251,6 +309,17 @@ func (r *tenantRetention) workDisposal(ctx context.Context, es *correct.Engines,
 		if errors.Is(err, tenant.ErrDisposeJobEnded) {
 			return nil
 		}
+		var gone *disposerRefused
+		if errors.As(err, &gone) {
+			// Its creator may no longer delete: the job ends with the
+			// reason, the sessions not reached left without an outcome.
+			_, err := r.st.StopDisposeJob(ctx, id, gone.reason(), r.w.now())
+			if err == nil {
+				r.log.Warn("retention: a person's disposal stopped: the key that confirmed it may no longer delete", "job", id,
+					"key", dj.Job.CreatedByKeyID, "reason", gone.why)
+			}
+			return errors.Join(append(errs, err)...)
+		}
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -275,14 +344,100 @@ func (r *tenantRetention) workDisposal(ctx context.Context, es *correct.Engines,
 	return nil
 }
 
+// disposerRefused is the refusal, in a session's delete, of the key that
+// confirmed a person's disposal: revoked, expired, suspended, gone, or no
+// longer an admin of the tenant.
+type disposerRefused struct {
+	why string
+	err error
+}
+
+// Error implements error.
+func (d *disposerRefused) Error() string {
+	return "the key that confirmed the disposal may no longer delete: " + d.why
+}
+
+// Unwrap answers the refusal itself.
+func (d *disposerRefused) Unwrap() error { return d.err }
+
+// reason is the job's reason when it stops for the refusal.
+func (d *disposerRefused) reason() string {
+	return "stopped: the key that confirmed the disposal may no longer delete (" + d.why + ")"
+}
+
+// disposerGuard returns the check each delete of a person's dispose job
+// makes, in its own transaction, of the key that confirmed the job: that it
+// still exists, is not revoked, expired or suspended, and is admin on the
+// tenant (master.Store.CheckActor). A job's deletes run for as long as it
+// lists sessions, and must not go on in the name of a key revoked or
+// demoted since. The daily pass's jobs, made by no key, and the local
+// operator's need none: nil.
+func (r *tenantRetention) disposerGuard(ctx context.Context, dj tenant.DisposeJob) (tenant.Guard, error) {
+	keyID := dj.Job.CreatedByKeyID
+	if dj.Scheduled || keyID == "" {
+		return nil, nil
+	}
+	tenantID, err := r.w.tenantID(ctx, r.name)
+	if err != nil {
+		return nil, err
+	}
+	by := master.ActingKey(keyID, master.TenantScope(tenantID), master.RoleAdmin, r.w.now)
+	return func(ctx context.Context) error {
+		err := r.w.d.Master.CheckActor(ctx, by)
+		if ref, ok := master.RefusalOf(err); ok {
+			return &disposerRefused{why: ref.Reason, err: err}
+		}
+		if err != nil {
+			return err
+		}
+		// A suspended key is refused by the access check, not by
+		// CheckActor: a restore suspends every key it brings back until
+		// the local operator reinstates them.
+		k, err := r.w.d.Master.Key(ctx, keyID)
+		switch {
+		case fault.KindOf(err) == fault.NotFound:
+			return &disposerRefused{why: master.RefusedUnknownKey, err: err}
+		case err != nil:
+			return err
+		case !k.Suspended.IsZero():
+			return &disposerRefused{why: "key suspended", err: fault.New(fault.Unauthenticated, "the acting key is suspended")}
+		}
+		return nil
+	}, nil
+}
+
+// checkAdopted refuses, as a temporary failure, a delete while the holds
+// found on storage are not adopted since the catalog's last activation: an
+// activation between this pass's adoption and its deletes would otherwise
+// let a delete pass a hold its database lost.
+func (r *tenantRetention) checkAdopted(ctx context.Context) error {
+	owed, _, err := r.adopted.Owed(ctx, r.st)
+	if err != nil {
+		return err
+	}
+	if owed {
+		return fault.New(fault.Unavailable, "the catalog was activated since the holds found on storage were adopted; the next check adopts them")
+	}
+	return nil
+}
+
 // dispose deletes one session of a dispose job through the corrections
 // engine, as a person's delete is made, with the rule and due time it was
 // listed under; the store checks again, in the delete's transaction, that
-// it is due under the rule, not held, and that the job has not ended. A
-// dispose job is not tried again, so every refusal that would not pass by
-// itself is a skip with its reason (skipOf); only a temporary failure is
-// answered, and the session is tried again at the next pass.
+// it is due under the rule, not held, and that the job has not ended, and,
+// for a person's job, that the key that confirmed it may still delete
+// (disposerGuard). A dispose job is not tried again, so every refusal that
+// would not pass by itself is a skip with its reason (skipOf); only a
+// temporary failure is answered, and the session is tried again at the
+// next pass; a refusal of the job's key is answered as disposerRefused.
 func (r *tenantRetention) dispose(ctx context.Context, es *correct.Engines, dj tenant.DisposeJob, s tenant.DisposeSession) (tenant.DisposeOutcome, string, error) {
+	if err := r.checkAdopted(ctx); err != nil {
+		return "", "", err
+	}
+	guard, err := r.disposerGuard(ctx, dj)
+	if err != nil {
+		return "", "", err
+	}
 	base := r.base
 	if base == nil {
 		base = r.st
@@ -304,7 +459,11 @@ func (r *tenantRetention) dispose(ctx context.Context, es *correct.Engines, dj t
 	now := r.w.now()
 	c, err := e.Delete(ctx, correct.DeleteRequest{Target: target, Reason: reason, Confirm: p.Confirm, KeyID: dj.Job.CreatedByKeyID,
 		Retention: &tenant.RetentionOrigin{Rule: dj.Rule, StudyUID: s.StudyUID, Due: s.Due, Scheduled: dj.Scheduled, JobID: dj.Job.ID},
-		Audit:     serverAudit(r.name, disposeMethod, s.StudyUID, now)})
+		Audit:     serverAudit(r.name, disposeMethod, s.StudyUID, now), Guard: guard})
+	var gone *disposerRefused
+	if errors.As(err, &gone) {
+		return "", "", err
+	}
 	if err != nil {
 		return r.skipOf(ctx, err)
 	}

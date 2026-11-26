@@ -333,6 +333,10 @@ func eventMessage(name string, e tenant.Event) *v1.Event {
 	case *tenant.ReplicaBehind:
 		m.Payload = &v1.Event_ReplicaBehind{ReplicaBehind: &v1.ReplicaBehind{Replica: p.Replica, Primary: p.Primary,
 			Lag: durationpb.New(time.Duration(p.LagMicros) * time.Microsecond), ScansBehind: p.ScansBehind, Recovered: p.Recovered}}
+	case *tenant.QuarantineAgingChanged:
+		m.Payload = &v1.Event_QuarantineAging{QuarantineAging: &v1.QuarantineAging{
+			OldestAge: durationpb.New(time.Duration(p.OldestAgeMicros) * time.Microsecond), HeldFiles: p.HeldFiles, HeldBytes: p.HeldBytes,
+			AgePassed: p.AgePassed, BytesPassed: p.BytesPassed, Recovered: p.Recovered}}
 	}
 	return m
 }

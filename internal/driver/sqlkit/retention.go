@@ -101,6 +101,20 @@ func (k Sending) lockRetention(ctx context.Context, tx SendingTx) error {
 	return orderRetention(ctx, tx, k.D.Lock)
 }
 
+// lockRules takes retention's locks for a change of rules (lockRetention)
+// and returns ch at the time it stores: its time, or the time trusted when
+// the clock reads earlier (storeTime), so a rule shortened while the clock
+// is set back gets its whole notice from the time trusted, never a notice
+// already run out.
+func (k Sending) lockRules(ctx context.Context, tx SendingTx, ch tenant.RetentionChange) (tenant.RetentionChange, error) {
+	if err := k.lockRetention(ctx, tx); err != nil {
+		return ch, err
+	}
+	var err error
+	ch.Now, err = storeTime(ctx, tx, ch.Now)
+	return ch, err
+}
+
 // restoreAll stores again every session's times after a change of rules at
 // ch, and marks the rule named with the notice's end when the change made
 // anything due sooner or kept it less. Every change of a rule ends the
@@ -145,7 +159,8 @@ func (k Sending) AddRetentionRule(ctx context.Context, r tenant.RetentionRule, c
 	}
 	var out tenant.RetentionRule
 	err := k.Host.Write(ctx, "the retention rule cannot be added", func(tx SendingTx) error {
-		if err := k.lockRetention(ctx, tx); err != nil {
+		ch, err := k.lockRules(ctx, tx, ch)
+		if err != nil {
 			return err
 		}
 		if _, found, err := ruleIn(ctx, tx, r.Name, k.D.Lock); err != nil || found {
@@ -165,7 +180,6 @@ func (k Sending) AddRetentionRule(ctx context.Context, r tenant.RetentionRule, c
 		if err := k.restoreAll(ctx, tx, r.Name, ch); err != nil {
 			return err
 		}
-		var err error
 		if out, err = k.ruleWithDue(ctx, tx, r.Name, ch.Now); err != nil {
 			return err
 		}
@@ -188,7 +202,8 @@ func (k Sending) SetRetentionRule(ctx context.Context, r tenant.RetentionRule, c
 	}
 	var out tenant.RetentionRule
 	err := k.Host.Write(ctx, "the retention rule cannot be changed", func(tx SendingTx) error {
-		if err := k.lockRetention(ctx, tx); err != nil {
+		ch, err := k.lockRules(ctx, tx, ch)
+		if err != nil {
 			return err
 		}
 		old, found, err := ruleIn(ctx, tx, r.Name, k.D.Lock)
@@ -234,10 +249,10 @@ func (k Sending) RemoveRetentionRule(ctx context.Context, name string, ch tenant
 	}
 	var out tenant.RetentionRule
 	err := k.Host.Write(ctx, "the retention rule cannot be removed", func(tx SendingTx) error {
-		if err := k.lockRetention(ctx, tx); err != nil {
+		ch, err := k.lockRules(ctx, tx, ch)
+		if err != nil {
 			return err
 		}
-		var err error
 		if out, err = k.ruleWithDue(ctx, tx, name, ch.Now); err != nil {
 			return err
 		}

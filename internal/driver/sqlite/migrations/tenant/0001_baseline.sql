@@ -1314,7 +1314,9 @@ CREATE TABLE rebuild_differences (
 -- retention_rule and retention_due are, for a delete a disposal made
 -- (origin retention), the rule and the due time its session was listed
 -- under; override_retention and override_reason say a person's delete went
--- over a rule's keep-at-least, and why.
+-- over a rule's keep-at-least, and why. copies_in_flight_until is the last
+-- moment a put of a copy to a replica that the purge's start or the
+-- delete's publish ended can still land: the purge removes nothing before it.
 CREATE TABLE corrections (
     id                 TEXT    NOT NULL PRIMARY KEY CHECK (length(id) = 26),
     kind               TEXT    NOT NULL CHECK (kind IN ('delete', 'relabel', 'replace')),
@@ -1360,6 +1362,7 @@ CREATE TABLE corrections (
     retention_due      INTEGER,
     override_retention INTEGER NOT NULL DEFAULT 0 CHECK (override_retention IN (0, 1)),
     override_reason    TEXT    NOT NULL DEFAULT '',
+    copies_in_flight_until INTEGER,
     CHECK ((origin = 'retention') = (retention_rule <> '')),
     CHECK ((retention_rule = '') = (retention_due IS NULL)),
     CHECK ((override_retention = 1) = (override_reason <> '')),

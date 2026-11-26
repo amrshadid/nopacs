@@ -48,7 +48,14 @@ import (
 // time trusted where it was, never earlier: due times are then read at the
 // clock's earlier reading, so going back only delays what is due, and the
 // next forward step is measured from the latest time trusted. Every time
-// comes from the caller; the store never reads a clock of its own.
+// stored while the clock reads earlier than the time trusted (a session's
+// start, a commit's or a change's clamp, a rule's change time) is taken at
+// the time trusted (RetentionClock.StoreTime), so a clock set back starts
+// nothing early. A clock run fast in small steps is caught by the drift
+// the caller measures against its monotonic clock
+// (RetentionClockCheck.Drift), and an automatic purge's check pauses
+// retention too when it sees a jump past the step a check stored. Every
+// time comes from the caller; the store never reads a clock of its own.
 //
 // # Rule changes beside commits
 //
@@ -218,6 +225,12 @@ type RetentionClockCheck struct {
 	// Pass says the check is the daily pass's, whose time it records when
 	// retention is not paused.
 	Pass bool
+	// Drift is how far the server's clock moved beyond the time the
+	// process measured by its monotonic clock, since the first check it
+	// trusted after its start or after the last pause: past MaxStep the
+	// check pauses, so a clock run fast in steps each within MaxStep is
+	// caught. Zero for a caller that measures nothing.
+	Drift time.Duration
 }
 
 // Validate returns an Invalid error unless c is well formed.
@@ -305,6 +318,19 @@ func (c RetentionClock) Effective(now time.Time) time.Time {
 		return now
 	case c.MaxStep > 0 && now.Sub(c.Trusted) > c.MaxStep:
 		return c.Trusted.Add(c.MaxStep)
+	}
+	return now
+}
+
+// StoreTime returns the time a change at now stores retention times at (a
+// session's start, the time a change is clamped from, a rule's change
+// time): now, or the latest time trusted when the clock reads earlier. A
+// clock set back would otherwise start a session early, and a session
+// started two years back by a clock two years behind is due at once under
+// a one-year rule once the clock is put right.
+func (c RetentionClock) StoreTime(now time.Time) time.Time {
+	if now.Before(c.Trusted) {
+		return c.Trusted
 	}
 	return now
 }

@@ -41,12 +41,11 @@ func (downStore) List(context.Context, blob.ListOptions) (blob.Page, error) {
 	return blob.Page{}, errDown
 }
 
-// TestPurgingInstanceIsNotFlaggedOnReplica guards that an instance a
-// delete in state purging hides is not called missing on a replica whose
-// manifest still names it: the replicator skips the object of an instance
-// whose purge began, and the purge removes it from every copy, so the
-// replica's row stays in step, nothing is recorded, and the instance is
-// counted as passed over.
+// TestPurgingInstanceIsNotFlaggedOnReplica guards that a replica is not
+// called damaged while an instance delete on its scan is purging: the scan
+// is not copied until the purge ends (a copy could put back a manifest that
+// names the deleted instance), so the replica's row waits and a scrub passes
+// it over, recording no damage and no finding.
 func TestPurgingInstanceIsNotFlaggedOnReplica(t *testing.T) {
 	r := newReplicaRig(t)
 	p, series, keys := r.archiveTwo("s1", "1.2.826.0.1.3680043.10.505")
@@ -78,26 +77,25 @@ func TestPurgingInstanceIsNotFlaggedOnReplica(t *testing.T) {
 	if got, err := r.p.Correction(r.ctx, c.ID); err != nil || got.State != record.StatePurging {
 		t.Fatalf("the purge with its replica out of reach is %+v, %v; want purging", got, err)
 	}
-	// The delete's publish queued the scan for the replica; the copy made
-	// once the purge began skips the instance's object, which a first copy
-	// had put there before the delete.
+	// The instance's object is gone from the replica, as a purge that reached
+	// it would leave it; no copy runs while the purge does.
 	if err := copy1.Delete(r.ctx, keys[1]); err != nil {
 		t.Fatal(err)
 	}
 	r.copyAll()
 	if _, err := copy1.Stat(r.ctx, keys[1]); err == nil {
-		t.Fatal("the copy made during the purge put the purging instance's object")
+		t.Fatal("a copy made during the purge put the purging instance's object back")
 	}
-	if row := r.row("copy", series); row.State != tenant.ReplicaInStep {
-		t.Fatalf("the replica's row before the scrub is %+v; want in step", row)
+	if row := r.row("copy", series); row.State == tenant.ReplicaInStep {
+		t.Fatalf("the replica's row before the scrub is %+v; want it waiting for the purge", row)
 	}
 
 	j := r.scrubAll(r.config())
-	if row := r.row("copy", series); row.State != tenant.ReplicaInStep || row.Damaged != 0 {
-		t.Errorf("after the scrub the replica's row is %s with %d damaged; want in step with none", row.State, row.Damaged)
+	if row := r.row("copy", series); row.Damaged != 0 || row.State == tenant.ReplicaDamaged {
+		t.Errorf("after the scrub the replica's row is %s with %d damaged; want no damage", row.State, row.Damaged)
 	}
-	if got := r.tallies(j.ID); got[TallyReplicaPurging] != 1 || got[TallyReplicaMissing] != 0 {
-		t.Errorf("the scrub tallied %v; want the purging instance passed over once and nothing missing", got)
+	if got := r.tallies(j.ID); got[TallyReplicaMissing] != 0 {
+		t.Errorf("the scrub tallied %v; want nothing missing on the replica", got)
 	}
 	if got := r.findingsOn("copy"); len(got) != 0 {
 		t.Errorf("the findings on the replica are %v; want none", got)

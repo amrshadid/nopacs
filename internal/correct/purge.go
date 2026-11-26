@@ -121,6 +121,9 @@ func (e *Engine) purge(ctx context.Context, c tenant.Correction) (tenant.Correct
 	if err := e.reached(c, "purge-started"); err != nil {
 		return c, err
 	}
+	if err := e.waitCopies(ctx, c); err != nil {
+		return c, err
+	}
 	// The copies are taken now: the primary of each scan and each replica
 	// attached to it, every one of which holds the correction's record
 	// before any object leaves any copy.

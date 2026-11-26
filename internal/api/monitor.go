@@ -133,6 +133,7 @@ func (c *core) tenantStatus(ctx context.Context, name string, st tenant.Store) *
 			ts.IncomingLimitBytes = limit
 		}
 		c.copiesStatus(ctx, st, ts)
+		c.quarantineStatus(ctx, st, ts)
 	}
 	for _, r := range receivers {
 		rs := &v1.ReceiverStatus{Receiver: r.Name, Health: healthMessage(c.receivers.Health(name, r))}

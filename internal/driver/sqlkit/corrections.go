@@ -38,22 +38,24 @@ const correctionColumns = `id, kind, level, state, records_state, origin, subjec
 // correctionSelect is what a read selects of a correction: its columns as
 // a row is written with them (correctionColumns, which a restore writes
 // too), then those a later change gave a default.
-const correctionSelect = correctionColumns + `, swept, retention_rule, retention_due, override_retention, override_reason`
+const correctionSelect = correctionColumns + `, swept, retention_rule, retention_due, override_retention, override_reason,
+	copies_in_flight_until`
 
 // scanCorrection reads one row of correctionSelect.
 func scanCorrection(row Row) (tenant.Correction, error) {
 	var c tenant.Correction
 	var kind, state, records string
-	var created, committed, purgeAfter, ended, due DBTime
+	var created, committed, purgeAfter, ended, due, inFlight DBTime
 	var oldSum, newSum, received []byte
 	err := row.Scan(&c.ID, &kind, &c.Level, &state, &records, &c.Origin, &c.Target.Subject, &c.Target.Session, &c.Target.Scan,
 		&c.Target.Instance, &c.ToLabel, &c.Quarantine, &c.Reason, &c.KeyID, &created, &committed, &purgeAfter, &ended,
 		&c.StateReason, &c.OldRevision, &c.NewRevision, &oldSum, &newSum, &received, &c.NewSize, &c.InstanceKey,
 		&c.InstanceSize, &c.RestoreLine, &c.ArrivalsAllowed, &c.UndoReason, &c.Unresolved, &c.Counts.Subjects,
 		&c.Counts.Sessions, &c.Counts.Scans, &c.Counts.Instances, &c.Counts.Bytes, &c.Counts.ObjectsCopied,
-		&c.Counts.ObjectsSuperseded, &c.Swept, &c.RetentionRule, &due, &c.OverrideRetention, &c.OverrideReason)
+		&c.Counts.ObjectsSuperseded, &c.Swept, &c.RetentionRule, &due, &c.OverrideRetention, &c.OverrideReason, &inFlight)
 	c.Kind, c.State, c.RecordsState = corr.Kind(kind), corr.State(state), corr.State(records)
 	c.Created, c.CommitTime, c.PurgeAfter, c.Ended, c.RetentionDue = created.T, committed.T, purgeAfter.T, ended.T, due.T
+	c.CopiesInFlightUntil = inFlight.T
 	c.OldSHA256, c.NewSHA256, c.ReceivedSHA256 = ToSHA256(oldSum), ToSHA256(newSum), ToSHA256(received)
 	return c, err
 }
