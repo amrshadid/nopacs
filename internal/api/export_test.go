@@ -60,6 +60,11 @@ func SetBackupLimit(h Handlers, limit time.Duration) { h.c.seams.backupLimit = l
 // every, in place of RecheckInterval.
 func SetRecheck(h Handlers, every time.Duration) { h.c.seams.recheck = every }
 
+// SetGuarding makes the guard of every delete by h that lifts retention,
+// and of every clock's confirmation on the installation, run fn first,
+// inside the change's transaction, after the request was let in.
+func SetGuarding(h Handlers, fn func()) { h.c.seams.guarding = fn }
+
 // SetSenderHealths makes the services of h answer a sender's health from
 // healths, as the part of the server that sends would.
 func SetSenderHealths(h Handlers, healths SenderHealths) { h.c.senders = healths }
@@ -120,3 +125,7 @@ func HoldTrialPlaces(h Handlers, n int) func() {
 
 // SafeTrial is trial.SafeError: what a trial's error is answered and logged as.
 func SafeTrial(err error) error { return trial.SafeError(err) }
+
+// EncryptionMessage is encryptionMessage, for the test of what a status
+// says of an S3 storage's encryption.
+var EncryptionMessage = encryptionMessage

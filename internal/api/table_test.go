@@ -119,6 +119,22 @@ var methodTests = map[string]func(t *testing.T){
 	nopacsv1connect.AuditSealServiceListAuditCheckpointsProcedure:    testListAuditCheckpoints,
 	nopacsv1connect.AuditSealServiceExportAuditProcedure:             testExportAudit,
 	nopacsv1connect.AuditSealServiceGetAuditPublicKeyProcedure:       testGetAuditPublicKey,
+
+	nopacsv1connect.ReplicaServiceListReplicasProcedure:          testListReplicas,
+	nopacsv1connect.ReplicaServiceAttachReplicaProcedure:         testAttachReplica,
+	nopacsv1connect.ReplicaServiceDetachReplicaProcedure:         testDetachReplica,
+	nopacsv1connect.ReplicaServiceRepairProcedure:                testRepair,
+	nopacsv1connect.ReplicaServiceSwitchStorageProcedure:         testSwitchStorage,
+	nopacsv1connect.RetentionServiceAddRetentionRuleProcedure:    testAddRetentionRule,
+	nopacsv1connect.RetentionServiceGetRetentionRuleProcedure:    testGetRetentionRule,
+	nopacsv1connect.RetentionServiceListRetentionRulesProcedure:  testListRetentionRules,
+	nopacsv1connect.RetentionServiceSetRetentionRuleProcedure:    testSetRetentionRule,
+	nopacsv1connect.RetentionServiceRemoveRetentionRuleProcedure: testRemoveRetentionRule,
+	nopacsv1connect.RetentionServiceListDueSessionsProcedure:     testListDueSessions,
+	nopacsv1connect.RetentionServiceDisposeProcedure:             testDispose,
+	nopacsv1connect.RetentionServiceConfirmClockProcedure:        testConfirmClock,
+	nopacsv1connect.RetentionServiceGetHoldProcedure:             testGetHold,
+	nopacsv1connect.RetentionServiceListHoldsProcedure:           testListHolds,
 }
 
 // contractMethods returns the full procedure name and descriptor of every
@@ -148,6 +164,8 @@ func contractMethods() map[string]protoreflect.MethodDescriptor {
 		v1.File_nopacs_v1_audit_seal_proto,
 		v1.File_nopacs_v1_correction_proto,
 		v1.File_nopacs_v1_backup_proto,
+		v1.File_nopacs_v1_replica_proto,
+		v1.File_nopacs_v1_retention_proto,
 	} {
 		for i := 0; i < f.Services().Len(); i++ {
 			s := f.Services().Get(i)
@@ -170,8 +188,8 @@ func contractMethods() map[string]protoreflect.MethodDescriptor {
 // here names a method the contract does not have.
 func TestEveryMethod(t *testing.T) {
 	methods := contractMethods()
-	if len(methods) != 94 {
-		t.Errorf("the contract has %d methods; this test was written for 94, so look at what changed", len(methods))
+	if len(methods) != 109 {
+		t.Errorf("the contract has %d methods; this test was written for 109, so look at what changed", len(methods))
 	}
 	var table api.Methods
 	for proc, md := range methods {
@@ -237,11 +255,18 @@ func TestRequirementTable(t *testing.T) {
 	}{
 		{"CreateKey", nopacsv1connect.AccessServiceCreateKeyProcedure, nil, admin},
 		{"GetKey", nopacsv1connect.AccessServiceGetKeyProcedure, nil, admin},
-		{"ListKeys", nopacsv1connect.AccessServiceListKeysProcedure, nil, admin},
+		{"ListKeys", nopacsv1connect.AccessServiceListKeysProcedure, &v1.ListKeysRequest{}, admin},
+		{"ListKeys of a tenant", nopacsv1connect.AccessServiceListKeysProcedure, &v1.ListKeysRequest{Tenant: "lab1"}, access.TenantGrants("lab1")},
+		{"ListKeys of a malformed tenant", nopacsv1connect.AccessServiceListKeysProcedure, &v1.ListKeysRequest{Tenant: "Lab 1"}, admin},
 		{"RevokeKey", nopacsv1connect.AccessServiceRevokeKeyProcedure, nil, admin},
-		{"SetGrant", nopacsv1connect.AccessServiceSetGrantProcedure, nil, admin},
-		{"ListGrants", nopacsv1connect.AccessServiceListGrantsProcedure, nil, admin},
-		{"RemoveGrant", nopacsv1connect.AccessServiceRemoveGrantProcedure, nil, admin},
+		{"SetGrant", nopacsv1connect.AccessServiceSetGrantProcedure, &v1.SetGrantRequest{}, admin},
+		{"SetGrant installation", nopacsv1connect.AccessServiceSetGrantProcedure, &v1.SetGrantRequest{Scope: installation()}, admin},
+		{"SetGrant tenant", nopacsv1connect.AccessServiceSetGrantProcedure, &v1.SetGrantRequest{Scope: tenantScope("lab1")}, access.TenantGrants("lab1")},
+		{"SetGrant malformed", nopacsv1connect.AccessServiceSetGrantProcedure, &v1.SetGrantRequest{Scope: tenantScope("../x")}, admin},
+		{"ListGrants of a key", nopacsv1connect.AccessServiceListGrantsProcedure, &v1.ListGrantsRequest{Filter: &v1.ListGrantsRequest_KeyId{KeyId: "k"}}, admin},
+		{"ListGrants on a tenant", nopacsv1connect.AccessServiceListGrantsProcedure, &v1.ListGrantsRequest{Filter: &v1.ListGrantsRequest_Scope{Scope: tenantScope("lab1")}}, access.TenantGrants("lab1")},
+		{"RemoveGrant", nopacsv1connect.AccessServiceRemoveGrantProcedure, &v1.RemoveGrantRequest{}, admin},
+		{"RemoveGrant tenant", nopacsv1connect.AccessServiceRemoveGrantProcedure, &v1.RemoveGrantRequest{Scope: tenantScope("lab1")}, access.TenantGrants("lab1")},
 		{"WhoAmI", nopacsv1connect.AccessServiceWhoAmIProcedure, nil, access.Authenticated()},
 		{"RotateKey", nopacsv1connect.AccessServiceRotateKeyProcedure, nil, access.Authenticated()},
 		{"SetKeyRules", nopacsv1connect.AccessServiceSetKeyRulesProcedure, nil, admin},

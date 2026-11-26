@@ -27,8 +27,16 @@ if _version_not_supported:
 
 class AccessServiceStub:
     """AccessService manages keys and the grants that give them roles, and tells a
-    caller who it is. In this version only an admin on the installation makes,
-    reads, revokes and grants keys.
+    caller who it is. Only an admin on the installation makes, reads and
+    revokes keys: a key is one person's or system's identity across the
+    installation. A tenant's admin hands out grants on its own tenant: which
+    keys may use a tenant is the tenant's business, so a person holds one key
+    and is let into each tenant by that tenant's admin. A tenant's admin sets,
+    changes and removes grants on that tenant only, at reader, writer or
+    operator; never on its own key; never on a key that is admin there; and
+    never touches a key's networks, expiry or other grants. Making or removing
+    a tenant's admin stays with the installation's admin. Such a refusal is
+    answered permission denied with the rule in its message.
     """
 
     def __init__(self, channel):
@@ -96,8 +104,16 @@ class AccessServiceStub:
 
 class AccessServiceServicer:
     """AccessService manages keys and the grants that give them roles, and tells a
-    caller who it is. In this version only an admin on the installation makes,
-    reads, revokes and grants keys.
+    caller who it is. Only an admin on the installation makes, reads and
+    revokes keys: a key is one person's or system's identity across the
+    installation. A tenant's admin hands out grants on its own tenant: which
+    keys may use a tenant is the tenant's business, so a person holds one key
+    and is let into each tenant by that tenant's admin. A tenant's admin sets,
+    changes and removes grants on that tenant only, at reader, writer or
+    operator; never on its own key; never on a key that is admin there; and
+    never touches a key's networks, expiry or other grants. Making or removing
+    a tenant's admin stays with the installation's admin. Such a refusal is
+    answered permission denied with the rule in its message.
     """
 
     def CreateKey(self, request, context):
@@ -131,10 +147,14 @@ class AccessServiceServicer:
 
     def ListKeys(self, request, context):
         """ListKeys answers every key of the installation, revoked and expired keys
-        included, oldest first.
+        included, oldest first; or, with a tenant, the keys that hold a grant on
+        that tenant, in order of key id (ListGrants on the tenant answers their
+        roles). A tenant's admin is answered only each key's id and holder.
 
-        Role: admin on the installation.
-        Audit: one entry in the installation's log.
+        Role: admin on the installation; with a tenant, admin on the
+        installation or on that tenant.
+        Audit: one entry in the installation's log, with the tenant in details
+        when one is given.
         Errors: unauthenticated, permission denied, invalid, unavailable (the
         master database does not answer).
         """
@@ -168,7 +188,9 @@ class AccessServiceServicer:
         same step, so a role is changed without a moment of no access. A role
         includes the roles below it (Role), so one per scope is enough.
 
-        Role: admin on the installation.
+        Role: admin on the installation; on a tenant, admin on the installation
+        or on that tenant, a tenant's admin held to its bounds (the service
+        says which).
         Audit: one entry in the installation's log, with the key's id as its
         object, and the scope, the previous role (when there was one) and the new
         role in details.
@@ -190,7 +212,9 @@ class AccessServiceServicer:
         come in order of key id. Exactly one of the two filters is required:
         there is no listing of every grant at once.
 
-        Role: admin on the installation.
+        Role: admin on the installation; for the grants on a tenant, admin on
+        the installation or on that tenant. A key's grants on every scope are
+        the installation's admin's alone to read.
         Audit: one entry in the installation's log, with the filter in details.
         Errors: unauthenticated, permission denied, invalid (also a key_id that
         is not a key id, such as a whole key or more than 12 characters, which
@@ -208,7 +232,9 @@ class AccessServiceServicer:
         key does not hold changes nothing and succeeds, so a repeated call does
         not fail.
 
-        Role: admin on the installation.
+        Role: admin on the installation; on a tenant, admin on the installation
+        or on that tenant, a tenant's admin held to its bounds (the service
+        says which).
         Audit: one entry in the installation's log, with the key's id as its
         object, and the scope and the role removed (when there was one) in
         details.
@@ -375,8 +401,16 @@ def add_AccessServiceServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class AccessService:
     """AccessService manages keys and the grants that give them roles, and tells a
-    caller who it is. In this version only an admin on the installation makes,
-    reads, revokes and grants keys.
+    caller who it is. Only an admin on the installation makes, reads and
+    revokes keys: a key is one person's or system's identity across the
+    installation. A tenant's admin hands out grants on its own tenant: which
+    keys may use a tenant is the tenant's business, so a person holds one key
+    and is let into each tenant by that tenant's admin. A tenant's admin sets,
+    changes and removes grants on that tenant only, at reader, writer or
+    operator; never on its own key; never on a key that is admin there; and
+    never touches a key's networks, expiry or other grants. Making or removing
+    a tenant's admin stays with the installation's admin. Such a refusal is
+    answered permission denied with the rule in its message.
     """
 
     @staticmethod

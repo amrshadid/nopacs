@@ -42,6 +42,7 @@ func Run(t *testing.T, open Open) {
 		{"MarkKeyUsed", testMarkKeyUsed},
 		{"MarkKeyUsedConcurrent", testMarkKeyUsedConcurrent},
 		{"Grants", testGrants},
+		{"TenantAdminGrants", testTenantAdminGrants},
 		{"GrantsListed", testGrantsListed},
 		{"SetGrantRace", testSetGrantRace},
 		{"Settings", testSettings},

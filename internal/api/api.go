@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
 	"github.com/amrshadid/nopacs/internal/access"
 	"github.com/amrshadid/nopacs/internal/api/codes"
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/correct"
@@ -27,6 +29,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/registry"
 	"github.com/amrshadid/nopacs/internal/secret"
 	"github.com/amrshadid/nopacs/internal/snapshot"
+	"github.com/amrshadid/nopacs/internal/storageswitch"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -145,6 +148,15 @@ type Config struct {
 	// again, or an error when ctx ends before a running pass does
 	// (auditseal.Sealer.Pause). Nil for a server that seals nothing.
 	SealPause func(ctx context.Context) (resume func(), err error)
+	// Switches finds the switch runner of a tenant (storageswitch.Switcher),
+	// which SwitchStorage previews, starts and waits for. Nil answers every
+	// switch unavailable.
+	Switches Switches
+	// StorageReports answers what the server learned of a storage when it
+	// opened it (its encryption at rest) and its scrub coverage, for a
+	// status. Nil leaves both out: an S3 storage's encryption answered
+	// unknown, a directory's what its admin declared, and no coverage.
+	StorageReports StorageReports
 }
 
 // Handlers is the services of the contract this package serves, each an
@@ -189,6 +201,10 @@ type Handlers struct {
 	Corrections nopacsv1connect.CorrectionServiceHandler
 	// Backups is BackupService.
 	Backups nopacsv1connect.BackupServiceHandler
+	// Replicas is ReplicaService.
+	Replicas nopacsv1connect.ReplicaServiceHandler
+	// Retention is RetentionService.
+	Retention nopacsv1connect.RetentionServiceHandler
 
 	// c is what the services share, kept for the test seams
 	// (export_test.go).
@@ -216,6 +232,7 @@ func New(cfg Config) (Handlers, error) {
 		reads: cfg.Reads, readCounts: cfg.ReadCounts, heldFiles: cfg.HeldFiles, trials: make(chan struct{}, MaxTrialsAtOnce), deidMemory: cfg.DeidMemory,
 		installation: cfg.Installation, importGuarded: cfg.ImportGuarded, corrections: cfg.Corrections, replaceSources: cfg.ReplaceSources,
 		handoffs: cfg.Handoffs, cleanups: cfg.StorageCleanups, sealPause: cfg.SealPause,
+		switches: cfg.Switches, storageReports: cfg.StorageReports,
 	}
 	if c.cleanups == nil {
 		c.cleanups = &place.Cleanups{}
@@ -273,6 +290,8 @@ func New(cfg Config) (Handlers, error) {
 		AuditSeal:   auditSealService{c},
 		Corrections: correctionService{c},
 		Backups:     backupService{c},
+		Replicas:    replicaService{c: c},
+		Retention:   retentionService{c: c},
 		c:           c,
 	}, nil
 }
@@ -298,6 +317,8 @@ func (h Handlers) Register(srv *connect.Server) {
 	nopacsv1connect.RegisterAuditSealServiceHandler(srv, h.AuditSeal)
 	nopacsv1connect.RegisterCorrectionServiceHandler(srv, h.Corrections)
 	nopacsv1connect.RegisterBackupServiceHandler(srv, h.Backups)
+	nopacsv1connect.RegisterReplicaServiceHandler(srv, h.Replicas)
+	nopacsv1connect.RegisterRetentionServiceHandler(srv, h.Retention)
 }
 
 // decisionKey is the context key of the Decision. Unexported, so only
@@ -394,6 +415,12 @@ type core struct {
 	exports handoffSlot
 	// sealPause is Config.SealPause; nil for none.
 	sealPause func(ctx context.Context) (resume func(), err error)
+	// switches finds a tenant's switch runner (Config.Switches); nil for
+	// none.
+	switches Switches
+	// storageReports answers a storage's encryption and coverage
+	// (Config.StorageReports); nil for none.
+	storageReports StorageReports
 	// places orders the changes that depend on where the installation lets
 	// data go (its roots, endpoints, ports and bind addresses) against the
 	// changes of those settings: a storage or a receiver is checked and
@@ -425,6 +452,11 @@ type core struct {
 		backupLimit time.Duration
 		// recheck, when not zero, stands for RecheckInterval in watchKey.
 		recheck time.Duration
+		// guarding, when set, runs as the guard of a delete that lifts
+		// retention, or of a clock's confirmation on the installation,
+		// begins: inside the change's transaction, after the request was
+		// let in, so a test can change the caller's grants between.
+		guarding func()
 	}
 }
 
@@ -469,6 +501,7 @@ func (c *core) changing(ctx context.Context, procedure string) (access.Decision,
 // unavailable one is logged too, since a database that does not answer is
 // for the operator to see.
 func (c *core) toAPI(d access.Decision, err error) error {
+	err = withReason(err)
 	switch fault.KindOf(err) {
 	case fault.Internal:
 		e := d.Entry(master.OutcomeFailed, "", access.Facts{})
@@ -480,6 +513,41 @@ func (c *core) toAPI(d access.Decision, err error) error {
 	}
 	return codes.ToConnect(err)
 }
+
+// withReason marks err with the contract's reason and retry delay for the
+// cases inside the unavailable kind that name one (access.proto): a write to
+// a storage being switched to its replica, STORAGE_SWITCHING, told to wait
+// for the swap; an object its storage cannot read at once, NOT_ONLINE, with
+// no delay, since waiting brings nothing back unless a recall runs, which a
+// read does not know of. Inside the precondition kind: a delete a hold
+// covers, HELD with the hold's id; a person's delete a retention rule keeps,
+// RETENTION_MINIMUM with the time it keeps it until. An error already
+// marked keeps its mark.
+func withReason(err error) error {
+	if _, _, ok := codes.ReasonOf(err); ok {
+		return err
+	}
+	var held *tenant.HeldRefusal
+	var kept *tenant.RetentionMinimum
+	switch kind := fault.KindOf(err); {
+	case kind == fault.Unavailable && errors.Is(err, storageswitch.ErrStorageSwitching):
+		return codes.WithReason(err, storageswitch.ReasonStorageSwitching, nil, storageswitch.RetryAfter)
+	case kind == fault.Unavailable && errors.Is(err, blob.ErrNotOnline):
+		return codes.WithReason(err, reasonNotOnline, nil, 0)
+	case kind == fault.Precondition && errors.As(err, &held):
+		return codes.WithReason(err, reasonHeld, map[string]string{"hold": held.Hold}, 0)
+	case kind == fault.Precondition && errors.As(err, &kept):
+		return codes.WithReason(err, reasonRetentionMinimum, map[string]string{"keep_until": kept.KeepUntil.UTC().Format(time.RFC3339)}, 0)
+	}
+	return err
+}
+
+// The reasons of the precondition kind a delete is refused with
+// (access.proto).
+const (
+	reasonHeld             = "HELD"
+	reasonRetentionMinimum = "RETENTION_MINIMUM"
+)
 
 // outcomeOf returns the outcome and the reason an audit entry records for a
 // request that did not complete with err. A refusal is refused; anything else

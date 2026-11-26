@@ -2780,11 +2780,13 @@ export const ImportUnitStateSchema: GenEnum<ImportUnitState> = /*@__PURE__*/
  * checked by presence: listed, its size compared, and the store's own
  * SHA-256 compared where the store keeps one (HeadObject), tallied
  * "presence|checked"; a key missing from the listing is a finding as on
- * any storage. Bytes are read there only for objects online, and for a
- * share of the others the tenant's setting scrub.archive-sample recalls on
- * purpose (a percentage such as "0.5%", from "0%" to "100%"; an ordinary
- * setting, a tenant may override it; built-in default "0%", since each
- * recall costs the site), tallied "presence|sampled".
+ * any storage. A presence scrub never recalls an object: a recall costs
+ * the site, and only an operator's ReplicaService.Recall asks for one.
+ * Bytes are read there only for objects online when the scrub meets them,
+ * and of those only a share, the tenant's setting scrub.archive-sample (a
+ * percentage such as "0.5%", from "0%" to "100%"; an ordinary setting, a
+ * tenant may override it; built-in default "0%"), tallied
+ * "presence|sampled"; the rest are checked by presence.
  *
  * What a rebuild job does. It reads the correction records on each of the
  * tenant's storages first, then lists their "meta/" keys and reads each

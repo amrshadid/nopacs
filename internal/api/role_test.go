@@ -111,6 +111,12 @@ const (
 	// tenantOperatorOrAdmin: operator on the tenant, and admin on it when
 	// the request sets the message field adminWhen names for the line.
 	tenantOperatorOrAdmin
+	// grantsScope: admin on the installation, or on the tenant the
+	// request's scope names (access.TenantGrants); grantsTenant the same
+	// for a tenant the request names by its field "tenant", admin on the
+	// installation without one.
+	grantsScope
+	grantsTenant
 )
 
 // rolePhrases is every Role line the contract has, with the shape it
@@ -139,6 +145,9 @@ var rolePhrases = map[string]roleShape{
 	"reader on the tenant; operator on the tenant with include_header, since the header holds what the sender sent, identifying data included.":                                         tenantReaderOrOperator,
 	"reader on the tenant asked for; operator on the installation for every tenant.":                                                                                                    monitorScope,
 	"operator on the tenant; admin on the tenant to name a profile version, since a version decides what leaves a file, as a receiver's does.":                                          tenantOperatorOrAdmin,
+	"admin on the installation; on a tenant, admin on the installation or on that tenant, a tenant's admin held to its bounds (the service says which).":                                grantsScope,
+	"admin on the installation; for the grants on a tenant, admin on the installation or on that tenant. A key's grants on every scope are the installation's admin's alone to read.":   grantsScope,
+	"admin on the installation; with a tenant, admin on the installation or on that tenant.":                                                                                            grantsTenant,
 }
 
 // adminWhen names, for each Role line of the shape tenantOperatorOrAdmin,
@@ -329,6 +338,33 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 					t.Errorf("%s with %s: %+v, want %+v", proc, c.name, got, c.want)
 				}
 			}
+		case grantsScope, grantsTenant:
+			if msg == nil {
+				t.Fatalf("%s: the table does not read the request", proc)
+			}
+			admin := access.OnInstallation(master.RoleAdmin)
+			for _, c := range []struct {
+				name   string
+				tenant string
+				scope  *v1.Scope
+				want   access.Requirement
+			}{
+				{"a tenant", "lab1", tenantScope("lab1"), access.TenantGrants("lab1")},
+				{"the installation", "", installation(), admin},
+				{"a malformed tenant", "Lab 1", tenantScope("Lab 1"), admin},
+				{"none", "", nil, admin},
+			} {
+				named := msg
+				switch {
+				case shape == grantsScope:
+					named = withScope(t, msg, c.scope)
+				case c.tenant != "":
+					named = withField(t, msg, "tenant", c.tenant)
+				}
+				if got := need(named); got != c.want {
+					t.Errorf("%s with %s: %+v, want %+v", proc, c.name, got, c.want)
+				}
+			}
 		case monitorScope:
 			if msg == nil {
 				t.Fatalf("%s: the table does not read the request", proc)
@@ -423,8 +459,8 @@ func TestPendingRules(t *testing.T) {
 	lines := roleLines(t)
 	var p api.Pending
 	procs := p.Procedures()
-	if len(procs) != 20 {
-		t.Errorf("the table of methods not served has %d lines; this test was written for 20, so look at what changed", len(procs))
+	if len(procs) != 5 {
+		t.Errorf("the table of methods not served has %d lines; this test was written for 5, so look at what changed", len(procs))
 	}
 	for _, proc := range procs {
 		if !inServices(notServed, proc) {

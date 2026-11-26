@@ -114,12 +114,14 @@ class GetKeyResponse(_message.Message):
     def __init__(self, key: _Optional[_Union[Key, _Mapping]] = ...) -> None: ...
 
 class ListKeysRequest(_message.Message):
-    __slots__ = ("page_size", "page_token")
+    __slots__ = ("page_size", "page_token", "tenant")
     PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    TENANT_FIELD_NUMBER: _ClassVar[int]
     page_size: int
     page_token: str
-    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+    tenant: str
+    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., tenant: _Optional[str] = ...) -> None: ...
 
 class ListKeysResponse(_message.Message):
     __slots__ = ("keys", "next_page_token")

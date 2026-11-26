@@ -51,6 +51,15 @@ func (c *core) newJobViews(p tenant.Pipeline, tenantName string) *jobViews {
 
 // message returns j as the contract writes it.
 func (v *jobViews) message(ctx context.Context, j tenant.Job) *v1.Job {
+	if j.Kind == tenant.JobDispose {
+		m := jobMessage(j, "")
+		if dp, ok := v.p.(tenant.Disposal); ok {
+			if dj, err := dp.DisposeJob(ctx, j.ID); err == nil {
+				m.Kind = &v1.Job_Dispose{Dispose: disposeJobMessage(dj)}
+			}
+		}
+		return m
+	}
 	if j.State.Ended() || j.Reason != "" || j.Sender == "" {
 		return jobMessage(j, "")
 	}
@@ -151,7 +160,7 @@ func (s jobService) GetJob(ctx context.Context, req *v1.GetJobRequest) (*v1.GetJ
 		return nil, c.failIn(d, st, err)
 	}
 	var tallies []tenant.JobTally
-	if out.Kind == tenant.JobDeid || out.Kind == tenant.JobScrub || out.Kind == tenant.JobRebuild {
+	if out.Kind == tenant.JobDeid || out.Kind == tenant.JobScrub || out.Kind == tenant.JobRebuild || out.Kind == tenant.JobRepair {
 		if tallies, err = p.JobTallies(ctx, out.ID); err != nil {
 			return nil, c.failIn(d, st, err)
 		}

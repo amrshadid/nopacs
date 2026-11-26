@@ -25,6 +25,15 @@ class S3RecallTier(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     S3_RECALL_TIER_BULK: _ClassVar[S3RecallTier]
     S3_RECALL_TIER_EXPEDITED: _ClassVar[S3RecallTier]
 
+class EncryptionAtRest(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    ENCRYPTION_AT_REST_UNSPECIFIED: _ClassVar[EncryptionAtRest]
+    ENCRYPTION_AT_REST_UNKNOWN: _ClassVar[EncryptionAtRest]
+    ENCRYPTION_AT_REST_NONE: _ClassVar[EncryptionAtRest]
+    ENCRYPTION_AT_REST_ENCRYPTED: _ClassVar[EncryptionAtRest]
+    ENCRYPTION_AT_REST_DECLARED: _ClassVar[EncryptionAtRest]
+    ENCRYPTION_AT_REST_NOT_DECLARED: _ClassVar[EncryptionAtRest]
+
 class StorageTestStep(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     STORAGE_TEST_STEP_UNSPECIFIED: _ClassVar[StorageTestStep]
@@ -56,6 +65,12 @@ S3_RECALL_TIER_UNSPECIFIED: S3RecallTier
 S3_RECALL_TIER_STANDARD: S3RecallTier
 S3_RECALL_TIER_BULK: S3RecallTier
 S3_RECALL_TIER_EXPEDITED: S3RecallTier
+ENCRYPTION_AT_REST_UNSPECIFIED: EncryptionAtRest
+ENCRYPTION_AT_REST_UNKNOWN: EncryptionAtRest
+ENCRYPTION_AT_REST_NONE: EncryptionAtRest
+ENCRYPTION_AT_REST_ENCRYPTED: EncryptionAtRest
+ENCRYPTION_AT_REST_DECLARED: EncryptionAtRest
+ENCRYPTION_AT_REST_NOT_DECLARED: EncryptionAtRest
 STORAGE_TEST_STEP_UNSPECIFIED: StorageTestStep
 STORAGE_TEST_STEP_WRITE: StorageTestStep
 STORAGE_TEST_STEP_READ: StorageTestStep
@@ -130,12 +145,14 @@ class ReplicaStatus(_message.Message):
     def __init__(self, replica: _Optional[str] = ..., primary: _Optional[str] = ..., tier: _Optional[_Union[StorageTier, str]] = ..., scans_in_step: _Optional[int] = ..., scans_pending: _Optional[int] = ..., scans_copying: _Optional[int] = ..., scans_damaged: _Optional[int] = ..., objects_damaged: _Optional[int] = ..., lag: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., oldest_pending_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., shares_bucket: _Optional[bool] = ..., last_fault: _Optional[_Union[StorageFault, str]] = ..., last_fault_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., backfill_job: _Optional[str] = ..., recalls_in_progress: _Optional[int] = ...) -> None: ...
 
 class DirectoryStorage(_message.Message):
-    __slots__ = ("root", "path")
+    __slots__ = ("root", "path", "encrypted_at_rest_declared")
     ROOT_FIELD_NUMBER: _ClassVar[int]
     PATH_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTED_AT_REST_DECLARED_FIELD_NUMBER: _ClassVar[int]
     root: str
     path: str
-    def __init__(self, root: _Optional[str] = ..., path: _Optional[str] = ...) -> None: ...
+    encrypted_at_rest_declared: bool
+    def __init__(self, root: _Optional[str] = ..., path: _Optional[str] = ..., encrypted_at_rest_declared: _Optional[bool] = ...) -> None: ...
 
 class S3Storage(_message.Message):
     __slots__ = ("endpoint", "region", "bucket", "prefix", "path_style", "access_key_id", "secret_access_key", "secret_access_key_set", "purge_versions", "recall_days", "recall_tier")

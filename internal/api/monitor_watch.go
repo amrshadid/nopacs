@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
 	"github.com/amrshadid/nopacs/internal/access"
@@ -324,6 +326,10 @@ func eventMessage(name string, e tenant.Event) *v1.Event {
 			Origin: v1.CorrectionOrigin(word("CORRECTION_ORIGIN_", p.Origin, v1.CorrectionOrigin_value))}}
 	case *tenant.CatalogRebuilt:
 		m.Payload = &v1.Event_CatalogRebuilt{CatalogRebuilt: &v1.CatalogRebuilt{Job: p.Job, Instances: p.Instances, NewHistory: p.NewHistory}}
+	case *tenant.StorageSwitched:
+		m.Payload = &v1.Event_StorageSwitched{StorageSwitched: &v1.StorageSwitched{Primary: p.Primary, Replica: p.Replica,
+			ScansDrained: p.ScansDrained, AssociationsRefused: p.AssociationsRefused, Pause: durationpb.New(time.Duration(p.PauseMicros) * time.Microsecond),
+			Refused: p.Refused, Refusal: p.Refusal, SwitchGeneration: p.SwitchGeneration}}
 	}
 	return m
 }

@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/storage.proto.
  */
 export const file_nopacs_v1_storage: GenFile = /*@__PURE__*/
-  fileDesc("Chdub3BhY3MvdjEvc3RvcmFnZS5wcm90bxIJbm9wYWNzLnYxIsQCCgdTdG9yYWdlEgwKBG5hbWUYASABKAkSMAoJZGlyZWN0b3J5GAIgASgLMhsubm9wYWNzLnYxLkRpcmVjdG9yeVN0b3JhZ2VIABIiCgJzMxgDIAEoCzIULm5vcGFjcy52MS5TM1N0b3JhZ2VIABIWCg5jYXBhY2l0eV9ieXRlcxgEIAEoAxIvCgtjcmVhdGVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLdXBkYXRlX3RpbWUYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnJlcGxpY2Ffb2YYByABKAkSJAoEdGllchgIIAEoDjIWLm5vcGFjcy52MS5TdG9yYWdlVGllchIZChFzd2l0Y2hfZ2VuZXJhdGlvbhgJIAEoA0IGCgR0eXBlItkDCg1SZXBsaWNhU3RhdHVzEg8KB3JlcGxpY2EYASABKAkSDwoHcHJpbWFyeRgCIAEoCRIkCgR0aWVyGAMgASgOMhYubm9wYWNzLnYxLlN0b3JhZ2VUaWVyEhUKDXNjYW5zX2luX3N0ZXAYBCABKAMSFQoNc2NhbnNfcGVuZGluZxgFIAEoAxIVCg1zY2Fuc19jb3B5aW5nGAYgASgDEhUKDXNjYW5zX2RhbWFnZWQYByABKAMSFwoPb2JqZWN0c19kYW1hZ2VkGAggASgDEiYKA2xhZxgJIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhI3ChNvbGRlc3RfcGVuZGluZ190aW1lGAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1zaGFyZXNfYnVja2V0GAsgASgIEisKCmxhc3RfZmF1bHQYDCABKA4yFy5ub3BhY3MudjEuU3RvcmFnZUZhdWx0EjMKD2xhc3RfZmF1bHRfdGltZRgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFAoMYmFja2ZpbGxfam9iGA4gASgJEhsKE3JlY2FsbHNfaW5fcHJvZ3Jlc3MYDyABKAMiLgoQRGlyZWN0b3J5U3RvcmFnZRIMCgRyb290GAEgASgJEgwKBHBhdGgYAiABKAkiqgIKCVMzU3RvcmFnZRIQCghlbmRwb2ludBgBIAEoCRIOCgZyZWdpb24YAiABKAkSDgoGYnVja2V0GAMgASgJEg4KBnByZWZpeBgEIAEoCRISCgpwYXRoX3N0eWxlGAUgASgIEhUKDWFjY2Vzc19rZXlfaWQYBiABKAkSHgoRc2VjcmV0X2FjY2Vzc19rZXkYByABKAlCA4ABARIdChVzZWNyZXRfYWNjZXNzX2tleV9zZXQYCCABKAgSGwoOcHVyZ2VfdmVyc2lvbnMYCSABKAhIAIgBARITCgtyZWNhbGxfZGF5cxgKIAEoBRIsCgtyZWNhbGxfdGllchgLIAEoDjIXLm5vcGFjcy52MS5TM1JlY2FsbFRpZXJCEQoPX3B1cmdlX3ZlcnNpb25zIsIBChFTdG9yYWdlVGVzdFJlc3VsdBIoCgRzdGVwGAEgASgOMhoubm9wYWNzLnYxLlN0b3JhZ2VUZXN0U3RlcBIuCgdvdXRjb21lGAIgASgOMh0ubm9wYWNzLnYxLlN0b3JhZ2VUZXN0T3V0Y29tZRIrCghkdXJhdGlvbhgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhImCgVmYXVsdBgEIAEoDjIXLm5vcGFjcy52MS5TdG9yYWdlRmF1bHQiSAoRQWRkU3RvcmFnZVJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiMKB3N0b3JhZ2UYAiABKAsyEi5ub3BhY3MudjEuU3RvcmFnZSI5ChJBZGRTdG9yYWdlUmVzcG9uc2USIwoHc3RvcmFnZRgBIAEoCzISLm5vcGFjcy52MS5TdG9yYWdlIjEKEUdldFN0b3JhZ2VSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIjkKEkdldFN0b3JhZ2VSZXNwb25zZRIjCgdzdG9yYWdlGAEgASgLMhIubm9wYWNzLnYxLlN0b3JhZ2UiTAoTTGlzdFN0b3JhZ2VzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSEQoJcGFnZV9zaXplGAIgASgFEhIKCnBhZ2VfdG9rZW4YAyABKAkiVQoUTGlzdFN0b3JhZ2VzUmVzcG9uc2USJAoIc3RvcmFnZXMYASADKAsyEi5ub3BhY3MudjEuU3RvcmFnZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkieQoRU2V0U3RvcmFnZVJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiMKB3N0b3JhZ2UYAiABKAsyEi5ub3BhY3MudjEuU3RvcmFnZRIvCgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siOQoSU2V0U3RvcmFnZVJlc3BvbnNlEiMKB3N0b3JhZ2UYASABKAsyEi5ub3BhY3MudjEuU3RvcmFnZSI0ChRSZW1vdmVTdG9yYWdlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSDAoEbmFtZRgCIAEoCSI8ChVSZW1vdmVTdG9yYWdlUmVzcG9uc2USIwoHc3RvcmFnZRgBIAEoCzISLm5vcGFjcy52MS5TdG9yYWdlIjIKElRlc3RTdG9yYWdlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSDAoEbmFtZRgCIAEoCSJUChNUZXN0U3RvcmFnZVJlc3BvbnNlEg4KBnBhc3NlZBgBIAEoCBItCgdyZXN1bHRzGAIgAygLMhwubm9wYWNzLnYxLlN0b3JhZ2VUZXN0UmVzdWx0Kl4KC1N0b3JhZ2VUaWVyEhwKGFNUT1JBR0VfVElFUl9VTlNQRUNJRklFRBAAEhcKE1NUT1JBR0VfVElFUl9PTkxJTkUQARIYChRTVE9SQUdFX1RJRVJfQVJDSElWRRACKoIBCgxTM1JlY2FsbFRpZXISHgoaUzNfUkVDQUxMX1RJRVJfVU5TUEVDSUZJRUQQABIbChdTM19SRUNBTExfVElFUl9TVEFOREFSRBABEhcKE1MzX1JFQ0FMTF9USUVSX0JVTEsQAhIcChhTM19SRUNBTExfVElFUl9FWFBFRElURUQQAyqqAQoPU3RvcmFnZVRlc3RTdGVwEiEKHVNUT1JBR0VfVEVTVF9TVEVQX1VOU1BFQ0lGSUVEEAASGwoXU1RPUkFHRV9URVNUX1NURVBfV1JJVEUQARIaChZTVE9SQUdFX1RFU1RfU1RFUF9SRUFEEAISHQoZU1RPUkFHRV9URVNUX1NURVBfQ09NUEFSRRADEhwKGFNUT1JBR0VfVEVTVF9TVEVQX1JFTU9WRRAEKp4BChJTdG9yYWdlVGVzdE91dGNvbWUSJAogU1RPUkFHRV9URVNUX09VVENPTUVfVU5TUEVDSUZJRUQQABIfChtTVE9SQUdFX1RFU1RfT1VUQ09NRV9QQVNTRUQQARIfChtTVE9SQUdFX1RFU1RfT1VUQ09NRV9GQUlMRUQQAhIgChxTVE9SQUdFX1RFU1RfT1VUQ09NRV9TS0lQUEVEEAMq6QEKDFN0b3JhZ2VGYXVsdBIdChlTVE9SQUdFX0ZBVUxUX1VOU1BFQ0lGSUVEEAASHQoZU1RPUkFHRV9GQVVMVF9VTlJFQUNIQUJMRRABEhwKGFNUT1JBR0VfRkFVTFRfVExTX0ZBSUxFRBACEhkKFVNUT1JBR0VfRkFVTFRfUkVGVVNFRBADEhsKF1NUT1JBR0VfRkFVTFRfTk9UX0ZPVU5EEAQSHgoaU1RPUkFHRV9GQVVMVF9XUk9OR19BTlNXRVIQBRIlCiFTVE9SQUdFX0ZBVUxUX0FERFJFU1NfTk9UX0FMTE9XRUQQBjL9AwoOU3RvcmFnZVNlcnZpY2USSQoKQWRkU3RvcmFnZRIcLm5vcGFjcy52MS5BZGRTdG9yYWdlUmVxdWVzdBodLm5vcGFjcy52MS5BZGRTdG9yYWdlUmVzcG9uc2USTgoKR2V0U3RvcmFnZRIcLm5vcGFjcy52MS5HZXRTdG9yYWdlUmVxdWVzdBodLm5vcGFjcy52MS5HZXRTdG9yYWdlUmVzcG9uc2UiA5ACARJUCgxMaXN0U3RvcmFnZXMSHi5ub3BhY3MudjEuTGlzdFN0b3JhZ2VzUmVxdWVzdBofLm5vcGFjcy52MS5MaXN0U3RvcmFnZXNSZXNwb25zZSIDkAIBEk4KClNldFN0b3JhZ2USHC5ub3BhY3MudjEuU2V0U3RvcmFnZVJlcXVlc3QaHS5ub3BhY3MudjEuU2V0U3RvcmFnZVJlc3BvbnNlIgOQAgISVwoNUmVtb3ZlU3RvcmFnZRIfLm5vcGFjcy52MS5SZW1vdmVTdG9yYWdlUmVxdWVzdBogLm5vcGFjcy52MS5SZW1vdmVTdG9yYWdlUmVzcG9uc2UiA5ACAhJRCgtUZXN0U3RvcmFnZRIdLm5vcGFjcy52MS5UZXN0U3RvcmFnZVJlcXVlc3QaHi5ub3BhY3MudjEuVGVzdFN0b3JhZ2VSZXNwb25zZSIDkAICYgZwcm90bzM", [file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
+  fileDesc("Chdub3BhY3MvdjEvc3RvcmFnZS5wcm90bxIJbm9wYWNzLnYxIsQCCgdTdG9yYWdlEgwKBG5hbWUYASABKAkSMAoJZGlyZWN0b3J5GAIgASgLMhsubm9wYWNzLnYxLkRpcmVjdG9yeVN0b3JhZ2VIABIiCgJzMxgDIAEoCzIULm5vcGFjcy52MS5TM1N0b3JhZ2VIABIWCg5jYXBhY2l0eV9ieXRlcxgEIAEoAxIvCgtjcmVhdGVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLdXBkYXRlX3RpbWUYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnJlcGxpY2Ffb2YYByABKAkSJAoEdGllchgIIAEoDjIWLm5vcGFjcy52MS5TdG9yYWdlVGllchIZChFzd2l0Y2hfZ2VuZXJhdGlvbhgJIAEoA0IGCgR0eXBlItkDCg1SZXBsaWNhU3RhdHVzEg8KB3JlcGxpY2EYASABKAkSDwoHcHJpbWFyeRgCIAEoCRIkCgR0aWVyGAMgASgOMhYubm9wYWNzLnYxLlN0b3JhZ2VUaWVyEhUKDXNjYW5zX2luX3N0ZXAYBCABKAMSFQoNc2NhbnNfcGVuZGluZxgFIAEoAxIVCg1zY2Fuc19jb3B5aW5nGAYgASgDEhUKDXNjYW5zX2RhbWFnZWQYByABKAMSFwoPb2JqZWN0c19kYW1hZ2VkGAggASgDEiYKA2xhZxgJIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhI3ChNvbGRlc3RfcGVuZGluZ190aW1lGAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1zaGFyZXNfYnVja2V0GAsgASgIEisKCmxhc3RfZmF1bHQYDCABKA4yFy5ub3BhY3MudjEuU3RvcmFnZUZhdWx0EjMKD2xhc3RfZmF1bHRfdGltZRgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFAoMYmFja2ZpbGxfam9iGA4gASgJEhsKE3JlY2FsbHNfaW5fcHJvZ3Jlc3MYDyABKAMiUgoQRGlyZWN0b3J5U3RvcmFnZRIMCgRyb290GAEgASgJEgwKBHBhdGgYAiABKAkSIgoaZW5jcnlwdGVkX2F0X3Jlc3RfZGVjbGFyZWQYAyABKAgiqgIKCVMzU3RvcmFnZRIQCghlbmRwb2ludBgBIAEoCRIOCgZyZWdpb24YAiABKAkSDgoGYnVja2V0GAMgASgJEg4KBnByZWZpeBgEIAEoCRISCgpwYXRoX3N0eWxlGAUgASgIEhUKDWFjY2Vzc19rZXlfaWQYBiABKAkSHgoRc2VjcmV0X2FjY2Vzc19rZXkYByABKAlCA4ABARIdChVzZWNyZXRfYWNjZXNzX2tleV9zZXQYCCABKAgSGwoOcHVyZ2VfdmVyc2lvbnMYCSABKAhIAIgBARITCgtyZWNhbGxfZGF5cxgKIAEoBRIsCgtyZWNhbGxfdGllchgLIAEoDjIXLm5vcGFjcy52MS5TM1JlY2FsbFRpZXJCEQoPX3B1cmdlX3ZlcnNpb25zIsIBChFTdG9yYWdlVGVzdFJlc3VsdBIoCgRzdGVwGAEgASgOMhoubm9wYWNzLnYxLlN0b3JhZ2VUZXN0U3RlcBIuCgdvdXRjb21lGAIgASgOMh0ubm9wYWNzLnYxLlN0b3JhZ2VUZXN0T3V0Y29tZRIrCghkdXJhdGlvbhgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhImCgVmYXVsdBgEIAEoDjIXLm5vcGFjcy52MS5TdG9yYWdlRmF1bHQiSAoRQWRkU3RvcmFnZVJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiMKB3N0b3JhZ2UYAiABKAsyEi5ub3BhY3MudjEuU3RvcmFnZSI5ChJBZGRTdG9yYWdlUmVzcG9uc2USIwoHc3RvcmFnZRgBIAEoCzISLm5vcGFjcy52MS5TdG9yYWdlIjEKEUdldFN0b3JhZ2VSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIjkKEkdldFN0b3JhZ2VSZXNwb25zZRIjCgdzdG9yYWdlGAEgASgLMhIubm9wYWNzLnYxLlN0b3JhZ2UiTAoTTGlzdFN0b3JhZ2VzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSEQoJcGFnZV9zaXplGAIgASgFEhIKCnBhZ2VfdG9rZW4YAyABKAkiVQoUTGlzdFN0b3JhZ2VzUmVzcG9uc2USJAoIc3RvcmFnZXMYASADKAsyEi5ub3BhY3MudjEuU3RvcmFnZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkieQoRU2V0U3RvcmFnZVJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiMKB3N0b3JhZ2UYAiABKAsyEi5ub3BhY3MudjEuU3RvcmFnZRIvCgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siOQoSU2V0U3RvcmFnZVJlc3BvbnNlEiMKB3N0b3JhZ2UYASABKAsyEi5ub3BhY3MudjEuU3RvcmFnZSI0ChRSZW1vdmVTdG9yYWdlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSDAoEbmFtZRgCIAEoCSI8ChVSZW1vdmVTdG9yYWdlUmVzcG9uc2USIwoHc3RvcmFnZRgBIAEoCzISLm5vcGFjcy52MS5TdG9yYWdlIjIKElRlc3RTdG9yYWdlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSDAoEbmFtZRgCIAEoCSJUChNUZXN0U3RvcmFnZVJlc3BvbnNlEg4KBnBhc3NlZBgBIAEoCBItCgdyZXN1bHRzGAIgAygLMhwubm9wYWNzLnYxLlN0b3JhZ2VUZXN0UmVzdWx0Kl4KC1N0b3JhZ2VUaWVyEhwKGFNUT1JBR0VfVElFUl9VTlNQRUNJRklFRBAAEhcKE1NUT1JBR0VfVElFUl9PTkxJTkUQARIYChRTVE9SQUdFX1RJRVJfQVJDSElWRRACKoIBCgxTM1JlY2FsbFRpZXISHgoaUzNfUkVDQUxMX1RJRVJfVU5TUEVDSUZJRUQQABIbChdTM19SRUNBTExfVElFUl9TVEFOREFSRBABEhcKE1MzX1JFQ0FMTF9USUVSX0JVTEsQAhIcChhTM19SRUNBTExfVElFUl9FWFBFRElURUQQAyrbAQoQRW5jcnlwdGlvbkF0UmVzdBIiCh5FTkNSWVBUSU9OX0FUX1JFU1RfVU5TUEVDSUZJRUQQABIeChpFTkNSWVBUSU9OX0FUX1JFU1RfVU5LTk9XThABEhsKF0VOQ1JZUFRJT05fQVRfUkVTVF9OT05FEAISIAocRU5DUllQVElPTl9BVF9SRVNUX0VOQ1JZUFRFRBADEh8KG0VOQ1JZUFRJT05fQVRfUkVTVF9ERUNMQVJFRBAEEiMKH0VOQ1JZUFRJT05fQVRfUkVTVF9OT1RfREVDTEFSRUQQBSqqAQoPU3RvcmFnZVRlc3RTdGVwEiEKHVNUT1JBR0VfVEVTVF9TVEVQX1VOU1BFQ0lGSUVEEAASGwoXU1RPUkFHRV9URVNUX1NURVBfV1JJVEUQARIaChZTVE9SQUdFX1RFU1RfU1RFUF9SRUFEEAISHQoZU1RPUkFHRV9URVNUX1NURVBfQ09NUEFSRRADEhwKGFNUT1JBR0VfVEVTVF9TVEVQX1JFTU9WRRAEKp4BChJTdG9yYWdlVGVzdE91dGNvbWUSJAogU1RPUkFHRV9URVNUX09VVENPTUVfVU5TUEVDSUZJRUQQABIfChtTVE9SQUdFX1RFU1RfT1VUQ09NRV9QQVNTRUQQARIfChtTVE9SQUdFX1RFU1RfT1VUQ09NRV9GQUlMRUQQAhIgChxTVE9SQUdFX1RFU1RfT1VUQ09NRV9TS0lQUEVEEAMq6QEKDFN0b3JhZ2VGYXVsdBIdChlTVE9SQUdFX0ZBVUxUX1VOU1BFQ0lGSUVEEAASHQoZU1RPUkFHRV9GQVVMVF9VTlJFQUNIQUJMRRABEhwKGFNUT1JBR0VfRkFVTFRfVExTX0ZBSUxFRBACEhkKFVNUT1JBR0VfRkFVTFRfUkVGVVNFRBADEhsKF1NUT1JBR0VfRkFVTFRfTk9UX0ZPVU5EEAQSHgoaU1RPUkFHRV9GQVVMVF9XUk9OR19BTlNXRVIQBRIlCiFTVE9SQUdFX0ZBVUxUX0FERFJFU1NfTk9UX0FMTE9XRUQQBjL9AwoOU3RvcmFnZVNlcnZpY2USSQoKQWRkU3RvcmFnZRIcLm5vcGFjcy52MS5BZGRTdG9yYWdlUmVxdWVzdBodLm5vcGFjcy52MS5BZGRTdG9yYWdlUmVzcG9uc2USTgoKR2V0U3RvcmFnZRIcLm5vcGFjcy52MS5HZXRTdG9yYWdlUmVxdWVzdBodLm5vcGFjcy52MS5HZXRTdG9yYWdlUmVzcG9uc2UiA5ACARJUCgxMaXN0U3RvcmFnZXMSHi5ub3BhY3MudjEuTGlzdFN0b3JhZ2VzUmVxdWVzdBofLm5vcGFjcy52MS5MaXN0U3RvcmFnZXNSZXNwb25zZSIDkAIBEk4KClNldFN0b3JhZ2USHC5ub3BhY3MudjEuU2V0U3RvcmFnZVJlcXVlc3QaHS5ub3BhY3MudjEuU2V0U3RvcmFnZVJlc3BvbnNlIgOQAgISVwoNUmVtb3ZlU3RvcmFnZRIfLm5vcGFjcy52MS5SZW1vdmVTdG9yYWdlUmVxdWVzdBogLm5vcGFjcy52MS5SZW1vdmVTdG9yYWdlUmVzcG9uc2UiA5ACAhJRCgtUZXN0U3RvcmFnZRIdLm5vcGFjcy52MS5UZXN0U3RvcmFnZVJlcXVlc3QaHi5ub3BhY3MudjEuVGVzdFN0b3JhZ2VSZXNwb25zZSIDkAICYgZwcm90bzM", [file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
 
 /**
  * Storage is a place a tenant's archived files are written to. In this
@@ -334,6 +334,18 @@ export type DirectoryStorage = Message<"nopacs.v1.DirectoryStorage"> & {
    * @generated from field: string path = 2;
    */
   path: string;
+
+  /**
+   * The admin's statement that the volume under the directory encrypts what
+   * it holds at rest (a disk or file system encryption the site set up).
+   * The server cannot ask a directory, so its status shows this statement
+   * as declared or not declared (StorageStatus.encryption_at_rest), never
+   * as a fact it checked; image data is encrypted by the storage, not by
+   * the server. False by default.
+   *
+   * @generated from field: bool encrypted_at_rest_declared = 3;
+   */
+  encryptedAtRestDeclared: boolean;
 };
 
 /**
@@ -729,7 +741,8 @@ export type SetStorageRequest = Message<"nopacs.v1.SetStorageRequest"> & {
   /**
    * The fields to change, as paths of Storage: "capacity_bytes", or a field
    * of the storage's type joined to it by a dot, such as "s3.endpoint" or
-   * "directory.path"; also "tier", "s3.recall_days" and "s3.recall_tier".
+   * "directory.path"; also "tier", "s3.recall_days", "s3.recall_tier" and
+   * "directory.encrypted_at_rest_declared".
    * "replica_of", "switch_generation", "create_time" and "update_time" are
    * not paths a change may name. A path that names a type's whole message ("s3",
    * "directory") is refused: its fields are named one by one, so a secret
@@ -966,6 +979,70 @@ export const S3RecallTierSchema: GenEnum<S3RecallTier> = /*@__PURE__*/
   enumDesc(file_nopacs_v1_storage, 1);
 
 /**
+ * EncryptionAtRest is what a storage's status says of whether the storage
+ * encrypts what it holds. An S3 storage is asked when the server opens it
+ * (the bucket's default encryption); a directory shows the admin's
+ * statement (DirectoryStorage.encrypted_at_rest_declared). The server does
+ * not encrypt image data itself, and makes no claim beyond what the storage
+ * or the admin said. A value added later is a new value; a client shows
+ * one it does not know as unknown.
+ *
+ * @generated from enum nopacs.v1.EncryptionAtRest
+ */
+export enum EncryptionAtRest {
+  /**
+   * Never answered by the server.
+   *
+   * @generated from enum value: ENCRYPTION_AT_REST_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * An S3 storage that could not be asked, or would not say (credentials
+   * that may not read the setting, a server without it), or one the server
+   * has not opened yet.
+   *
+   * @generated from enum value: ENCRYPTION_AT_REST_UNKNOWN = 1;
+   */
+  UNKNOWN = 1,
+
+  /**
+   * An S3 storage that says it does not encrypt new objects by default.
+   *
+   * @generated from enum value: ENCRYPTION_AT_REST_NONE = 2;
+   */
+  NONE = 2,
+
+  /**
+   * An S3 storage that says it encrypts new objects by default, with
+   * StorageStatus.encryption_algorithm.
+   *
+   * @generated from enum value: ENCRYPTION_AT_REST_ENCRYPTED = 3;
+   */
+  ENCRYPTED = 3,
+
+  /**
+   * A directory whose admin declared its volume encrypts at rest.
+   *
+   * @generated from enum value: ENCRYPTION_AT_REST_DECLARED = 4;
+   */
+  DECLARED = 4,
+
+  /**
+   * A directory whose admin made no such statement.
+   *
+   * @generated from enum value: ENCRYPTION_AT_REST_NOT_DECLARED = 5;
+   */
+  NOT_DECLARED = 5,
+}
+
+/**
+ * Describes the enum nopacs.v1.EncryptionAtRest.
+ */
+export const EncryptionAtRestSchema: GenEnum<EncryptionAtRest> = /*@__PURE__*/
+  enumDesc(file_nopacs_v1_storage, 2);
+
+/**
  * StorageTestStep is one step of TestStorage.
  *
  * @generated from enum nopacs.v1.StorageTestStep
@@ -1011,7 +1088,7 @@ export enum StorageTestStep {
  * Describes the enum nopacs.v1.StorageTestStep.
  */
 export const StorageTestStepSchema: GenEnum<StorageTestStep> = /*@__PURE__*/
-  enumDesc(file_nopacs_v1_storage, 2);
+  enumDesc(file_nopacs_v1_storage, 3);
 
 /**
  * StorageTestOutcome is how one step of TestStorage ended.
@@ -1052,7 +1129,7 @@ export enum StorageTestOutcome {
  * Describes the enum nopacs.v1.StorageTestOutcome.
  */
 export const StorageTestOutcomeSchema: GenEnum<StorageTestOutcome> = /*@__PURE__*/
-  enumDesc(file_nopacs_v1_storage, 3);
+  enumDesc(file_nopacs_v1_storage, 4);
 
 /**
  * StorageFault is why an operation on a storage failed, from a fixed list.
@@ -1123,7 +1200,7 @@ export enum StorageFault {
  * Describes the enum nopacs.v1.StorageFault.
  */
 export const StorageFaultSchema: GenEnum<StorageFault> = /*@__PURE__*/
-  enumDesc(file_nopacs_v1_storage, 4);
+  enumDesc(file_nopacs_v1_storage, 5);
 
 /**
  * StorageService adds, reads, changes, removes and tests a tenant's storages:

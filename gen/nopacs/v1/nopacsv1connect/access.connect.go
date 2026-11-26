@@ -382,10 +382,14 @@ type AccessServiceClient interface {
 	// id), unavailable (the master database does not answer).
 	GetKey(context.Context, *v1.GetKeyRequest) (*v1.GetKeyResponse, error)
 	// ListKeys answers every key of the installation, revoked and expired keys
-	// included, oldest first.
+	// included, oldest first; or, with a tenant, the keys that hold a grant on
+	// that tenant, in order of key id (ListGrants on the tenant answers their
+	// roles). A tenant's admin is answered only each key's id and holder.
 	//
-	// Role: admin on the installation.
-	// Audit: one entry in the installation's log.
+	// Role: admin on the installation; with a tenant, admin on the
+	// installation or on that tenant.
+	// Audit: one entry in the installation's log, with the tenant in details
+	// when one is given.
 	// Errors: unauthenticated, permission denied, invalid, unavailable (the
 	// master database does not answer).
 	ListKeys(context.Context, *v1.ListKeysRequest) (*v1.ListKeysResponse, error)
@@ -409,7 +413,9 @@ type AccessServiceClient interface {
 	// same step, so a role is changed without a moment of no access. A role
 	// includes the roles below it (Role), so one per scope is enough.
 	//
-	// Role: admin on the installation.
+	// Role: admin on the installation; on a tenant, admin on the installation
+	// or on that tenant, a tenant's admin held to its bounds (the service
+	// says which).
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object, and the scope, the previous role (when there was one) and the new
 	// role in details.
@@ -426,7 +432,9 @@ type AccessServiceClient interface {
 	// come in order of key id. Exactly one of the two filters is required:
 	// there is no listing of every grant at once.
 	//
-	// Role: admin on the installation.
+	// Role: admin on the installation; for the grants on a tenant, admin on
+	// the installation or on that tenant. A key's grants on every scope are
+	// the installation's admin's alone to read.
 	// Audit: one entry in the installation's log, with the filter in details.
 	// Errors: unauthenticated, permission denied, invalid (also a key_id that
 	// is not a key id, such as a whole key or more than 12 characters, which
@@ -439,7 +447,9 @@ type AccessServiceClient interface {
 	// key does not hold changes nothing and succeeds, so a repeated call does
 	// not fail.
 	//
-	// Role: admin on the installation.
+	// Role: admin on the installation; on a tenant, admin on the installation
+	// or on that tenant, a tenant's admin held to its bounds (the service
+	// says which).
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object, and the scope and the role removed (when there was one) in
 	// details.
@@ -544,10 +554,14 @@ type AccessServiceHandler interface {
 	// id), unavailable (the master database does not answer).
 	GetKey(context.Context, *v1.GetKeyRequest) (*v1.GetKeyResponse, error)
 	// ListKeys answers every key of the installation, revoked and expired keys
-	// included, oldest first.
+	// included, oldest first; or, with a tenant, the keys that hold a grant on
+	// that tenant, in order of key id (ListGrants on the tenant answers their
+	// roles). A tenant's admin is answered only each key's id and holder.
 	//
-	// Role: admin on the installation.
-	// Audit: one entry in the installation's log.
+	// Role: admin on the installation; with a tenant, admin on the
+	// installation or on that tenant.
+	// Audit: one entry in the installation's log, with the tenant in details
+	// when one is given.
 	// Errors: unauthenticated, permission denied, invalid, unavailable (the
 	// master database does not answer).
 	ListKeys(context.Context, *v1.ListKeysRequest) (*v1.ListKeysResponse, error)
@@ -571,7 +585,9 @@ type AccessServiceHandler interface {
 	// same step, so a role is changed without a moment of no access. A role
 	// includes the roles below it (Role), so one per scope is enough.
 	//
-	// Role: admin on the installation.
+	// Role: admin on the installation; on a tenant, admin on the installation
+	// or on that tenant, a tenant's admin held to its bounds (the service
+	// says which).
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object, and the scope, the previous role (when there was one) and the new
 	// role in details.
@@ -588,7 +604,9 @@ type AccessServiceHandler interface {
 	// come in order of key id. Exactly one of the two filters is required:
 	// there is no listing of every grant at once.
 	//
-	// Role: admin on the installation.
+	// Role: admin on the installation; for the grants on a tenant, admin on
+	// the installation or on that tenant. A key's grants on every scope are
+	// the installation's admin's alone to read.
 	// Audit: one entry in the installation's log, with the filter in details.
 	// Errors: unauthenticated, permission denied, invalid (also a key_id that
 	// is not a key id, such as a whole key or more than 12 characters, which
@@ -601,7 +619,9 @@ type AccessServiceHandler interface {
 	// key does not hold changes nothing and succeeds, so a repeated call does
 	// not fail.
 	//
-	// Role: admin on the installation.
+	// Role: admin on the installation; on a tenant, admin on the installation
+	// or on that tenant, a tenant's admin held to its bounds (the service
+	// says which).
 	// Audit: one entry in the installation's log, with the key's id as its
 	// object, and the scope and the role removed (when there was one) in
 	// details.

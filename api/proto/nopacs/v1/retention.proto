@@ -281,7 +281,12 @@ service RetentionService {
   //
   // Role: admin on the scope.
   // Audit: one entry in the log of the scope, with the time given, the
-  // server's time, the tenants resumed and the reason in details.
+  // server's time, the tenants resumed and the reason in details; with the
+  // installation, each tenant resumed also has its entry in its own log,
+  // and the installation's entry names tenants_refused in details and
+  // records the request refused when the key's role refused a tenant,
+  // failed when a tenant's confirmation failed otherwise, and done only
+  // when no paused tenant was left paused.
   // Errors: unauthenticated, permission denied (no grant; also a tenant that
   // does not exist, for a caller who may not list every tenant), invalid
   // (also a missing or too long reason; no observed_time), not found (a
@@ -849,6 +854,13 @@ message ConfirmClockResponse {
   // With a tenant scope, where its retention stands now; absent with the
   // installation.
   RetentionStatus status = 2;
+
+  // With the installation, the names of the paused tenants whose
+  // confirmation was refused or failed, ordered by name: the key no longer
+  // admin on the installation when the tenant's change was made, the
+  // tenant moved or fenced since, or its database not answering. Each is
+  // still paused. Empty with a tenant scope, whose refusal is the error.
+  repeated string tenants_refused = 3;
 }
 
 // PlaceHoldRequest names what to hold, and why.

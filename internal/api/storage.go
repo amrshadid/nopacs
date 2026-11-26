@@ -39,7 +39,8 @@ var storageMask = maskRules{
 		string(tenant.FieldCapacityBytes), string(tenant.FieldDirectoryRoot), string(tenant.FieldDirectoryPath),
 		string(tenant.FieldS3Endpoint), string(tenant.FieldS3Region), string(tenant.FieldS3Bucket),
 		string(tenant.FieldS3Prefix), string(tenant.FieldS3PathStyle), string(tenant.FieldS3AccessKeyID),
-		string(tenant.FieldS3SecretKey), string(tenant.FieldS3PurgeVersions),
+		string(tenant.FieldS3SecretKey), string(tenant.FieldS3PurgeVersions), string(tenant.FieldTier),
+		string(tenant.FieldS3RecallDays), string(tenant.FieldS3RecallTier), string(tenant.FieldEncryptionDeclared),
 	},
 	refused: map[string]string{
 		"directory":                "names a type's whole message: name its fields one by one",
@@ -51,29 +52,6 @@ var storageMask = maskRules{
 		"replica_of":               "is changed by attaching or detaching a replica, never by SetStorage",
 		"switch_generation":        "is answered by the server and cannot be set",
 	},
-}
-
-// storageTierPaths are the mask paths of a storage's tier and recall: in
-// the contract, and refused as not served (messageTierNotServed) until
-// archive-tier storages are.
-var storageTierPaths = []string{"tier", "s3.recall_days", "s3.recall_tier"}
-
-// The messages of the parts of StorageService's contract the server does
-// not serve yet. Replicas and archive tiers are written into the contract
-// before the code that keeps them: a storage that claimed to be either
-// would be one no copy, recall or failover stands behind, so it is refused
-// rather than stored as if it were.
-const (
-	messageReplicaNotServed = "storage.replica_of: replica storages are not served yet"
-	messageTierNotServed    = "the archive tier and recall settings of a storage are not served yet"
-)
-
-// refuseNotServed records a request that asks for a part of the contract
-// the server does not serve yet, as one that did not complete, and answers
-// it UNIMPLEMENTED with msg.
-func (c *core) refuseNotServed(d access.Decision, st tenant.Store, msg string) error {
-	c.record(d, st, master.OutcomeFailed, msg, access.Facts{})
-	return connect.NewError(connect.CodeUnimplemented, msg)
 }
 
 // storageTier returns an Invalid error naming field unless tier is a value
@@ -93,18 +71,47 @@ func storageTier(field string, tier v1.StorageTier, directory bool) error {
 	return invalid(field, "is online or archive")
 }
 
-// notServedStorage returns the message refusing what a request's storage
-// asks for that is not served yet: to be a replica, or of the archive
-// tier; "" when it asks for neither. Recall settings alone are ignored, as
-// the contract says for an online storage.
-func notServedStorage(m *v1.Storage) string {
-	switch {
-	case m.GetReplicaOf() != "":
-		return messageReplicaNotServed
-	case m.GetTier() == v1.StorageTier_STORAGE_TIER_ARCHIVE:
-		return messageTierNotServed
+// refuseNotServed records a request that asks for a part of the contract
+// the server does not serve yet, as one that did not complete, and answers
+// it UNIMPLEMENTED with msg.
+func (c *core) refuseNotServed(d access.Decision, st tenant.Store, msg string) error {
+	c.record(d, st, master.OutcomeFailed, msg, access.Facts{})
+	return connect.NewError(connect.CodeUnimplemented, msg)
+}
+
+// recallSpeedOf returns the recall speed an S3 storage's recall_tier names:
+// unspecified is the store's standard.
+func recallSpeedOf(field string, t v1.S3RecallTier) (tenant.RecallSpeed, error) {
+	switch t {
+	case v1.S3RecallTier_S3_RECALL_TIER_UNSPECIFIED:
+		return "", nil
+	case v1.S3RecallTier_S3_RECALL_TIER_STANDARD:
+		return tenant.RecallStandard, nil
+	case v1.S3RecallTier_S3_RECALL_TIER_BULK:
+		return tenant.RecallBulk, nil
+	case v1.S3RecallTier_S3_RECALL_TIER_EXPEDITED:
+		return tenant.RecallExpedited, nil
 	}
-	return ""
+	return "", invalid(field, "is standard, bulk or expedited")
+}
+
+// recallTierMessage returns a recall speed as the contract writes it.
+func recallTierMessage(sp tenant.RecallSpeed) v1.S3RecallTier {
+	switch sp {
+	case tenant.RecallBulk:
+		return v1.S3RecallTier_S3_RECALL_TIER_BULK
+	case tenant.RecallExpedited:
+		return v1.S3RecallTier_S3_RECALL_TIER_EXPEDITED
+	}
+	return v1.S3RecallTier_S3_RECALL_TIER_STANDARD
+}
+
+// tierOf returns the tier a request names: unspecified is online.
+func tierOf(t v1.StorageTier) tenant.StorageTier {
+	if t == v1.StorageTier_STORAGE_TIER_ARCHIVE {
+		return tenant.TierArchive
+	}
+	return tenant.TierOnline
 }
 
 // storageType returns the type a request's storage names, for an audit
@@ -130,15 +137,21 @@ func storageFromRequest(field string, m *v1.Storage) (tenant.Storage, string, er
 	if err := itemName(field+".name", m.GetName()); err != nil {
 		return tenant.Storage{}, "", err
 	}
-	s := tenant.Storage{Name: m.GetName(), CapacityBytes: m.GetCapacityBytes()}
+	s := tenant.Storage{Name: m.GetName(), CapacityBytes: m.GetCapacityBytes(), ReplicaOf: m.GetReplicaOf(), Tier: tierOf(m.GetTier())}
 	if s.CapacityBytes < 0 || s.CapacityBytes > tenant.MaxCapacityBytes {
 		return tenant.Storage{}, "", invalid(field+".capacity_bytes", "is 0 to 2^62")
+	}
+	if s.ReplicaOf != "" {
+		if err := itemName(field+".replica_of", s.ReplicaOf); err != nil {
+			return tenant.Storage{}, "", err
+		}
 	}
 	var secret string
 	switch t := m.GetType().(type) {
 	case *v1.Storage_Directory:
 		s.Type = tenant.StorageDirectory
 		s.Directory = tenant.DirectoryStorage{Root: t.Directory.GetRoot(), Path: t.Directory.GetPath()}
+		s.EncryptedAtRestDeclared = t.Directory.GetEncryptedAtRestDeclared()
 		if err := itemName(field+".directory.root", s.Directory.Root); err != nil {
 			return tenant.Storage{}, "", err
 		}
@@ -146,7 +159,16 @@ func storageFromRequest(field string, m *v1.Storage) (tenant.Storage, string, er
 		s.Type = tenant.StorageS3
 		x := t.S3
 		s.S3 = tenant.S3Storage{Endpoint: x.GetEndpoint(), Region: x.GetRegion(), Bucket: x.GetBucket(), Prefix: x.GetPrefix(), PathStyle: x.GetPathStyle(),
-			AccessKeyID: x.GetAccessKeyId(), KeepVersions: keepVersions(x)}
+			AccessKeyID: x.GetAccessKeyId(), KeepVersions: keepVersions(x), RecallDays: int(x.GetRecallDays())}
+		var err error
+		if s.S3.RecallSpeed, err = recallSpeedOf(field+".s3.recall_tier", x.GetRecallTier()); err != nil {
+			return tenant.Storage{}, "", err
+		}
+		if s.Tier != tenant.TierArchive {
+			// The contract ignores recall settings on an online storage; the
+			// store keeps them empty there.
+			s.S3.RecallDays, s.S3.RecallSpeed = 0, ""
+		}
 		secret = x.GetSecretAccessKey()
 		if err := secretAccessKey(field+".s3.secret_access_key", secret); err != nil {
 			return tenant.Storage{}, "", err
@@ -186,17 +208,24 @@ func secretAccessKey(field, secret string) error {
 
 // storageChange returns the values a SetStorage request gives, whatever its
 // type, for tenant.ApplyStorage to take the fields its mask names from.
-func storageChange(m *v1.Storage) (tenant.Storage, string) {
+func storageChange(m *v1.Storage) (tenant.Storage, string, error) {
 	d, x := m.GetDirectory(), m.GetS3()
+	speed, err := recallSpeedOf("storage.s3.recall_tier", x.GetRecallTier())
+	if err != nil {
+		return tenant.Storage{}, "", err
+	}
 	return tenant.Storage{
-		Name:          m.GetName(),
-		CapacityBytes: m.GetCapacityBytes(),
-		Directory:     tenant.DirectoryStorage{Root: d.GetRoot(), Path: d.GetPath()},
+		Name:                    m.GetName(),
+		CapacityBytes:           m.GetCapacityBytes(),
+		Tier:                    tierOf(m.GetTier()),
+		EncryptedAtRestDeclared: d.GetEncryptedAtRestDeclared(),
+		Directory:               tenant.DirectoryStorage{Root: d.GetRoot(), Path: d.GetPath()},
 		S3: tenant.S3Storage{
 			Endpoint: x.GetEndpoint(), Region: x.GetRegion(), Bucket: x.GetBucket(), Prefix: x.GetPrefix(),
 			PathStyle: x.GetPathStyle(), AccessKeyID: x.GetAccessKeyId(), KeepVersions: keepVersions(x),
+			RecallDays: int(x.GetRecallDays()), RecallSpeed: speed,
 		},
-	}, x.GetSecretAccessKey()
+	}, x.GetSecretAccessKey(), nil
 }
 
 // keepVersions reads S3Storage.purge_versions as the store keeps it: only
@@ -209,14 +238,14 @@ func keepVersions(x *v1.S3Storage) bool {
 }
 
 // storageMessage returns a storage as the contract writes it: never its
-// secret, only whether one is held. Every storage the server keeps is of
-// the online tier, since an archive tier is refused until it is served.
+// secret, only whether one is held.
 func storageMessage(s tenant.Storage) *v1.Storage {
 	m := &v1.Storage{Name: s.Name, CapacityBytes: s.CapacityBytes, CreateTime: timestamp(s.Created), UpdateTime: timestamp(s.Updated),
-		Tier: v1.StorageTier_STORAGE_TIER_ONLINE}
+		Tier: tierMessage(s.Tier), ReplicaOf: s.ReplicaOf, SwitchGeneration: s.SwitchGeneration}
 	switch s.Type {
 	case tenant.StorageDirectory:
-		m.Type = &v1.Storage_Directory{Directory: &v1.DirectoryStorage{Root: s.Directory.Root, Path: s.Directory.Path}}
+		m.Type = &v1.Storage_Directory{Directory: &v1.DirectoryStorage{Root: s.Directory.Root, Path: s.Directory.Path,
+			EncryptedAtRestDeclared: s.EncryptedAtRestDeclared}}
 	case tenant.StorageS3:
 		m.Type = &v1.Storage_S3{S3: &v1.S3Storage{
 			Endpoint: s.S3.Endpoint, Region: s.S3.Region, Bucket: s.S3.Bucket, Prefix: s.S3.Prefix,
@@ -225,6 +254,14 @@ func storageMessage(s tenant.Storage) *v1.Storage {
 			// that absent means true.
 			PurgeVersions: proto.Bool(!s.S3.KeepVersions),
 		}}
+		if s.Tier == tenant.TierArchive {
+			x := m.GetS3()
+			x.RecallDays = int32(s.S3.RecallDays) //nolint:gosec // G115: at most 365.
+			if x.RecallDays == 0 {
+				x.RecallDays = tenant.DefaultRecallDays
+			}
+			x.RecallTier = recallTierMessage(s.S3.RecallSpeed)
+		}
 	}
 	return m
 }
@@ -259,9 +296,6 @@ func (s storageService) AddStorage(ctx context.Context, req *v1.AddStorageReques
 	}
 	if err := storageTier("storage.tier", req.GetStorage().GetTier(), in.Type == tenant.StorageDirectory); err != nil {
 		return nil, c.failIn(d, st, err)
-	}
-	if msg := notServedStorage(req.GetStorage()); msg != "" {
-		return nil, c.refuseNotServed(d, st, msg)
 	}
 	ref, _ := d.Tenant()
 	c.places.RLock()
@@ -365,9 +399,6 @@ func (s storageService) SetStorage(ctx context.Context, req *v1.SetStorageReques
 				return nil, c.failIn(d, st, err)
 			}
 		}
-		if slices.Contains(storageTierPaths, p) {
-			return nil, c.refuseNotServed(d, st, messageTierNotServed)
-		}
 	}
 	paths, err := storageMask.paths(req.GetUpdateMask())
 	if err != nil {
@@ -377,7 +408,10 @@ func (s storageService) SetStorage(ctx context.Context, req *v1.SetStorageReques
 	for i, p := range paths {
 		fields[i] = tenant.StorageField(p)
 	}
-	change, secret := storageChange(in)
+	change, secret, err := storageChange(in)
+	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
 	newSecret := slices.Contains(fields, tenant.FieldS3SecretKey)
 	if slices.Contains(fields, tenant.FieldS3Endpoint) && !newSecret {
 		// Credentials are given for one store; sent to another host they

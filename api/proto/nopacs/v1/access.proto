@@ -229,8 +229,16 @@ import "google/protobuf/timestamp.proto";
 import "nopacs/v1/scope.proto";
 
 // AccessService manages keys and the grants that give them roles, and tells a
-// caller who it is. In this version only an admin on the installation makes,
-// reads, revokes and grants keys.
+// caller who it is. Only an admin on the installation makes, reads and
+// revokes keys: a key is one person's or system's identity across the
+// installation. A tenant's admin hands out grants on its own tenant: which
+// keys may use a tenant is the tenant's business, so a person holds one key
+// and is let into each tenant by that tenant's admin. A tenant's admin sets,
+// changes and removes grants on that tenant only, at reader, writer or
+// operator; never on its own key; never on a key that is admin there; and
+// never touches a key's networks, expiry or other grants. Making or removing
+// a tenant's admin stays with the installation's admin. Such a refusal is
+// answered permission denied with the rule in its message.
 service AccessService {
   // CreateKey makes a key and answers its secret, once. The server keeps only
   // the SHA-256 of the secret, so it can never show the secret again.
@@ -256,10 +264,14 @@ service AccessService {
   }
 
   // ListKeys answers every key of the installation, revoked and expired keys
-  // included, oldest first.
+  // included, oldest first; or, with a tenant, the keys that hold a grant on
+  // that tenant, in order of key id (ListGrants on the tenant answers their
+  // roles). A tenant's admin is answered only each key's id and holder.
   //
-  // Role: admin on the installation.
-  // Audit: one entry in the installation's log.
+  // Role: admin on the installation; with a tenant, admin on the
+  // installation or on that tenant.
+  // Audit: one entry in the installation's log, with the tenant in details
+  // when one is given.
   // Errors: unauthenticated, permission denied, invalid, unavailable (the
   // master database does not answer).
   rpc ListKeys(ListKeysRequest) returns (ListKeysResponse) {
@@ -289,7 +301,9 @@ service AccessService {
   // same step, so a role is changed without a moment of no access. A role
   // includes the roles below it (Role), so one per scope is enough.
   //
-  // Role: admin on the installation.
+  // Role: admin on the installation; on a tenant, admin on the installation
+  // or on that tenant, a tenant's admin held to its bounds (the service
+  // says which).
   // Audit: one entry in the installation's log, with the key's id as its
   // object, and the scope, the previous role (when there was one) and the new
   // role in details.
@@ -309,7 +323,9 @@ service AccessService {
   // come in order of key id. Exactly one of the two filters is required:
   // there is no listing of every grant at once.
   //
-  // Role: admin on the installation.
+  // Role: admin on the installation; for the grants on a tenant, admin on
+  // the installation or on that tenant. A key's grants on every scope are
+  // the installation's admin's alone to read.
   // Audit: one entry in the installation's log, with the filter in details.
   // Errors: unauthenticated, permission denied, invalid (also a key_id that
   // is not a key id, such as a whole key or more than 12 characters, which
@@ -325,7 +341,9 @@ service AccessService {
   // key does not hold changes nothing and succeeds, so a repeated call does
   // not fail.
   //
-  // Role: admin on the installation.
+  // Role: admin on the installation; on a tenant, admin on the installation
+  // or on that tenant, a tenant's admin held to its bounds (the service
+  // says which).
   // Audit: one entry in the installation's log, with the key's id as its
   // object, and the scope and the role removed (when there was one) in
   // details.
@@ -602,8 +620,14 @@ message ListKeysRequest {
   int32 page_size = 1;
 
   // The next_page_token of the previous page, or empty for the first page.
-  // Opaque; at most 1 KiB.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+  // one it was made with.
   string page_token = 2;
+
+  // Only the keys that hold a grant on the tenant of this name. Empty for
+  // every key, which only an admin on the installation may list. A tenant
+  // that does not exist is answered as for any request naming one.
+  string tenant = 3;
 }
 
 // ListKeysResponse is a page of keys.

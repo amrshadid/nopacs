@@ -101,7 +101,8 @@ func (s accessService) GetKey(ctx context.Context, req *v1.GetKeyRequest) (*v1.G
 	return &v1.GetKeyResponse{Key: keyMessage(k)}, nil
 }
 
-// ListKeys answers a page of every key, oldest first.
+// ListKeys answers a page of every key, oldest first; or, with a tenant, of
+// the keys holding a grant on it, as much of each as the caller may read.
 func (s accessService) ListKeys(ctx context.Context, req *v1.ListKeysRequest) (*v1.ListKeysResponse, error) {
 	c := s.c
 	d, err := c.decision(ctx, nopacsv1connect.AccessServiceListKeysProcedure)
@@ -112,7 +113,16 @@ func (s accessService) ListKeys(ctx context.Context, req *v1.ListKeysRequest) (*
 	if err != nil {
 		return nil, c.fail(d, err)
 	}
-	keys, next, err := c.access.ListKeys(ctx, d, page)
+	var keys []master.Key
+	var next string
+	if req.GetTenant() != "" {
+		if err := tenantName("tenant", req.GetTenant()); err != nil {
+			return nil, c.fail(d, err)
+		}
+		keys, next, err = c.access.ListKeysOnTenant(ctx, d, req.GetTenant(), page)
+	} else {
+		keys, next, err = c.access.ListKeys(ctx, d, page)
+	}
 	if err != nil {
 		return nil, c.toAPI(d, listError(err, page.Cursor))
 	}

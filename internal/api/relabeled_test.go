@@ -13,6 +13,7 @@ import (
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/access"
 	"github.com/amrshadid/nopacs/internal/api"
+	"github.com/amrshadid/nopacs/internal/api/codes"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
 )
@@ -149,6 +150,19 @@ func TestOldLabelsPointToTheNewOnes(t *testing.T) {
 		msg := messageOf(err)
 		if !isNotFound(err) || !strings.HasPrefix(msg, "RELABELED: ") || !strings.Contains(msg, "the relabel "+id) || !strings.Contains(msg, r.want) {
 			t.Errorf("%s by the old label, as an operator, answered %v, want NOT_FOUND RELABELED naming %s and %q", r.name, err, id, r.want)
+		}
+		// The reason travels as an ErrorInfo detail too, with the relabel's
+		// id and the label at the depth asked (the plain download's body
+		// carries no details).
+		var ce *connect.Error
+		if r.name != "download" {
+			if !errors.As(err, &ce) {
+				t.Fatalf("%s answered %v, not an API error", r.name, err)
+			}
+			ri, ok := codes.ReasonOfError(ce)
+			if want := r.want[strings.LastIndexByte(r.want, ' ')+1:]; !ok || ri.Reason != "RELABELED" || ri.Metadata["correction"] != id || ri.Metadata["to_label"] != want {
+				t.Errorf("%s by the old label: error info %+v %v, want RELABELED, %s, %s", r.name, ri, ok, id, want)
+			}
 		}
 		if err := r.call(c.lab1Reader); !bare(err, id) {
 			t.Errorf("%s by the old label, as a reader, answered %v, want a bare not found", r.name, err)

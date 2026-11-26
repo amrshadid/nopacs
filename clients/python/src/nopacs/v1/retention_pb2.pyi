@@ -312,12 +312,14 @@ class ConfirmClockRequest(_message.Message):
     def __init__(self, scope: _Optional[_Union[_scope_pb2.Scope, _Mapping]] = ..., observed_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., reason: _Optional[str] = ...) -> None: ...
 
 class ConfirmClockResponse(_message.Message):
-    __slots__ = ("tenants", "status")
+    __slots__ = ("tenants", "status", "tenants_refused")
     TENANTS_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
+    TENANTS_REFUSED_FIELD_NUMBER: _ClassVar[int]
     tenants: _containers.RepeatedScalarFieldContainer[str]
     status: RetentionStatus
-    def __init__(self, tenants: _Optional[_Iterable[str]] = ..., status: _Optional[_Union[RetentionStatus, _Mapping]] = ...) -> None: ...
+    tenants_refused: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, tenants: _Optional[_Iterable[str]] = ..., status: _Optional[_Union[RetentionStatus, _Mapping]] = ..., tenants_refused: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class PlaceHoldRequest(_message.Message):
     __slots__ = ("tenant", "target", "reason")

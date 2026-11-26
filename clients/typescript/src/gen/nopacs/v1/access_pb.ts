@@ -237,7 +237,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/access.proto.
  */
 export const file_nopacs_v1_access: GenFile = /*@__PURE__*/
-  fileDesc("ChZub3BhY3MvdjEvYWNjZXNzLnByb3RvEglub3BhY3MudjEiigMKA0tleRIKCgJpZBgBIAEoCRIOCgZob2xkZXIYAiABKAkSLwoLY3JlYXRlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2V4cGlyZV90aW1lGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg1sYXN0X3VzZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtyZXZva2VfdGltZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIbmV0d29ya3MYByADKAkSGgoSY2xpZW50X2NlcnRfc2hhMjU2GAggASgJEhgKEGxhc3RfdXNlX2FkZHJlc3MYCSABKAkSFAoMc3VjY2Vzc29yX2lkGAogASgJEhEKCXN1c3BlbmRlZBgLIAEoCBIwCgxzdXNwZW5kX3RpbWUYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlcKBUdyYW50Eg4KBmtleV9pZBgBIAEoCRIfCgVzY29wZRgCIAEoCzIQLm5vcGFjcy52MS5TY29wZRIdCgRyb2xlGAMgASgOMg8ubm9wYWNzLnYxLlJvbGUiigEKCVByaW5jaXBhbBIdCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5SAASMgoObG9jYWxfb3BlcmF0b3IYAiABKAsyGC5ub3BhY3MudjEuTG9jYWxPcGVyYXRvckgAEiAKBmdyYW50cxgDIAMoCzIQLm5vcGFjcy52MS5HcmFudEIICgZjYWxsZXIiIAoNTG9jYWxPcGVyYXRvchIPCgd1c2VyX2lkGAEgASgJIqUBChBDcmVhdGVLZXlSZXF1ZXN0Eg4KBmhvbGRlchgBIAEoCRIxCgxleHBpcmVfYWZ0ZXIYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb25IABIWCgxuZXZlcl9leHBpcmUYAyABKAhIABIQCghuZXR3b3JrcxgEIAMoCRIaChJjbGllbnRfY2VydF9zaGEyNTYYBSABKAlCCAoGZXhwaXJ5IkUKEUNyZWF0ZUtleVJlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkSEwoGc2VjcmV0GAIgASgJQgOAAQEiGwoNR2V0S2V5UmVxdWVzdBIKCgJpZBgBIAEoCSItCg5HZXRLZXlSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5IjgKD0xpc3RLZXlzUmVxdWVzdBIRCglwYWdlX3NpemUYASABKAUSEgoKcGFnZV90b2tlbhgCIAEoCSJJChBMaXN0S2V5c1Jlc3BvbnNlEhwKBGtleXMYASADKAsyDi5ub3BhY3MudjEuS2V5EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSIeChBSZXZva2VLZXlSZXF1ZXN0EgoKAmlkGAEgASgJIjAKEVJldm9rZUtleVJlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkiYQoPU2V0R3JhbnRSZXF1ZXN0Eg4KBmtleV9pZBgBIAEoCRIfCgVzY29wZRgCIAEoCzIQLm5vcGFjcy52MS5TY29wZRIdCgRyb2xlGAMgASgOMg8ubm9wYWNzLnYxLlJvbGUiWwoQU2V0R3JhbnRSZXNwb25zZRIfCgVncmFudBgBIAEoCzIQLm5vcGFjcy52MS5HcmFudBImCg1wcmV2aW91c19yb2xlGAIgASgOMg8ubm9wYWNzLnYxLlJvbGUieQoRTGlzdEdyYW50c1JlcXVlc3QSEAoGa2V5X2lkGAEgASgJSAASIQoFc2NvcGUYAiABKAsyEC5ub3BhY3MudjEuU2NvcGVIABIRCglwYWdlX3NpemUYAyABKAUSEgoKcGFnZV90b2tlbhgEIAEoCUIICgZmaWx0ZXIiTwoSTGlzdEdyYW50c1Jlc3BvbnNlEiAKBmdyYW50cxgBIAMoCzIQLm5vcGFjcy52MS5HcmFudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiRQoSUmVtb3ZlR3JhbnRSZXF1ZXN0Eg4KBmtleV9pZBgBIAEoCRIfCgVzY29wZRgCIAEoCzIQLm5vcGFjcy52MS5TY29wZSI9ChNSZW1vdmVHcmFudFJlc3BvbnNlEiYKDXByZXZpb3VzX3JvbGUYASABKA4yDy5ub3BhY3MudjEuUm9sZSIPCg1XaG9BbUlSZXF1ZXN0IjkKDldob0FtSVJlc3BvbnNlEicKCXByaW5jaXBhbBgBIAEoCzIULm5vcGFjcy52MS5QcmluY2lwYWwiSgoQUm90YXRlS2V5UmVxdWVzdBIKCgJpZBgBIAEoCRIqCgdvdmVybGFwGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uImYKEVJvdGF0ZUtleVJlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkSEwoGc2VjcmV0GAIgASgJQgOAAQESHwoHcm90YXRlZBgDIAEoCzIOLm5vcGFjcy52MS5LZXkiTgoSU2V0S2V5UnVsZXNSZXF1ZXN0EgoKAmlkGAEgASgJEhAKCG5ldHdvcmtzGAIgAygJEhoKEmNsaWVudF9jZXJ0X3NoYTI1NhgDIAEoCSIyChNTZXRLZXlSdWxlc1Jlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkiNAoUUmVpbnN0YXRlS2V5c1JlcXVlc3QSDwoHa2V5X2lkcxgBIAMoCRILCgNhbGwYAiABKAgiSQoVUmVpbnN0YXRlS2V5c1Jlc3BvbnNlEhwKBGtleXMYASADKAsyDi5ub3BhY3MudjEuS2V5EhIKCnJlaW5zdGF0ZWQYAiABKAMqYQoEUm9sZRIUChBST0xFX1VOU1BFQ0lGSUVEEAASDwoLUk9MRV9SRUFERVIQARIPCgtST0xFX1dSSVRFUhACEhEKDVJPTEVfT1BFUkFUT1IQAxIOCgpST0xFX0FETUlOEAQy1wYKDUFjY2Vzc1NlcnZpY2USRgoJQ3JlYXRlS2V5Ehsubm9wYWNzLnYxLkNyZWF0ZUtleVJlcXVlc3QaHC5ub3BhY3MudjEuQ3JlYXRlS2V5UmVzcG9uc2USQgoGR2V0S2V5Ehgubm9wYWNzLnYxLkdldEtleVJlcXVlc3QaGS5ub3BhY3MudjEuR2V0S2V5UmVzcG9uc2UiA5ACARJICghMaXN0S2V5cxIaLm5vcGFjcy52MS5MaXN0S2V5c1JlcXVlc3QaGy5ub3BhY3MudjEuTGlzdEtleXNSZXNwb25zZSIDkAIBEksKCVJldm9rZUtleRIbLm5vcGFjcy52MS5SZXZva2VLZXlSZXF1ZXN0Ghwubm9wYWNzLnYxLlJldm9rZUtleVJlc3BvbnNlIgOQAgISSAoIU2V0R3JhbnQSGi5ub3BhY3MudjEuU2V0R3JhbnRSZXF1ZXN0Ghsubm9wYWNzLnYxLlNldEdyYW50UmVzcG9uc2UiA5ACAhJOCgpMaXN0R3JhbnRzEhwubm9wYWNzLnYxLkxpc3RHcmFudHNSZXF1ZXN0Gh0ubm9wYWNzLnYxLkxpc3RHcmFudHNSZXNwb25zZSIDkAIBElEKC1JlbW92ZUdyYW50Eh0ubm9wYWNzLnYxLlJlbW92ZUdyYW50UmVxdWVzdBoeLm5vcGFjcy52MS5SZW1vdmVHcmFudFJlc3BvbnNlIgOQAgISQgoGV2hvQW1JEhgubm9wYWNzLnYxLldob0FtSVJlcXVlc3QaGS5ub3BhY3MudjEuV2hvQW1JUmVzcG9uc2UiA5ACARJGCglSb3RhdGVLZXkSGy5ub3BhY3MudjEuUm90YXRlS2V5UmVxdWVzdBocLm5vcGFjcy52MS5Sb3RhdGVLZXlSZXNwb25zZRJRCgtTZXRLZXlSdWxlcxIdLm5vcGFjcy52MS5TZXRLZXlSdWxlc1JlcXVlc3QaHi5ub3BhY3MudjEuU2V0S2V5UnVsZXNSZXNwb25zZSIDkAICElcKDVJlaW5zdGF0ZUtleXMSHy5ub3BhY3MudjEuUmVpbnN0YXRlS2V5c1JlcXVlc3QaIC5ub3BhY3MudjEuUmVpbnN0YXRlS2V5c1Jlc3BvbnNlIgOQAgJiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_nopacs_v1_scope]);
+  fileDesc("ChZub3BhY3MvdjEvYWNjZXNzLnByb3RvEglub3BhY3MudjEiigMKA0tleRIKCgJpZBgBIAEoCRIOCgZob2xkZXIYAiABKAkSLwoLY3JlYXRlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2V4cGlyZV90aW1lGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg1sYXN0X3VzZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtyZXZva2VfdGltZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIbmV0d29ya3MYByADKAkSGgoSY2xpZW50X2NlcnRfc2hhMjU2GAggASgJEhgKEGxhc3RfdXNlX2FkZHJlc3MYCSABKAkSFAoMc3VjY2Vzc29yX2lkGAogASgJEhEKCXN1c3BlbmRlZBgLIAEoCBIwCgxzdXNwZW5kX3RpbWUYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlcKBUdyYW50Eg4KBmtleV9pZBgBIAEoCRIfCgVzY29wZRgCIAEoCzIQLm5vcGFjcy52MS5TY29wZRIdCgRyb2xlGAMgASgOMg8ubm9wYWNzLnYxLlJvbGUiigEKCVByaW5jaXBhbBIdCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5SAASMgoObG9jYWxfb3BlcmF0b3IYAiABKAsyGC5ub3BhY3MudjEuTG9jYWxPcGVyYXRvckgAEiAKBmdyYW50cxgDIAMoCzIQLm5vcGFjcy52MS5HcmFudEIICgZjYWxsZXIiIAoNTG9jYWxPcGVyYXRvchIPCgd1c2VyX2lkGAEgASgJIqUBChBDcmVhdGVLZXlSZXF1ZXN0Eg4KBmhvbGRlchgBIAEoCRIxCgxleHBpcmVfYWZ0ZXIYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb25IABIWCgxuZXZlcl9leHBpcmUYAyABKAhIABIQCghuZXR3b3JrcxgEIAMoCRIaChJjbGllbnRfY2VydF9zaGEyNTYYBSABKAlCCAoGZXhwaXJ5IkUKEUNyZWF0ZUtleVJlc3BvbnNlEhsKA2tleRgBIAEoCzIOLm5vcGFjcy52MS5LZXkSEwoGc2VjcmV0GAIgASgJQgOAAQEiGwoNR2V0S2V5UmVxdWVzdBIKCgJpZBgBIAEoCSItCg5HZXRLZXlSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5IkgKD0xpc3RLZXlzUmVxdWVzdBIRCglwYWdlX3NpemUYASABKAUSEgoKcGFnZV90b2tlbhgCIAEoCRIOCgZ0ZW5hbnQYAyABKAkiSQoQTGlzdEtleXNSZXNwb25zZRIcCgRrZXlzGAEgAygLMg4ubm9wYWNzLnYxLktleRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiHgoQUmV2b2tlS2V5UmVxdWVzdBIKCgJpZBgBIAEoCSIwChFSZXZva2VLZXlSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5ImEKD1NldEdyYW50UmVxdWVzdBIOCgZrZXlfaWQYASABKAkSHwoFc2NvcGUYAiABKAsyEC5ub3BhY3MudjEuU2NvcGUSHQoEcm9sZRgDIAEoDjIPLm5vcGFjcy52MS5Sb2xlIlsKEFNldEdyYW50UmVzcG9uc2USHwoFZ3JhbnQYASABKAsyEC5ub3BhY3MudjEuR3JhbnQSJgoNcHJldmlvdXNfcm9sZRgCIAEoDjIPLm5vcGFjcy52MS5Sb2xlInkKEUxpc3RHcmFudHNSZXF1ZXN0EhAKBmtleV9pZBgBIAEoCUgAEiEKBXNjb3BlGAIgASgLMhAubm9wYWNzLnYxLlNjb3BlSAASEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAlCCAoGZmlsdGVyIk8KEkxpc3RHcmFudHNSZXNwb25zZRIgCgZncmFudHMYASADKAsyEC5ub3BhY3MudjEuR3JhbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIkUKElJlbW92ZUdyYW50UmVxdWVzdBIOCgZrZXlfaWQYASABKAkSHwoFc2NvcGUYAiABKAsyEC5ub3BhY3MudjEuU2NvcGUiPQoTUmVtb3ZlR3JhbnRSZXNwb25zZRImCg1wcmV2aW91c19yb2xlGAEgASgOMg8ubm9wYWNzLnYxLlJvbGUiDwoNV2hvQW1JUmVxdWVzdCI5Cg5XaG9BbUlSZXNwb25zZRInCglwcmluY2lwYWwYASABKAsyFC5ub3BhY3MudjEuUHJpbmNpcGFsIkoKEFJvdGF0ZUtleVJlcXVlc3QSCgoCaWQYASABKAkSKgoHb3ZlcmxhcBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJmChFSb3RhdGVLZXlSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5EhMKBnNlY3JldBgCIAEoCUIDgAEBEh8KB3JvdGF0ZWQYAyABKAsyDi5ub3BhY3MudjEuS2V5Ik4KElNldEtleVJ1bGVzUmVxdWVzdBIKCgJpZBgBIAEoCRIQCghuZXR3b3JrcxgCIAMoCRIaChJjbGllbnRfY2VydF9zaGEyNTYYAyABKAkiMgoTU2V0S2V5UnVsZXNSZXNwb25zZRIbCgNrZXkYASABKAsyDi5ub3BhY3MudjEuS2V5IjQKFFJlaW5zdGF0ZUtleXNSZXF1ZXN0Eg8KB2tleV9pZHMYASADKAkSCwoDYWxsGAIgASgIIkkKFVJlaW5zdGF0ZUtleXNSZXNwb25zZRIcCgRrZXlzGAEgAygLMg4ubm9wYWNzLnYxLktleRISCgpyZWluc3RhdGVkGAIgASgDKmEKBFJvbGUSFAoQUk9MRV9VTlNQRUNJRklFRBAAEg8KC1JPTEVfUkVBREVSEAESDwoLUk9MRV9XUklURVIQAhIRCg1ST0xFX09QRVJBVE9SEAMSDgoKUk9MRV9BRE1JThAEMtcGCg1BY2Nlc3NTZXJ2aWNlEkYKCUNyZWF0ZUtleRIbLm5vcGFjcy52MS5DcmVhdGVLZXlSZXF1ZXN0Ghwubm9wYWNzLnYxLkNyZWF0ZUtleVJlc3BvbnNlEkIKBkdldEtleRIYLm5vcGFjcy52MS5HZXRLZXlSZXF1ZXN0Ghkubm9wYWNzLnYxLkdldEtleVJlc3BvbnNlIgOQAgESSAoITGlzdEtleXMSGi5ub3BhY3MudjEuTGlzdEtleXNSZXF1ZXN0Ghsubm9wYWNzLnYxLkxpc3RLZXlzUmVzcG9uc2UiA5ACARJLCglSZXZva2VLZXkSGy5ub3BhY3MudjEuUmV2b2tlS2V5UmVxdWVzdBocLm5vcGFjcy52MS5SZXZva2VLZXlSZXNwb25zZSIDkAICEkgKCFNldEdyYW50Ehoubm9wYWNzLnYxLlNldEdyYW50UmVxdWVzdBobLm5vcGFjcy52MS5TZXRHcmFudFJlc3BvbnNlIgOQAgISTgoKTGlzdEdyYW50cxIcLm5vcGFjcy52MS5MaXN0R3JhbnRzUmVxdWVzdBodLm5vcGFjcy52MS5MaXN0R3JhbnRzUmVzcG9uc2UiA5ACARJRCgtSZW1vdmVHcmFudBIdLm5vcGFjcy52MS5SZW1vdmVHcmFudFJlcXVlc3QaHi5ub3BhY3MudjEuUmVtb3ZlR3JhbnRSZXNwb25zZSIDkAICEkIKBldob0FtSRIYLm5vcGFjcy52MS5XaG9BbUlSZXF1ZXN0Ghkubm9wYWNzLnYxLldob0FtSVJlc3BvbnNlIgOQAgESRgoJUm90YXRlS2V5Ehsubm9wYWNzLnYxLlJvdGF0ZUtleVJlcXVlc3QaHC5ub3BhY3MudjEuUm90YXRlS2V5UmVzcG9uc2USUQoLU2V0S2V5UnVsZXMSHS5ub3BhY3MudjEuU2V0S2V5UnVsZXNSZXF1ZXN0Gh4ubm9wYWNzLnYxLlNldEtleVJ1bGVzUmVzcG9uc2UiA5ACAhJXCg1SZWluc3RhdGVLZXlzEh8ubm9wYWNzLnYxLlJlaW5zdGF0ZUtleXNSZXF1ZXN0GiAubm9wYWNzLnYxLlJlaW5zdGF0ZUtleXNSZXNwb25zZSIDkAICYgZwcm90bzM", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_nopacs_v1_scope]);
 
 /**
  * Key is a credential held by a person or a system. It never carries its
@@ -617,11 +617,21 @@ export type ListKeysRequest = Message<"nopacs.v1.ListKeysRequest"> & {
 
   /**
    * The next_page_token of the previous page, or empty for the first page.
-   * Opaque; at most 1 KiB.
+   * Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+   * one it was made with.
    *
    * @generated from field: string page_token = 2;
    */
   pageToken: string;
+
+  /**
+   * Only the keys that hold a grant on the tenant of this name. Empty for
+   * every key, which only an admin on the installation may list. A tenant
+   * that does not exist is answered as for any request naming one.
+   *
+   * @generated from field: string tenant = 3;
+   */
+  tenant: string;
 };
 
 /**
@@ -1181,8 +1191,16 @@ export const RoleSchema: GenEnum<Role> = /*@__PURE__*/
 
 /**
  * AccessService manages keys and the grants that give them roles, and tells a
- * caller who it is. In this version only an admin on the installation makes,
- * reads, revokes and grants keys.
+ * caller who it is. Only an admin on the installation makes, reads and
+ * revokes keys: a key is one person's or system's identity across the
+ * installation. A tenant's admin hands out grants on its own tenant: which
+ * keys may use a tenant is the tenant's business, so a person holds one key
+ * and is let into each tenant by that tenant's admin. A tenant's admin sets,
+ * changes and removes grants on that tenant only, at reader, writer or
+ * operator; never on its own key; never on a key that is admin there; and
+ * never touches a key's networks, expiry or other grants. Making or removing
+ * a tenant's admin stays with the installation's admin. Such a refusal is
+ * answered permission denied with the rule in its message.
  *
  * @generated from service nopacs.v1.AccessService
  */
@@ -1224,10 +1242,14 @@ export const AccessService: GenService<{
   },
   /**
    * ListKeys answers every key of the installation, revoked and expired keys
-   * included, oldest first.
+   * included, oldest first; or, with a tenant, the keys that hold a grant on
+   * that tenant, in order of key id (ListGrants on the tenant answers their
+   * roles). A tenant's admin is answered only each key's id and holder.
    *
-   * Role: admin on the installation.
-   * Audit: one entry in the installation's log.
+   * Role: admin on the installation; with a tenant, admin on the
+   * installation or on that tenant.
+   * Audit: one entry in the installation's log, with the tenant in details
+   * when one is given.
    * Errors: unauthenticated, permission denied, invalid, unavailable (the
    * master database does not answer).
    *
@@ -1267,7 +1289,9 @@ export const AccessService: GenService<{
    * same step, so a role is changed without a moment of no access. A role
    * includes the roles below it (Role), so one per scope is enough.
    *
-   * Role: admin on the installation.
+   * Role: admin on the installation; on a tenant, admin on the installation
+   * or on that tenant, a tenant's admin held to its bounds (the service
+   * says which).
    * Audit: one entry in the installation's log, with the key's id as its
    * object, and the scope, the previous role (when there was one) and the new
    * role in details.
@@ -1292,7 +1316,9 @@ export const AccessService: GenService<{
    * come in order of key id. Exactly one of the two filters is required:
    * there is no listing of every grant at once.
    *
-   * Role: admin on the installation.
+   * Role: admin on the installation; for the grants on a tenant, admin on
+   * the installation or on that tenant. A key's grants on every scope are
+   * the installation's admin's alone to read.
    * Audit: one entry in the installation's log, with the filter in details.
    * Errors: unauthenticated, permission denied, invalid (also a key_id that
    * is not a key id, such as a whole key or more than 12 characters, which
@@ -1313,7 +1339,9 @@ export const AccessService: GenService<{
    * key does not hold changes nothing and succeeds, so a repeated call does
    * not fail.
    *
-   * Role: admin on the installation.
+   * Role: admin on the installation; on a tenant, admin on the installation
+   * or on that tenant, a tenant's admin held to its bounds (the service
+   * says which).
    * Audit: one entry in the installation's log, with the key's id as its
    * object, and the scope and the role removed (when there was one) in
    * details.

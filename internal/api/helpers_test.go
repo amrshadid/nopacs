@@ -339,6 +339,12 @@ type env struct {
 	// sealPauses counts the pauses of the audit's sealing pass the handlers
 	// hold now.
 	sealPauses atomic.Int64
+	// switches is the switch runner the handlers are given, which a test
+	// sets (testSwitches).
+	switches testSwitches
+	// reports is what the handlers are told of storages beyond the
+	// database (testReports).
+	reports testReports
 }
 
 // newEnv returns a running installation with no tenant and no key, whose
@@ -413,7 +419,7 @@ func newEnvChecking(t testing.TB, interval time.Duration) *env {
 	e.engines = newTestEngines(t, e)
 	h, err := api.New(api.Config{Access: e.access, Registry: e.registry, Master: e.faulty, NewID: tenantID, Log: logger, Settings: e.known, Keys: e.keys, Now: e.now,
 		Incoming: e.parts, Headers: e.parts, HeldFiles: e.parts, Receivers: e.parts, Feeds: feeds, Installation: testInstallation,
-		Corrections: e.engines, ReplaceSources: testReplaceSources{e}, Handoffs: &e.handoffs,
+		Corrections: e.engines, ReplaceSources: testReplaceSources{e}, Handoffs: &e.handoffs, Switches: &e.switches, StorageReports: &e.reports,
 		SealPause: func(context.Context) (func(), error) {
 			e.sealPauses.Add(1)
 			return func() { e.sealPauses.Add(-1) }, nil
@@ -629,6 +635,9 @@ type clients struct {
 	corrections nopacsv1connect.CorrectionServiceClient
 	// backups is BackupService's client.
 	backups nopacsv1connect.BackupServiceClient
+	// replicas is ReplicaService's client; retention RetentionService's.
+	replicas  nopacsv1connect.ReplicaServiceClient
+	retention nopacsv1connect.RetentionServiceClient
 }
 
 // as returns clients that call as c.
@@ -668,6 +677,8 @@ func (e *env) as(c caller) clients {
 		// The correction service's.
 		corrections: nopacsv1connect.NewCorrectionServiceClient(cl),
 		backups:     nopacsv1connect.NewBackupServiceClient(cl),
+		replicas:    nopacsv1connect.NewReplicaServiceClient(cl),
+		retention:   nopacsv1connect.NewRetentionServiceClient(cl),
 	}
 }
 

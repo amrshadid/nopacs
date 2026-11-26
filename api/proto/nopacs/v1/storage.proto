@@ -449,6 +449,44 @@ message DirectoryStorage {
   // the tenant's directory itself. Not absolute: a leading "/" is invalid. It is not a
   // secret, and is answered to every caller who may read the storage.
   string path = 2;
+
+  // The admin's statement that the volume under the directory encrypts what
+  // it holds at rest (a disk or file system encryption the site set up).
+  // The server cannot ask a directory, so its status shows this statement
+  // as declared or not declared (StorageStatus.encryption_at_rest), never
+  // as a fact it checked; image data is encrypted by the storage, not by
+  // the server. False by default.
+  bool encrypted_at_rest_declared = 3;
+}
+
+// EncryptionAtRest is what a storage's status says of whether the storage
+// encrypts what it holds. An S3 storage is asked when the server opens it
+// (the bucket's default encryption); a directory shows the admin's
+// statement (DirectoryStorage.encrypted_at_rest_declared). The server does
+// not encrypt image data itself, and makes no claim beyond what the storage
+// or the admin said. A value added later is a new value; a client shows
+// one it does not know as unknown.
+enum EncryptionAtRest {
+  // Never answered by the server.
+  ENCRYPTION_AT_REST_UNSPECIFIED = 0;
+
+  // An S3 storage that could not be asked, or would not say (credentials
+  // that may not read the setting, a server without it), or one the server
+  // has not opened yet.
+  ENCRYPTION_AT_REST_UNKNOWN = 1;
+
+  // An S3 storage that says it does not encrypt new objects by default.
+  ENCRYPTION_AT_REST_NONE = 2;
+
+  // An S3 storage that says it encrypts new objects by default, with
+  // StorageStatus.encryption_algorithm.
+  ENCRYPTION_AT_REST_ENCRYPTED = 3;
+
+  // A directory whose admin declared its volume encrypts at rest.
+  ENCRYPTION_AT_REST_DECLARED = 4;
+
+  // A directory whose admin made no such statement.
+  ENCRYPTION_AT_REST_NOT_DECLARED = 5;
 }
 
 // S3Storage is a bucket, or a part of one under a prefix, on an object store
@@ -698,7 +736,8 @@ message SetStorageRequest {
 
   // The fields to change, as paths of Storage: "capacity_bytes", or a field
   // of the storage's type joined to it by a dot, such as "s3.endpoint" or
-  // "directory.path"; also "tier", "s3.recall_days" and "s3.recall_tier".
+  // "directory.path"; also "tier", "s3.recall_days", "s3.recall_tier" and
+  // "directory.encrypted_at_rest_declared".
   // "replica_of", "switch_generation", "create_time" and "update_time" are
   // not paths a change may name. A path that names a type's whole message ("s3",
   // "directory") is refused: its fields are named one by one, so a secret

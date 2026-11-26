@@ -388,6 +388,21 @@ scan, keeps it whole, and serves it through an API with keys.
   `replica.repair-lease`, `retention.shorten-notice`,
   `retention.max-clock-step`, `retention.max-per-pass`, `quarantine.warn-age`,
   `quarantine.warn-bytes`.
+- The API serves replicas (list, attach, detach, repair, switch with its
+  preview and token) and retention (rules, due sessions, disposal with a
+  server-keyed token bound to its rule, clock confirmation that names the
+  tenants it left paused, hold reads); storages take a replica, the archive
+  tier, recall settings and a directory's declared encryption; storage status
+  shows tier, replica, switching, encryption at rest and scrub coverage;
+  corrections show their dispositions on every copy. Every reason the
+  contract names travels as google.rpc.ErrorInfo, with RetryInfo where a
+  retry is meant (`STORAGE_SWITCHING`).
+- A tenant's admin sets, changes and removes reader, writer and operator
+  grants on its tenant and lists its keys; never an admin's grant (the
+  tenant's or the installation's), never its own; the bounds are checked in
+  the master's transaction. `override_retention` is taken only from an
+  installation admin or the local operator, checked again when the delete
+  commits.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

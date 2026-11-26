@@ -1929,9 +1929,15 @@ type ConfirmClockResponse struct {
 	Tenants []string `protobuf:"bytes,1,rep,name=tenants,proto3" json:"tenants,omitempty"`
 	// With a tenant scope, where its retention stands now; absent with the
 	// installation.
-	Status        *RetentionStatus `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Status *RetentionStatus `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	// With the installation, the names of the paused tenants whose
+	// confirmation was refused or failed, ordered by name: the key no longer
+	// admin on the installation when the tenant's change was made, the
+	// tenant moved or fenced since, or its database not answering. Each is
+	// still paused. Empty with a tenant scope, whose refusal is the error.
+	TenantsRefused []string `protobuf:"bytes,3,rep,name=tenants_refused,json=tenantsRefused,proto3" json:"tenants_refused,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ConfirmClockResponse) Reset() {
@@ -1974,6 +1980,13 @@ func (x *ConfirmClockResponse) GetTenants() []string {
 func (x *ConfirmClockResponse) GetStatus() *RetentionStatus {
 	if x != nil {
 		return x.Status
+	}
+	return nil
+}
+
+func (x *ConfirmClockResponse) GetTenantsRefused() []string {
+	if x != nil {
+		return x.TenantsRefused
 	}
 	return nil
 }
@@ -2580,10 +2593,11 @@ const file_nopacs_v1_retention_proto_rawDesc = "" +
 	"\x13ConfirmClockRequest\x12&\n" +
 	"\x05scope\x18\x01 \x01(\v2\x10.nopacs.v1.ScopeR\x05scope\x12?\n" +
 	"\robserved_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fobservedTime\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"d\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x8d\x01\n" +
 	"\x14ConfirmClockResponse\x12\x18\n" +
 	"\atenants\x18\x01 \x03(\tR\atenants\x122\n" +
-	"\x06status\x18\x02 \x01(\v2\x1a.nopacs.v1.RetentionStatusR\x06status\"q\n" +
+	"\x06status\x18\x02 \x01(\v2\x1a.nopacs.v1.RetentionStatusR\x06status\x12'\n" +
+	"\x0ftenants_refused\x18\x03 \x03(\tR\x0etenantsRefused\"q\n" +
 	"\x10PlaceHoldRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12-\n" +
 	"\x06target\x18\x02 \x01(\v2\x15.nopacs.v1.HoldTargetR\x06target\x12\x16\n" +

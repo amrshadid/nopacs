@@ -162,6 +162,55 @@ func (a *Access) actFor(d Decision, needAdmin bool, object string, details map[s
 	return e, d.Actor(master.Installation, role), nil
 }
 
+// installationAdmin reports whether d's caller holds admin on the
+// installation, as the check read it: the local operator, or a key with that
+// grant.
+func (d Decision) installationAdmin() bool {
+	return atLeast(d.principal.Role(master.Installation), master.RoleAdmin)
+}
+
+// grantsActor returns the actor a change of grants is made by: admin on the
+// installation for the installation's admin and the local operator, and
+// otherwise admin on the tenant the request named, whose bounds the master
+// holds the change to (master.CheckGrantChange).
+func (d Decision) grantsActor() master.Actor {
+	if d.installationAdmin() || !d.hasTenant {
+		return d.Actor(master.Installation, master.RoleAdmin)
+	}
+	return d.Actor(master.TenantScope(d.tenant.ID), master.RoleAdmin)
+}
+
+// actForGrants is actFor for an operation on the grants of scope or on the
+// keys that hold grants there: the installation's admin may act on every
+// scope; a tenant's admin, allowed by TenantGrants, only on the very tenant
+// the check read its role on. It returns the entry, the actor, and whether
+// the caller acts as a tenant's admin, so a listing answers it less.
+func (a *Access) actForGrants(d Decision, scope Scope, object string, details map[string]string) (master.AuditEntry, master.Actor, bool, error) {
+	if d.checked() && !d.installationAdmin() && d.req.kind == needTenantGrants && d.hasTenant &&
+		!scope.IsInstallation() && scope.Tenant == d.tenant.Name &&
+		atLeast(d.principal.Role(master.TenantScope(d.tenant.ID)), master.RoleAdmin) {
+		e, _, err := a.actFor(d, false, object, details)
+		if err != nil {
+			return master.AuditEntry{}, master.Actor{}, false, err
+		}
+		return e, d.grantsActor(), true, nil
+	}
+	e, by, err := a.actFor(d, true, object, details)
+	return e, by, false, err
+}
+
+// changeGrants is change for a change of grants on scope (actForGrants).
+func (a *Access) changeGrants(ctx context.Context, d Decision, scope Scope, object string, details map[string]string) (master.AuditEntry, master.Actor, error) {
+	e, by, _, err := a.actForGrants(d, scope, object, details)
+	if err != nil || d.confirmed {
+		return e, by, err
+	}
+	if err := a.store.CheckActor(ctx, by); err != nil {
+		return master.AuditEntry{}, master.Actor{}, a.failAfter(e, err)
+	}
+	return e, by, nil
+}
+
 // change is actFor for an operation that changes the master: the actor goes
 // into the change, whose transaction checks it. Before anything else reads
 // what the request names (the key to revoke, the tenant of a scope) or
@@ -203,6 +252,8 @@ func (a *Access) Confirm(ctx context.Context, d Decision) (Decision, error) {
 		by = d.Actor(master.Installation, d.req.role)
 	case needTenant:
 		by = d.Actor(master.TenantScope(d.tenant.ID), d.req.role)
+	case needTenantGrants:
+		by = d.grantsActor()
 	default:
 		by = d.Actor(master.Installation, "")
 	}
@@ -267,6 +318,14 @@ func (a *Access) failAfter(e master.AuditEntry, err error) error {
 		// The id source gave an id already used, so the failure is recorded
 		// under a fresh one rather than refused again for the same reason.
 		e.ID = a.newID()
+	}
+	if errors.Is(err, master.ErrGrantBound) {
+		// A tenant's admin past what it may do: a refusal, with the rule it
+		// broke, which the caller may read.
+		e.Outcome = master.OutcomeRefused
+		e.Reason = auditText(fault.Message(err), master.MaxAuditReasonLength)
+		a.enqueueRecord(a.store, e)
+		return fault.New(fault.Denied, fault.Message(err))
 	}
 	e.Outcome = master.OutcomeFailed
 	switch fault.KindOf(err) {
@@ -370,6 +429,71 @@ func (a *Access) GetKey(ctx context.Context, d Decision, id string) (master.Key,
 	return publicKey(k), nil
 }
 
+// readGrants is read for a listing of the grants on scope, or of the keys
+// that hold them (actForGrants).
+func (a *Access) readGrants(ctx context.Context, d Decision, scope Scope, details map[string]string) (master.AuditEntry, error) {
+	e, _, err := a.readGrantsAs(ctx, d, scope, details)
+	return e, err
+}
+
+// readGrantsAs is readGrants that also reports whether the caller reads as
+// a tenant's admin.
+func (a *Access) readGrantsAs(ctx context.Context, d Decision, scope Scope, details map[string]string) (master.AuditEntry, bool, error) {
+	e, by, bounded, err := a.actForGrants(d, scope, "", details)
+	if err != nil {
+		return master.AuditEntry{}, false, err
+	}
+	if err := a.store.CheckActor(ctx, by); err != nil {
+		return master.AuditEntry{}, false, a.failAfter(e, err)
+	}
+	return e, bounded, nil
+}
+
+// ListKeysOnTenant returns a page of the keys that hold a grant on the
+// tenant named tenantName, in order of key id, and the token of the next
+// page; ListGrants on the tenant answers their roles. The installation's
+// admin reads each key whole, without its hash; the tenant's own admin reads
+// only each key's id and holder, never its networks, certificate, expiry,
+// use or other grants: who may use the tenant is that admin's business, the
+// rest of a key is the installation's. A tenant that does not exist is
+// NotFound.
+func (a *Access) ListKeysOnTenant(ctx context.Context, d Decision, tenantName string, p master.Page) ([]master.Key, string, error) {
+	scope := TenantNamed(tenantName)
+	entry, bounded, err := a.readGrantsAs(ctx, d, scope, map[string]string{detailFilter: scope.String()})
+	if err != nil {
+		return nil, "", err
+	}
+	p, err = page(p)
+	if err != nil {
+		return nil, "", a.failAfter(entry, err)
+	}
+	ms, err := a.resolve(ctx, scope)
+	if err != nil {
+		return nil, "", a.failAfter(entry, err)
+	}
+	grants, next, err := a.store.GrantsByScope(ctx, ms, p)
+	if err != nil {
+		return nil, "", a.failAfter(entry, err)
+	}
+	out := make([]master.Key, 0, len(grants))
+	for _, g := range grants {
+		k, err := a.store.Key(ctx, g.KeyID)
+		if fault.KindOf(err) == fault.NotFound {
+			// Removed between the two reads: it holds no grant now.
+			continue
+		}
+		if err != nil {
+			return nil, "", a.failAfter(entry, err)
+		}
+		if bounded {
+			k = master.Key{ID: k.ID, Holder: k.Holder}
+		}
+		out = append(out, publicKey(k))
+	}
+	a.appendRead(entry)
+	return out, next, nil
+}
+
 // ListKeys returns a page of every key, revoked and expired keys included,
 // oldest first, without their hashes, and the token of the next page. It
 // needs the installation's admin.
@@ -444,12 +568,14 @@ func (a *Access) resolve(ctx context.Context, s Scope) (master.Scope, error) {
 
 // SetGrant gives the key keyID role on scope, replacing in one step the
 // role it held there, and returns the grant and the role it replaced (the
-// empty Role for none). It needs the installation's admin. Writer is not a
+// empty Role for none). It needs the installation's admin, or, on a tenant,
+// that tenant's admin, held to what a tenant's admin may do
+// (master.CheckGrantChange, in the change's transaction). Writer is not a
 // role on the installation and is Invalid there; an unknown key or tenant is
 // NotFound; a revoked key is Conflict. The audit entry has the scope and,
 // from the master, the old and the new role.
 func (a *Access) SetGrant(ctx context.Context, d Decision, keyID string, scope Scope, role master.Role) (Grant, master.Role, error) {
-	entry, by, err := a.change(ctx, d, master.KeyObject(keyID), map[string]string{detailScope: scope.String()})
+	entry, by, err := a.changeGrants(ctx, d, scope, master.KeyObject(keyID), map[string]string{detailScope: scope.String()})
 	if err != nil {
 		return Grant{}, "", err
 	}
@@ -480,10 +606,11 @@ func (a *Access) SetGrant(ctx context.Context, d Decision, keyID string, scope S
 
 // RemoveGrant takes back the key keyID's grant on scope and returns the
 // role it had, or the empty Role when it held none, which changes nothing
-// and succeeds. It needs the installation's admin. An unknown key or tenant
-// is NotFound.
+// and succeeds. It needs the installation's admin, or, on a tenant, that
+// tenant's admin, held as SetGrant holds it. An unknown key or tenant is
+// NotFound.
 func (a *Access) RemoveGrant(ctx context.Context, d Decision, keyID string, scope Scope) (master.Role, error) {
-	entry, by, err := a.change(ctx, d, master.KeyObject(keyID), map[string]string{detailScope: scope.String()})
+	entry, by, err := a.changeGrants(ctx, d, scope, master.KeyObject(keyID), map[string]string{detailScope: scope.String()})
 	if err != nil {
 		return "", err
 	}
@@ -506,8 +633,10 @@ func (a *Access) RemoveGrant(ctx context.Context, d Decision, keyID string, scop
 
 // ListGrants returns a page of the grants filter keeps, with each scope by
 // its tenant's name, and the token of the next page. It needs the
-// installation's admin. A scope's tenant that does not exist is NotFound; a
-// key that does not exist has no grants.
+// installation's admin, or, for the grants on a tenant, that tenant's admin:
+// a key's grants on every scope are the installation's to read, so a
+// tenant's admin never sees a key's other grants. A scope's tenant that does
+// not exist is NotFound; a key that does not exist has no grants.
 func (a *Access) ListGrants(ctx context.Context, d Decision, filter GrantFilter, p master.Page) ([]Grant, string, error) {
 	desc := "none"
 	switch {
@@ -516,7 +645,14 @@ func (a *Access) ListGrants(ctx context.Context, d Decision, filter GrantFilter,
 	case filter.byScope:
 		desc = filter.scope.String()
 	}
-	entry, err := a.read(ctx, d, true, "", map[string]string{detailFilter: desc})
+	details := map[string]string{detailFilter: desc}
+	var entry master.AuditEntry
+	var err error
+	if filter.byScope {
+		entry, err = a.readGrants(ctx, d, filter.scope, details)
+	} else {
+		entry, err = a.read(ctx, d, true, "", details)
+	}
 	if err != nil {
 		return nil, "", err
 	}

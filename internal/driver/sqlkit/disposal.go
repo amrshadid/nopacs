@@ -112,17 +112,23 @@ func (k Sending) QueueDispose(ctx context.Context, d tenant.DisposeQueue, audit 
 			return err
 		}
 		if !d.Scheduled {
-			id := ""
-			if _, err := tx.QueryRow(ctx, `SELECT job_id FROM dispose_jobs WHERE confirm_token = ?`, []any{d.Confirm}, &id); err != nil {
+			id, rule := "", ""
+			if _, err := tx.QueryRow(ctx, `SELECT job_id, rule FROM dispose_jobs WHERE confirm_token = ?`, []any{d.Confirm}, &id, &rule); err != nil {
 				return err
 			}
 			if id != "" {
+				// A token answers only the disposal it was given for: a
+				// repeat naming another rule would otherwise be told a job
+				// of a rule it did not ask about was queued for it.
+				if rule != d.Rule {
+					return tenant.Precondition("the confirm token was used for a disposal under another rule")
+				}
 				r, err := jobInTx(ctx, tx, id, "")
 				if err != nil {
 					return err
 				}
 				job, preview = r.job, tenant.DisposalPreview{Rule: d.Rule, Confirm: d.Confirm}
-				return tx.Audited(ctx, audit, guard)
+				return tx.Audited(ctx, answeredEntry(audit, d.ID, id), guard)
 			}
 		}
 		if err := k.checkNoRebuild(ctx, tx); err != nil {
@@ -176,6 +182,25 @@ func (k Sending) QueueDispose(ctx context.Context, d tenant.DisposeQueue, audit 
 		return tx.Audited(ctx, audit, guard)
 	})
 	return job, preview, made, err
+}
+
+// answeredEntry returns audit naming the job answered in place of the one
+// the caller would have made: a repeated token makes no job, so wherever
+// the entry names the new id (its object or a detail) it names answered,
+// and the log never points at a job that does not exist.
+func answeredEntry(audit master.AuditEntry, made, answered string) master.AuditEntry {
+	if audit.Object == made {
+		audit.Object = answered
+	}
+	details := make(map[string]string, len(audit.Details))
+	for k, v := range audit.Details {
+		if v == made {
+			v = answered
+		}
+		details[k] = v
+	}
+	audit.Details = details
+	return audit
 }
 
 // insertDisposeJob writes a dispose job of preview's sessions, queued,

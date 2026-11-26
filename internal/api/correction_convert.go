@@ -113,6 +113,10 @@ func correctionMessage(c tenant.Correction, withHolds bool) *v1.Correction {
 		CreateTime: timestamp(c.Created), EndTime: timestamp(c.Ended), Counts: correctionCounts(c.Counts),
 		StateReason: c.StateReason, ArrivalsAllowed: c.ArrivalsAllowed, UndoReason: c.UndoReason,
 		Unresolved: c.Unresolved, Origin: v1.CorrectionOrigin_CORRECTION_ORIGIN_PERSON, Swept: c.Swept,
+		OverrideRetention: c.OverrideRetention, OverrideReason: c.OverrideReason, CopiesAbandoned: c.CopiesAbandoned,
+	}
+	if c.Origin == tenant.OriginRetention {
+		m.Origin, m.RetentionRule, m.RetentionDueTime = v1.CorrectionOrigin_CORRECTION_ORIGIN_RETENTION, c.RetentionRule, timestamp(c.RetentionDue)
 	}
 	// A purge time is set from the commit on, and said only while the
 	// correction can still reach its purge, never for one unresolved.
@@ -130,7 +134,8 @@ func correctionMessage(c tenant.Correction, withHolds bool) *v1.Correction {
 	}
 	for _, d := range c.Dispositions {
 		m.Dispositions = append(m.Dispositions, &v1.StorageDisposition{Storage: d.Storage, ObjectsRemoved: d.Removed, ObjectsHidden: d.Hidden,
-			ObjectsRetained: d.Retained, ObjectsUnknown: d.Unknown, VersionsRemoved: d.VersionsRemoved, RetainUntil: timestamp(d.RetainUntil)})
+			ObjectsRetained: d.Retained, ObjectsUnknown: d.Unknown, VersionsRemoved: d.VersionsRemoved, RetainUntil: timestamp(d.RetainUntil),
+			ReplicaOf: d.ReplicaOf, SwitchGeneration: d.SwitchGeneration})
 	}
 	if withHolds && c.Kind == record.KindDelete {
 		m.Holds = holdsMessage(c.Holds)
@@ -144,13 +149,14 @@ func previewMessage(p correct.Preview) *v1.DeletePreview {
 		Counts: correctionCounts(p.Counts), Storages: p.Storages, SentTo: peersMessage(p.SentTo), Jobs: p.Jobs,
 		JobsNotListed: p.JobsNotListed, Confirm: p.Confirm, PurgeTime: timestamp(p.PurgeAfter),
 		Quarantined: p.Quarantined, Receptions: p.Receptions, HeldAfterPurge: p.HeldAfterPurge, TenantJobs: p.TenantJobs,
+		Holds: p.Holds, SessionsUnderMinimum: p.SessionsUnderMinimum, KeepUntil: timestamp(p.KeepUntil),
 	}
 	if m.Storages == nil {
 		m.Storages = []string{}
 	}
 	for _, sp := range p.Purges {
 		m.StoragePurges = append(m.StoragePurges, &v1.StoragePurge{Storage: sp.Storage, Expected: objectDispositions[sp.Expected],
-			Why: clip(sp.Why, tenant.MaxStateReasonLength-3)})
+			Why: clip(sp.Why, tenant.MaxStateReasonLength-3), ReplicaOf: sp.ReplicaOf})
 	}
 	return m
 }
@@ -162,6 +168,7 @@ func findingMessage(f tenant.ScrubFinding) *v1.ScrubFinding {
 		SessionLabel: f.Path.Session, ScanLabel: f.Path.Scan, InstanceId: f.SOPInstanceUID,
 		ExpectedSize: f.ExpectedSize, FoundSize: f.FoundSize, Job: f.Job, FindTime: timestamp(f.Found),
 		ClearTime: timestamp(f.Cleared), ClearJob: f.ClearJob, Revision: int32(f.Revision), //nolint:gosec // G115: a finding's revision is at most a million.
+		ReplicaOf: f.ReplicaOf,
 	}
 	if !f.ExpectedSHA256.IsZero() {
 		m.ExpectedSha256 = f.ExpectedSHA256.String()

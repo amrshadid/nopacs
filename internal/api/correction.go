@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 
-	connect "connectrpc.com/connect/v2"
-
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
 	"github.com/amrshadid/nopacs/internal/access"
@@ -39,9 +37,10 @@ func (noReplaceSources) ReplaceSource(context.Context, string, tenant.Quarantine
 // messageNoCorrection answers a correction's id the tenant does not have.
 const messageNoCorrection = "the tenant has no correction with this id"
 
-// messageRetentionNotServed answers a delete that sets override_retention
-// while the server keeps no retention rules.
-const messageRetentionNotServed = "override_retention: retention rules are not served yet, so there is nothing to override"
+// messageOverrideNotAdmin answers a delete that sets override_retention
+// from a caller who is not the installation's admin or the local operator.
+const messageOverrideNotAdmin = "override_retention: only an admin on the installation, or the local operator, lifts a retention rule's keep_at_least; " +
+	"the person who wants a delete is not the one who lifts the rule that refuses it"
 
 // correctionService is CorrectionService: the corrections a tenant's
 // store keeps, made through the tenant's corrections engine
@@ -157,18 +156,27 @@ func (s correctionService) Delete(ctx context.Context, req *v1.DeleteRequest) (*
 		return nil, err
 	}
 	target := targetOf(req.GetTarget())
+	guard := c.roleGuard(d, master.RoleAdmin)
+	if req.GetOverrideRetention() {
+		facts.Details[detailReason] = req.GetReason()
+		facts.Details[detailOverrideReason] = req.GetOverrideReason()
+		// A keep-at-least is often a legal duty: lifting it is rare, and
+		// kept to the installation's admin, so a tenant's admin who wants a
+		// delete cannot also lift the rule that refuses it. The role is
+		// judged before the request is validated, so a caller without it
+		// learns nothing from the shape of its request.
+		// A refusal is written to the installation's log, as the check's
+		// own are (audit.proto).
+		if !d.Principal().Role(master.Installation).Includes(master.RoleAdmin) {
+			facts.TenantName = req.GetTenant()
+			return nil, c.failWith(d, nil, facts, fault.New(fault.Denied, messageOverrideNotAdmin))
+		}
+		guard = c.overrideGuard(d)
+	}
 	if err := checkDelete(req, target); err != nil {
 		return nil, c.failWith(d, st, facts, err)
 	}
 	facts.Details[detailReason] = req.GetReason()
-	if req.GetOverrideRetention() {
-		// Accepted, it would be recorded and audited as an override that
-		// nothing applies, since no retention rule keeps anything yet. The
-		// refusal's entry keeps what was asked, as one that did not complete.
-		facts.Details[detailOverrideReason] = req.GetOverrideReason()
-		c.record(d, st, master.OutcomeFailed, messageRetentionNotServed, facts)
-		return nil, connect.NewError(connect.CodeUnimplemented, messageRetentionNotServed)
-	}
 	e, release, err := c.engine(ctx, req.GetTenant(), st)
 	if err != nil {
 		return nil, c.failWith(d, st, facts, err)
@@ -190,7 +198,8 @@ func (s correctionService) Delete(ctx context.Context, req *v1.DeleteRequest) (*
 		return &v1.DeleteResponse{Preview: previewMessage(prev)}, nil
 	}
 	made, err := e.Delete(ctx, correct.DeleteRequest{Target: target, Reason: req.GetReason(), Confirm: req.GetConfirm(), KeyID: callerKeyID(d),
-		Audit: changeEntry(d, facts), Guard: c.roleGuard(d, master.RoleAdmin)})
+		OverrideRetention: req.GetOverrideRetention(), OverrideReason: req.GetOverrideReason(),
+		Audit: changeEntry(d, facts), Guard: guard})
 	if err != nil {
 		if made.ID != "" {
 			// Recorded, then abandoned: its entry was written with it.
@@ -200,6 +209,25 @@ func (s correctionService) Delete(ctx context.Context, req *v1.DeleteRequest) (*
 	}
 	prev.Confirm = ""
 	return &v1.DeleteResponse{Preview: previewMessage(prev), Correction: correctionMessage(made, true)}, nil
+}
+
+// overrideGuard returns the check a delete that lifts retention makes of
+// its caller inside the delete's transaction: d's key still admin on the
+// tenant and still admin on the installation (or the local operator), so a
+// key that loses its installation grant after the request was let in
+// cannot still lift a keep-at-least.
+func (c *core) overrideGuard(d access.Decision) tenant.Guard {
+	onTenant := c.roleGuard(d, master.RoleAdmin)
+	onInstallation := d.Actor(master.Installation, master.RoleAdmin)
+	return func(ctx context.Context) error {
+		if c.seams.guarding != nil {
+			c.seams.guarding()
+		}
+		if err := c.master.CheckActor(ctx, onInstallation); err != nil {
+			return err
+		}
+		return onTenant(ctx)
+	}
 }
 
 // Relabel records a relabel and leaves its copy and its publish to the

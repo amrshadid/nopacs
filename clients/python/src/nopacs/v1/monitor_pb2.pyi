@@ -170,7 +170,7 @@ class Throughput(_message.Message):
     def __init__(self, files_received_per_second: _Optional[float] = ..., bytes_received_per_second: _Optional[float] = ..., files_archived_per_second: _Optional[float] = ..., bytes_archived_per_second: _Optional[float] = ...) -> None: ...
 
 class StorageStatus(_message.Message):
-    __slots__ = ("storage", "used_bytes", "free_bytes", "capacity_bytes", "nearly_full", "versioning", "object_lock", "tier", "replica_of", "switching", "last_switch_time", "switch_generation")
+    __slots__ = ("storage", "used_bytes", "free_bytes", "capacity_bytes", "nearly_full", "versioning", "object_lock", "tier", "replica_of", "switching", "last_switch_time", "switch_generation", "encryption_at_rest", "encryption_algorithm", "coverage")
     STORAGE_FIELD_NUMBER: _ClassVar[int]
     USED_BYTES_FIELD_NUMBER: _ClassVar[int]
     FREE_BYTES_FIELD_NUMBER: _ClassVar[int]
@@ -183,6 +183,9 @@ class StorageStatus(_message.Message):
     SWITCHING_FIELD_NUMBER: _ClassVar[int]
     LAST_SWITCH_TIME_FIELD_NUMBER: _ClassVar[int]
     SWITCH_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTION_AT_REST_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTION_ALGORITHM_FIELD_NUMBER: _ClassVar[int]
+    COVERAGE_FIELD_NUMBER: _ClassVar[int]
     storage: str
     used_bytes: int
     free_bytes: int
@@ -195,7 +198,26 @@ class StorageStatus(_message.Message):
     switching: bool
     last_switch_time: _timestamp_pb2.Timestamp
     switch_generation: int
-    def __init__(self, storage: _Optional[str] = ..., used_bytes: _Optional[int] = ..., free_bytes: _Optional[int] = ..., capacity_bytes: _Optional[int] = ..., nearly_full: _Optional[bool] = ..., versioning: _Optional[_Union[StorageVersioning, str]] = ..., object_lock: _Optional[bool] = ..., tier: _Optional[_Union[_storage_pb2.StorageTier, str]] = ..., replica_of: _Optional[str] = ..., switching: _Optional[bool] = ..., last_switch_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., switch_generation: _Optional[int] = ...) -> None: ...
+    encryption_at_rest: _storage_pb2.EncryptionAtRest
+    encryption_algorithm: str
+    coverage: ScrubCoverage
+    def __init__(self, storage: _Optional[str] = ..., used_bytes: _Optional[int] = ..., free_bytes: _Optional[int] = ..., capacity_bytes: _Optional[int] = ..., nearly_full: _Optional[bool] = ..., versioning: _Optional[_Union[StorageVersioning, str]] = ..., object_lock: _Optional[bool] = ..., tier: _Optional[_Union[_storage_pb2.StorageTier, str]] = ..., replica_of: _Optional[str] = ..., switching: _Optional[bool] = ..., last_switch_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., switch_generation: _Optional[int] = ..., encryption_at_rest: _Optional[_Union[_storage_pb2.EncryptionAtRest, str]] = ..., encryption_algorithm: _Optional[str] = ..., coverage: _Optional[_Union[ScrubCoverage, _Mapping]] = ...) -> None: ...
+
+class ScrubCoverage(_message.Message):
+    __slots__ = ("objects", "verified", "share", "presence_only", "oldest_unverified", "overdue")
+    OBJECTS_FIELD_NUMBER: _ClassVar[int]
+    VERIFIED_FIELD_NUMBER: _ClassVar[int]
+    SHARE_FIELD_NUMBER: _ClassVar[int]
+    PRESENCE_ONLY_FIELD_NUMBER: _ClassVar[int]
+    OLDEST_UNVERIFIED_FIELD_NUMBER: _ClassVar[int]
+    OVERDUE_FIELD_NUMBER: _ClassVar[int]
+    objects: int
+    verified: int
+    share: float
+    presence_only: int
+    oldest_unverified: _duration_pb2.Duration
+    overdue: int
+    def __init__(self, objects: _Optional[int] = ..., verified: _Optional[int] = ..., share: _Optional[float] = ..., presence_only: _Optional[int] = ..., oldest_unverified: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., overdue: _Optional[int] = ...) -> None: ...
 
 class RecallCounts(_message.Message):
     __slots__ = ("requested", "in_progress", "online", "failed", "units_waiting")

@@ -15,6 +15,7 @@ const (
 	needInstallation
 	needTenant
 	needTenantRegistration
+	needTenantGrants
 )
 
 // Requirement is what a request needs of its caller. The zero Requirement is
@@ -53,9 +54,20 @@ func TenantRegistration(tenantName string) Requirement {
 	return Requirement{kind: needTenantRegistration, role: master.RoleReader, tenant: tenantName}
 }
 
+// TenantGrants requires the right to hand out grants on one tenant: admin
+// on the installation, or admin on that tenant, or the local operator. A
+// tenant's admin is then held to what a tenant's admin may do: grants on
+// that tenant only, below admin, never its own key's or an admin's
+// (master.CheckGrantChange), and a listing of that tenant's keys alone.
+// Which keys may use a tenant is the tenant's business, so its admin lets a
+// key in; making keys and admins stays with the installation.
+func TenantGrants(tenantName string) Requirement {
+	return Requirement{kind: needTenantGrants, role: master.RoleAdmin, tenant: tenantName}
+}
+
 // namesTenant reports whether r names a tenant the check must look up.
 func (r Requirement) namesTenant() bool {
-	return r.kind == needTenant || r.kind == needTenantRegistration
+	return r.kind == needTenant || r.kind == needTenantRegistration || r.kind == needTenantGrants
 }
 
 // valid reports whether r is one a constructor above made.
@@ -63,7 +75,7 @@ func (r Requirement) valid() bool {
 	switch r.kind {
 	case needAuthenticated:
 		return true
-	case needInstallation, needTenant, needTenantRegistration:
+	case needInstallation, needTenant, needTenantRegistration, needTenantGrants:
 		return r.role.Valid()
 	}
 	return false

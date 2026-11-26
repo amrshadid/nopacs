@@ -42,15 +42,16 @@ func testAddStorage(t *testing.T) {
 		{name: "a root not listed", as: f.lab1Admin, call: add("lab1", dirStorage("main", "slow", "")), code: connect.CodeFailedPrecondition, msg: "no directory root named slow",
 			audit: &wantAudit{log: "lab1", outcome: master.OutcomeFailed, object: "main", details: map[string]string{"type": "directory"}}},
 		{name: "a tenant not ready", as: local, call: add("down", dirStorage("main", "fast", "")), code: connect.CodeUnavailable, audit: inMasterRerouted("down")},
-		// Replicas and archive tiers are in the contract before the code
-		// that keeps them: a storage claiming either is refused, never
-		// stored as if a copy or a recall stood behind it.
-		{name: "a replica, not served yet", as: f.lab1Admin, call: add("lab1", withStorage(dirStorage("copy", "fast", "copy"), func(s *v1.Storage) { s.ReplicaOf = "main" })),
-			code: connect.CodeUnimplemented, msg: "replica storages are not served yet", audit: inTenant("lab1", master.OutcomeFailed)},
-		{name: "the archive tier, not served yet", as: f.lab1Admin, call: add("lab1", withStorage(s3Storage("cold", "https://s3.example.com", "x"), func(s *v1.Storage) { s.Tier = v1.StorageTier_STORAGE_TIER_ARCHIVE })),
-			code: connect.CodeUnimplemented, msg: "archive tier", audit: inTenant("lab1", master.OutcomeFailed)},
+		// A replica names a primary the tenant has; the archive tier is for
+		// a replica only.
+		{name: "a replica of a primary the tenant does not have", as: f.lab1Admin, call: add("lab1", withStorage(dirStorage("copy", "fast", "copy"), func(s *v1.Storage) { s.ReplicaOf = "main" })),
+			code: connect.CodeFailedPrecondition, audit: inTenant("lab1", master.OutcomeFailed)},
+		{name: "a replica_of that is not a name", as: f.lab1Admin, call: add("lab1", withStorage(dirStorage("copy", "fast", "copy"), func(s *v1.Storage) { s.ReplicaOf = "Main" })),
+			code: connect.CodeInvalidArgument, msg: "storage.replica_of"},
+		{name: "the archive tier, not a replica", as: f.lab1Admin, call: add("lab1", withStorage(s3Storage("cold", "https://s3.example.com", "x"), func(s *v1.Storage) { s.Tier = v1.StorageTier_STORAGE_TIER_ARCHIVE })),
+			code: connect.CodeFailedPrecondition, audit: inTenant("lab1", master.OutcomeFailed)},
 		{name: "the archive tier on a directory", as: f.lab1Admin, call: add("lab1", withStorage(dirStorage("cold", "fast", "cold"), func(s *v1.Storage) { s.Tier = v1.StorageTier_STORAGE_TIER_ARCHIVE })),
-			code: connect.CodeInvalidArgument, msg: "storage.tier: is online for a directory storage"},
+			code: connect.CodeInvalidArgument, msg: "a directory storage is always online"},
 		{name: "a tier this version does not know", as: f.lab1Admin, call: add("lab1", withStorage(dirStorage("odd", "fast", "odd"), func(s *v1.Storage) { s.Tier = 7 })),
 			code: connect.CodeInvalidArgument, msg: "storage.tier: is online or archive"},
 		{name: "added", as: f.lab1Admin, call: add("lab1", dirStorage("main", "fast", "mri")),
@@ -188,10 +189,10 @@ func testSetStorage(t *testing.T) {
 		{name: "secret_access_key_set", as: f.lab1Admin, call: set(capacity, []string{"s3.secret_access_key_set"}), code: connect.CodeInvalidArgument, msg: "answered by the server"},
 		{name: "an unknown path", as: f.lab1Admin, call: set(capacity, []string{"color"}), code: connect.CodeInvalidArgument, msg: "names no field"},
 		{name: "replica_of", as: f.lab1Admin, call: set(capacity, []string{"replica_of"}), code: connect.CodeInvalidArgument, msg: "attaching or detaching a replica"},
-		{name: "the tier, not served yet", as: f.lab1Admin, call: set(&v1.Storage{Name: "main", Tier: v1.StorageTier_STORAGE_TIER_ONLINE}, []string{"tier"}),
-			code: connect.CodeUnimplemented, msg: "archive tier", audit: inTenant("lab1", master.OutcomeFailed)},
+		{name: "the tier of a storage that is not a replica, archive", as: f.lab1Admin, call: set(&v1.Storage{Name: "main", Tier: v1.StorageTier_STORAGE_TIER_ARCHIVE}, []string{"tier"}),
+			code: connect.CodeInvalidArgument, msg: "a directory storage is always online"},
 		{name: "a tier this version does not know", as: f.lab1Admin, call: set(&v1.Storage{Name: "main", Tier: 7}, []string{"tier"}), code: connect.CodeInvalidArgument, msg: "is online or archive"},
-		{name: "a recall setting, not served yet", as: f.lab1Admin, call: set(capacity, []string{"s3.recall_days"}), code: connect.CodeUnimplemented},
+		{name: "a recall setting of a directory", as: f.lab1Admin, call: set(capacity, []string{"s3.recall_days"}), code: connect.CodeInvalidArgument},
 		{name: "a path twice", as: f.lab1Admin, call: set(capacity, []string{"capacity_bytes", "capacity_bytes"}), code: connect.CodeInvalidArgument, msg: "twice"},
 		{name: "one credential alone", as: f.lab1Admin, call: set(&v1.Storage{Name: "main", Type: s3Storage("main", "https://s3.example.com", "x").Type}, []string{"s3.access_key_id"}), code: connect.CodeInvalidArgument},
 		{name: "a field of the other type", as: f.lab1Admin, call: set(&v1.Storage{Name: "main", Type: s3Storage("main", "https://s3.example.com", "x").Type}, []string{"s3.bucket"}), code: connect.CodeInvalidArgument, msg: "type cannot change"},

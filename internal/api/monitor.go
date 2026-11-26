@@ -118,7 +118,7 @@ func (c *core) tenantStatus(ctx context.Context, name string, st tenant.Store) *
 		}
 		if p, ok := st.(tenant.Pipeline); ok {
 			if snapped {
-				ts.Storages = storageStatuses(ctx, p, snap, live)
+				ts.Storages = c.storageStatuses(ctx, name, st, p, snap, live)
 			}
 			if receivers == nil {
 				// Nothing runs the tenant's receivers yet: they are read
@@ -132,6 +132,7 @@ func (c *core) tenantStatus(ctx context.Context, name string, st tenant.Store) *
 		if limit, err := c.values().OnTenant(st).IncomingLimit(ctx); err == nil {
 			ts.IncomingLimitBytes = limit
 		}
+		c.copiesStatus(ctx, st, ts)
 	}
 	for _, r := range receivers {
 		rs := &v1.ReceiverStatus{Receiver: r.Name, Health: healthMessage(c.receivers.Health(name, r))}
@@ -169,7 +170,7 @@ func countsMessage(s tenant.StatusSnapshot) *v1.TenantCounts {
 // its used bytes from the snapshot; its free bytes, the smaller of what was
 // last measured and what is left under its capacity, absent when neither
 // is known; and whether it is below its reserve, as last measured.
-func storageStatuses(ctx context.Context, p tenant.Pipeline, snap tenant.StatusSnapshot, live TenantLive) []*v1.StorageStatus {
+func (c *core) storageStatuses(ctx context.Context, name string, st tenant.Store, p tenant.Pipeline, snap tenant.StatusSnapshot, live TenantLive) []*v1.StorageStatus {
 	rows, err := allStorages(ctx, p)
 	if err != nil {
 		return nil
@@ -177,7 +178,8 @@ func storageStatuses(ctx context.Context, p tenant.Pipeline, snap tenant.StatusS
 	out := make([]*v1.StorageStatus, 0, len(rows))
 	for _, r := range rows {
 		used := snap.StorageBytes[r.Name]
-		m := &v1.StorageStatus{Storage: r.Name, UsedBytes: used, CapacityBytes: r.CapacityBytes, Tier: v1.StorageTier_STORAGE_TIER_ONLINE}
+		m := &v1.StorageStatus{Storage: r.Name, UsedBytes: used, CapacityBytes: r.CapacityBytes}
+		c.storageFacts(ctx, name, st, r, m)
 		measured, known := live.Storages[r.Name]
 		var free int64
 		switch {
@@ -195,6 +197,23 @@ func storageStatuses(ctx context.Context, p tenant.Pipeline, snap tenant.StatusS
 		out = append(out, m)
 	}
 	return out
+}
+
+// copiesStatus fills a tenant's status with its replicas, its recalls and
+// where its retention stands. A part that cannot be read is left out.
+func (c *core) copiesStatus(ctx context.Context, st tenant.Store, ts *v1.TenantStatus) {
+	now := c.now()
+	ts.Replicas = replicaStatuses(ctx, st, now)
+	if rc, ok := st.(tenant.Recalls); ok {
+		if n, err := rc.RecallCounts(ctx, now); err == nil {
+			ts.Recalls = &v1.RecallCounts{Requested: n.Requested, InProgress: n.InProgress, Online: n.Online, Failed: n.Failed}
+		}
+	}
+	if rs, ok := st.(tenant.Retention); ok {
+		if clock, err := rs.RetentionClock(ctx); err == nil {
+			ts.Retention = retentionStatusMessage(clock)
+		}
+	}
 }
 
 // allStorages reads every storage of the tenant, page after page.

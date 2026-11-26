@@ -513,6 +513,47 @@ func (g Grant) Validate() error {
 	return nil
 }
 
+// ErrGrantBound is in the chain of a change of a grant refused because a
+// tenant's admin made it past what a tenant's admin may do
+// (CheckGrantChange).
+var ErrGrantBound = errors.New("a tenant's admin may not make this change of a grant")
+
+// CheckGrantChange returns a Denied error, ErrGrantBound in its chain,
+// unless by may change the grant of the key keyID on scope from old to next
+// (next empty for a removal; old empty when there was none); onInstallation
+// is that key's role on the installation (empty for none). A store calls
+// it inside the change's transaction, after it read both roles, so a role
+// another change set meanwhile is judged too.
+//
+// A key acting by its admin grant on a tenant (a tenant's admin) changes
+// grants on that tenant only, at reader, writer or operator; never its own
+// key's; never a key that is admin there, nor one that is admin on the
+// installation, which outranks it. Making or removing a tenant's admin
+// stays with the installation's admin, so a tenant's admin cannot multiply
+// admins or remove one, nor raise its own role, nor lower or shut out an
+// installation's admin. Any other actor (a key acting by its grant on the
+// installation, the local operator, the server) is held to the store's
+// other rules only.
+func CheckGrantChange(by Actor, keyID string, scope Scope, old, next, onInstallation Role) error {
+	if !by.IsKey() || by.Scope().IsInstallation() {
+		return nil
+	}
+	deny := func(why string) error { return fault.Wrap(fault.Denied, ErrGrantBound, why) }
+	switch {
+	case scope.IsInstallation() || scope.TenantID != by.Scope().TenantID:
+		return deny("a tenant's admin changes grants on that tenant only")
+	case keyID == by.KeyID():
+		return deny("a tenant's admin does not change its own key's grant")
+	case next == RoleAdmin:
+		return deny("a tenant's admin gives reader, writer or operator; an admin of a tenant is made by the installation's admin")
+	case old == RoleAdmin:
+		return deny("a tenant's admin does not change or remove the grant of a key that is admin on the tenant")
+	case onInstallation == RoleAdmin:
+		return deny("a tenant's admin does not change or remove the grant of a key that is admin on the installation")
+	}
+	return nil
+}
+
 // Setting is one installation setting.
 type Setting struct {
 	// Name is 1 to 128 of a-z, 0-9, ".", "_" and "-".

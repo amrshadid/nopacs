@@ -182,9 +182,14 @@ func testDelete(t *testing.T) {
 		{name: "override_retention", as: c.lab1Admin, call: func(cl clients) outcome {
 			return call(cl.corrections.Delete, &v1.DeleteRequest{Tenant: "lab1", Target: subjectTarget(c.other), Reason: "consent withdrawn",
 				ValidateOnly: true, OverrideRetention: true, OverrideReason: "the participant asked"})
-		}, code: connect.CodeUnimplemented, msg: "retention rules are not served yet",
-			audit: &wantAudit{log: "lab1", outcome: master.OutcomeFailed, object: "-", details: map[string]string{"override_retention": "true",
+		}, code: connect.CodePermissionDenied, msg: "only an admin on the installation, or the local operator",
+			audit: &wantAudit{outcome: master.OutcomeRefused, object: "-", tenant: "lab1", details: map[string]string{"override_retention": "true",
 				"override_reason": "the participant asked", "reason": "consent withdrawn"}}},
+		{name: "override_retention by the local operator", as: local, call: func(cl clients) outcome {
+			return call(cl.corrections.Delete, &v1.DeleteRequest{Tenant: "lab1", Target: subjectTarget(c.other), Reason: "consent withdrawn",
+				ValidateOnly: true, OverrideRetention: true, OverrideReason: "the participant asked"})
+		}, audit: &wantAudit{log: "lab1", outcome: master.OutcomeDone, details: map[string]string{"override_retention": "true",
+			"override_reason": "the participant asked"}}},
 	})
 }
 

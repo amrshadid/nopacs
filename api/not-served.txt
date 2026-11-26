@@ -21,5 +21,8 @@
 # A line is removed in the change that serves what it names; the tests fail
 # until it is.
 
-nopacs.v1.ReplicaService
-nopacs.v1.RetentionService
+nopacs.v1.ReplicaService/BackfillReplica
+nopacs.v1.ReplicaService/Recall
+nopacs.v1.ReplicaService/VerifySample
+nopacs.v1.RetentionService/PlaceHold
+nopacs.v1.RetentionService/ReleaseHold

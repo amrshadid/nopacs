@@ -1653,8 +1653,10 @@ type DeleteRequest struct {
 	// validate_only; must be empty with it.
 	Confirm string `protobuf:"bytes,5,opt,name=confirm,proto3" json:"confirm,omitempty"`
 	// Delete data a retention rule keeps at least until a time to come, as
-	// for a consent withdrawn. Needs override_reason. The override is
-	// recorded in the correction and its audit entry.
+	// for a consent withdrawn. Needs override_reason, and a caller who is an
+	// admin on the installation or the local operator: a tenant's admin is
+	// answered permission denied. The override is recorded in the correction
+	// and its audit entry.
 	OverrideRetention bool `protobuf:"varint,6,opt,name=override_retention,json=overrideRetention,proto3" json:"override_retention,omitempty"`
 	// Why the override, in the person's own words: 1 to 1024 bytes of UTF-8
 	// with no control characters, never a value read from a file. Required

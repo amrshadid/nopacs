@@ -43,6 +43,13 @@ func (m *Master) SetGrant(ctx context.Context, g master.Grant, audit master.Audi
 			return err
 		}
 		previous = master.Role(old)
+		inst, err := installationRole(ctx, tx, s, g.KeyID)
+		if err != nil {
+			return err
+		}
+		if err := master.CheckGrantChange(by, g.KeyID, g.Scope, previous, g.Role, inst); err != nil {
+			return err
+		}
 		if _, err := tx.StmtContext(ctx, s.upsertGrant).ExecContext(ctx,
 			g.KeyID, g.Scope.TenantID, sqlkit.NullText(g.Scope.TenantID), string(g.Role)); err != nil {
 			return err
@@ -53,6 +60,17 @@ func (m *Master) SetGrant(ctx context.Context, g master.Grant, audit master.Audi
 		return "", err
 	}
 	return previous, nil
+}
+
+// installationRole returns the role keyID holds on the installation, read
+// in tx, empty for none: the installation's scope is the empty tenant id.
+func installationRole(ctx context.Context, tx *sql.Tx, s *statements, keyID string) (master.Role, error) {
+	var role string
+	err := tx.StmtContext(ctx, s.grantRole).QueryRowContext(ctx, keyID, master.Installation.TenantID).Scan(&role)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	return master.Role(role), nil
 }
 
 // grantTargetsExist returns NotFound unless the key, and the tenant of a
@@ -233,6 +251,15 @@ func (m *Master) RemoveGrant(ctx context.Context, keyID string, scope master.Sco
 			return err
 		}
 		previous = master.Role(old)
+		// Judged after the delete, inside its transaction: a refusal rolls
+		// the delete back.
+		inst, err := installationRole(ctx, tx, s, keyID)
+		if err != nil {
+			return err
+		}
+		if err := master.CheckGrantChange(by, keyID, scope, previous, "", inst); err != nil {
+			return err
+		}
 		return insertAudit(ctx, tx, s, audit.WithRoleChange(previous, ""))
 	})
 	if err != nil {

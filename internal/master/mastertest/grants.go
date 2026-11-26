@@ -1,6 +1,7 @@
 package mastertest
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -85,6 +86,112 @@ func testGrants(e *env) {
 	grants, _, err = e.s.GrantsByKey(e.ctx, "nope", master.Page{Limit: 10})
 	if err != nil || len(grants) != 0 {
 		e.Errorf("GrantsByKey(unknown) = %v, %v; want none, nil", grants, err)
+	}
+}
+
+// testTenantAdminGrants guards the bounds of a tenant's admin inside the
+// change's transaction (master.CheckGrantChange): acting by its admin grant
+// on a tenant, a key sets and removes a reader grant there, and is refused,
+// changing nothing and writing no entry, when it gives admin, lowers or
+// removes an admin's grant (an admin set by another change before it),
+// gives, changes or removes a grant of a key that is admin on the
+// installation (which outranks it), changes its own key's grant, touches
+// the installation's scope, or touches another tenant.
+func testTenantAdminGrants(e *env) {
+	lab, other := e.mustTenant("lab"), e.mustTenant("other")
+	scope := master.TenantScope(lab.ID)
+	admin, peer, person, chief := e.mustKey(), e.mustKey(), e.mustKey(), e.mustKey()
+	e.mustGrant(admin.ID, scope, master.RoleAdmin)
+	e.mustGrant(peer.ID, scope, master.RoleAdmin)
+	e.mustGrant(chief.ID, scope, master.RoleOperator)
+	e.mustGrant(chief.ID, master.Installation, master.RoleAdmin)
+	by := master.ActingKey(admin.ID, scope, master.RoleAdmin, at(T0))
+	newcomer := e.mustKey()
+	e.mustGrant(newcomer.ID, master.Installation, master.RoleAdmin)
+
+	_, err := e.s.SetGrant(e.ctx, master.Grant{KeyID: person.ID, Scope: scope, Role: master.RoleReader}, e.audit(), by)
+	e.ok("SetGrant of a reader by a tenant's admin", err)
+	before := len(e.auditIDs())
+	for _, c := range []struct {
+		what string
+		run  func() error
+	}{
+		{"giving admin", func() error {
+			_, err := e.s.SetGrant(e.ctx, master.Grant{KeyID: person.ID, Scope: scope, Role: master.RoleAdmin}, e.audit(), by)
+			return err
+		}},
+		{"lowering an admin", func() error {
+			_, err := e.s.SetGrant(e.ctx, master.Grant{KeyID: peer.ID, Scope: scope, Role: master.RoleReader}, e.audit(), by)
+			return err
+		}},
+		{"removing an admin", func() error {
+			_, err := e.s.RemoveGrant(e.ctx, peer.ID, scope, e.audit(), by)
+			return err
+		}},
+		{"another tenant", func() error {
+			_, err := e.s.SetGrant(e.ctx, master.Grant{KeyID: person.ID, Scope: master.TenantScope(other.ID), Role: master.RoleReader}, e.audit(), by)
+			return err
+		}},
+		{"lowering an installation's admin", func() error {
+			_, err := e.s.SetGrant(e.ctx, master.Grant{KeyID: chief.ID, Scope: scope, Role: master.RoleReader}, e.audit(), by)
+			return err
+		}},
+		{"removing an installation's admin", func() error {
+			_, err := e.s.RemoveGrant(e.ctx, chief.ID, scope, e.audit(), by)
+			return err
+		}},
+		{"giving an installation's admin a grant", func() error {
+			_, err := e.s.SetGrant(e.ctx, master.Grant{KeyID: newcomer.ID, Scope: scope, Role: master.RoleReader}, e.audit(), by)
+			return err
+		}},
+		{"its own key", func() error {
+			_, err := e.s.SetGrant(e.ctx, master.Grant{KeyID: admin.ID, Scope: scope, Role: master.RoleOperator}, e.audit(), by)
+			return err
+		}},
+		{"removing its own key's grant", func() error {
+			_, err := e.s.RemoveGrant(e.ctx, admin.ID, scope, e.audit(), by)
+			return err
+		}},
+		{"a grant on the installation", func() error {
+			_, err := e.s.SetGrant(e.ctx, master.Grant{KeyID: person.ID, Scope: master.Installation, Role: master.RoleReader}, e.audit(), by)
+			return err
+		}},
+		{"removing a grant on the installation", func() error {
+			_, err := e.s.RemoveGrant(e.ctx, chief.ID, master.Installation, e.audit(), by)
+			return err
+		}},
+	} {
+		if err := c.run(); fault.KindOf(err) != fault.Denied || !errors.Is(err, master.ErrGrantBound) {
+			e.Errorf("%s by a tenant's admin: %v, want a refusal with ErrGrantBound", c.what, err)
+		}
+	}
+	if after := len(e.auditIDs()); after != before {
+		e.Errorf("the refused changes wrote %d audit entries, want none", after-before)
+	}
+	r, err := e.s.RolesFor(e.ctx, peer.ID, "lab")
+	e.ok("RolesFor", err)
+	if r.Tenant != master.RoleAdmin {
+		e.Errorf("the other admin's role is %q after the refusals, want admin", r.Tenant)
+	}
+	for _, k := range []struct {
+		name        string
+		id          string
+		tenant, ins master.Role
+	}{
+		{"the installation's admin", chief.ID, master.RoleOperator, master.RoleAdmin},
+		{"the newcomer", newcomer.ID, "", master.RoleAdmin},
+		{"the acting admin", admin.ID, master.RoleAdmin, ""},
+		{"the person", person.ID, master.RoleReader, ""},
+	} {
+		r, err := e.s.RolesFor(e.ctx, k.id, "lab")
+		e.ok("RolesFor", err)
+		if r.Tenant != k.tenant || r.Installation != k.ins {
+			e.Errorf("%s holds %q on the tenant and %q on the installation after the refusals, want %q and %q", k.name, r.Tenant, r.Installation, k.tenant, k.ins)
+		}
+	}
+	prev, err := e.s.RemoveGrant(e.ctx, person.ID, scope, e.audit(), by)
+	if err != nil || prev != master.RoleReader {
+		e.Errorf("RemoveGrant of a reader by a tenant's admin = %q, %v; want reader", prev, err)
 	}
 }
 

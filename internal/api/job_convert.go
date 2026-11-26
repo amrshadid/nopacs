@@ -59,8 +59,29 @@ func jobMessage(j tenant.Job, held string) *v1.Job {
 		// Its paths are answered here; GetJob and ListJobs take them out
 		// for a reader (hideImportPaths).
 		m.Kind = &v1.Job_ImportJob{ImportJob: importJobMessage(j)}
+	case tenant.JobRepair:
+		r := &v1.RepairJob{}
+		if j.Repair != nil {
+			r = &v1.RepairJob{Storage: j.Repair.Storage, From: j.Repair.From, Findings: j.Repair.Findings, All: j.Repair.All, Automatic: j.Repair.Automatic}
+		}
+		m.Kind = &v1.Job_Repair{Repair: r}
+	case tenant.JobReplicate:
+		// The store keeps no fields of its own for a replicate job yet: its
+		// kind is answered, so a listing never shows it as one it does not
+		// know.
+		m.Kind = &v1.Job_Replicate{Replicate: &v1.ReplicateJob{Mode: v1.ReplicateJobMode_REPLICATE_JOB_MODE_BACKFILL}}
+	case tenant.JobDispose:
+		// Its rule and reason are the dispose job's own rows
+		// (disposeJobMessage), which a view reads.
+		m.Kind = &v1.Job_Dispose{Dispose: &v1.DisposeJob{}}
 	}
 	return m
+}
+
+// disposeJobMessage returns a dispose job's own part as the contract writes
+// it.
+func disposeJobMessage(dj tenant.DisposeJob) *v1.DisposeJob {
+	return &v1.DisposeJob{Rule: dj.Rule, Reason: dj.Reason, Sessions: int64(len(dj.Sessions)), Scheduled: dj.Scheduled}
 }
 
 // jobFailureMessage returns a failure of a job as the contract writes it.

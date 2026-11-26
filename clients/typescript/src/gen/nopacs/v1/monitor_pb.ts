@@ -30,7 +30,7 @@ import type { Scope } from "./scope_pb.js";
 import { file_nopacs_v1_scope } from "./scope_pb.js";
 import type { SenderHealth } from "./sender_pb.js";
 import { file_nopacs_v1_sender } from "./sender_pb.js";
-import type { ReplicaStatus, StorageTier } from "./storage_pb.js";
+import type { EncryptionAtRest, ReplicaStatus, StorageTier } from "./storage_pb.js";
 import { file_nopacs_v1_storage } from "./storage_pb.js";
 import type { TenantState } from "./tenant_pb.js";
 import { file_nopacs_v1_tenant } from "./tenant_pb.js";
@@ -40,7 +40,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/monitor.proto.
  */
 export const file_nopacs_v1_monitor: GenFile = /*@__PURE__*/
-  fileDesc("Chdub3BhY3MvdjEvbW9uaXRvci5wcm90bxIJbm9wYWNzLnYxIlAKElJlY2VwdGlvblN0ZXBDb3VudBImCgRzdGVwGAEgASgOMhgubm9wYWNzLnYxLlJlY2VwdGlvblN0ZXASEgoKcmVjZXB0aW9ucxgCIAEoAyKVAgoMVGVuYW50Q291bnRzEhAKCHN1YmplY3RzGAEgASgDEhAKCHNlc3Npb25zGAIgASgDEg0KBXNjYW5zGAMgASgDEhEKCWluc3RhbmNlcxgEIAEoAxIZChFxdWFyYW50aW5lZF9maWxlcxgFIAEoAxIZChFxdWFyYW50aW5lZF9ieXRlcxgGIAEoAxI9ChZyZWNlcHRpb25zX2luX3Byb2dyZXNzGAcgAygLMh0ubm9wYWNzLnYxLlJlY2VwdGlvblN0ZXBDb3VudBIWCg5pbmNvbWluZ19ieXRlcxgIIAEoAxIyChBqb2JzX2luX3Byb2dyZXNzGAkgAygLMhgubm9wYWNzLnYxLkpvYlN0YXRlQ291bnQiQQoNSm9iU3RhdGVDb3VudBIiCgVzdGF0ZRgBIAEoDjITLm5vcGFjcy52MS5Kb2JTdGF0ZRIMCgRqb2JzGAIgASgDImIKDFNlbmRlclN0YXR1cxIOCgZzZW5kZXIYASABKAkSJwoGaGVhbHRoGAIgASgLMhcubm9wYWNzLnYxLlNlbmRlckhlYWx0aBIZChFvcGVuX2Fzc29jaWF0aW9ucxgDIAEoBSKYAQoKVGhyb3VnaHB1dBIhChlmaWxlc19yZWNlaXZlZF9wZXJfc2Vjb25kGAEgASgBEiEKGWJ5dGVzX3JlY2VpdmVkX3Blcl9zZWNvbmQYAiABKAESIQoZZmlsZXNfYXJjaGl2ZWRfcGVyX3NlY29uZBgDIAEoARIhChlieXRlc19hcmNoaXZlZF9wZXJfc2Vjb25kGAQgASgBIu4CCg1TdG9yYWdlU3RhdHVzEg8KB3N0b3JhZ2UYASABKAkSEgoKdXNlZF9ieXRlcxgCIAEoAxIXCgpmcmVlX2J5dGVzGAMgASgDSACIAQESFgoOY2FwYWNpdHlfYnl0ZXMYBCABKAMSEwoLbmVhcmx5X2Z1bGwYBSABKAgSMAoKdmVyc2lvbmluZxgGIAEoDjIcLm5vcGFjcy52MS5TdG9yYWdlVmVyc2lvbmluZxITCgtvYmplY3RfbG9jaxgHIAEoCBIkCgR0aWVyGAggASgOMhYubm9wYWNzLnYxLlN0b3JhZ2VUaWVyEhIKCnJlcGxpY2Ffb2YYCSABKAkSEQoJc3dpdGNoaW5nGAogASgIEjQKEGxhc3Rfc3dpdGNoX3RpbWUYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhkKEXN3aXRjaF9nZW5lcmF0aW9uGAwgASgDQg0KC19mcmVlX2J5dGVzIm0KDFJlY2FsbENvdW50cxIRCglyZXF1ZXN0ZWQYASABKAMSEwoLaW5fcHJvZ3Jlc3MYAiABKAMSDgoGb25saW5lGAMgASgDEg4KBmZhaWxlZBgEIAEoAxIVCg11bml0c193YWl0aW5nGAUgASgDImEKDlJlY2VpdmVyU3RhdHVzEhAKCHJlY2VpdmVyGAEgASgJEikKBmhlYWx0aBgCIAEoCzIZLm5vcGFjcy52MS5SZWNlaXZlckhlYWx0aBISCgphbnlfY2FsbGVyGAMgASgIIrYGCgxUZW5hbnRTdGF0dXMSDgoGdGVuYW50GAEgASgJEi4KDmRhdGFiYXNlX3N0YXRlGAIgASgOMhYubm9wYWNzLnYxLlRlbmFudFN0YXRlEjcKE2RhdGFiYXNlX3N0YXRlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhQKDGV2ZW50X2N1cnNvchgEIAEoCRInCgZjb3VudHMYBSABKAsyFy5ub3BhY3MudjEuVGVuYW50Q291bnRzEikKCnRocm91Z2hwdXQYBiABKAsyFS5ub3BhY3MudjEuVGhyb3VnaHB1dBIqCghzdG9yYWdlcxgHIAMoCzIYLm5vcGFjcy52MS5TdG9yYWdlU3RhdHVzEiwKCXJlY2VpdmVycxgIIAMoCzIZLm5vcGFjcy52MS5SZWNlaXZlclN0YXR1cxIcChRpbmNvbWluZ19saW1pdF9ieXRlcxgJIAEoAxIoCgdzZW5kZXJzGAogAygLMhcubm9wYWNzLnYxLlNlbmRlclN0YXR1cxIrCgpsYXN0X3NjcnViGAsgASgLMhcubm9wYWNzLnYxLlNjcnViU3VtbWFyeRIzCg1vcGVuX2ZpbmRpbmdzGAwgAygLMhwubm9wYWNzLnYxLlNjcnViRmluZGluZ0NvdW50Ei4KCmF1ZGl0X3NlYWwYDSABKAsyGi5ub3BhY3MudjEuQXVkaXRTZWFsU3RhdHVzEhkKEXBlbmRpbmdfZGVsZXRpb25zGA4gASgDEh4KFnBlbmRpbmdfZGVsZXRpb25fYnl0ZXMYDyABKAMSFQoNZXZlbnRfaGlzdG9yeRgQIAEoCRIYChBvd25lcl9nZW5lcmF0aW9uGBEgASgDEh4KFnVucmVzb2x2ZWRfY29ycmVjdGlvbnMYEiABKAMSKgoIcmVwbGljYXMYEyADKAsyGC5ub3BhY3MudjEuUmVwbGljYVN0YXR1cxIoCgdyZWNhbGxzGBQgASgLMhcubm9wYWNzLnYxLlJlY2FsbENvdW50cxItCglyZXRlbnRpb24YFSABKAsyGi5ub3BhY3MudjEuUmV0ZW50aW9uU3RhdHVzIs0BCgxTY3J1YlN1bW1hcnkSCwoDam9iGAEgASgJEiIKBXN0YXRlGAIgASgOMhMubm9wYWNzLnYxLkpvYlN0YXRlEi4KCnN0YXJ0X3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiwKCGVuZF90aW1lGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCghmaW5kaW5ncxgFIAMoCzIcLm5vcGFjcy52MS5TY3J1YkZpbmRpbmdDb3VudCJQChFTY3J1YkZpbmRpbmdDb3VudBIpCgRraW5kGAEgASgOMhsubm9wYWNzLnYxLlNjcnViRmluZGluZ0tpbmQSEAoIZmluZGluZ3MYAiABKAMiWgoQR2V0U3RhdHVzUmVxdWVzdBIfCgVzY29wZRgBIAEoCzIQLm5vcGFjcy52MS5TY29wZRIRCglwYWdlX3NpemUYAiABKAUSEgoKcGFnZV90b2tlbhgDIAEoCSLkAQoRR2V0U3RhdHVzUmVzcG9uc2USKAoHdGVuYW50cxgBIAMoCzIXLm5vcGFjcy52MS5UZW5hbnRTdGF0dXMSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEigKBHRpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiUKDWV4cGlyaW5nX2tleXMYBCADKAsyDi5ub3BhY3MudjEuS2V5EjsKF2luc3RhbGxhdGlvbl9hdWRpdF9zZWFsGAUgASgLMhoubm9wYWNzLnYxLkF1ZGl0U2VhbFN0YXR1cyKWAQoRQXNzb2NpYXRpb25GYWlsZWQSEAoIcmVjZWl2ZXIYASABKAkSIQoGY2FsbGVyGAIgASgLMhEubm9wYWNzLnYxLkNhbGxlchIuCgdmYWlsdXJlGAMgASgOMh0ubm9wYWNzLnYxLkFzc29jaWF0aW9uRmFpbHVyZRINCgVjb3VudBgEIAEoAxINCgVob3N0cxgFIAEoAyKRAgoUUmVjZXB0aW9uU3RlcFJlYWNoZWQSEQoJcmVjZXB0aW9uGAEgASgJEhAKCHJlY2VpdmVyGAIgASgJEg8KB2Fycml2YWwYAyABKAUSJgoEc3RlcBgEIAEoDjIYLm5vcGFjcy52MS5SZWNlcHRpb25TdGVwEi8KDXByZXZpb3VzX3N0ZXAYCSABKA4yGC5ub3BhY3MudjEuUmVjZXB0aW9uU3RlcBIqCgZjb3VudHMYBSABKAsyGi5ub3BhY3MudjEuUmVjZXB0aW9uQ291bnRzEhUKDXN1YmplY3RfbGFiZWwYBiABKAkSFQoNc2Vzc2lvbl9sYWJlbBgHIAEoCRIQCghyZXRyeV9vZhgIIAEoCSKtAQoPRmlsZVF1YXJhbnRpbmVkEgwKBGZpbGUYASABKAkSEQoJcmVjZXB0aW9uGAIgASgJEhAKCHJlY2VpdmVyGAMgASgJEisKBnJlYXNvbhgEIAEoDjIbLm5vcGFjcy52MS5RdWFyYW50aW5lUmVhc29uEhIKCnNpemVfYnl0ZXMYBSABKAMSEgoKaGVsZF9maWxlcxgGIAEoAxISCgpoZWxkX2J5dGVzGAcgASgDIr0BChFRdWFyYW50aW5lRGVjaWRlZBIMCgRmaWxlGAEgASgJEikKBXN0YXRlGAIgASgOMhoubm9wYWNzLnYxLlF1YXJhbnRpbmVTdGF0ZRIsCgxyZWxlYXNlX21vZGUYAyABKA4yFi5ub3BhY3MudjEuUmVsZWFzZU1vZGUSGQoRcmVsZWFzZV9yZWNlcHRpb24YBCABKAkSEgoKaGVsZF9maWxlcxgFIAEoAxISCgpoZWxkX2J5dGVzGAYgASgDIlQKFVJlY2VpdmVySGVhbHRoQ2hhbmdlZBIQCghyZWNlaXZlchgBIAEoCRIpCgZoZWFsdGgYAiABKAsyGS5ub3BhY3MudjEuUmVjZWl2ZXJIZWFsdGgijwEKE1N0b3JhZ2VTcGFjZUNoYW5nZWQSDwoHc3RvcmFnZRgBIAEoCRIrCgVzdGF0ZRgCIAEoDjIcLm5vcGFjcy52MS5TdG9yYWdlU3BhY2VTdGF0ZRISCgp1c2VkX2J5dGVzGAMgASgDEhcKCmZyZWVfYnl0ZXMYBCABKANIAIgBAUINCgtfZnJlZV9ieXRlcyKgAQoLRnJhbWVzQWRkZWQSFQoNc3ViamVjdF9sYWJlbBgBIAEoCRIVCg1zZXNzaW9uX2xhYmVsGAIgASgJEhIKCnNjYW5fbGFiZWwYAyABKAkSEQoJaW5zdGFuY2VzGAQgASgDEhIKCnNjYW5zX2RvbmUYBSABKAMSFgoOaW5zdGFuY2VzX2RvbmUYBiABKAMSEAoIZmluaXNoZWQYByABKAgi6wEKDkpvYlN0ZXBSZWFjaGVkEgsKA2pvYhgBIAEoCRIiCgVzdGF0ZRgCIAEoDjITLm5vcGFjcy52MS5Kb2JTdGF0ZRIrCg5wcmV2aW91c19zdGF0ZRgDIAEoDjITLm5vcGFjcy52MS5Kb2JTdGF0ZRIkCgZjb3VudHMYBCABKAsyFC5ub3BhY3MudjEuSm9iQ291bnRzEg4KBnNlbmRlchgFIAEoCRIQCghyZWNlaXZlchgGIAEoCRIRCglyZWNlcHRpb24YByABKAkSEAoIcmV0cnlfb2YYCCABKAkSDgoGcmVhc29uGAkgASgJIlIKDUpvYlByb2dyZXNzZWQSCwoDam9iGAEgASgJEiQKBmNvdW50cxgCIAEoCzIULm5vcGFjcy52MS5Kb2JDb3VudHMSDgoGc2VuZGVyGAMgASgJIk4KE1NlbmRlckhlYWx0aENoYW5nZWQSDgoGc2VuZGVyGAEgASgJEicKBmhlYWx0aBgCIAEoCzIXLm5vcGFjcy52MS5TZW5kZXJIZWFsdGgiwgEKE1NjcnViRmluZGluZ0NoYW5nZWQSDwoHZmluZGluZxgBIAEoCRIpCgRraW5kGAIgASgOMhsubm9wYWNzLnYxLlNjcnViRmluZGluZ0tpbmQSDwoHc3RvcmFnZRgDIAEoCRIVCg1zdWJqZWN0X2xhYmVsGAQgASgJEhUKDXNlc3Npb25fbGFiZWwYBSABKAkSEgoKc2Nhbl9sYWJlbBgGIAEoCRIPCgdjbGVhcmVkGAcgASgIEgsKA2pvYhgIIAEoCSKeAgoOQ2F0YWxvZ0NoYW5nZWQSEgoKY29ycmVjdGlvbhgBIAEoCRInCgRraW5kGAIgASgOMhkubm9wYWNzLnYxLkNvcnJlY3Rpb25LaW5kEikKBXN0YXRlGAMgASgOMhoubm9wYWNzLnYxLkNvcnJlY3Rpb25TdGF0ZRIVCg1zdWJqZWN0X2xhYmVsGAQgASgJEhUKDXNlc3Npb25fbGFiZWwYBSABKAkSEgoKc2Nhbl9sYWJlbBgGIAEoCRIQCgh0b19sYWJlbBgHIAEoCRIRCglpbnN0YW5jZXMYCCABKAMSEAoIcmV2aXNpb24YCSABKAUSKwoGb3JpZ2luGAogASgOMhsubm9wYWNzLnYxLkNvcnJlY3Rpb25PcmlnaW4iggEKDVJlcGxpY2FCZWhpbmQSDwoHcmVwbGljYRgBIAEoCRIPCgdwcmltYXJ5GAIgASgJEiYKA2xhZxgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIUCgxzY2Fuc19iZWhpbmQYBCABKAMSEQoJcmVjb3ZlcmVkGAUgASgIIs8BCg9TdG9yYWdlU3dpdGNoZWQSDwoHcHJpbWFyeRgBIAEoCRIPCgdyZXBsaWNhGAIgASgJEhUKDXNjYW5zX2RyYWluZWQYAyABKAMSHAoUYXNzb2NpYXRpb25zX3JlZnVzZWQYBCABKAMSKAoFcGF1c2UYBSABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SDwoHcmVmdXNlZBgGIAEoCBIPCgdyZWZ1c2FsGAcgASgJEhkKEXN3aXRjaF9nZW5lcmF0aW9uGAggASgDIrIBCgtIb2xkQ2hhbmdlZBIMCgRob2xkGAEgASgJEiMKBXN0YXRlGAIgASgOMhQubm9wYWNzLnYxLkhvbGRTdGF0ZRIVCg1zdWJqZWN0X2xhYmVsGAMgASgJEhUKDXNlc3Npb25fbGFiZWwYBCABKAkSEgoKc2Nhbl9sYWJlbBgFIAEoCRIUCgx3aG9sZV90ZW5hbnQYBiABKAgSGAoQZm91bmRfb25fc3RvcmFnZRgHIAEoCCKDAQoOUmV0ZW50aW9uQ2xvY2sSDgoGcGF1c2VkGAEgASgIEi0KCmNsb2NrX3N0ZXAYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SMgoObGFzdF9wYXNzX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkUKDkNhdGFsb2dSZWJ1aWx0EgsKA2pvYhgBIAEoCRIRCglpbnN0YW5jZXMYAiABKAMSEwoLbmV3X2hpc3RvcnkYAyABKAgioggKBUV2ZW50Eg4KBmN1cnNvchgBIAEoCRIoCgR0aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZ0ZW5hbnQYAyABKAkSIgoEdHlwZRgEIAEoDjIULm5vcGFjcy52MS5FdmVudFR5cGUSOgoSYXNzb2NpYXRpb25fZmFpbGVkGAUgASgLMhwubm9wYWNzLnYxLkFzc29jaWF0aW9uRmFpbGVkSAASOQoOcmVjZXB0aW9uX3N0ZXAYBiABKAsyHy5ub3BhY3MudjEuUmVjZXB0aW9uU3RlcFJlYWNoZWRIABI2ChBmaWxlX3F1YXJhbnRpbmVkGAcgASgLMhoubm9wYWNzLnYxLkZpbGVRdWFyYW50aW5lZEgAEjoKEnF1YXJhbnRpbmVfZGVjaWRlZBgIIAEoCzIcLm5vcGFjcy52MS5RdWFyYW50aW5lRGVjaWRlZEgAEjsKD3JlY2VpdmVyX2hlYWx0aBgJIAEoCzIgLm5vcGFjcy52MS5SZWNlaXZlckhlYWx0aENoYW5nZWRIABI3Cg1zdG9yYWdlX3NwYWNlGAogASgLMh4ubm9wYWNzLnYxLlN0b3JhZ2VTcGFjZUNoYW5nZWRIABIuCgxmcmFtZXNfYWRkZWQYCyABKAsyFi5ub3BhY3MudjEuRnJhbWVzQWRkZWRIABItCghqb2Jfc3RlcBgMIAEoCzIZLm5vcGFjcy52MS5Kb2JTdGVwUmVhY2hlZEgAEjAKDGpvYl9wcm9ncmVzcxgNIAEoCzIYLm5vcGFjcy52MS5Kb2JQcm9ncmVzc2VkSAASNwoNc2VuZGVyX2hlYWx0aBgOIAEoCzIeLm5vcGFjcy52MS5TZW5kZXJIZWFsdGhDaGFuZ2VkSAASNwoNc2NydWJfZmluZGluZxgPIAEoCzIeLm5vcGFjcy52MS5TY3J1YkZpbmRpbmdDaGFuZ2VkSAASNAoPY2F0YWxvZ19jaGFuZ2VkGBAgASgLMhkubm9wYWNzLnYxLkNhdGFsb2dDaGFuZ2VkSAASNAoPY2F0YWxvZ19yZWJ1aWx0GBEgASgLMhkubm9wYWNzLnYxLkNhdGFsb2dSZWJ1aWx0SAASMgoOcmVwbGljYV9iZWhpbmQYEiABKAsyGC5ub3BhY3MudjEuUmVwbGljYUJlaGluZEgAEjYKEHN0b3JhZ2Vfc3dpdGNoZWQYEyABKAsyGi5ub3BhY3MudjEuU3RvcmFnZVN3aXRjaGVkSAASLgoMaG9sZF9jaGFuZ2VkGBQgASgLMhYubm9wYWNzLnYxLkhvbGRDaGFuZ2VkSAASNAoPcmV0ZW50aW9uX2Nsb2NrGBUgASgLMhkubm9wYWNzLnYxLlJldGVudGlvbkNsb2NrSABCCQoHcGF5bG9hZCKZAwoOV2F0Y2hLZWVwQWxpdmUSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGY3Vyc29yGAIgASgJEkQKDnRlbmFudF9jdXJzb3JzGAMgAygLMiwubm9wYWNzLnYxLldhdGNoS2VlcEFsaXZlLlRlbmFudEN1cnNvcnNFbnRyeRIaChJ1bmFuc3dlcmVkX3RlbmFudHMYBCADKAkSDAoEZnVsbBgFIAEoCBIVCg1ldmVudF9oaXN0b3J5GAYgASgJElMKFnRlbmFudF9ldmVudF9oaXN0b3JpZXMYByADKAsyMy5ub3BhY3MudjEuV2F0Y2hLZWVwQWxpdmUuVGVuYW50RXZlbnRIaXN0b3JpZXNFbnRyeRo0ChJUZW5hbnRDdXJzb3JzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARo7ChlUZW5hbnRFdmVudEhpc3Rvcmllc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEi7gEKDFdhdGNoUmVxdWVzdBIfCgVzY29wZRgBIAEoCzIQLm5vcGFjcy52MS5TY29wZRIOCgZjdXJzb3IYAiABKAkSIwoFdHlwZXMYAyADKA4yFC5ub3BhY3MudjEuRXZlbnRUeXBlEkIKDnRlbmFudF9jdXJzb3JzGAQgAygLMioubm9wYWNzLnYxLldhdGNoUmVxdWVzdC5UZW5hbnRDdXJzb3JzRW50cnkSDgoGcmVzdW1lGAUgASgIGjQKElRlbmFudEN1cnNvcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBImsKDVdhdGNoUmVzcG9uc2USIQoFZXZlbnQYASABKAsyEC5ub3BhY3MudjEuRXZlbnRIABIvCgprZWVwX2FsaXZlGAIgASgLMhkubm9wYWNzLnYxLldhdGNoS2VlcEFsaXZlSABCBgoEa2luZCrXAQoRU3RvcmFnZVZlcnNpb25pbmcSIgoeU1RPUkFHRV9WRVJTSU9OSU5HX1VOU1BFQ0lGSUVEEAASIAocU1RPUkFHRV9WRVJTSU9OSU5HX0RJUkVDVE9SWRABEhoKFlNUT1JBR0VfVkVSU0lPTklOR19PRkYQAhIeChpTVE9SQUdFX1ZFUlNJT05JTkdfRU5BQkxFRBADEiAKHFNUT1JBR0VfVkVSU0lPTklOR19TVVNQRU5ERUQQBBIeChpTVE9SQUdFX1ZFUlNJT05JTkdfVU5LTk9XThAFKrcECglFdmVudFR5cGUSGgoWRVZFTlRfVFlQRV9VTlNQRUNJRklFRBAAEiEKHUVWRU5UX1RZUEVfQVNTT0NJQVRJT05fRkFJTEVEEAESHQoZRVZFTlRfVFlQRV9SRUNFUFRJT05fU1RFUBACEh8KG0VWRU5UX1RZUEVfRklMRV9RVUFSQU5USU5FRBADEiEKHUVWRU5UX1RZUEVfUVVBUkFOVElORV9ERUNJREVEEAQSHgoaRVZFTlRfVFlQRV9SRUNFSVZFUl9IRUFMVEgQBRIcChhFVkVOVF9UWVBFX1NUT1JBR0VfU1BBQ0UQBhIbChdFVkVOVF9UWVBFX0ZSQU1FU19BRERFRBAHEhcKE0VWRU5UX1RZUEVfSk9CX1NURVAQCBIbChdFVkVOVF9UWVBFX0pPQl9QUk9HUkVTUxAJEhwKGEVWRU5UX1RZUEVfU0VOREVSX0hFQUxUSBAKEhwKGEVWRU5UX1RZUEVfU0NSVUJfRklORElORxALEh4KGkVWRU5UX1RZUEVfQ0FUQUxPR19DSEFOR0VEEAwSHgoaRVZFTlRfVFlQRV9DQVRBTE9HX1JFQlVJTFQQDRIdChlFVkVOVF9UWVBFX1JFUExJQ0FfQkVISU5EEA4SHwobRVZFTlRfVFlQRV9TVE9SQUdFX1NXSVRDSEVEEA8SGwoXRVZFTlRfVFlQRV9IT0xEX0NIQU5HRUQQEBIeChpFVkVOVF9UWVBFX1JFVEVOVElPTl9DTE9DSxARKroDChJBc3NvY2lhdGlvbkZhaWx1cmUSIwofQVNTT0NJQVRJT05fRkFJTFVSRV9VTlNQRUNJRklFRBAAEioKJkFTU09DSUFUSU9OX0ZBSUxVUkVfQ0FMTEVSX05PVF9BTExPV0VEEAESNgoyQVNTT0NJQVRJT05fRkFJTFVSRV9DQUxMRURfQUVfVElUTEVfTk9UX1JFQ09HTklaRUQQAhItCilBU1NPQ0lBVElPTl9GQUlMVVJFX05PX0FDQ0VQVEFCTEVfQ09OVEVYVBADEiMKH0FTU09DSUFUSU9OX0ZBSUxVUkVfTkVBUkxZX0ZVTEwQBBIoCiRBU1NPQ0lBVElPTl9GQUlMVVJFX1RFTkFOVF9OT1RfUkVBRFkQBRIiCh5BU1NPQ0lBVElPTl9GQUlMVVJFX1RMU19GQUlMRUQQBhImCiJBU1NPQ0lBVElPTl9GQUlMVVJFX1BST1RPQ09MX0VSUk9SEAcSJgoiQVNTT0NJQVRJT05fRkFJTFVSRV9JTkNPTUlOR19MSU1JVBAIEikKJUFTU09DSUFUSU9OX0ZBSUxVUkVfU1RPUkFHRV9TV0lUQ0hJTkcQCSqAAQoRU3RvcmFnZVNwYWNlU3RhdGUSIwofU1RPUkFHRV9TUEFDRV9TVEFURV9VTlNQRUNJRklFRBAAEiMKH1NUT1JBR0VfU1BBQ0VfU1RBVEVfTkVBUkxZX0ZVTEwQARIhCh1TVE9SQUdFX1NQQUNFX1NUQVRFX1JFQ09WRVJFRBACMqABCg5Nb25pdG9yU2VydmljZRJLCglHZXRTdGF0dXMSGy5ub3BhY3MudjEuR2V0U3RhdHVzUmVxdWVzdBocLm5vcGFjcy52MS5HZXRTdGF0dXNSZXNwb25zZSIDkAIBEkEKBVdhdGNoEhcubm9wYWNzLnYxLldhdGNoUmVxdWVzdBoYLm5vcGFjcy52MS5XYXRjaFJlc3BvbnNlIgOQAgEwAWIGcHJvdG8z", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_nopacs_v1_access, file_nopacs_v1_audit_seal, file_nopacs_v1_correction, file_nopacs_v1_job, file_nopacs_v1_quarantine, file_nopacs_v1_reception, file_nopacs_v1_receiver, file_nopacs_v1_retention, file_nopacs_v1_scope, file_nopacs_v1_sender, file_nopacs_v1_storage, file_nopacs_v1_tenant]);
+  fileDesc("Chdub3BhY3MvdjEvbW9uaXRvci5wcm90bxIJbm9wYWNzLnYxIlAKElJlY2VwdGlvblN0ZXBDb3VudBImCgRzdGVwGAEgASgOMhgubm9wYWNzLnYxLlJlY2VwdGlvblN0ZXASEgoKcmVjZXB0aW9ucxgCIAEoAyKVAgoMVGVuYW50Q291bnRzEhAKCHN1YmplY3RzGAEgASgDEhAKCHNlc3Npb25zGAIgASgDEg0KBXNjYW5zGAMgASgDEhEKCWluc3RhbmNlcxgEIAEoAxIZChFxdWFyYW50aW5lZF9maWxlcxgFIAEoAxIZChFxdWFyYW50aW5lZF9ieXRlcxgGIAEoAxI9ChZyZWNlcHRpb25zX2luX3Byb2dyZXNzGAcgAygLMh0ubm9wYWNzLnYxLlJlY2VwdGlvblN0ZXBDb3VudBIWCg5pbmNvbWluZ19ieXRlcxgIIAEoAxIyChBqb2JzX2luX3Byb2dyZXNzGAkgAygLMhgubm9wYWNzLnYxLkpvYlN0YXRlQ291bnQiQQoNSm9iU3RhdGVDb3VudBIiCgVzdGF0ZRgBIAEoDjITLm5vcGFjcy52MS5Kb2JTdGF0ZRIMCgRqb2JzGAIgASgDImIKDFNlbmRlclN0YXR1cxIOCgZzZW5kZXIYASABKAkSJwoGaGVhbHRoGAIgASgLMhcubm9wYWNzLnYxLlNlbmRlckhlYWx0aBIZChFvcGVuX2Fzc29jaWF0aW9ucxgDIAEoBSKYAQoKVGhyb3VnaHB1dBIhChlmaWxlc19yZWNlaXZlZF9wZXJfc2Vjb25kGAEgASgBEiEKGWJ5dGVzX3JlY2VpdmVkX3Blcl9zZWNvbmQYAiABKAESIQoZZmlsZXNfYXJjaGl2ZWRfcGVyX3NlY29uZBgDIAEoARIhChlieXRlc19hcmNoaXZlZF9wZXJfc2Vjb25kGAQgASgBIvEDCg1TdG9yYWdlU3RhdHVzEg8KB3N0b3JhZ2UYASABKAkSEgoKdXNlZF9ieXRlcxgCIAEoAxIXCgpmcmVlX2J5dGVzGAMgASgDSACIAQESFgoOY2FwYWNpdHlfYnl0ZXMYBCABKAMSEwoLbmVhcmx5X2Z1bGwYBSABKAgSMAoKdmVyc2lvbmluZxgGIAEoDjIcLm5vcGFjcy52MS5TdG9yYWdlVmVyc2lvbmluZxITCgtvYmplY3RfbG9jaxgHIAEoCBIkCgR0aWVyGAggASgOMhYubm9wYWNzLnYxLlN0b3JhZ2VUaWVyEhIKCnJlcGxpY2Ffb2YYCSABKAkSEQoJc3dpdGNoaW5nGAogASgIEjQKEGxhc3Rfc3dpdGNoX3RpbWUYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhkKEXN3aXRjaF9nZW5lcmF0aW9uGAwgASgDEjcKEmVuY3J5cHRpb25fYXRfcmVzdBgNIAEoDjIbLm5vcGFjcy52MS5FbmNyeXB0aW9uQXRSZXN0EhwKFGVuY3J5cHRpb25fYWxnb3JpdGhtGA4gASgJEioKCGNvdmVyYWdlGA8gASgLMhgubm9wYWNzLnYxLlNjcnViQ292ZXJhZ2VCDQoLX2ZyZWVfYnl0ZXMinwEKDVNjcnViQ292ZXJhZ2USDwoHb2JqZWN0cxgBIAEoAxIQCgh2ZXJpZmllZBgCIAEoAxINCgVzaGFyZRgDIAEoARIVCg1wcmVzZW5jZV9vbmx5GAQgASgDEjQKEW9sZGVzdF91bnZlcmlmaWVkGAUgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEg8KB292ZXJkdWUYBiABKAMibQoMUmVjYWxsQ291bnRzEhEKCXJlcXVlc3RlZBgBIAEoAxITCgtpbl9wcm9ncmVzcxgCIAEoAxIOCgZvbmxpbmUYAyABKAMSDgoGZmFpbGVkGAQgASgDEhUKDXVuaXRzX3dhaXRpbmcYBSABKAMiYQoOUmVjZWl2ZXJTdGF0dXMSEAoIcmVjZWl2ZXIYASABKAkSKQoGaGVhbHRoGAIgASgLMhkubm9wYWNzLnYxLlJlY2VpdmVySGVhbHRoEhIKCmFueV9jYWxsZXIYAyABKAgitgYKDFRlbmFudFN0YXR1cxIOCgZ0ZW5hbnQYASABKAkSLgoOZGF0YWJhc2Vfc3RhdGUYAiABKA4yFi5ub3BhY3MudjEuVGVuYW50U3RhdGUSNwoTZGF0YWJhc2Vfc3RhdGVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFAoMZXZlbnRfY3Vyc29yGAQgASgJEicKBmNvdW50cxgFIAEoCzIXLm5vcGFjcy52MS5UZW5hbnRDb3VudHMSKQoKdGhyb3VnaHB1dBgGIAEoCzIVLm5vcGFjcy52MS5UaHJvdWdocHV0EioKCHN0b3JhZ2VzGAcgAygLMhgubm9wYWNzLnYxLlN0b3JhZ2VTdGF0dXMSLAoJcmVjZWl2ZXJzGAggAygLMhkubm9wYWNzLnYxLlJlY2VpdmVyU3RhdHVzEhwKFGluY29taW5nX2xpbWl0X2J5dGVzGAkgASgDEigKB3NlbmRlcnMYCiADKAsyFy5ub3BhY3MudjEuU2VuZGVyU3RhdHVzEisKCmxhc3Rfc2NydWIYCyABKAsyFy5ub3BhY3MudjEuU2NydWJTdW1tYXJ5EjMKDW9wZW5fZmluZGluZ3MYDCADKAsyHC5ub3BhY3MudjEuU2NydWJGaW5kaW5nQ291bnQSLgoKYXVkaXRfc2VhbBgNIAEoCzIaLm5vcGFjcy52MS5BdWRpdFNlYWxTdGF0dXMSGQoRcGVuZGluZ19kZWxldGlvbnMYDiABKAMSHgoWcGVuZGluZ19kZWxldGlvbl9ieXRlcxgPIAEoAxIVCg1ldmVudF9oaXN0b3J5GBAgASgJEhgKEG93bmVyX2dlbmVyYXRpb24YESABKAMSHgoWdW5yZXNvbHZlZF9jb3JyZWN0aW9ucxgSIAEoAxIqCghyZXBsaWNhcxgTIAMoCzIYLm5vcGFjcy52MS5SZXBsaWNhU3RhdHVzEigKB3JlY2FsbHMYFCABKAsyFy5ub3BhY3MudjEuUmVjYWxsQ291bnRzEi0KCXJldGVudGlvbhgVIAEoCzIaLm5vcGFjcy52MS5SZXRlbnRpb25TdGF0dXMizQEKDFNjcnViU3VtbWFyeRILCgNqb2IYASABKAkSIgoFc3RhdGUYAiABKA4yEy5ub3BhY3MudjEuSm9iU3RhdGUSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCGZpbmRpbmdzGAUgAygLMhwubm9wYWNzLnYxLlNjcnViRmluZGluZ0NvdW50IlAKEVNjcnViRmluZGluZ0NvdW50EikKBGtpbmQYASABKA4yGy5ub3BhY3MudjEuU2NydWJGaW5kaW5nS2luZBIQCghmaW5kaW5ncxgCIAEoAyJaChBHZXRTdGF0dXNSZXF1ZXN0Eh8KBXNjb3BlGAEgASgLMhAubm9wYWNzLnYxLlNjb3BlEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIuQBChFHZXRTdGF0dXNSZXNwb25zZRIoCgd0ZW5hbnRzGAEgAygLMhcubm9wYWNzLnYxLlRlbmFudFN0YXR1cxIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSKAoEdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoNZXhwaXJpbmdfa2V5cxgEIAMoCzIOLm5vcGFjcy52MS5LZXkSOwoXaW5zdGFsbGF0aW9uX2F1ZGl0X3NlYWwYBSABKAsyGi5ub3BhY3MudjEuQXVkaXRTZWFsU3RhdHVzIpYBChFBc3NvY2lhdGlvbkZhaWxlZBIQCghyZWNlaXZlchgBIAEoCRIhCgZjYWxsZXIYAiABKAsyES5ub3BhY3MudjEuQ2FsbGVyEi4KB2ZhaWx1cmUYAyABKA4yHS5ub3BhY3MudjEuQXNzb2NpYXRpb25GYWlsdXJlEg0KBWNvdW50GAQgASgDEg0KBWhvc3RzGAUgASgDIpECChRSZWNlcHRpb25TdGVwUmVhY2hlZBIRCglyZWNlcHRpb24YASABKAkSEAoIcmVjZWl2ZXIYAiABKAkSDwoHYXJyaXZhbBgDIAEoBRImCgRzdGVwGAQgASgOMhgubm9wYWNzLnYxLlJlY2VwdGlvblN0ZXASLwoNcHJldmlvdXNfc3RlcBgJIAEoDjIYLm5vcGFjcy52MS5SZWNlcHRpb25TdGVwEioKBmNvdW50cxgFIAEoCzIaLm5vcGFjcy52MS5SZWNlcHRpb25Db3VudHMSFQoNc3ViamVjdF9sYWJlbBgGIAEoCRIVCg1zZXNzaW9uX2xhYmVsGAcgASgJEhAKCHJldHJ5X29mGAggASgJIq0BCg9GaWxlUXVhcmFudGluZWQSDAoEZmlsZRgBIAEoCRIRCglyZWNlcHRpb24YAiABKAkSEAoIcmVjZWl2ZXIYAyABKAkSKwoGcmVhc29uGAQgASgOMhsubm9wYWNzLnYxLlF1YXJhbnRpbmVSZWFzb24SEgoKc2l6ZV9ieXRlcxgFIAEoAxISCgpoZWxkX2ZpbGVzGAYgASgDEhIKCmhlbGRfYnl0ZXMYByABKAMivQEKEVF1YXJhbnRpbmVEZWNpZGVkEgwKBGZpbGUYASABKAkSKQoFc3RhdGUYAiABKA4yGi5ub3BhY3MudjEuUXVhcmFudGluZVN0YXRlEiwKDHJlbGVhc2VfbW9kZRgDIAEoDjIWLm5vcGFjcy52MS5SZWxlYXNlTW9kZRIZChFyZWxlYXNlX3JlY2VwdGlvbhgEIAEoCRISCgpoZWxkX2ZpbGVzGAUgASgDEhIKCmhlbGRfYnl0ZXMYBiABKAMiVAoVUmVjZWl2ZXJIZWFsdGhDaGFuZ2VkEhAKCHJlY2VpdmVyGAEgASgJEikKBmhlYWx0aBgCIAEoCzIZLm5vcGFjcy52MS5SZWNlaXZlckhlYWx0aCKPAQoTU3RvcmFnZVNwYWNlQ2hhbmdlZBIPCgdzdG9yYWdlGAEgASgJEisKBXN0YXRlGAIgASgOMhwubm9wYWNzLnYxLlN0b3JhZ2VTcGFjZVN0YXRlEhIKCnVzZWRfYnl0ZXMYAyABKAMSFwoKZnJlZV9ieXRlcxgEIAEoA0gAiAEBQg0KC19mcmVlX2J5dGVzIqABCgtGcmFtZXNBZGRlZBIVCg1zdWJqZWN0X2xhYmVsGAEgASgJEhUKDXNlc3Npb25fbGFiZWwYAiABKAkSEgoKc2Nhbl9sYWJlbBgDIAEoCRIRCglpbnN0YW5jZXMYBCABKAMSEgoKc2NhbnNfZG9uZRgFIAEoAxIWCg5pbnN0YW5jZXNfZG9uZRgGIAEoAxIQCghmaW5pc2hlZBgHIAEoCCLrAQoOSm9iU3RlcFJlYWNoZWQSCwoDam9iGAEgASgJEiIKBXN0YXRlGAIgASgOMhMubm9wYWNzLnYxLkpvYlN0YXRlEisKDnByZXZpb3VzX3N0YXRlGAMgASgOMhMubm9wYWNzLnYxLkpvYlN0YXRlEiQKBmNvdW50cxgEIAEoCzIULm5vcGFjcy52MS5Kb2JDb3VudHMSDgoGc2VuZGVyGAUgASgJEhAKCHJlY2VpdmVyGAYgASgJEhEKCXJlY2VwdGlvbhgHIAEoCRIQCghyZXRyeV9vZhgIIAEoCRIOCgZyZWFzb24YCSABKAkiUgoNSm9iUHJvZ3Jlc3NlZBILCgNqb2IYASABKAkSJAoGY291bnRzGAIgASgLMhQubm9wYWNzLnYxLkpvYkNvdW50cxIOCgZzZW5kZXIYAyABKAkiTgoTU2VuZGVySGVhbHRoQ2hhbmdlZBIOCgZzZW5kZXIYASABKAkSJwoGaGVhbHRoGAIgASgLMhcubm9wYWNzLnYxLlNlbmRlckhlYWx0aCLCAQoTU2NydWJGaW5kaW5nQ2hhbmdlZBIPCgdmaW5kaW5nGAEgASgJEikKBGtpbmQYAiABKA4yGy5ub3BhY3MudjEuU2NydWJGaW5kaW5nS2luZBIPCgdzdG9yYWdlGAMgASgJEhUKDXN1YmplY3RfbGFiZWwYBCABKAkSFQoNc2Vzc2lvbl9sYWJlbBgFIAEoCRISCgpzY2FuX2xhYmVsGAYgASgJEg8KB2NsZWFyZWQYByABKAgSCwoDam9iGAggASgJIp4CCg5DYXRhbG9nQ2hhbmdlZBISCgpjb3JyZWN0aW9uGAEgASgJEicKBGtpbmQYAiABKA4yGS5ub3BhY3MudjEuQ29ycmVjdGlvbktpbmQSKQoFc3RhdGUYAyABKA4yGi5ub3BhY3MudjEuQ29ycmVjdGlvblN0YXRlEhUKDXN1YmplY3RfbGFiZWwYBCABKAkSFQoNc2Vzc2lvbl9sYWJlbBgFIAEoCRISCgpzY2FuX2xhYmVsGAYgASgJEhAKCHRvX2xhYmVsGAcgASgJEhEKCWluc3RhbmNlcxgIIAEoAxIQCghyZXZpc2lvbhgJIAEoBRIrCgZvcmlnaW4YCiABKA4yGy5ub3BhY3MudjEuQ29ycmVjdGlvbk9yaWdpbiKCAQoNUmVwbGljYUJlaGluZBIPCgdyZXBsaWNhGAEgASgJEg8KB3ByaW1hcnkYAiABKAkSJgoDbGFnGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhQKDHNjYW5zX2JlaGluZBgEIAEoAxIRCglyZWNvdmVyZWQYBSABKAgizwEKD1N0b3JhZ2VTd2l0Y2hlZBIPCgdwcmltYXJ5GAEgASgJEg8KB3JlcGxpY2EYAiABKAkSFQoNc2NhbnNfZHJhaW5lZBgDIAEoAxIcChRhc3NvY2lhdGlvbnNfcmVmdXNlZBgEIAEoAxIoCgVwYXVzZRgFIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIPCgdyZWZ1c2VkGAYgASgIEg8KB3JlZnVzYWwYByABKAkSGQoRc3dpdGNoX2dlbmVyYXRpb24YCCABKAMisgEKC0hvbGRDaGFuZ2VkEgwKBGhvbGQYASABKAkSIwoFc3RhdGUYAiABKA4yFC5ub3BhY3MudjEuSG9sZFN0YXRlEhUKDXN1YmplY3RfbGFiZWwYAyABKAkSFQoNc2Vzc2lvbl9sYWJlbBgEIAEoCRISCgpzY2FuX2xhYmVsGAUgASgJEhQKDHdob2xlX3RlbmFudBgGIAEoCBIYChBmb3VuZF9vbl9zdG9yYWdlGAcgASgIIoMBCg5SZXRlbnRpb25DbG9jaxIOCgZwYXVzZWQYASABKAgSLQoKY2xvY2tfc3RlcBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIyCg5sYXN0X3Bhc3NfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiRQoOQ2F0YWxvZ1JlYnVpbHQSCwoDam9iGAEgASgJEhEKCWluc3RhbmNlcxgCIAEoAxITCgtuZXdfaGlzdG9yeRgDIAEoCCKiCAoFRXZlbnQSDgoGY3Vyc29yGAEgASgJEigKBHRpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBnRlbmFudBgDIAEoCRIiCgR0eXBlGAQgASgOMhQubm9wYWNzLnYxLkV2ZW50VHlwZRI6ChJhc3NvY2lhdGlvbl9mYWlsZWQYBSABKAsyHC5ub3BhY3MudjEuQXNzb2NpYXRpb25GYWlsZWRIABI5Cg5yZWNlcHRpb25fc3RlcBgGIAEoCzIfLm5vcGFjcy52MS5SZWNlcHRpb25TdGVwUmVhY2hlZEgAEjYKEGZpbGVfcXVhcmFudGluZWQYByABKAsyGi5ub3BhY3MudjEuRmlsZVF1YXJhbnRpbmVkSAASOgoScXVhcmFudGluZV9kZWNpZGVkGAggASgLMhwubm9wYWNzLnYxLlF1YXJhbnRpbmVEZWNpZGVkSAASOwoPcmVjZWl2ZXJfaGVhbHRoGAkgASgLMiAubm9wYWNzLnYxLlJlY2VpdmVySGVhbHRoQ2hhbmdlZEgAEjcKDXN0b3JhZ2Vfc3BhY2UYCiABKAsyHi5ub3BhY3MudjEuU3RvcmFnZVNwYWNlQ2hhbmdlZEgAEi4KDGZyYW1lc19hZGRlZBgLIAEoCzIWLm5vcGFjcy52MS5GcmFtZXNBZGRlZEgAEi0KCGpvYl9zdGVwGAwgASgLMhkubm9wYWNzLnYxLkpvYlN0ZXBSZWFjaGVkSAASMAoMam9iX3Byb2dyZXNzGA0gASgLMhgubm9wYWNzLnYxLkpvYlByb2dyZXNzZWRIABI3Cg1zZW5kZXJfaGVhbHRoGA4gASgLMh4ubm9wYWNzLnYxLlNlbmRlckhlYWx0aENoYW5nZWRIABI3Cg1zY3J1Yl9maW5kaW5nGA8gASgLMh4ubm9wYWNzLnYxLlNjcnViRmluZGluZ0NoYW5nZWRIABI0Cg9jYXRhbG9nX2NoYW5nZWQYECABKAsyGS5ub3BhY3MudjEuQ2F0YWxvZ0NoYW5nZWRIABI0Cg9jYXRhbG9nX3JlYnVpbHQYESABKAsyGS5ub3BhY3MudjEuQ2F0YWxvZ1JlYnVpbHRIABIyCg5yZXBsaWNhX2JlaGluZBgSIAEoCzIYLm5vcGFjcy52MS5SZXBsaWNhQmVoaW5kSAASNgoQc3RvcmFnZV9zd2l0Y2hlZBgTIAEoCzIaLm5vcGFjcy52MS5TdG9yYWdlU3dpdGNoZWRIABIuCgxob2xkX2NoYW5nZWQYFCABKAsyFi5ub3BhY3MudjEuSG9sZENoYW5nZWRIABI0Cg9yZXRlbnRpb25fY2xvY2sYFSABKAsyGS5ub3BhY3MudjEuUmV0ZW50aW9uQ2xvY2tIAEIJCgdwYXlsb2FkIpkDCg5XYXRjaEtlZXBBbGl2ZRIoCgR0aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZjdXJzb3IYAiABKAkSRAoOdGVuYW50X2N1cnNvcnMYAyADKAsyLC5ub3BhY3MudjEuV2F0Y2hLZWVwQWxpdmUuVGVuYW50Q3Vyc29yc0VudHJ5EhoKEnVuYW5zd2VyZWRfdGVuYW50cxgEIAMoCRIMCgRmdWxsGAUgASgIEhUKDWV2ZW50X2hpc3RvcnkYBiABKAkSUwoWdGVuYW50X2V2ZW50X2hpc3RvcmllcxgHIAMoCzIzLm5vcGFjcy52MS5XYXRjaEtlZXBBbGl2ZS5UZW5hbnRFdmVudEhpc3Rvcmllc0VudHJ5GjQKElRlbmFudEN1cnNvcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjsKGVRlbmFudEV2ZW50SGlzdG9yaWVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLuAQoMV2F0Y2hSZXF1ZXN0Eh8KBXNjb3BlGAEgASgLMhAubm9wYWNzLnYxLlNjb3BlEg4KBmN1cnNvchgCIAEoCRIjCgV0eXBlcxgDIAMoDjIULm5vcGFjcy52MS5FdmVudFR5cGUSQgoOdGVuYW50X2N1cnNvcnMYBCADKAsyKi5ub3BhY3MudjEuV2F0Y2hSZXF1ZXN0LlRlbmFudEN1cnNvcnNFbnRyeRIOCgZyZXN1bWUYBSABKAgaNAoSVGVuYW50Q3Vyc29yc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiawoNV2F0Y2hSZXNwb25zZRIhCgVldmVudBgBIAEoCzIQLm5vcGFjcy52MS5FdmVudEgAEi8KCmtlZXBfYWxpdmUYAiABKAsyGS5ub3BhY3MudjEuV2F0Y2hLZWVwQWxpdmVIAEIGCgRraW5kKtcBChFTdG9yYWdlVmVyc2lvbmluZxIiCh5TVE9SQUdFX1ZFUlNJT05JTkdfVU5TUEVDSUZJRUQQABIgChxTVE9SQUdFX1ZFUlNJT05JTkdfRElSRUNUT1JZEAESGgoWU1RPUkFHRV9WRVJTSU9OSU5HX09GRhACEh4KGlNUT1JBR0VfVkVSU0lPTklOR19FTkFCTEVEEAMSIAocU1RPUkFHRV9WRVJTSU9OSU5HX1NVU1BFTkRFRBAEEh4KGlNUT1JBR0VfVkVSU0lPTklOR19VTktOT1dOEAUqtwQKCUV2ZW50VHlwZRIaChZFVkVOVF9UWVBFX1VOU1BFQ0lGSUVEEAASIQodRVZFTlRfVFlQRV9BU1NPQ0lBVElPTl9GQUlMRUQQARIdChlFVkVOVF9UWVBFX1JFQ0VQVElPTl9TVEVQEAISHwobRVZFTlRfVFlQRV9GSUxFX1FVQVJBTlRJTkVEEAMSIQodRVZFTlRfVFlQRV9RVUFSQU5USU5FX0RFQ0lERUQQBBIeChpFVkVOVF9UWVBFX1JFQ0VJVkVSX0hFQUxUSBAFEhwKGEVWRU5UX1RZUEVfU1RPUkFHRV9TUEFDRRAGEhsKF0VWRU5UX1RZUEVfRlJBTUVTX0FEREVEEAcSFwoTRVZFTlRfVFlQRV9KT0JfU1RFUBAIEhsKF0VWRU5UX1RZUEVfSk9CX1BST0dSRVNTEAkSHAoYRVZFTlRfVFlQRV9TRU5ERVJfSEVBTFRIEAoSHAoYRVZFTlRfVFlQRV9TQ1JVQl9GSU5ESU5HEAsSHgoaRVZFTlRfVFlQRV9DQVRBTE9HX0NIQU5HRUQQDBIeChpFVkVOVF9UWVBFX0NBVEFMT0dfUkVCVUlMVBANEh0KGUVWRU5UX1RZUEVfUkVQTElDQV9CRUhJTkQQDhIfChtFVkVOVF9UWVBFX1NUT1JBR0VfU1dJVENIRUQQDxIbChdFVkVOVF9UWVBFX0hPTERfQ0hBTkdFRBAQEh4KGkVWRU5UX1RZUEVfUkVURU5USU9OX0NMT0NLEBEqugMKEkFzc29jaWF0aW9uRmFpbHVyZRIjCh9BU1NPQ0lBVElPTl9GQUlMVVJFX1VOU1BFQ0lGSUVEEAASKgomQVNTT0NJQVRJT05fRkFJTFVSRV9DQUxMRVJfTk9UX0FMTE9XRUQQARI2CjJBU1NPQ0lBVElPTl9GQUlMVVJFX0NBTExFRF9BRV9USVRMRV9OT1RfUkVDT0dOSVpFRBACEi0KKUFTU09DSUFUSU9OX0ZBSUxVUkVfTk9fQUNDRVBUQUJMRV9DT05URVhUEAMSIwofQVNTT0NJQVRJT05fRkFJTFVSRV9ORUFSTFlfRlVMTBAEEigKJEFTU09DSUFUSU9OX0ZBSUxVUkVfVEVOQU5UX05PVF9SRUFEWRAFEiIKHkFTU09DSUFUSU9OX0ZBSUxVUkVfVExTX0ZBSUxFRBAGEiYKIkFTU09DSUFUSU9OX0ZBSUxVUkVfUFJPVE9DT0xfRVJST1IQBxImCiJBU1NPQ0lBVElPTl9GQUlMVVJFX0lOQ09NSU5HX0xJTUlUEAgSKQolQVNTT0NJQVRJT05fRkFJTFVSRV9TVE9SQUdFX1NXSVRDSElORxAJKoABChFTdG9yYWdlU3BhY2VTdGF0ZRIjCh9TVE9SQUdFX1NQQUNFX1NUQVRFX1VOU1BFQ0lGSUVEEAASIwofU1RPUkFHRV9TUEFDRV9TVEFURV9ORUFSTFlfRlVMTBABEiEKHVNUT1JBR0VfU1BBQ0VfU1RBVEVfUkVDT1ZFUkVEEAIyoAEKDk1vbml0b3JTZXJ2aWNlEksKCUdldFN0YXR1cxIbLm5vcGFjcy52MS5HZXRTdGF0dXNSZXF1ZXN0Ghwubm9wYWNzLnYxLkdldFN0YXR1c1Jlc3BvbnNlIgOQAgESQQoFV2F0Y2gSFy5ub3BhY3MudjEuV2F0Y2hSZXF1ZXN0Ghgubm9wYWNzLnYxLldhdGNoUmVzcG9uc2UiA5ACATABYgZwcm90bzM", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_nopacs_v1_access, file_nopacs_v1_audit_seal, file_nopacs_v1_correction, file_nopacs_v1_job, file_nopacs_v1_quarantine, file_nopacs_v1_reception, file_nopacs_v1_receiver, file_nopacs_v1_retention, file_nopacs_v1_scope, file_nopacs_v1_sender, file_nopacs_v1_storage, file_nopacs_v1_tenant]);
 
 /**
  * ReceptionStepCount is how many receptions are in one step.
@@ -373,6 +373,33 @@ export type StorageStatus = Message<"nopacs.v1.StorageStatus"> & {
    * @generated from field: int64 switch_generation = 12;
    */
   switchGeneration: bigint;
+
+  /**
+   * Whether it encrypts what it holds at rest, as the storage said when the
+   * server opened it (S3: the bucket's default encryption) or as its admin
+   * declared (a directory).
+   *
+   * @generated from field: nopacs.v1.EncryptionAtRest encryption_at_rest = 13;
+   */
+  encryptionAtRest: EncryptionAtRest;
+
+  /**
+   * For ENCRYPTION_AT_REST_ENCRYPTED, the algorithm as the storage names it
+   * ("AES256", "aws:kms", "aws:kms:dsse"), or "other" for a name this
+   * version does not know; empty otherwise. Never the storage's own text
+   * beyond those names, nor a key's name.
+   *
+   * @generated from field: string encryption_algorithm = 14;
+   */
+  encryptionAlgorithm: string;
+
+  /**
+   * How much of it scrubs have read whole within the tenant's
+   * scrub.interval (ScrubJob). Absent when the server does not compute it.
+   *
+   * @generated from field: nopacs.v1.ScrubCoverage coverage = 15;
+   */
+  coverage?: ScrubCoverage | undefined;
 };
 
 /**
@@ -381,6 +408,71 @@ export type StorageStatus = Message<"nopacs.v1.StorageStatus"> & {
  */
 export const StorageStatusSchema: GenMessage<StorageStatus> = /*@__PURE__*/
   messageDesc(file_nopacs_v1_monitor, 5);
+
+/**
+ * ScrubCoverage is how far scrubs keep up with one storage: of the objects
+ * the catalog places on it (for a replica, those of its scans in step), the
+ * share read whole within the tenant's scrub.interval, the oldest one
+ * unread and those overdue. A scrub reading 64 MiB/s reads 300 TB in about
+ * 52 days, so a storage larger than its interval allows shows here.
+ *
+ * @generated from message nopacs.v1.ScrubCoverage
+ */
+export type ScrubCoverage = Message<"nopacs.v1.ScrubCoverage"> & {
+  /**
+   * The objects it holds, as the catalog counts them.
+   *
+   * @generated from field: int64 objects = 1;
+   */
+  objects: bigint;
+
+  /**
+   * Of those, the objects read whole within the interval.
+   *
+   * @generated from field: int64 verified = 2;
+   */
+  verified: bigint;
+
+  /**
+   * verified over objects, from 0 to 1; 1 when it holds none.
+   *
+   * @generated from field: double share = 3;
+   */
+  share: number;
+
+  /**
+   * The objects of an archive-tier storage checked within the interval by
+   * presence only (listing, size, the store's checksum), not counted in
+   * verified.
+   *
+   * @generated from field: int64 presence_only = 4;
+   */
+  presenceOnly: bigint;
+
+  /**
+   * How long the object waiting longest has gone unread, from its last
+   * read or, never read, from its archiving. Zero when every object is
+   * verified within the interval.
+   *
+   * @generated from field: google.protobuf.Duration oldest_unverified = 5;
+   */
+  oldestUnverified?: Duration | undefined;
+
+  /**
+   * The objects not read within one interval of their last read, or of
+   * their archiving when never read.
+   *
+   * @generated from field: int64 overdue = 6;
+   */
+  overdue: bigint;
+};
+
+/**
+ * Describes the message nopacs.v1.ScrubCoverage.
+ * Use `create(ScrubCoverageSchema)` to create a new message.
+ */
+export const ScrubCoverageSchema: GenMessage<ScrubCoverage> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_monitor, 6);
 
 /**
  * RecallCounts are a tenant's recalls of objects from its archive-tier
@@ -430,7 +522,7 @@ export type RecallCounts = Message<"nopacs.v1.RecallCounts"> & {
  * Use `create(RecallCountsSchema)` to create a new message.
  */
 export const RecallCountsSchema: GenMessage<RecallCounts> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 6);
+  messageDesc(file_nopacs_v1_monitor, 7);
 
 /**
  * ReceiverStatus is a receiver's state now.
@@ -466,7 +558,7 @@ export type ReceiverStatus = Message<"nopacs.v1.ReceiverStatus"> & {
  * Use `create(ReceiverStatusSchema)` to create a new message.
  */
 export const ReceiverStatusSchema: GenMessage<ReceiverStatus> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 7);
+  messageDesc(file_nopacs_v1_monitor, 8);
 
 /**
  * TenantStatus is one tenant's numbers now.
@@ -657,7 +749,7 @@ export type TenantStatus = Message<"nopacs.v1.TenantStatus"> & {
  * Use `create(TenantStatusSchema)` to create a new message.
  */
 export const TenantStatusSchema: GenMessage<TenantStatus> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 8);
+  messageDesc(file_nopacs_v1_monitor, 9);
 
 /**
  * ScrubSummary is a tenant's last scrub, for a status.
@@ -706,7 +798,7 @@ export type ScrubSummary = Message<"nopacs.v1.ScrubSummary"> & {
  * Use `create(ScrubSummarySchema)` to create a new message.
  */
 export const ScrubSummarySchema: GenMessage<ScrubSummary> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 9);
+  messageDesc(file_nopacs_v1_monitor, 10);
 
 /**
  * ScrubFindingCount is how many scrub findings are of one kind.
@@ -734,7 +826,7 @@ export type ScrubFindingCount = Message<"nopacs.v1.ScrubFindingCount"> & {
  * Use `create(ScrubFindingCountSchema)` to create a new message.
  */
 export const ScrubFindingCountSchema: GenMessage<ScrubFindingCount> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 10);
+  messageDesc(file_nopacs_v1_monitor, 11);
 
 /**
  * GetStatusRequest asks for the status of one tenant or of every tenant.
@@ -774,7 +866,7 @@ export type GetStatusRequest = Message<"nopacs.v1.GetStatusRequest"> & {
  * Use `create(GetStatusRequestSchema)` to create a new message.
  */
 export const GetStatusRequestSchema: GenMessage<GetStatusRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 11);
+  messageDesc(file_nopacs_v1_monitor, 12);
 
 /**
  * GetStatusResponse is the status asked for.
@@ -830,7 +922,7 @@ export type GetStatusResponse = Message<"nopacs.v1.GetStatusResponse"> & {
  * Use `create(GetStatusResponseSchema)` to create a new message.
  */
 export const GetStatusResponseSchema: GenMessage<GetStatusResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 12);
+  messageDesc(file_nopacs_v1_monitor, 13);
 
 /**
  * AssociationFailed is a receiver turning callers away. Failures are grouped
@@ -890,7 +982,7 @@ export type AssociationFailed = Message<"nopacs.v1.AssociationFailed"> & {
  * Use `create(AssociationFailedSchema)` to create a new message.
  */
 export const AssociationFailedSchema: GenMessage<AssociationFailed> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 13);
+  messageDesc(file_nopacs_v1_monitor, 14);
 
 /**
  * ReceptionStepReached is a reception reaching a step.
@@ -973,7 +1065,7 @@ export type ReceptionStepReached = Message<"nopacs.v1.ReceptionStepReached"> & {
  * Use `create(ReceptionStepReachedSchema)` to create a new message.
  */
 export const ReceptionStepReachedSchema: GenMessage<ReceptionStepReached> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 14);
+  messageDesc(file_nopacs_v1_monitor, 15);
 
 /**
  * FileQuarantined is one file quarantined.
@@ -1037,7 +1129,7 @@ export type FileQuarantined = Message<"nopacs.v1.FileQuarantined"> & {
  * Use `create(FileQuarantinedSchema)` to create a new message.
  */
 export const FileQuarantinedSchema: GenMessage<FileQuarantined> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 15);
+  messageDesc(file_nopacs_v1_monitor, 16);
 
 /**
  * QuarantineDecided is a quarantined file released or rejected.
@@ -1094,7 +1186,7 @@ export type QuarantineDecided = Message<"nopacs.v1.QuarantineDecided"> & {
  * Use `create(QuarantineDecidedSchema)` to create a new message.
  */
 export const QuarantineDecidedSchema: GenMessage<QuarantineDecided> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 16);
+  messageDesc(file_nopacs_v1_monitor, 17);
 
 /**
  * ReceiverHealthChanged is a receiver's state changing.
@@ -1122,7 +1214,7 @@ export type ReceiverHealthChanged = Message<"nopacs.v1.ReceiverHealthChanged"> &
  * Use `create(ReceiverHealthChangedSchema)` to create a new message.
  */
 export const ReceiverHealthChangedSchema: GenMessage<ReceiverHealthChanged> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 17);
+  messageDesc(file_nopacs_v1_monitor, 18);
 
 /**
  * StorageSpaceChanged is a storage becoming nearly full or recovering.
@@ -1164,7 +1256,7 @@ export type StorageSpaceChanged = Message<"nopacs.v1.StorageSpaceChanged"> & {
  * Use `create(StorageSpaceChangedSchema)` to create a new message.
  */
 export const StorageSpaceChangedSchema: GenMessage<StorageSpaceChanged> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 18);
+  messageDesc(file_nopacs_v1_monitor, 19);
 
 /**
  * FramesAdded is the progress of the pass that gives frame tables (where
@@ -1233,7 +1325,7 @@ export type FramesAdded = Message<"nopacs.v1.FramesAdded"> & {
  * Use `create(FramesAddedSchema)` to create a new message.
  */
 export const FramesAddedSchema: GenMessage<FramesAdded> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 19);
+  messageDesc(file_nopacs_v1_monitor, 20);
 
 /**
  * JobStepReached is a job made or reaching a state.
@@ -1315,7 +1407,7 @@ export type JobStepReached = Message<"nopacs.v1.JobStepReached"> & {
  * Use `create(JobStepReachedSchema)` to create a new message.
  */
 export const JobStepReachedSchema: GenMessage<JobStepReached> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 20);
+  messageDesc(file_nopacs_v1_monitor, 21);
 
 /**
  * JobProgressed is a running job's counts. At most one per job every 10
@@ -1352,7 +1444,7 @@ export type JobProgressed = Message<"nopacs.v1.JobProgressed"> & {
  * Use `create(JobProgressedSchema)` to create a new message.
  */
 export const JobProgressedSchema: GenMessage<JobProgressed> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 21);
+  messageDesc(file_nopacs_v1_monitor, 22);
 
 /**
  * SenderHealthChanged is a sender's state changing.
@@ -1380,7 +1472,7 @@ export type SenderHealthChanged = Message<"nopacs.v1.SenderHealthChanged"> & {
  * Use `create(SenderHealthChangedSchema)` to create a new message.
  */
 export const SenderHealthChangedSchema: GenMessage<SenderHealthChanged> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 22);
+  messageDesc(file_nopacs_v1_monitor, 23);
 
 /**
  * ScrubFindingChanged is a scrub finding recorded or cleared. It names the
@@ -1453,7 +1545,7 @@ export type ScrubFindingChanged = Message<"nopacs.v1.ScrubFindingChanged"> & {
  * Use `create(ScrubFindingChangedSchema)` to create a new message.
  */
 export const ScrubFindingChangedSchema: GenMessage<ScrubFindingChanged> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 23);
+  messageDesc(file_nopacs_v1_monitor, 24);
 
 /**
  * CatalogChanged is a correction changing what the catalog shows.
@@ -1537,7 +1629,7 @@ export type CatalogChanged = Message<"nopacs.v1.CatalogChanged"> & {
  * Use `create(CatalogChangedSchema)` to create a new message.
  */
 export const CatalogChangedSchema: GenMessage<CatalogChanged> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 24);
+  messageDesc(file_nopacs_v1_monitor, 25);
 
 /**
  * ReplicaBehind is a replica's lag passing the tenant's replica.lag-alert,
@@ -1587,7 +1679,7 @@ export type ReplicaBehind = Message<"nopacs.v1.ReplicaBehind"> & {
  * Use `create(ReplicaBehindSchema)` to create a new message.
  */
 export const ReplicaBehindSchema: GenMessage<ReplicaBehind> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 25);
+  messageDesc(file_nopacs_v1_monitor, 26);
 
 /**
  * StorageSwitched is a switch's end: a replica made the primary in one
@@ -1667,7 +1759,7 @@ export type StorageSwitched = Message<"nopacs.v1.StorageSwitched"> & {
  * Use `create(StorageSwitchedSchema)` to create a new message.
  */
 export const StorageSwitchedSchema: GenMessage<StorageSwitched> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 26);
+  messageDesc(file_nopacs_v1_monitor, 27);
 
 /**
  * HoldChanged is a hold placed, released, or found on a storage and made
@@ -1733,7 +1825,7 @@ export type HoldChanged = Message<"nopacs.v1.HoldChanged"> & {
  * Use `create(HoldChangedSchema)` to create a new message.
  */
 export const HoldChangedSchema: GenMessage<HoldChanged> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 27);
+  messageDesc(file_nopacs_v1_monitor, 28);
 
 /**
  * RetentionClock is the tenant's retention paused for a clock jump, or
@@ -1771,7 +1863,7 @@ export type RetentionClock = Message<"nopacs.v1.RetentionClock"> & {
  * Use `create(RetentionClockSchema)` to create a new message.
  */
 export const RetentionClockSchema: GenMessage<RetentionClock> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 28);
+  messageDesc(file_nopacs_v1_monitor, 29);
 
 /**
  * CatalogRebuilt is a catalog made again from the storages and put in use
@@ -1811,7 +1903,7 @@ export type CatalogRebuilt = Message<"nopacs.v1.CatalogRebuilt"> & {
  * Use `create(CatalogRebuiltSchema)` to create a new message.
  */
 export const CatalogRebuiltSchema: GenMessage<CatalogRebuilt> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 29);
+  messageDesc(file_nopacs_v1_monitor, 30);
 
 /**
  * Event is one thing that happened in a tenant.
@@ -1999,7 +2091,7 @@ export type Event = Message<"nopacs.v1.Event"> & {
  * Use `create(EventSchema)` to create a new message.
  */
 export const EventSchema: GenMessage<Event> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 30);
+  messageDesc(file_nopacs_v1_monitor, 31);
 
 /**
  * WatchKeepAlive opens every stream, and is sent again when no event has
@@ -2087,7 +2179,7 @@ export type WatchKeepAlive = Message<"nopacs.v1.WatchKeepAlive"> & {
  * Use `create(WatchKeepAliveSchema)` to create a new message.
  */
 export const WatchKeepAliveSchema: GenMessage<WatchKeepAlive> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 31);
+  messageDesc(file_nopacs_v1_monitor, 32);
 
 /**
  * WatchRequest asks for a stream of events.
@@ -2150,7 +2242,7 @@ export type WatchRequest = Message<"nopacs.v1.WatchRequest"> & {
  * Use `create(WatchRequestSchema)` to create a new message.
  */
 export const WatchRequestSchema: GenMessage<WatchRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 32);
+  messageDesc(file_nopacs_v1_monitor, 33);
 
 /**
  * WatchResponse is one message of the stream: an event or a keep-alive.
@@ -2188,7 +2280,7 @@ export type WatchResponse = Message<"nopacs.v1.WatchResponse"> & {
  * Use `create(WatchResponseSchema)` to create a new message.
  */
 export const WatchResponseSchema: GenMessage<WatchResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_monitor, 33);
+  messageDesc(file_nopacs_v1_monitor, 34);
 
 /**
  * StorageVersioning is an S3 bucket's versioning, as the bucket answered

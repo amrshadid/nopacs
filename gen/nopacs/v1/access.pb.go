@@ -975,8 +975,13 @@ type ListKeysRequest struct {
 	// negative value is invalid.
 	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// The next_page_token of the previous page, or empty for the first page.
-	// Opaque; at most 1 KiB.
-	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+	// one it was made with.
+	PageToken string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Only the keys that hold a grant on the tenant of this name. Empty for
+	// every key, which only an admin on the installation may list. A tenant
+	// that does not exist is answered as for any request naming one.
+	Tenant        string `protobuf:"bytes,3,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1021,6 +1026,13 @@ func (x *ListKeysRequest) GetPageSize() int32 {
 func (x *ListKeysRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListKeysRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
 	}
 	return ""
 }
@@ -2035,11 +2047,12 @@ const file_nopacs_v1_access_proto_rawDesc = "" +
 	"\rGetKeyRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"2\n" +
 	"\x0eGetKeyResponse\x12 \n" +
-	"\x03key\x18\x01 \x01(\v2\x0e.nopacs.v1.KeyR\x03key\"M\n" +
+	"\x03key\x18\x01 \x01(\v2\x0e.nopacs.v1.KeyR\x03key\"e\n" +
 	"\x0fListKeysRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\"^\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\x12\x16\n" +
+	"\x06tenant\x18\x03 \x01(\tR\x06tenant\"^\n" +
 	"\x10ListKeysResponse\x12\"\n" +
 	"\x04keys\x18\x01 \x03(\v2\x0e.nopacs.v1.KeyR\x04keys\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\"\n" +

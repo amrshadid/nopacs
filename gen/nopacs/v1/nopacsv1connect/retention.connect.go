@@ -289,7 +289,12 @@ type RetentionServiceClient interface {
 	//
 	// Role: admin on the scope.
 	// Audit: one entry in the log of the scope, with the time given, the
-	// server's time, the tenants resumed and the reason in details.
+	// server's time, the tenants resumed and the reason in details; with the
+	// installation, each tenant resumed also has its entry in its own log,
+	// and the installation's entry names tenants_refused in details and
+	// records the request refused when the key's role refused a tenant,
+	// failed when a tenant's confirmation failed otherwise, and done only
+	// when no paused tenant was left paused.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
 	// does not exist, for a caller who may not list every tenant), invalid
 	// (also a missing or too long reason; no observed_time), not found (a
@@ -499,7 +504,12 @@ type RetentionServiceHandler interface {
 	//
 	// Role: admin on the scope.
 	// Audit: one entry in the log of the scope, with the time given, the
-	// server's time, the tenants resumed and the reason in details.
+	// server's time, the tenants resumed and the reason in details; with the
+	// installation, each tenant resumed also has its entry in its own log,
+	// and the installation's entry names tenants_refused in details and
+	// records the request refused when the key's role refused a tenant,
+	// failed when a tenant's confirmation failed otherwise, and done only
+	// when no paused tenant was left paused.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
 	// does not exist, for a caller who may not list every tenant), invalid
 	// (also a missing or too long reason; no observed_time), not found (a

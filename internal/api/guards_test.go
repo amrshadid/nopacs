@@ -11,6 +11,8 @@ import (
 
 	connect "connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/access"
@@ -262,6 +264,53 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		},
 		"ResolveInstances": func(c clients) outcome {
 			return call(c.corrections.ResolveInstances, &v1.ResolveInstancesRequest{Tenant: name, Members: []*v1.InstanceRef{{InstanceId: "2.25.1", Revision: 1}}})
+		},
+		"ListReplicas": func(c clients) outcome {
+			return call(c.replicas.ListReplicas, &v1.ListReplicasRequest{Tenant: name})
+		},
+		"AttachReplica": func(c clients) outcome {
+			return call(c.replicas.AttachReplica, &v1.AttachReplicaRequest{Tenant: name, Replica: "copy", Primary: "main"})
+		},
+		"DetachReplica": func(c clients) outcome {
+			return call(c.replicas.DetachReplica, &v1.DetachReplicaRequest{Tenant: name, Replica: "copy"})
+		},
+		"Repair": func(c clients) outcome {
+			return call(c.replicas.Repair, &v1.RepairRequest{Tenant: name, Storage: "main", All: true})
+		},
+		"SwitchStorage": func(c clients) outcome {
+			return call(c.replicas.SwitchStorage, &v1.SwitchStorageRequest{Tenant: name, Primary: "main", Replica: "copy", ValidateOnly: true})
+		},
+		"AddRetentionRule": func(c clients) outcome {
+			return call(c.retention.AddRetentionRule, &v1.AddRetentionRuleRequest{Tenant: name, Rule: &v1.RetentionRule{Name: "r", KeepAtLeast: &v1.RetentionPeriod{Years: 1}}})
+		},
+		"GetRetentionRule": func(c clients) outcome {
+			return call(c.retention.GetRetentionRule, &v1.GetRetentionRuleRequest{Tenant: name, Name: "r"})
+		},
+		"ListRetentionRules": func(c clients) outcome {
+			return call(c.retention.ListRetentionRules, &v1.ListRetentionRulesRequest{Tenant: name})
+		},
+		"SetRetentionRule": func(c clients) outcome {
+			return call(c.retention.SetRetentionRule, &v1.SetRetentionRuleRequest{Tenant: name, Rule: &v1.RetentionRule{Name: "r"},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"action"}}})
+		},
+		"RemoveRetentionRule": func(c clients) outcome {
+			return call(c.retention.RemoveRetentionRule, &v1.RemoveRetentionRuleRequest{Tenant: name, Name: "r"})
+		},
+		"ListDueSessions": func(c clients) outcome {
+			return call(c.retention.ListDueSessions, &v1.ListDueSessionsRequest{Tenant: name})
+		},
+		"Dispose": func(c clients) outcome {
+			return call(c.retention.Dispose, &v1.DisposeRequest{Tenant: name, Rule: "r", Reason: "x", ValidateOnly: true})
+		},
+		"ConfirmClock": func(c clients) outcome {
+			return call(c.retention.ConfirmClock, &v1.ConfirmClockRequest{Scope: &v1.Scope{Kind: &v1.Scope_Tenant{Tenant: name}},
+				ObservedTime: timestamppb.Now(), Reason: "x"})
+		},
+		"GetHold": func(c clients) outcome {
+			return call(c.retention.GetHold, &v1.GetHoldRequest{Tenant: name, Id: correctionULID})
+		},
+		"ListHolds": func(c clients) outcome {
+			return call(c.retention.ListHolds, &v1.ListHoldsRequest{Tenant: name})
 		},
 	}
 }

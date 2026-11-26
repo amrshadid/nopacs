@@ -153,7 +153,11 @@ type CorrectionServiceClient interface {
 	// received), validate_only, the counts and the reason in details; with
 	// override_retention, that and its reason too.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid
+	// does not exist, for a caller who may not list every tenant;
+	// override_retention asked by a caller who is not an admin on the
+	// installation or the local operator: the person who wants a delete is
+	// not the one who lifts the rule that refuses it, so a tenant's admin may
+	// not), invalid
 	// (also a missing or too long reason; a label that does not pass the
 	// label rule; a level named without the one above it; a confirm token
 	// with validate_only, or none without it; override_retention without an
@@ -172,8 +176,7 @@ type CorrectionServiceClient interface {
 	// not answer, or a storage holding the target does not answer, so its
 	// correction record cannot be written and the correction is abandoned;
 	// or the tenant is not ready; or the tenant's corrections are still
-	// taking up what the server's last stop left), unimplemented
-	// (override_retention, while the server keeps no retention rules).
+	// taking up what the server's last stop left).
 	Delete(context.Context, *v1.DeleteRequest) (*v1.DeleteResponse, error)
 	// Relabel gives a subject, a session or a scan a new label, moving its
 	// stored objects to keys under that label. A Relabel with the same
@@ -379,7 +382,11 @@ type CorrectionServiceHandler interface {
 	// received), validate_only, the counts and the reason in details; with
 	// override_retention, that and its reason too.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
-	// does not exist, for a caller who may not list every tenant), invalid
+	// does not exist, for a caller who may not list every tenant;
+	// override_retention asked by a caller who is not an admin on the
+	// installation or the local operator: the person who wants a delete is
+	// not the one who lifts the rule that refuses it, so a tenant's admin may
+	// not), invalid
 	// (also a missing or too long reason; a label that does not pass the
 	// label rule; a level named without the one above it; a confirm token
 	// with validate_only, or none without it; override_retention without an
@@ -398,8 +405,7 @@ type CorrectionServiceHandler interface {
 	// not answer, or a storage holding the target does not answer, so its
 	// correction record cannot be written and the correction is abandoned;
 	// or the tenant is not ready; or the tenant's corrections are still
-	// taking up what the server's last stop left), unimplemented
-	// (override_retention, while the server keeps no retention rules).
+	// taking up what the server's last stop left).
 	Delete(context.Context, *v1.DeleteRequest) (*v1.DeleteResponse, error)
 	// Relabel gives a subject, a session or a scan a new label, moving its
 	// stored objects to keys under that label. A Relabel with the same

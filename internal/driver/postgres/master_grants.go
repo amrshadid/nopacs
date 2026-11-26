@@ -62,12 +62,34 @@ func (m *Master) SetGrant(ctx context.Context, g master.Grant, audit master.Audi
 		if old != nil {
 			previous = master.Role(*old)
 		}
+		// Judged after the upsert, inside its transaction under the key's
+		// lock: a refusal rolls the upsert back.
+		inst, err := installationRole(ctx, tx, g.KeyID)
+		if err != nil {
+			return err
+		}
+		if err := master.CheckGrantChange(by, g.KeyID, g.Scope, previous, g.Role, inst); err != nil {
+			return err
+		}
 		return insertAudit(ctx, tx, m.red, audit.WithRoleChange(previous, g.Role))
 	})
 	if err != nil {
 		return "", err
 	}
 	return previous, nil
+}
+
+// installationRole returns the role keyID holds on the installation, read
+// in tx, empty for none: the installation's scope is the empty tenant id.
+// The caller holds the key's row lock, which every grant change of the key
+// takes, so the role cannot change before the transaction ends.
+func installationRole(ctx context.Context, tx pgx.Tx, keyID string) (master.Role, error) {
+	var role string
+	err := tx.QueryRow(ctx, `SELECT role FROM grants WHERE key_id = $1 AND scope = $2`, keyID, master.Installation.TenantID).Scan(&role)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	return master.Role(role), nil
 }
 
 // lockGrantTargets returns NotFound unless the key, and the tenant of a
@@ -259,6 +281,15 @@ func (m *Master) RemoveGrant(ctx context.Context, keyID string, scope master.Sco
 			return err
 		}
 		previous = master.Role(old)
+		// Judged after the delete, inside its transaction: a refusal rolls
+		// the delete back.
+		inst, err := installationRole(ctx, tx, keyID)
+		if err != nil {
+			return err
+		}
+		if err := master.CheckGrantChange(by, keyID, scope, previous, "", inst); err != nil {
+			return err
+		}
 		return insertAudit(ctx, tx, m.red, audit.WithRoleChange(previous, ""))
 	})
 	if err != nil {

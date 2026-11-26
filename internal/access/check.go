@@ -158,6 +158,10 @@ func (a *Access) Check(ctx context.Context, cred Credential, req Requirement, fa
 	d.principal = p
 
 	switch {
+	case tenantMissing && req.kind == needTenantGrants && atLeast(p.Role(master.Installation), master.RoleAdmin):
+		// The installation's admin changes grants in the master, which
+		// answers a tenant it does not have after the key is checked
+		// again, as for any change of grants: the check lets it through.
 	case tenantMissing && p.CanListTenants():
 		a.record(entry, master.OutcomeFailed, reasonNoTenant)
 		return Decision{}, fault.New(fault.NotFound, MessageNoTenant)
@@ -168,7 +172,11 @@ func (a *Access) Check(ctx context.Context, cred Credential, req Requirement, fa
 		a.record(entry, master.OutcomeRefused, reasonNoGrant)
 		return Decision{}, fault.New(fault.Denied, MessageDenied)
 	}
-	registrationByInstallation := req.kind == needTenantRegistration && p.CanListTenants()
+	// A change of grants an installation's admin makes is a change of the
+	// master, judged by the installation's networks alone, as a tenant's
+	// registration read by the installation is.
+	registrationByInstallation := (req.kind == needTenantRegistration && p.CanListTenants()) ||
+		(req.kind == needTenantGrants && atLeast(p.Role(master.Installation), master.RoleAdmin))
 	if d.hasTenant && p.isKey && !registrationByInstallation {
 		// The tenant's networks are judged only once the caller may act on
 		// the tenant, so a caller with no grant there is told Denied, as for
@@ -277,6 +285,8 @@ func allows(p Principal, req Requirement, tenantID string) bool {
 		return atLeast(p.Role(master.TenantScope(tenantID)), req.role)
 	case needTenantRegistration:
 		return atLeast(p.Role(master.TenantScope(tenantID)), master.RoleReader) || p.CanListTenants()
+	case needTenantGrants:
+		return atLeast(p.Role(master.TenantScope(tenantID)), master.RoleAdmin) || atLeast(p.Role(master.Installation), master.RoleAdmin)
 	}
 	return false
 }

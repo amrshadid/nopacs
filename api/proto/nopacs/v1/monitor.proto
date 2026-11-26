@@ -284,6 +284,51 @@ message StorageStatus {
   // Its switch_generation (Storage): how many switches changed the place
   // its name names.
   int64 switch_generation = 12;
+
+  // Whether it encrypts what it holds at rest, as the storage said when the
+  // server opened it (S3: the bucket's default encryption) or as its admin
+  // declared (a directory).
+  EncryptionAtRest encryption_at_rest = 13;
+
+  // For ENCRYPTION_AT_REST_ENCRYPTED, the algorithm as the storage names it
+  // ("AES256", "aws:kms", "aws:kms:dsse"), or "other" for a name this
+  // version does not know; empty otherwise. Never the storage's own text
+  // beyond those names, nor a key's name.
+  string encryption_algorithm = 14;
+
+  // How much of it scrubs have read whole within the tenant's
+  // scrub.interval (ScrubJob). Absent when the server does not compute it.
+  ScrubCoverage coverage = 15;
+}
+
+// ScrubCoverage is how far scrubs keep up with one storage: of the objects
+// the catalog places on it (for a replica, those of its scans in step), the
+// share read whole within the tenant's scrub.interval, the oldest one
+// unread and those overdue. A scrub reading 64 MiB/s reads 300 TB in about
+// 52 days, so a storage larger than its interval allows shows here.
+message ScrubCoverage {
+  // The objects it holds, as the catalog counts them.
+  int64 objects = 1;
+
+  // Of those, the objects read whole within the interval.
+  int64 verified = 2;
+
+  // verified over objects, from 0 to 1; 1 when it holds none.
+  double share = 3;
+
+  // The objects of an archive-tier storage checked within the interval by
+  // presence only (listing, size, the store's checksum), not counted in
+  // verified.
+  int64 presence_only = 4;
+
+  // How long the object waiting longest has gone unread, from its last
+  // read or, never read, from its archiving. Zero when every object is
+  // verified within the interval.
+  google.protobuf.Duration oldest_unverified = 5;
+
+  // The objects not read within one interval of their last read, or of
+  // their archiving when never read.
+  int64 overdue = 6;
 }
 
 // RecallCounts are a tenant's recalls of objects from its archive-tier

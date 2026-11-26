@@ -149,6 +149,80 @@ func (S3RecallTier) EnumDescriptor() ([]byte, []int) {
 	return file_nopacs_v1_storage_proto_rawDescGZIP(), []int{1}
 }
 
+// EncryptionAtRest is what a storage's status says of whether the storage
+// encrypts what it holds. An S3 storage is asked when the server opens it
+// (the bucket's default encryption); a directory shows the admin's
+// statement (DirectoryStorage.encrypted_at_rest_declared). The server does
+// not encrypt image data itself, and makes no claim beyond what the storage
+// or the admin said. A value added later is a new value; a client shows
+// one it does not know as unknown.
+type EncryptionAtRest int32
+
+const (
+	// Never answered by the server.
+	EncryptionAtRest_ENCRYPTION_AT_REST_UNSPECIFIED EncryptionAtRest = 0
+	// An S3 storage that could not be asked, or would not say (credentials
+	// that may not read the setting, a server without it), or one the server
+	// has not opened yet.
+	EncryptionAtRest_ENCRYPTION_AT_REST_UNKNOWN EncryptionAtRest = 1
+	// An S3 storage that says it does not encrypt new objects by default.
+	EncryptionAtRest_ENCRYPTION_AT_REST_NONE EncryptionAtRest = 2
+	// An S3 storage that says it encrypts new objects by default, with
+	// StorageStatus.encryption_algorithm.
+	EncryptionAtRest_ENCRYPTION_AT_REST_ENCRYPTED EncryptionAtRest = 3
+	// A directory whose admin declared its volume encrypts at rest.
+	EncryptionAtRest_ENCRYPTION_AT_REST_DECLARED EncryptionAtRest = 4
+	// A directory whose admin made no such statement.
+	EncryptionAtRest_ENCRYPTION_AT_REST_NOT_DECLARED EncryptionAtRest = 5
+)
+
+// Enum value maps for EncryptionAtRest.
+var (
+	EncryptionAtRest_name = map[int32]string{
+		0: "ENCRYPTION_AT_REST_UNSPECIFIED",
+		1: "ENCRYPTION_AT_REST_UNKNOWN",
+		2: "ENCRYPTION_AT_REST_NONE",
+		3: "ENCRYPTION_AT_REST_ENCRYPTED",
+		4: "ENCRYPTION_AT_REST_DECLARED",
+		5: "ENCRYPTION_AT_REST_NOT_DECLARED",
+	}
+	EncryptionAtRest_value = map[string]int32{
+		"ENCRYPTION_AT_REST_UNSPECIFIED":  0,
+		"ENCRYPTION_AT_REST_UNKNOWN":      1,
+		"ENCRYPTION_AT_REST_NONE":         2,
+		"ENCRYPTION_AT_REST_ENCRYPTED":    3,
+		"ENCRYPTION_AT_REST_DECLARED":     4,
+		"ENCRYPTION_AT_REST_NOT_DECLARED": 5,
+	}
+)
+
+func (x EncryptionAtRest) Enum() *EncryptionAtRest {
+	p := new(EncryptionAtRest)
+	*p = x
+	return p
+}
+
+func (x EncryptionAtRest) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EncryptionAtRest) Descriptor() protoreflect.EnumDescriptor {
+	return file_nopacs_v1_storage_proto_enumTypes[2].Descriptor()
+}
+
+func (EncryptionAtRest) Type() protoreflect.EnumType {
+	return &file_nopacs_v1_storage_proto_enumTypes[2]
+}
+
+func (x EncryptionAtRest) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EncryptionAtRest.Descriptor instead.
+func (EncryptionAtRest) EnumDescriptor() ([]byte, []int) {
+	return file_nopacs_v1_storage_proto_rawDescGZIP(), []int{2}
+}
+
 // StorageTestStep is one step of TestStorage.
 type StorageTestStep int32
 
@@ -194,11 +268,11 @@ func (x StorageTestStep) String() string {
 }
 
 func (StorageTestStep) Descriptor() protoreflect.EnumDescriptor {
-	return file_nopacs_v1_storage_proto_enumTypes[2].Descriptor()
+	return file_nopacs_v1_storage_proto_enumTypes[3].Descriptor()
 }
 
 func (StorageTestStep) Type() protoreflect.EnumType {
-	return &file_nopacs_v1_storage_proto_enumTypes[2]
+	return &file_nopacs_v1_storage_proto_enumTypes[3]
 }
 
 func (x StorageTestStep) Number() protoreflect.EnumNumber {
@@ -207,7 +281,7 @@ func (x StorageTestStep) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StorageTestStep.Descriptor instead.
 func (StorageTestStep) EnumDescriptor() ([]byte, []int) {
-	return file_nopacs_v1_storage_proto_rawDescGZIP(), []int{2}
+	return file_nopacs_v1_storage_proto_rawDescGZIP(), []int{3}
 }
 
 // StorageTestOutcome is how one step of TestStorage ended.
@@ -251,11 +325,11 @@ func (x StorageTestOutcome) String() string {
 }
 
 func (StorageTestOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_nopacs_v1_storage_proto_enumTypes[3].Descriptor()
+	return file_nopacs_v1_storage_proto_enumTypes[4].Descriptor()
 }
 
 func (StorageTestOutcome) Type() protoreflect.EnumType {
-	return &file_nopacs_v1_storage_proto_enumTypes[3]
+	return &file_nopacs_v1_storage_proto_enumTypes[4]
 }
 
 func (x StorageTestOutcome) Number() protoreflect.EnumNumber {
@@ -264,7 +338,7 @@ func (x StorageTestOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StorageTestOutcome.Descriptor instead.
 func (StorageTestOutcome) EnumDescriptor() ([]byte, []int) {
-	return file_nopacs_v1_storage_proto_rawDescGZIP(), []int{3}
+	return file_nopacs_v1_storage_proto_rawDescGZIP(), []int{4}
 }
 
 // StorageFault is why an operation on a storage failed, from a fixed list.
@@ -329,11 +403,11 @@ func (x StorageFault) String() string {
 }
 
 func (StorageFault) Descriptor() protoreflect.EnumDescriptor {
-	return file_nopacs_v1_storage_proto_enumTypes[4].Descriptor()
+	return file_nopacs_v1_storage_proto_enumTypes[5].Descriptor()
 }
 
 func (StorageFault) Type() protoreflect.EnumType {
-	return &file_nopacs_v1_storage_proto_enumTypes[4]
+	return &file_nopacs_v1_storage_proto_enumTypes[5]
 }
 
 func (x StorageFault) Number() protoreflect.EnumNumber {
@@ -342,7 +416,7 @@ func (x StorageFault) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StorageFault.Descriptor instead.
 func (StorageFault) EnumDescriptor() ([]byte, []int) {
-	return file_nopacs_v1_storage_proto_rawDescGZIP(), []int{4}
+	return file_nopacs_v1_storage_proto_rawDescGZIP(), []int{5}
 }
 
 // Storage is a place a tenant's archived files are written to. In this
@@ -765,9 +839,16 @@ type DirectoryStorage struct {
 	// runs on can open it; a longer one is a precondition failure. Empty for
 	// the tenant's directory itself. Not absolute: a leading "/" is invalid. It is not a
 	// secret, and is answered to every caller who may read the storage.
-	Path          string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// The admin's statement that the volume under the directory encrypts what
+	// it holds at rest (a disk or file system encryption the site set up).
+	// The server cannot ask a directory, so its status shows this statement
+	// as declared or not declared (StorageStatus.encryption_at_rest), never
+	// as a fact it checked; image data is encrypted by the storage, not by
+	// the server. False by default.
+	EncryptedAtRestDeclared bool `protobuf:"varint,3,opt,name=encrypted_at_rest_declared,json=encryptedAtRestDeclared,proto3" json:"encrypted_at_rest_declared,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *DirectoryStorage) Reset() {
@@ -812,6 +893,13 @@ func (x *DirectoryStorage) GetPath() string {
 		return x.Path
 	}
 	return ""
+}
+
+func (x *DirectoryStorage) GetEncryptedAtRestDeclared() bool {
+	if x != nil {
+		return x.EncryptedAtRestDeclared
+	}
+	return false
 }
 
 // S3Storage is a bucket, or a part of one under a prefix, on an object store
@@ -1422,7 +1510,8 @@ type SetStorageRequest struct {
 	Storage *Storage `protobuf:"bytes,2,opt,name=storage,proto3" json:"storage,omitempty"`
 	// The fields to change, as paths of Storage: "capacity_bytes", or a field
 	// of the storage's type joined to it by a dot, such as "s3.endpoint" or
-	// "directory.path"; also "tier", "s3.recall_days" and "s3.recall_tier".
+	// "directory.path"; also "tier", "s3.recall_days", "s3.recall_tier" and
+	// "directory.encrypted_at_rest_declared".
 	// "replica_of", "switch_generation", "create_time" and "update_time" are
 	// not paths a change may name. A path that names a type's whole message ("s3",
 	// "directory") is refused: its fields are named one by one, so a secret
@@ -1782,10 +1871,11 @@ const file_nopacs_v1_storage_proto_rawDesc = "" +
 	"last_fault\x18\f \x01(\x0e2\x17.nopacs.v1.StorageFaultR\tlastFault\x12B\n" +
 	"\x0flast_fault_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\rlastFaultTime\x12!\n" +
 	"\fbackfill_job\x18\x0e \x01(\tR\vbackfillJob\x12.\n" +
-	"\x13recalls_in_progress\x18\x0f \x01(\x03R\x11recallsInProgress\":\n" +
+	"\x13recalls_in_progress\x18\x0f \x01(\x03R\x11recallsInProgress\"w\n" +
 	"\x10DirectoryStorage\x12\x12\n" +
 	"\x04root\x18\x01 \x01(\tR\x04root\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\"\xb0\x03\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12;\n" +
+	"\x1aencrypted_at_rest_declared\x18\x03 \x01(\bR\x17encryptedAtRestDeclared\"\xb0\x03\n" +
 	"\tS3Storage\x12\x1a\n" +
 	"\bendpoint\x18\x01 \x01(\tR\bendpoint\x12\x16\n" +
 	"\x06region\x18\x02 \x01(\tR\x06region\x12\x16\n" +
@@ -1852,7 +1942,14 @@ const file_nopacs_v1_storage_proto_rawDesc = "" +
 	"\x1aS3_RECALL_TIER_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17S3_RECALL_TIER_STANDARD\x10\x01\x12\x17\n" +
 	"\x13S3_RECALL_TIER_BULK\x10\x02\x12\x1c\n" +
-	"\x18S3_RECALL_TIER_EXPEDITED\x10\x03*\xaa\x01\n" +
+	"\x18S3_RECALL_TIER_EXPEDITED\x10\x03*\xdb\x01\n" +
+	"\x10EncryptionAtRest\x12\"\n" +
+	"\x1eENCRYPTION_AT_REST_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aENCRYPTION_AT_REST_UNKNOWN\x10\x01\x12\x1b\n" +
+	"\x17ENCRYPTION_AT_REST_NONE\x10\x02\x12 \n" +
+	"\x1cENCRYPTION_AT_REST_ENCRYPTED\x10\x03\x12\x1f\n" +
+	"\x1bENCRYPTION_AT_REST_DECLARED\x10\x04\x12#\n" +
+	"\x1fENCRYPTION_AT_REST_NOT_DECLARED\x10\x05*\xaa\x01\n" +
 	"\x0fStorageTestStep\x12!\n" +
 	"\x1dSTORAGE_TEST_STEP_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17STORAGE_TEST_STEP_WRITE\x10\x01\x12\x1a\n" +
@@ -1897,72 +1994,73 @@ func file_nopacs_v1_storage_proto_rawDescGZIP() []byte {
 	return file_nopacs_v1_storage_proto_rawDescData
 }
 
-var file_nopacs_v1_storage_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_nopacs_v1_storage_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_nopacs_v1_storage_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_nopacs_v1_storage_proto_goTypes = []any{
 	(StorageTier)(0),              // 0: nopacs.v1.StorageTier
 	(S3RecallTier)(0),             // 1: nopacs.v1.S3RecallTier
-	(StorageTestStep)(0),          // 2: nopacs.v1.StorageTestStep
-	(StorageTestOutcome)(0),       // 3: nopacs.v1.StorageTestOutcome
-	(StorageFault)(0),             // 4: nopacs.v1.StorageFault
-	(*Storage)(nil),               // 5: nopacs.v1.Storage
-	(*ReplicaStatus)(nil),         // 6: nopacs.v1.ReplicaStatus
-	(*DirectoryStorage)(nil),      // 7: nopacs.v1.DirectoryStorage
-	(*S3Storage)(nil),             // 8: nopacs.v1.S3Storage
-	(*StorageTestResult)(nil),     // 9: nopacs.v1.StorageTestResult
-	(*AddStorageRequest)(nil),     // 10: nopacs.v1.AddStorageRequest
-	(*AddStorageResponse)(nil),    // 11: nopacs.v1.AddStorageResponse
-	(*GetStorageRequest)(nil),     // 12: nopacs.v1.GetStorageRequest
-	(*GetStorageResponse)(nil),    // 13: nopacs.v1.GetStorageResponse
-	(*ListStoragesRequest)(nil),   // 14: nopacs.v1.ListStoragesRequest
-	(*ListStoragesResponse)(nil),  // 15: nopacs.v1.ListStoragesResponse
-	(*SetStorageRequest)(nil),     // 16: nopacs.v1.SetStorageRequest
-	(*SetStorageResponse)(nil),    // 17: nopacs.v1.SetStorageResponse
-	(*RemoveStorageRequest)(nil),  // 18: nopacs.v1.RemoveStorageRequest
-	(*RemoveStorageResponse)(nil), // 19: nopacs.v1.RemoveStorageResponse
-	(*TestStorageRequest)(nil),    // 20: nopacs.v1.TestStorageRequest
-	(*TestStorageResponse)(nil),   // 21: nopacs.v1.TestStorageResponse
-	(*timestamppb.Timestamp)(nil), // 22: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 23: google.protobuf.Duration
-	(*fieldmaskpb.FieldMask)(nil), // 24: google.protobuf.FieldMask
+	(EncryptionAtRest)(0),         // 2: nopacs.v1.EncryptionAtRest
+	(StorageTestStep)(0),          // 3: nopacs.v1.StorageTestStep
+	(StorageTestOutcome)(0),       // 4: nopacs.v1.StorageTestOutcome
+	(StorageFault)(0),             // 5: nopacs.v1.StorageFault
+	(*Storage)(nil),               // 6: nopacs.v1.Storage
+	(*ReplicaStatus)(nil),         // 7: nopacs.v1.ReplicaStatus
+	(*DirectoryStorage)(nil),      // 8: nopacs.v1.DirectoryStorage
+	(*S3Storage)(nil),             // 9: nopacs.v1.S3Storage
+	(*StorageTestResult)(nil),     // 10: nopacs.v1.StorageTestResult
+	(*AddStorageRequest)(nil),     // 11: nopacs.v1.AddStorageRequest
+	(*AddStorageResponse)(nil),    // 12: nopacs.v1.AddStorageResponse
+	(*GetStorageRequest)(nil),     // 13: nopacs.v1.GetStorageRequest
+	(*GetStorageResponse)(nil),    // 14: nopacs.v1.GetStorageResponse
+	(*ListStoragesRequest)(nil),   // 15: nopacs.v1.ListStoragesRequest
+	(*ListStoragesResponse)(nil),  // 16: nopacs.v1.ListStoragesResponse
+	(*SetStorageRequest)(nil),     // 17: nopacs.v1.SetStorageRequest
+	(*SetStorageResponse)(nil),    // 18: nopacs.v1.SetStorageResponse
+	(*RemoveStorageRequest)(nil),  // 19: nopacs.v1.RemoveStorageRequest
+	(*RemoveStorageResponse)(nil), // 20: nopacs.v1.RemoveStorageResponse
+	(*TestStorageRequest)(nil),    // 21: nopacs.v1.TestStorageRequest
+	(*TestStorageResponse)(nil),   // 22: nopacs.v1.TestStorageResponse
+	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 24: google.protobuf.Duration
+	(*fieldmaskpb.FieldMask)(nil), // 25: google.protobuf.FieldMask
 }
 var file_nopacs_v1_storage_proto_depIdxs = []int32{
-	7,  // 0: nopacs.v1.Storage.directory:type_name -> nopacs.v1.DirectoryStorage
-	8,  // 1: nopacs.v1.Storage.s3:type_name -> nopacs.v1.S3Storage
-	22, // 2: nopacs.v1.Storage.create_time:type_name -> google.protobuf.Timestamp
-	22, // 3: nopacs.v1.Storage.update_time:type_name -> google.protobuf.Timestamp
+	8,  // 0: nopacs.v1.Storage.directory:type_name -> nopacs.v1.DirectoryStorage
+	9,  // 1: nopacs.v1.Storage.s3:type_name -> nopacs.v1.S3Storage
+	23, // 2: nopacs.v1.Storage.create_time:type_name -> google.protobuf.Timestamp
+	23, // 3: nopacs.v1.Storage.update_time:type_name -> google.protobuf.Timestamp
 	0,  // 4: nopacs.v1.Storage.tier:type_name -> nopacs.v1.StorageTier
 	0,  // 5: nopacs.v1.ReplicaStatus.tier:type_name -> nopacs.v1.StorageTier
-	23, // 6: nopacs.v1.ReplicaStatus.lag:type_name -> google.protobuf.Duration
-	22, // 7: nopacs.v1.ReplicaStatus.oldest_pending_time:type_name -> google.protobuf.Timestamp
-	4,  // 8: nopacs.v1.ReplicaStatus.last_fault:type_name -> nopacs.v1.StorageFault
-	22, // 9: nopacs.v1.ReplicaStatus.last_fault_time:type_name -> google.protobuf.Timestamp
+	24, // 6: nopacs.v1.ReplicaStatus.lag:type_name -> google.protobuf.Duration
+	23, // 7: nopacs.v1.ReplicaStatus.oldest_pending_time:type_name -> google.protobuf.Timestamp
+	5,  // 8: nopacs.v1.ReplicaStatus.last_fault:type_name -> nopacs.v1.StorageFault
+	23, // 9: nopacs.v1.ReplicaStatus.last_fault_time:type_name -> google.protobuf.Timestamp
 	1,  // 10: nopacs.v1.S3Storage.recall_tier:type_name -> nopacs.v1.S3RecallTier
-	2,  // 11: nopacs.v1.StorageTestResult.step:type_name -> nopacs.v1.StorageTestStep
-	3,  // 12: nopacs.v1.StorageTestResult.outcome:type_name -> nopacs.v1.StorageTestOutcome
-	23, // 13: nopacs.v1.StorageTestResult.duration:type_name -> google.protobuf.Duration
-	4,  // 14: nopacs.v1.StorageTestResult.fault:type_name -> nopacs.v1.StorageFault
-	5,  // 15: nopacs.v1.AddStorageRequest.storage:type_name -> nopacs.v1.Storage
-	5,  // 16: nopacs.v1.AddStorageResponse.storage:type_name -> nopacs.v1.Storage
-	5,  // 17: nopacs.v1.GetStorageResponse.storage:type_name -> nopacs.v1.Storage
-	5,  // 18: nopacs.v1.ListStoragesResponse.storages:type_name -> nopacs.v1.Storage
-	5,  // 19: nopacs.v1.SetStorageRequest.storage:type_name -> nopacs.v1.Storage
-	24, // 20: nopacs.v1.SetStorageRequest.update_mask:type_name -> google.protobuf.FieldMask
-	5,  // 21: nopacs.v1.SetStorageResponse.storage:type_name -> nopacs.v1.Storage
-	5,  // 22: nopacs.v1.RemoveStorageResponse.storage:type_name -> nopacs.v1.Storage
-	9,  // 23: nopacs.v1.TestStorageResponse.results:type_name -> nopacs.v1.StorageTestResult
-	10, // 24: nopacs.v1.StorageService.AddStorage:input_type -> nopacs.v1.AddStorageRequest
-	12, // 25: nopacs.v1.StorageService.GetStorage:input_type -> nopacs.v1.GetStorageRequest
-	14, // 26: nopacs.v1.StorageService.ListStorages:input_type -> nopacs.v1.ListStoragesRequest
-	16, // 27: nopacs.v1.StorageService.SetStorage:input_type -> nopacs.v1.SetStorageRequest
-	18, // 28: nopacs.v1.StorageService.RemoveStorage:input_type -> nopacs.v1.RemoveStorageRequest
-	20, // 29: nopacs.v1.StorageService.TestStorage:input_type -> nopacs.v1.TestStorageRequest
-	11, // 30: nopacs.v1.StorageService.AddStorage:output_type -> nopacs.v1.AddStorageResponse
-	13, // 31: nopacs.v1.StorageService.GetStorage:output_type -> nopacs.v1.GetStorageResponse
-	15, // 32: nopacs.v1.StorageService.ListStorages:output_type -> nopacs.v1.ListStoragesResponse
-	17, // 33: nopacs.v1.StorageService.SetStorage:output_type -> nopacs.v1.SetStorageResponse
-	19, // 34: nopacs.v1.StorageService.RemoveStorage:output_type -> nopacs.v1.RemoveStorageResponse
-	21, // 35: nopacs.v1.StorageService.TestStorage:output_type -> nopacs.v1.TestStorageResponse
+	3,  // 11: nopacs.v1.StorageTestResult.step:type_name -> nopacs.v1.StorageTestStep
+	4,  // 12: nopacs.v1.StorageTestResult.outcome:type_name -> nopacs.v1.StorageTestOutcome
+	24, // 13: nopacs.v1.StorageTestResult.duration:type_name -> google.protobuf.Duration
+	5,  // 14: nopacs.v1.StorageTestResult.fault:type_name -> nopacs.v1.StorageFault
+	6,  // 15: nopacs.v1.AddStorageRequest.storage:type_name -> nopacs.v1.Storage
+	6,  // 16: nopacs.v1.AddStorageResponse.storage:type_name -> nopacs.v1.Storage
+	6,  // 17: nopacs.v1.GetStorageResponse.storage:type_name -> nopacs.v1.Storage
+	6,  // 18: nopacs.v1.ListStoragesResponse.storages:type_name -> nopacs.v1.Storage
+	6,  // 19: nopacs.v1.SetStorageRequest.storage:type_name -> nopacs.v1.Storage
+	25, // 20: nopacs.v1.SetStorageRequest.update_mask:type_name -> google.protobuf.FieldMask
+	6,  // 21: nopacs.v1.SetStorageResponse.storage:type_name -> nopacs.v1.Storage
+	6,  // 22: nopacs.v1.RemoveStorageResponse.storage:type_name -> nopacs.v1.Storage
+	10, // 23: nopacs.v1.TestStorageResponse.results:type_name -> nopacs.v1.StorageTestResult
+	11, // 24: nopacs.v1.StorageService.AddStorage:input_type -> nopacs.v1.AddStorageRequest
+	13, // 25: nopacs.v1.StorageService.GetStorage:input_type -> nopacs.v1.GetStorageRequest
+	15, // 26: nopacs.v1.StorageService.ListStorages:input_type -> nopacs.v1.ListStoragesRequest
+	17, // 27: nopacs.v1.StorageService.SetStorage:input_type -> nopacs.v1.SetStorageRequest
+	19, // 28: nopacs.v1.StorageService.RemoveStorage:input_type -> nopacs.v1.RemoveStorageRequest
+	21, // 29: nopacs.v1.StorageService.TestStorage:input_type -> nopacs.v1.TestStorageRequest
+	12, // 30: nopacs.v1.StorageService.AddStorage:output_type -> nopacs.v1.AddStorageResponse
+	14, // 31: nopacs.v1.StorageService.GetStorage:output_type -> nopacs.v1.GetStorageResponse
+	16, // 32: nopacs.v1.StorageService.ListStorages:output_type -> nopacs.v1.ListStoragesResponse
+	18, // 33: nopacs.v1.StorageService.SetStorage:output_type -> nopacs.v1.SetStorageResponse
+	20, // 34: nopacs.v1.StorageService.RemoveStorage:output_type -> nopacs.v1.RemoveStorageResponse
+	22, // 35: nopacs.v1.StorageService.TestStorage:output_type -> nopacs.v1.TestStorageResponse
 	30, // [30:36] is the sub-list for method output_type
 	24, // [24:30] is the sub-list for method input_type
 	24, // [24:24] is the sub-list for extension type_name
@@ -1985,7 +2083,7 @@ func file_nopacs_v1_storage_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_storage_proto_rawDesc), len(file_nopacs_v1_storage_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      6,
 			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,

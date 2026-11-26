@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 
+	"github.com/amrshadid/nopacs/internal/api/codes"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -42,8 +43,22 @@ func relabeled(ctx context.Context, st tenant.Store, p label.Path, err error) er
 	case !ok:
 		return err
 	}
-	return fault.Wrap(fault.NotFound, err, tenant.ReasonRelabeled+": "+fault.Message(err)+"; the relabel "+moved.Correction+
-		" gave it the labels "+labelsText(moved.To))
+	return codes.WithReason(fault.Wrap(fault.NotFound, err, tenant.ReasonRelabeled+": "+fault.Message(err)+"; the relabel "+moved.Correction+
+		" gave it the labels "+labelsText(moved.To)), tenant.ReasonRelabeled,
+		map[string]string{"correction": moved.Correction, "to_label": deepestLabel(moved.To)}, 0)
+}
+
+// deepestLabel returns the label of p at the depth it names: the scan's,
+// else the session's, else the subject's, the one label a relabel's
+// to_label gives.
+func deepestLabel(p label.Path) string {
+	switch {
+	case p.Scan != "":
+		return p.Scan
+	case p.Session != "":
+		return p.Session
+	}
+	return p.Subject
 }
 
 // readsCorrections reports whether the request in ctx was decided for a

@@ -138,6 +138,26 @@ func onScope(s *v1.Scope, role master.Role) access.Requirement {
 	return access.OnInstallation(role)
 }
 
+// grantsOn is the requirement of a change or listing of the grants on the
+// tenant named name: admin on the installation or on that tenant; admin on
+// the installation for an empty or malformed name (the handler then answers
+// a malformed one as invalid).
+func grantsOn(name string) access.Requirement {
+	if name != "" && master.ValidateTenantName(name) == nil {
+		return access.TenantGrants(name)
+	}
+	return installationAdmin
+}
+
+// grantsOnScope is grantsOn for a scope a request names: a tenant's, or the
+// installation's, whose grants only its admin changes.
+func grantsOnScope(s *v1.Scope) access.Requirement {
+	if t, ok := s.GetKind().(*v1.Scope_Tenant); ok {
+		return grantsOn(t.Tenant)
+	}
+	return installationAdmin
+}
+
 // onMonitorScope is the requirement of a Monitor method: reader on the
 // tenant the scope names, operator on the installation for every tenant (a
 // malformed scope is held to the installation's, as onScope does).
@@ -172,12 +192,24 @@ var rules = map[string]rule{
 	// writes each entry's object and details itself.
 	nopacsv1connect.AccessServiceCreateKeyProcedure:   fixed(installationAdmin),
 	nopacsv1connect.AccessServiceGetKeyProcedure:      fixed(installationAdmin),
-	nopacsv1connect.AccessServiceListKeysProcedure:    fixed(installationAdmin),
 	nopacsv1connect.AccessServiceRevokeKeyProcedure:   fixed(installationAdmin),
-	nopacsv1connect.AccessServiceSetGrantProcedure:    fixed(installationAdmin),
-	nopacsv1connect.AccessServiceListGrantsProcedure:  fixed(installationAdmin),
-	nopacsv1connect.AccessServiceRemoveGrantProcedure: fixed(installationAdmin),
 	nopacsv1connect.AccessServiceSetKeyRulesProcedure: fixed(installationAdmin),
+	// The grants on a tenant, and the keys that hold them: admin on the
+	// installation or on that tenant (access.TenantGrants), a tenant's admin
+	// held to its bounds by package access and the master. Every key, and a
+	// key's grants on every scope, stay the installation's admin's.
+	nopacsv1connect.AccessServiceListKeysProcedure: byMessage(func(r *v1.ListKeysRequest) (access.Requirement, access.Request) {
+		return grantsOn(r.GetTenant()), access.Request{}
+	}),
+	nopacsv1connect.AccessServiceSetGrantProcedure: byMessage(func(r *v1.SetGrantRequest) (access.Requirement, access.Request) {
+		return grantsOnScope(r.GetScope()), access.Request{}
+	}),
+	nopacsv1connect.AccessServiceListGrantsProcedure: byMessage(func(r *v1.ListGrantsRequest) (access.Requirement, access.Request) {
+		return grantsOnScope(r.GetScope()), access.Request{}
+	}),
+	nopacsv1connect.AccessServiceRemoveGrantProcedure: byMessage(func(r *v1.RemoveGrantRequest) (access.Requirement, access.Request) {
+		return grantsOnScope(r.GetScope()), access.Request{}
+	}),
 	// ReinstateKeys: admin on the installation, further kept to the local
 	// operator by package access, which refuses every key.
 	nopacsv1connect.AccessServiceReinstateKeysProcedure: fixed(installationAdmin),
@@ -528,31 +560,15 @@ var rules = map[string]rule{
 	nopacsv1connect.CorrectionServiceResolveInstancesProcedure: byMessage(func(r *v1.ResolveInstancesRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Details: map[string]string{detailMembers: strconv.Itoa(len(r.GetMembers()))}}
 	}),
-}
 
-// pendingRules is the table of the methods the contract defines and no
-// handler serves yet: those of the services api/not-served.txt names, and
-// the single methods it names of services otherwise served. Methods does
-// not consult it for a requirement, and the server does not mount a method
-// it holds (Pending), so the server answers each of these methods as one
-// it does not serve, after the caller is authenticated, and none can be
-// served by mistake with no handler behind it. Each line is written with
-// its method's contract and checked against its Role line now; the change
-// that serves a method moves its line into rules and its name off the
-// list, and the tests fail until both are done.
-//
-// ReplicaService: admin to attach,
-// detach, repair and switch, since each decides where the archive's bytes
-// are or writes to a primary; operator to backfill, recall (which costs the
-// site money) and sample keys; reader to list replicas. RetentionService:
-// admin for every change of rules, disposal and holds, and admin on the
-// scope (a tenant, or the installation for every tenant) to confirm the
-// clock; reader
-// for rules and due sessions; operator for holds, whose reasons are a
-// person's words about a subject. A hold's target is recorded as its path
-// of labels; the object of a storage, rule or hold method is its name or
-// id.
-var pendingRules = map[string]rule{
+	// ReplicaService: admin to attach, detach, repair and switch, since each
+	// decides where the archive's bytes are or writes to a primary; reader
+	// to list replicas. RetentionService: admin for every change of rules
+	// and for disposal, and admin on the scope (a tenant, or the
+	// installation for every tenant) to confirm the clock; reader for rules
+	// and due sessions; operator for holds, whose reasons are a person's
+	// words about a subject. The object of a storage, rule or hold method is
+	// its name or id.
 	nopacsv1connect.ReplicaServiceListReplicasProcedure: byMessage(func(r *v1.ListReplicasRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{}
 	}),
@@ -563,9 +579,6 @@ var pendingRules = map[string]rule{
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetReplica(),
 			Details: map[string]string{detailAbandonPurges: strconv.FormatBool(r.GetAbandonPurges())}}
 	}),
-	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: byMessage(func(r *v1.BackfillReplicaRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetReplica()}
-	}),
 	nopacsv1connect.ReplicaServiceRepairProcedure: byMessage(func(r *v1.RepairRequest) (access.Requirement, access.Request) {
 		findings := strconv.Itoa(len(r.GetFindings()))
 		if r.GetAll() {
@@ -573,18 +586,10 @@ var pendingRules = map[string]rule{
 		}
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetStorage(), Details: map[string]string{detailFindings: findings}}
 	}),
-	nopacsv1connect.ReplicaServiceRecallProcedure: byMessage(func(r *v1.RecallRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: labelPath(r.GetSubjectLabel(), r.GetSessionLabel(), r.GetScanLabel()),
-			Details: map[string]string{detailValidateOnly: strconv.FormatBool(r.GetValidateOnly())}}
-	}),
 	nopacsv1connect.ReplicaServiceSwitchStorageProcedure: byMessage(func(r *v1.SwitchStorageRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetPrimary(),
 			Details: map[string]string{detailValidateOnly: strconv.FormatBool(r.GetValidateOnly()), detailSkipVerification: strconv.FormatBool(r.GetSkipVerification())}}
 	}),
-	nopacsv1connect.ReplicaServiceVerifySampleProcedure: byMessage(func(r *v1.VerifySampleRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetStorage()}
-	}),
-
 	nopacsv1connect.RetentionServiceAddRetentionRuleProcedure: byMessage(func(r *v1.AddRetentionRuleRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetRule().GetName()}
 	}),
@@ -610,18 +615,46 @@ var pendingRules = map[string]rule{
 	nopacsv1connect.RetentionServiceConfirmClockProcedure: byMessage(func(r *v1.ConfirmClockRequest) (access.Requirement, access.Request) {
 		return onScope(r.GetScope(), master.RoleAdmin), access.Request{Details: map[string]string{detailScope: scopeDetail(r.GetScope())}}
 	}),
+	nopacsv1connect.RetentionServiceGetHoldProcedure: byMessage(func(r *v1.GetHoldRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetId())}
+	}),
+	nopacsv1connect.RetentionServiceListHoldsProcedure: byMessage(func(r *v1.ListHoldsRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
+	}),
+}
+
+// pendingRules is the table of the methods the contract defines and no
+// handler serves yet: those of the services api/not-served.txt names, and
+// the single methods it names of services otherwise served. Methods does
+// not consult it for a requirement, and the server does not mount a method
+// it holds (Pending), so the server answers each of these methods as one
+// it does not serve, after the caller is authenticated, and none can be
+// served by mistake with no handler behind it. Each line is written with
+// its method's contract and checked against its Role line now; the change
+// that serves a method moves its line into rules and its name off the
+// list, and the tests fail until both are done.
+//
+// BackfillReplica: operator, as copying is the server's own work. Recall:
+// operator, since a recall costs the site money and is previewed first.
+// VerifySample: operator, since it answers keys that hold UIDs. PlaceHold
+// and ReleaseHold: admin, a hold's target recorded as its path of labels.
+var pendingRules = map[string]rule{
+	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: byMessage(func(r *v1.BackfillReplicaRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetReplica()}
+	}),
+	nopacsv1connect.ReplicaServiceRecallProcedure: byMessage(func(r *v1.RecallRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: labelPath(r.GetSubjectLabel(), r.GetSessionLabel(), r.GetScanLabel()),
+			Details: map[string]string{detailValidateOnly: strconv.FormatBool(r.GetValidateOnly())}}
+	}),
+	nopacsv1connect.ReplicaServiceVerifySampleProcedure: byMessage(func(r *v1.VerifySampleRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetStorage()}
+	}),
 	nopacsv1connect.RetentionServicePlaceHoldProcedure: byMessage(func(r *v1.PlaceHoldRequest) (access.Requirement, access.Request) {
 		t := r.GetTarget()
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: map[string]string{detailTarget: labelPath(t.GetSubjectLabel(), t.GetSessionLabel(), t.GetScanLabel())}}
 	}),
 	nopacsv1connect.RetentionServiceReleaseHoldProcedure: byMessage(func(r *v1.ReleaseHoldRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: jobObject(r.GetId())}
-	}),
-	nopacsv1connect.RetentionServiceGetHoldProcedure: byMessage(func(r *v1.GetHoldRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetId())}
-	}),
-	nopacsv1connect.RetentionServiceListHoldsProcedure: byMessage(func(r *v1.ListHoldsRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
 	}),
 }
 
