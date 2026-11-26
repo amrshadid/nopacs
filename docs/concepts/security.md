@@ -47,6 +47,34 @@ list every tenant.
 Each role includes the ones below it, so one grant per scope is enough. The
 contract names, on every method, the role it needs.
 
+### What a tenant admin may grant
+
+A key is one person's or system's identity across the installation, so only an admin on
+the installation makes and revokes keys. Which keys may use a tenant is that tenant's
+business, so a person holds one key and is let into each tenant by that tenant's admin. A
+tenant's admin (an admin grant on that tenant, not on the installation) may:
+
+- **set, change and remove grants on its own tenant**, at `reader`, `writer` or `operator`
+  (`nopacs grant set <key-id> --role operator --tenant lab1`, `nopacs grant remove
+  <key-id> --tenant lab1`);
+- **list the grants on its tenant** (`nopacs grant list --tenant lab1`) and **the keys that
+  hold one** (`nopacs key list --tenant lab1`), with each key's id and holder only.
+
+A tenant's admin may **not**:
+
+- grant or remove `admin`, on its tenant or any other: making or removing a tenant's admin
+  stays with the installation's admin;
+- change its own key's grant, or the grant of a key that is admin on the tenant;
+- grant on any other tenant, or on the installation;
+- touch a key's networks, expiry or other grants, make, rotate or revoke a key, or read a key's
+  grants on other scopes;
+- lift a retention rule's keep-at-least for a delete ([retention](../use/retention.md#keep-at-least-and-lifting-it)).
+
+Each refusal is `PERMISSION_DENIED` with the rule in its message. Every grant change is
+audited in the installation's log with the key's id, the scope and the previous and new role.
+A tenant's admin may also set the tenant's own value of the settings marked so in
+[the settings reference](../reference/settings.md).
+
 ## The local operator
 
 A command on the server's local socket (`run/nopacs.sock` in the data directory)

@@ -13,7 +13,7 @@ you can see it.
 |---|---|---|
 | **Landed** | The file reached the incoming area whole, was synced to disk, and only then was the sender told it was received. From now on a crash loses nothing. | `nopacs reception show`, the tenant's status (the incoming bytes) |
 | **Archived** | The file was put in its storage, read back and compared, and the catalog committed it. It is listed, readable and checked on every read. | `nopacs catalog`, `nopacs reception show` (step *verified*, *done*) |
-| **Protected** | The file is verified on a second storage. **Not built yet:** replication is defined in the contract and not served, so no instance is protected in this sense. | |
+| **Protected** | The file is verified on a second storage. A replica storage holds a second copy, and a scan is protected once the replica is in step for it ([replicas](../operate/replicas.md)). | `nopacs replica list` |
 
 The first two are in the pipeline described in [a reception, end to end](../use/receiving.md).
 `nopacs reception show` and `MonitorService.GetStatus` say, for each reception, how
@@ -26,9 +26,9 @@ many files are received, archived and quarantined.
 | **Reception** | Whether a file was refused, landed, held in quarantine (with its reason) or archived; which receiver, which caller, which import job | Built: receptions, quarantine, import outcome counts |
 | **Identity and provenance** | Which tenant, subject, study, series and instance it is; which de-identification profile version made it, in what form and transfer syntax it was received, and by which version of the software | Built: the catalog, and a sidecar next to each scan on its storage |
 | **Publication** | Which revision of an instance is the current one, with its length, transfer syntax and SHA-256, and the manifest that commits it | Built: one transaction makes a change visible; a replace publishes a new revision |
-| **Preservation** | How many copies there are, when each was last checked, and whether an object is online, damaged or missing | Partly built: the server's scrub re-reads every stored object against its checksum and marks a damaged instance so a read fails as data loss, never returning wrong bytes. Replicas, repair and recall are defined and not served. |
+| **Preservation** | How many copies there are, when each was last checked, and whether an object is online, damaged or missing | Partly built: the server's scrub re-reads every stored object against its checksum and marks a damaged instance so a read fails as data loss, never returning wrong bytes. Replicas, repair and recall are built, except `replica backfill`, `recall` and the verified sample, which are not served ([replicas](../operate/replicas.md)). |
 | **Distribution** | Which revision a send delivered and what the peer answered | Built: send jobs say, for each instance, sent, sent with a warning or refused, and why ([sending](../use/sending.md)) |
-| **Disposition** | Whether it is active, hidden, awaiting purge or removed, and why | Partly built: delete, relabel and replace, with a grace period and a record ([correcting](../use/correcting.md)). Holds and retention rules are defined and not served. |
+| **Disposition** | Whether it is active, hidden, awaiting purge or removed, and why | Partly built: delete, relabel and replace, with a grace period and a record ([correcting](../use/correcting.md)). Holds and retention rules are built ([retention rules and holds](../use/retention.md)). |
 
 ## What a person can rely on
 

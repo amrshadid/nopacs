@@ -81,6 +81,10 @@ nopacs job finding <tenant> <id>
   does not rewrite stored objects, so a finding holds after it until the object
   reads good again.
 
+Scrubbing a replica, and what coverage says about how far scrubs keep up, are on
+[the scrub coverage page](../operate/scrub-coverage.md); moving a tenant to another storage uses a
+compare from one storage ([moving off a storage](../operate/moving-off-a-storage.md)).
+
 `job watch` and `--wait` follow these jobs like any job, and exit 1 when a scrub
 ends partial (it found something). `job list` shows the columns ID, KIND, ON, STATE,
 DONE, OK, NOT OK, REMAINING and CREATED.

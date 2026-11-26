@@ -127,6 +127,9 @@ long a tenant's events are kept.
 
 ## Replicas, retention and the quarantine
 
+The pages that use these settings are [replica storages](replicas.md) (with the repair lease worked through),
+[retention rules and holds](../use/retention.md) and [scrub coverage](scrub-coverage.md) (for `scrub.rate` and `scrub.interval`).
+
 `replica.repair` is `manual` by default: a primary's object a scrub found damaged
 or missing is put back from a replica in step only when a person runs `nopacs
 repair`, since reads already turn to the replica. With `auto`, the server makes an
@@ -138,9 +141,22 @@ receiver of the tenant accepts at 100 MiB a second is refused, the server's log 
 which lease would do, and no repair runs until it is lengthened. No speed of the
 storage is measured yet; the check assumes that floor.
 
+`replica.lag-alert` (an hour by default, from `1m` to `30d`) is how long a replica's
+oldest scan not in step may wait before the server writes one `REPLICA_BEHIND` event,
+and one more when the replica is back under it; the same lag is in the metrics
+`nopacs_replica_lag_seconds` and `nopacs_replica_scans_behind`. `replica.rate` is the
+most bytes a second the replicator puts on one replica; `0`, the default, is no bound.
+`recall.wait` (48 hours by default, from `1h` to `30d`) is how long a recall may stay
+requested or in progress; past it the recall is recorded as failed. `scrub.archive-sample`
+is the share of the online objects of an archive-tier storage that a scrub reads whole
+(`0%` by default: presence only). Each of the four may be set on the installation and
+overridden for a tenant, by that tenant's admin too.
+
 `retention.shorten-notice` and `retention.max-clock-step` guard retention against a
-mistyped rule and a clock set wrong. A tenant's own value is set by an admin on the
-installation only. Once a day the server disposes of what each delete rule makes due,
+mistyped rule and a clock set wrong. `retention.max-clock-step` has one value, the
+installation's, since the clock is the server's. `retention.shorten-notice` and
+`retention.max-per-pass` may be set for one tenant, by an admin on the installation
+only. Once a day the server disposes of what each delete rule makes due,
 at most `retention.max-per-pass` sessions a rule, each through an ordinary delete, and
 works the disposals a person queued within the hour. `quarantine.warn-age` and
 `quarantine.warn-bytes` make a tenant's status warn of files held too long, or too
@@ -180,6 +196,10 @@ when it starts do not change until it is started again.
 | `access.tenant-networks` | Within five seconds, on the same terms, for each tenant |
 | `replica.repair-lease` | At the next claim of a repair job; a job running keeps the lease it claimed with |
 | `replica.repair` | Within five minutes, at the next look for damage a scrub found |
+| `replica.lag-alert` | At the next look at the replicas, at most a minute away |
+| `replica.rate` | At the next claim of scans to copy |
+| `recall.wait` | At the next pass of the recall worker |
+| `scrub.archive-sample` | At the start of the next unit of a scrub |
 | `retention.max-clock-step`, `retention.shorten-notice` | At the next check of the tenant's clock, at most an hour away, and at the next change of a rule |
 | `retention.max-per-pass` | At the next daily pass |
 | the server's `--listen` address | Needs a restart: the address is opened once, when the server starts |

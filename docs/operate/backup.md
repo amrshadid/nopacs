@@ -31,7 +31,8 @@ It does not hold:
   from them). A restore rebuilds it from the storages, so it can never be older
   than the bytes it points at;
 - **the storages**: the DICOM files and the records beside them are not copied.
-  Back them up with the tools of the place they live in (a disk's, a bucket's).
+  Back them up with the tools of the place they live in (a disk's, a bucket's), or
+  keep a second copy of them on a [replica storage](replicas.md).
   A restore expects to find them where they were;
 - **the bytes in the incoming area** of the server's disk: files a sender was
   told were received but that were not archived yet, and the bytes of held

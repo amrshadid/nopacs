@@ -33,6 +33,15 @@ command. A key that works only with a TLS client certificate also needs
 **`the key file ... may be opened by other users (mode 0644)`.** Make it private:
 `chmod 600`. A key file other users can read is not accepted.
 
+## A write is refused and retried, or a read says NOT_ONLINE
+
+`STORAGE_SWITCHING`, `NOT_ONLINE`, `HELD` and `RETENTION_MINIMUM` are reasons, each with its own
+cause and whether to retry: [reasons and retry delays](../api/errors.md). A switch pauses writes
+until its drain ends ([moving off a storage](moving-off-a-storage.md#what-pauses)); a cold replica's
+object needs a recall ([replicas](replicas.md#cold-archive-tier-replicas-and-recall)); a held or kept
+delete needs a person ([retention rules and holds](../use/retention.md)). A repair that never runs
+may be refused for a lease that is too short ([replicas](replicas.md#the-repair-lease-and-a-very-large-object)).
+
 ## Refused (exit 3)
 
 All of these are one answer on purpose, so a caller cannot tell which was wrong: no key,

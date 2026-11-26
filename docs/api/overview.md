@@ -1,6 +1,6 @@
 # The API: an overview
 
-[Documentation index](../README.md) · [Receiving through the API](reception-walkthrough.md) · [DICOMweb](dicomweb.md) · [The clients](clients.md) · [Error kinds and codes](../reference/errors.md)
+[Documentation index](../README.md) · [Receiving through the API](reception-walkthrough.md) · [DICOMweb](dicomweb.md) · [The clients](clients.md) · [Error kinds and codes](../reference/errors.md) · [Reasons and retry delays](errors.md)
 
 Everything `nopacs` does, it does through this API, and so can any program. The
 contract is the protobuf files in `api/proto/nopacs/v1`: every method has a comment
@@ -66,7 +66,9 @@ the command line. The codes and the HTTP status each travels with are in
 Where a kind names a *reason* (a relabeled label, a moved tenant, a held delete, a
 cursor that expired), it travels as a `google.rpc.ErrorInfo` detail with the domain
 `nopacs` and a fixed word; a client that does not read details still has the code
-and the message. The message of an `INTERNAL` answer says nothing of the cause; the
+and the message. A refusal that passes by itself (a storage being switched, an object
+being recalled) may add a `google.rpc.RetryInfo` delay. The reasons, the delays and how to
+read them in code are on [one page](errors.md). The message of an `INTERNAL` answer says nothing of the cause; the
 cause is in the server's log under the request id.
 
 ## Request ids
@@ -116,15 +118,16 @@ tenant, a key, a storage, a receiver, a sender, a job) is not repeated plainly.
 
 ## What is served
 
-Every method of the contract is served except all of `ReplicaService` and
-`RetentionService`. Calling one of those, as an authenticated
-caller, answers `UNIMPLEMENTED`. `api/not-served.txt` in the repository lists them,
-and the tests keep the list true.
+Every method of the contract is served except the few `api/not-served.txt` in the
+repository lists (at this writing `ReplicaService`'s `BackfillReplica`, `Recall` and
+`VerifySample`). Calling one of
+those, as an authenticated caller, answers `UNIMPLEMENTED`, and the tests keep the list
+true.
 
 The services: access (keys and grants), audit and audit seal, backup (a backup of
 the installation while it runs, and a tenant's export), catalog, correction, data (the files of a scan), deid, job, metadata,
 monitor (status and the live event feed), profile, quarantine, receiver, reception,
-sender, settings, storage and tenant. Each `*.proto` file holds one.
+replica, retention, sender, settings, storage and tenant. Each `*.proto` file holds one.
 
 ## Walkthroughs and clients
 

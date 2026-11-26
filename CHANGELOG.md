@@ -448,6 +448,10 @@ scan, keeps it whole, and serves it through an API with keys.
 - `retention.max-clock-step` is installation-only and
   `retention.max-per-pass` is set on a tenant by the installation's admin
   only.
+- Documentation for replica storages, moving off a storage (with a check
+  that reads the copy without NoPACs), scrub coverage, encryption at rest,
+  retention and holds, and the error reasons and retry delays a client
+  receives; the security model says what a tenant's admin may grant.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

@@ -1,6 +1,6 @@
 # Correcting archived data
 
-[Documentation index](../README.md) · [The command line](command-line.md) · [Settings](../operate/settings.md)
+[Documentation index](../README.md) · [The command line](command-line.md) · [Settings](../operate/settings.md) · [Retention rules and holds](retention.md) · [Replica storages](../operate/replicas.md)
 
 A *correction* is a change to archived data made on purpose, with the reason a
 person gave, and kept as a record for as long as the tenant is: a **delete** of a
@@ -124,6 +124,44 @@ later purges do; `nopacs storage show` says which applies.
   holds against the next re-send.
 - **The correction and its records**, for as long as the tenant is, so a
   restore from an older backup applies the delete again.
+
+### Every copy of a storage
+
+When a storage has [replicas](../operate/replicas.md), a correction reaches every copy:
+
+- **Delete.** The purge removes each object from the primary and from every replica and
+  records what each storage did, per storage. It is "purged" only when every object on every
+  copy is removed and each removed key has been checked absent. A replica that does not
+  answer holds the correction in `purging` until it does, so a withdrawal never ends with
+  bytes left on a copy nobody sees. A correction's preview lists the replicas.
+- **Records.** The correction's record is written to the primary and to each replica its
+  target touches. A replica that cannot take it yet is owed it; until every record owed is
+  put, no purge removes anything from that replica and a [switch](../operate/moving-off-a-storage.md) to it does not swap.
+- **Replace.** The publish queues the scan for each replica to be copied again.
+- **Relabel.** The new keys are copied to the primary and to each in-step replica before the
+  one publish that makes the new labels visible.
+- A replica attached while a purge runs joins that purge's copies, and its backfill never
+  copies an object of a correction whose purge has started. A replica cannot be detached
+  while a correction counts it, unless the detach says to abandon those purges
+  (`replica detach --abandon-purges --reason ...`), and then the correction records that
+  copy as unknown.
+- A purge and a [switch](../operate/moving-off-a-storage.md) exclude each other: a switch
+  is refused while a purge of its storages is unfinished, and a purge waits while a switch
+  runs.
+
+### Holds and retention rules
+
+A delete of data a [hold](retention.md#holds) covers is refused (`HELD`), and a purge of it
+waits. A delete of data a [retention rule](retention.md#rules) keeps at least until a time
+to come is refused (`RETENTION_MINIMUM`); an admin **on the installation** may lift that
+for one delete, with a reason:
+
+```
+nopacs correction delete lab1 sub-3f9a --reason "consent withdrawn" \
+  --override-retention --override-reason "court order of 2026-11-03"
+```
+
+A tenant's admin who tries it is refused. See [retention and holds](retention.md) for why.
 
 ### Letting data arrive again
 

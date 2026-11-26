@@ -15,9 +15,9 @@ The pages are grouped by what you came to do:
 |---|---|---|
 | [start](start/install.md) | get going | install the two programs; a first archive end to end |
 | [concepts](concepts/archive.md) | understand | what an archive is made of; the lifecycle of a file; the security model; de-identification |
-| [operate](operate/running.md) | run a site | running; settings; backup and moving a tenant; choosing a database; upgrading; troubleshooting |
-| [use](use/command-line.md) | work in the archive | the command line; receiving; routing; reading; sending; importing; correcting; profiles |
-| [api](api/overview.md) | build on it | the overview; a walkthrough; DICOMweb; the clients |
+| [operate](operate/running.md) | run a site | running; settings; backup and moving a tenant; replicas; moving off a storage; scrub coverage; encryption at rest; choosing a database; upgrading; troubleshooting |
+| [use](use/command-line.md) | work in the archive | the command line; receiving; routing; reading; sending; importing; correcting; retention and holds; profiles |
+| [api](api/overview.md) | build on it | the overview; reasons and retry delays; a walkthrough; DICOMweb; the clients |
 | [reference](reference/settings.md) | look a fact up | settings, commands, errors, events, metrics, environment variables, all generated from the code |
 | [develop](develop/architecture.md) | change the code | architecture; testing; gates; guides |
 
@@ -26,16 +26,17 @@ The pages are grouped by what you came to do:
 **You run NoPACs for a site.**
 [Install](start/install.md), make [a first archive](start/first-archive.md), then
 [run it](operate/running.md), set [its settings](operate/settings.md), [back it up](operate/backup.md),
-[choose a database](operate/database.md), and keep [troubleshooting](operate/troubleshooting.md) and
+[choose a database](operate/database.md), keep a second copy on [a replica](operate/replicas.md) (and [move off a storage](operate/moving-off-a-storage.md) with it), watch [scrub coverage](operate/scrub-coverage.md), know what [encryption at rest](operate/encryption-at-rest.md) records, and keep [troubleshooting](operate/troubleshooting.md) and
 [upgrading](operate/upgrading.md) at hand. The security side is [the security model](concepts/security.md).
 
 **You work with the data.**
 [The command line](use/command-line.md) (with contexts for many installations, and the
 interactive program), [receiving](use/receiving.md), [reading](use/reading.md),
-[sending on](use/sending.md), [importing](use/importing.md) and [correcting](use/correcting.md).
+[sending on](use/sending.md), [importing](use/importing.md), [correcting](use/correcting.md) and
+[retention rules and holds](use/retention.md).
 
 **You build on the API.**
-[The overview](api/overview.md), [receiving through the API](api/reception-walkthrough.md),
+[The overview](api/overview.md), [reasons and retry delays](api/errors.md), [receiving through the API](api/reception-walkthrough.md),
 [DICOMweb](api/dicomweb.md) and [the clients](api/clients.md). The contract is `api/proto/nopacs/v1`; the
 generated clients are in `clients/python` and `clients/typescript`.
 
@@ -64,6 +65,13 @@ and the guides: [a database driver](develop/guides/database-driver.md), [a stora
 | bring in a directory of existing files | [Importing a directory](use/importing.md) |
 | delete, relabel or replace archived data | [Correcting archived data](use/correcting.md) |
 | back up, restore, or move a tenant | [Backup, restore and moving a tenant](operate/backup.md) |
+| keep a second copy of a tenant's files | [Replica storages](operate/replicas.md) |
+| move a tenant to another disk or bucket | [Moving off a storage](operate/moving-off-a-storage.md) |
+| tell whether scrubs keep up with the archive's size | [Scrub coverage](operate/scrub-coverage.md) |
+| see which storages are said to be encrypted | [Encryption at rest](operate/encryption-at-rest.md) |
+| keep data for a time, or stop it going | [Retention rules and holds](use/retention.md) |
+| let a tenant's admin give keys access | [What a tenant admin may grant](concepts/security.md#what-a-tenant-admin-may-grant) |
+| read a refusal's reason and retry delay in code | [Reasons and retry delays](api/errors.md) |
 | check that the audit log was not changed | [Running NoPACs](operate/running.md#check-that-the-audit-log-was-not-changed) |
 | pick SQLite or Postgres | [Choosing a database](operate/database.md) |
 | find out why something fails | [Troubleshooting](operate/troubleshooting.md), [error kinds and codes](reference/errors.md) |
