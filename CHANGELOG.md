@@ -452,6 +452,13 @@ scan, keeps it whole, and serves it through an API with keys.
   that reads the copy without NoPACs), scrub coverage, encryption at rest,
   retention and holds, and the error reasons and retry delays a client
   receives; the security model says what a tenant's admin may grant.
+- One condition language for routing and search (internal/query): a bounded
+  parser with one printed form; a three-valued evaluator over a DICOM data set
+  (absent never matches, a removed attribute is unknown in a dry run, any
+  sequence item and any value of a multi-valued attribute, private tags by
+  creator, person names by any component group); a compiler to SQL from bound
+  parameters and registered columns only, which refuses a search no index
+  serves; and the QIDO-RS matching rules mapped onto it.
 - Quarantine warnings: tenant status and the status screen warn when the
   oldest held file passes `quarantine.warn-age` or the bytes held pass
   `quarantine.warn-bytes`, with gauges and an event when a warning starts and
