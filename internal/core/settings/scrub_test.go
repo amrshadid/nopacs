@@ -51,3 +51,24 @@ func TestScrubSettingsRules(t *testing.T) {
 		t.Errorf("ParseScrubInterval(30d) = %v, %v", d, err)
 	}
 }
+
+// TestArchiveSampleRules guards scrub.archive-sample: an ordinary setting a
+// tenant may override, "0%" by default (a presence check alone, which bills
+// nothing), a whole percentage from 0% to 100% read as a share from 0 to 1,
+// and anything else refused.
+func TestArchiveSampleRules(t *testing.T) {
+	d, ok := MustBuiltin().Lookup(ScrubArchiveSample)
+	if !ok || d.Default != "0%" || !d.TenantOverride || d.Kind() != Ordinary {
+		t.Fatalf("scrub.archive-sample: %+v %v", d, ok)
+	}
+	for v, want := range map[string]float64{"0%": 0, "5%": 0.05, "100%": 1} {
+		if got, err := ParseArchiveSample(v); err != nil || got != want {
+			t.Errorf("%q: %v %v, want %v", v, got, err, want)
+		}
+	}
+	for _, v := range []string{"", "0", "0.5", "101%", "-1%", "05%", "5 %", "%", "1.5%"} {
+		if _, err := ParseArchiveSample(v); err == nil {
+			t.Errorf("%q was taken", v)
+		}
+	}
+}

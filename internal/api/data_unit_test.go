@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/recall"
 )
 
 // TestByteRangeOf guards the reading of a Range header against a body of
@@ -165,6 +167,49 @@ func TestNotOnlineAnswer(t *testing.T) {
 	down := fault.New(fault.Unavailable, "the read failed: the storage could not be reached")
 	if msg := fault.Message(instanceFailure(down, p)); strings.Contains(msg, "NOT_ONLINE") || fault.KindOf(instanceFailure(down, p)) != fault.Unavailable {
 		t.Errorf("a storage that does not answer: %q", msg)
+	}
+}
+
+// TestNotOnlineCarriesRecallStateAndRetry guards NOT_ONLINE's details as
+// access.proto writes them: the ErrorInfo reason NOT_ONLINE with the
+// metadata recall_state the read learned, through instanceFailure and
+// storageFailure alike; a RetryInfo of the recall worker's poll only while
+// a recall is requested or in progress, none for none or failed; and a
+// plain HTTP download's answer then carries Retry-After in seconds.
+func TestNotOnlineCarriesRecallStateAndRetry(t *testing.T) {
+	cold := fault.Wrap(fault.Unavailable, blob.ErrNotOnline, "the read failed: the object is held in a tier the storage cannot read at once")
+	p := label.Path{Subject: "s1", Session: "a", Scan: "b"}
+	for _, c := range []struct {
+		state string
+		retry bool
+	}{
+		{checkedread.RecallNone, false}, {checkedread.RecallRequested, true}, {checkedread.RecallInProgress, true}, {checkedread.RecallFailed, false},
+	} {
+		in := &checkedread.NotOnline{RecallState: c.state, Err: cold}
+		for name, err := range map[string]error{
+			"instance": instanceFailure(fault.Wrap(fault.Unavailable, in, "the read failed"), p),
+			"metadata": storageFailure(in, "the scan's metadata file cannot be read"),
+		} {
+			ce := codes.ToConnect(err)
+			r, ok := codes.ReasonOfError(ce)
+			if ce.Code() != connect.CodeUnavailable || !ok || r.Reason != "NOT_ONLINE" || r.Domain != codes.Domain || r.Metadata["recall_state"] != c.state {
+				t.Errorf("%s with recall %s: %v, reason %+v %v", name, c.state, ce, r, ok)
+			}
+			delay, has := codes.RetryOfError(ce)
+			if has != c.retry || (c.retry && delay != recall.DefaultPoll) {
+				t.Errorf("%s with recall %s: retry %v %v; want %v", name, c.state, delay, has, c.retry)
+			}
+		}
+	}
+	h := http.Header{}
+	setRetryAfter(h, codes.ToConnect(instanceFailure(&checkedread.NotOnline{RecallState: checkedread.RecallRequested, Err: cold}, p)))
+	if got := h.Get("Retry-After"); got != "60" {
+		t.Errorf("the download's Retry-After while a recall runs is %q; want 60", got)
+	}
+	h = http.Header{}
+	setRetryAfter(h, codes.ToConnect(instanceFailure(&checkedread.NotOnline{RecallState: checkedread.RecallFailed, Err: cold}, p)))
+	if got := h.Get("Retry-After"); got != "" {
+		t.Errorf("the download's Retry-After with the recall failed is %q; want none", got)
 	}
 }
 

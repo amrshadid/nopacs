@@ -46,13 +46,10 @@ const (
 
 // retentionService is RetentionService: a tenant's retention rules, the
 // sessions due under them, their disposal, the clock they are read
-// against, and holds, kept in the tenant's store.
-//
-// PlaceHold and ReleaseHold are in the contract and not served yet
-// (api/not-served.txt): a hold's record goes on every storage its target
-// touches before its row commits, so it outlives a lost database, and the
-// server has no writer of those records yet. The server does not mount
-// them, so their bodies here are never reached.
+// against, and holds, kept in the tenant's store. A hold is placed and
+// released through the tenant's hold writer (Config.Holds), which puts its
+// record on every storage its target touches before its row commits, so it
+// outlives a lost database.
 type retentionService struct {
 	nopacsv1connect.UnimplementedRetentionServiceHandler
 	c *core
@@ -69,8 +66,8 @@ func retention(st tenant.Store) (tenant.Retention, error) {
 	return r, nil
 }
 
-// holds returns st as the holds' port.
-func holds(st tenant.Store) (tenant.Holds, error) {
+// holdsOf returns st as the holds' port.
+func holdsOf(st tenant.Store) (tenant.Holds, error) {
 	h, ok := st.(tenant.Holds)
 	if !ok {
 		return nil, fault.New(fault.Internal, "api: the tenant's store keeps no holds")
@@ -837,7 +834,7 @@ func (s retentionService) GetHold(ctx context.Context, req *v1.GetHoldRequest) (
 	if tenant.ValidateHoldID(req.GetId()) != nil {
 		return nil, c.failIn(d, st, fault.New(fault.NotFound, messageNoHold))
 	}
-	hs, err := holds(st)
+	hs, err := holdsOf(st)
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}
@@ -889,7 +886,7 @@ func (s retentionService) ListHolds(ctx context.Context, req *v1.ListHoldsReques
 	if err != nil {
 		return nil, c.failWith(d, st, facts, err)
 	}
-	hs, err := holds(st)
+	hs, err := holdsOf(st)
 	if err != nil {
 		return nil, c.failWith(d, st, facts, err)
 	}

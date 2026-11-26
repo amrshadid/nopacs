@@ -20,6 +20,33 @@ func (t Tenant) RepairLease(ctx context.Context) (time.Duration, error) {
 	return typed(settings.ReplicaRepairLease, v, err, settings.ParseRepairLease)
 }
 
+// LagAlert returns replica.lag-alert as it applies on the tenant.
+func (t Tenant) LagAlert(ctx context.Context) (time.Duration, error) {
+	v, err := t.r.Tenant(ctx, t.st, settings.ReplicaLagAlert)
+	return typed(settings.ReplicaLagAlert, v, err, settings.ParseLagAlert)
+}
+
+// ReplicaRate returns replica.rate as it applies on the tenant: bytes a
+// second put on one replica, 0 for no bound.
+func (t Tenant) ReplicaRate(ctx context.Context) (int64, error) {
+	v, err := t.r.Tenant(ctx, t.st, settings.ReplicaRate)
+	return typed(settings.ReplicaRate, v, err, settings.ParseReplicaRate)
+}
+
+// RecallWait returns recall.wait as it applies on the tenant.
+func (t Tenant) RecallWait(ctx context.Context) (time.Duration, error) {
+	v, err := t.r.Tenant(ctx, t.st, settings.RecallWait)
+	return typed(settings.RecallWait, v, err, settings.ParseRecallWait)
+}
+
+// ArchiveSample returns scrub.archive-sample as it applies on the tenant:
+// the share, from 0 to 1, of an archive-tier storage's online objects whose
+// bytes a scrub reads.
+func (t Tenant) ArchiveSample(ctx context.Context) (float64, error) {
+	v, err := t.r.Tenant(ctx, t.st, settings.ScrubArchiveSample)
+	return typed(settings.ScrubArchiveSample, v, err, settings.ParseArchiveSample)
+}
+
 // ShortenNotice returns retention.shorten-notice as it applies on the
 // tenant.
 func (t Tenant) ShortenNotice(ctx context.Context) (time.Duration, error) {

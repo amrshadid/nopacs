@@ -621,6 +621,14 @@ var rules = map[string]rule{
 	nopacsv1connect.RetentionServiceListHoldsProcedure: byMessage(func(r *v1.ListHoldsRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
 	}),
+	// PlaceHold and ReleaseHold: admin, a hold's target recorded as its path
+	// of labels.
+	nopacsv1connect.RetentionServicePlaceHoldProcedure: byMessage(func(r *v1.PlaceHoldRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: map[string]string{detailTarget: holdTargetDetail(r.GetTarget())}}
+	}),
+	nopacsv1connect.RetentionServiceReleaseHoldProcedure: byMessage(func(r *v1.ReleaseHoldRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: jobObject(r.GetId())}
+	}),
 }
 
 // pendingRules is the table of the methods the contract defines and no
@@ -636,8 +644,7 @@ var rules = map[string]rule{
 //
 // BackfillReplica: operator, as copying is the server's own work. Recall:
 // operator, since a recall costs the site money and is previewed first.
-// VerifySample: operator, since it answers keys that hold UIDs. PlaceHold
-// and ReleaseHold: admin, a hold's target recorded as its path of labels.
+// VerifySample: operator, since it answers keys that hold UIDs.
 var pendingRules = map[string]rule{
 	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: byMessage(func(r *v1.BackfillReplicaRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetReplica()}
@@ -648,13 +655,6 @@ var pendingRules = map[string]rule{
 	}),
 	nopacsv1connect.ReplicaServiceVerifySampleProcedure: byMessage(func(r *v1.VerifySampleRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetStorage()}
-	}),
-	nopacsv1connect.RetentionServicePlaceHoldProcedure: byMessage(func(r *v1.PlaceHoldRequest) (access.Requirement, access.Request) {
-		t := r.GetTarget()
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: map[string]string{detailTarget: labelPath(t.GetSubjectLabel(), t.GetSessionLabel(), t.GetScanLabel())}}
-	}),
-	nopacsv1connect.RetentionServiceReleaseHoldProcedure: byMessage(func(r *v1.ReleaseHoldRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: jobObject(r.GetId())}
 	}),
 }
 

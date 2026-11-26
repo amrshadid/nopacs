@@ -188,6 +188,7 @@ func APIServices(d Deps) (Built, error) {
 		closeRegistry(reg)
 		return Built{}, err
 	}
+	work.wakeFeed = feeds.Wake
 	tenantJobs.Store(work)
 	sup, err := newReception(d, reg, feeds.Wake, pokeSenders, stowReceivers, deidMemory, scanLocks, pipes, cleanups, work)
 	if err != nil {
@@ -262,7 +263,8 @@ func APIServices(d Deps) (Built, error) {
 		Receivers: receiverHealth{sup}, Live: receiverHealth{sup}, Feeds: feeds, Incoming: pipelineDecisions{sup}, Headers: heldHeaders{sup}, HeldFiles: heldHeaders{sup}, STOW: stowReceivers,
 		Reads: reads, ReadCounts: readCounts, SenderHealths: senderHealths{s: senders, deid: deids, scrub: scrubs, imports: imports, rebuilds: rebuilds}, SenderTests: senderTests{senders}, DeidMemory: deidMemory,
 		Installation: installation, ImportGuarded: importGuarded(d.DataDir), Corrections: engines, ReplaceSources: pipes,
-		Handoffs: handoffs{sup: sup, engines: engines, owners: ownerCheck, locks: owners, work: work}, StorageCleanups: cleanups, SealPause: sealer.Pause})
+		Handoffs: handoffs{sup: sup, engines: engines, owners: ownerCheck, locks: owners, work: work}, StorageCleanups: cleanups, SealPause: sealer.Pause,
+		Holds: work.HoldWriter})
 	if err != nil {
 		closeRegistry(reg)
 		return Built{}, err
@@ -331,7 +333,7 @@ func APIServices(d Deps) (Built, error) {
 		// the entries the requests and the engines wrote.
 		AfterDrain: stopThen(engines, sealer.Last),
 		Counters:   func() []obs.Counter { return append(sealCounters(sealer.Stats()), readCounters(readCounts)...) },
-		Gauges:     func() []obs.Gauge { return sealGauges(sealer.Stats(), time.Now()) },
+		Gauges:     func() []obs.Gauge { return append(sealGauges(sealer.Stats(), time.Now()), copyGauges(work, scrubs)...) },
 	}, nil
 }
 

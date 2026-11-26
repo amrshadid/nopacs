@@ -67,6 +67,11 @@ func TestBuiltin(t *testing.T) {
 		ScrubRate:     {Ordinary, "64MiB", false},
 		ScrubInterval: {Ordinary, "30d", false},
 
+		ScrubArchiveSample: {Ordinary, "0%", false},
+		ReplicaLagAlert:    {Ordinary, "1h", false},
+		ReplicaRate:        {Ordinary, "0", false},
+		RecallWait:         {Ordinary, "48h", false},
+
 		DeleteGrace: {Ordinary, "7d", false},
 
 		BackupMaxDuration: {InstallationOnly, "6h", false},
@@ -80,8 +85,8 @@ func TestBuiltin(t *testing.T) {
 		ReplicaRepair:          {Ordinary, "manual", false},
 		ReplicaRepairLease:     {Ordinary, "1m", false},
 		RetentionShortenNotice: {SetByInstallation, "30d", false},
-		RetentionMaxClockStep:  {SetByInstallation, "2d", false},
-		RetentionMaxPerPass:    {Ordinary, "1000", false},
+		RetentionMaxClockStep:  {InstallationOnly, "2d", false},
+		RetentionMaxPerPass:    {SetByInstallation, "1000", false},
 		QuarantineWarnAge:      {Ordinary, "30d", false},
 		QuarantineWarnBytes:    {Ordinary, "0", false},
 	}

@@ -191,3 +191,38 @@ func TestSenderValues(t *testing.T) {
 		t.Errorf("a stored value its rule refuses: %v", err)
 	}
 }
+
+// TestCopyAndRecallValues guards the readers of the settings of replicas'
+// copies, recalls and archive-tier scrubs: each built-in default when
+// nothing is stored, and a tenant's own value over the installation's.
+func TestCopyAndRecallValues(t *testing.T) {
+	ctx := context.Background()
+	r := settingvalue.Reader{Master: stored{v: map[string]string{settings.ReplicaRate: "64MiB"}}}
+	none := r.OnTenant(stored{v: map[string]string{}})
+	if v, err := none.LagAlert(ctx); err != nil || v.String() != "1h0m0s" {
+		t.Errorf("lag alert by default: %v, %v", v, err)
+	}
+	if v, err := none.ReplicaRate(ctx); err != nil || v != 64<<20 {
+		t.Errorf("replica rate from the installation: %v, %v", v, err)
+	}
+	if v, err := none.RecallWait(ctx); err != nil || v.String() != "48h0m0s" {
+		t.Errorf("recall wait by default: %v, %v", v, err)
+	}
+	if v, err := none.ArchiveSample(ctx); err != nil || v != 0 {
+		t.Errorf("archive sample by default: %v, %v", v, err)
+	}
+	own := r.OnTenant(stored{v: map[string]string{settings.ReplicaLagAlert: "5m", settings.ReplicaRate: "0",
+		settings.RecallWait: "2h", settings.ScrubArchiveSample: "25%"}})
+	if v, err := own.LagAlert(ctx); err != nil || v.String() != "5m0s" {
+		t.Errorf("a tenant's own lag alert: %v, %v", v, err)
+	}
+	if v, err := own.ReplicaRate(ctx); err != nil || v != 0 {
+		t.Errorf("a tenant's own unbounded rate: %v, %v", v, err)
+	}
+	if v, err := own.RecallWait(ctx); err != nil || v.String() != "2h0m0s" {
+		t.Errorf("a tenant's own recall wait: %v, %v", v, err)
+	}
+	if v, err := own.ArchiveSample(ctx); err != nil || v != 0.25 {
+		t.Errorf("a tenant's own archive sample: %v, %v", v, err)
+	}
+}

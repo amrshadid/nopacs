@@ -2,6 +2,7 @@ package settings
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -17,6 +18,11 @@ const (
 	// ScrubInterval is how often the server makes a scrub of each of a
 	// tenant's storages by itself, or "0" for never (ParseScrubInterval).
 	ScrubInterval = "scrub.interval"
+	// ScrubArchiveSample is the share of the objects online on a storage of
+	// the archive tier whose bytes a scrub reads, the rest checked by their
+	// presence only (ParseArchiveSample). It is read at the start of each
+	// unit of a scrub.
+	ScrubArchiveSample = "scrub.archive-sample"
 )
 
 // The bounds of the scrub settings.
@@ -55,6 +61,17 @@ func ParseScrubInterval(v string) (time.Duration, error) {
 	return d, nil
 }
 
+// ParseArchiveSample reads scrub.archive-sample: a whole percentage from
+// "0%" to "100%", answered as the share from 0 to 1.
+func ParseArchiveSample(v string) (float64, error) {
+	digits, ok := strings.CutSuffix(v, "%")
+	n, err := wholeNumber(digits, 100)
+	if !ok || err != nil {
+		return 0, errors.New("is a whole percentage from 0% to 100%, such as 5%")
+	}
+	return float64(n) / 100, nil
+}
+
 // scrubDefinitions returns the definitions of the scrub settings, for
 // Builtin.
 func scrubDefinitions() []Definition {
@@ -73,5 +90,14 @@ func scrubDefinitions() []Definition {
 		Default:        "30d",
 		TenantOverride: true,
 		Validate:       func(v string) error { _, err := ParseScrubInterval(v); return err },
+	}, {
+		// None: a read of an archive-tier object may bill the site, and a
+		// presence check (size, and the store's own checksum where it keeps
+		// one) costs nothing; a site that wants its cold copies read sets a
+		// share.
+		Name:           ScrubArchiveSample,
+		Default:        "0%",
+		TenantOverride: true,
+		Validate:       func(v string) error { _, err := ParseArchiveSample(v); return err },
 	}}
 }

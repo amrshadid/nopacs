@@ -16,6 +16,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/core/manifest"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/pace"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -129,14 +130,26 @@ func (s *scanCopy) put(ctx context.Context, key string, size int64, sum [sha256.
 	if err := s.lease.keep(ctx); err != nil {
 		return err
 	}
-	pctx, cancel := context.WithTimeout(ctx, s.w.putTimeout())
+	// replica.rate paces the bytes put on the replica; the put's limit grows
+	// by the time the bound makes it take, so a bound a site set never makes
+	// a large object miss its limit, while a storage that hangs still fails.
+	pacer, rate := s.w.pacing(s.c.Fence.Replica)
+	var extra time.Duration
+	if rate > 0 {
+		extra = time.Duration(float64(max(size, 0)) / float64(rate) * float64(time.Second))
+	}
+	pctx, cancel := context.WithTimeout(ctx, s.w.putTimeout()+extra)
 	defer cancel()
 	body, err := open(pctx)
 	if err != nil {
 		return onPrimary(err, "an object of the scan could not be read from the primary")
 	}
 	src := &source{ctx: pctx, r: body, lease: s.lease}
-	wr, err := blob.PutConfirmed(pctx, s.replica, key, src, size, sum)
+	var in io.Reader = src
+	if rate > 0 {
+		in = &pace.Reader{Ctx: pctx, R: src, P: pacer, Rate: rate}
+	}
+	wr, err := blob.PutConfirmed(pctx, s.replica, key, in, size, sum)
 	_ = body.Close() // only read from; nothing to lose
 	if err != nil {
 		switch {

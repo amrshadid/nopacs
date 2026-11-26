@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
-	"github.com/amrshadid/nopacs/internal/cli/client"
 	"github.com/amrshadid/nopacs/internal/cli/output"
 	"github.com/amrshadid/nopacs/internal/fault"
 )
@@ -26,9 +25,8 @@ hold stays committed and may still be undone.
 
 A hold's record is written beside the data on each primary before the hold
 counts, and a replica that does not answer is owed it: until it has the record no
-purge removes anything from it and no switch to it swaps. A server that does not
-serve placing or releasing yet says so ("not served"); listing and showing need
-the operator role, placing and releasing the admin role. The reason of a hold is
+purge removes anything from it and no switch to it swaps. Listing and showing
+need the operator role, placing and releasing the admin role. The reason of a hold is
 a person's words about a subject: it is answered only to an operator or more.`,
 		a.newHoldList(), a.newHoldShow(), a.newHoldPlace(), a.newHoldRelease())
 }
@@ -160,10 +158,8 @@ func (a *app) newHoldPlace() *cobra.Command {
 the tenant. A subject, session or scan under a committed delete that is not yet
 purged can be held by the labels it had: its purge then waits. An active hold
 with the same target and reason is answered instead, so a repeated command places
-nothing more. The reason is kept with the hold and in the audit log.
-
-A server that does not serve this yet answers so ("not served") and nothing is
-held.`,
+nothing more. The reason is kept with the hold and in the audit log. A primary
+storage that does not take the hold's record leaves nothing held.`,
 		Example: `  nopacs hold place lab1 sub-0017 --reason "litigation hold 2026-114"
   nopacs hold place lab1 --whole-tenant --reason "audit in progress"`,
 		Args: cobra.RangeArgs(1, 2),
@@ -199,7 +195,7 @@ held.`,
 				return c.Retention.PlaceHold(ctx, &v1.PlaceHoldRequest{Tenant: args[0], Target: target, Reason: reason})
 			})
 			if err != nil {
-				return client.OrNotServed(what(cmd), err)
+				return err
 			}
 			return messageOut(a, res, func(w io.Writer) error {
 				if _, err := fmt.Fprintf(w, "hold %s placed on %s\n", output.Clean(res.GetHold().GetId()), output.Clean(output.HoldTarget(res.GetHold().GetTarget()))); err != nil {
@@ -229,7 +225,7 @@ stands.
 
 Releasing lets data go, so on a terminal it asks for the hold's id to be typed
 again; with --yes it does not; with no terminal and no --yes it releases nothing
-and exits 2. A server that does not serve this yet answers so ("not served").`,
+and exits 2.`,
 		Example: `  nopacs hold release lab1 hold_3Tq9 --reason "litigation closed"
   nopacs hold release lab1 hold_3Tq9 --reason "litigation closed" --yes`,
 		Args: exactArgs(2),
@@ -249,7 +245,7 @@ and exits 2. A server that does not serve this yet answers so ("not served").`,
 				return c.Retention.ReleaseHold(ctx, &v1.ReleaseHoldRequest{Tenant: args[0], Id: args[1], Reason: reason})
 			})
 			if err != nil {
-				return client.OrNotServed(what(cmd), err)
+				return err
 			}
 			return messageOut(a, res, func(w io.Writer) error {
 				if _, err := fmt.Fprintf(w, "hold %s released\n", output.Clean(res.GetHold().GetId())); err != nil {

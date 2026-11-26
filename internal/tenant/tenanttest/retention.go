@@ -36,6 +36,7 @@ func runRetention(t *testing.T, open OpenEvents) {
 		{"HoldFollowsRelabel", testHoldFollowsRelabel},
 		{"HoldRecords", testHoldRecords},
 		{"HoldRecordsFollowTarget", testHoldRecordsFollowTarget},
+		{"HoldRecordsOfAStorageGone", testHoldRecordsOfAStorageGone},
 		{"DisposalPreview", testDisposalPreview},
 		{"DisposalTokenKeepsItsTime", testDisposalTokenKeepsItsTime},
 		{"DisposalDeletes", testDisposalDeletes},

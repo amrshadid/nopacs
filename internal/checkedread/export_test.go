@@ -13,5 +13,8 @@ func WrapStores(s *Stores, wrap func(name string, st blob.Store) blob.Store) { s
 // UseReplicas makes s ask r, rather than its pipeline, of the replicas.
 func UseReplicas(s *Stores, r Replicas) { s.replicas = r }
 
+// UseRecalls makes s ask r, rather than its pipeline, of the recalls.
+func UseRecalls(s *Stores, r Recalls) { s.recalls = r }
+
 // CountsClock makes c read the time of its warnings' limit from now.
 func CountsClock(c *Counts, now func() time.Time) { c.seams.now = now }

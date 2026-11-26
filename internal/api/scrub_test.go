@@ -48,6 +48,10 @@ func (scrubSettings) ScrubRate(context.Context) (int64, error) { return 64 << 30
 // ScrubInterval answers scrub.interval, "0".
 func (scrubSettings) ScrubInterval(context.Context) (time.Duration, error) { return 0, nil }
 
+// ArchiveSample answers scrub.archive-sample: no object of an archive tier
+// read.
+func (scrubSettings) ArchiveSample(context.Context) (float64, error) { return 0, nil }
+
 // oneStorage opens lab1's storage for every name, and keeps it open.
 type oneStorage struct{ s blob.Store }
 

@@ -27,6 +27,12 @@ var metricLabels = map[string][]string{
 	"nopacs_requests_total":           {"method", "code"},
 	"nopacs_request_duration_seconds": {"method"},
 	"nopacs_tenants":                  {"state"},
+	// Tenants and storages are named by an admin, never by a request.
+	"nopacs_replica_lag_seconds":             {"tenant", "replica"},
+	"nopacs_replica_scans_behind":            {"tenant", "replica"},
+	"nopacs_scrub_verified_share":            {"tenant", "storage"},
+	"nopacs_scrub_oldest_unverified_seconds": {"tenant", "storage"},
+	"nopacs_scrub_overdue_objects":           {"tenant", "storage"},
 }
 
 // metric is one family of the text a scrape returns.

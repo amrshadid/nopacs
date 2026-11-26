@@ -10,6 +10,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/pace"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -34,6 +35,13 @@ type TenantSettings interface {
 	// ScrubInterval returns scrub.interval as it applies on the tenant,
 	// zero for never.
 	ScrubInterval(ctx context.Context) (time.Duration, error)
+	// ArchiveSample returns scrub.archive-sample as it applies on the
+	// tenant: the share, from 0 to 1, of the objects online on a storage of
+	// the archive tier whose bytes a scrub reads; the rest are checked by
+	// presence (Stat: size, and the store's own SHA-256 where it keeps
+	// one). Zero, the default, reads no object's bytes there: a read may
+	// bill the site, and a scrub never asks for a recall.
+	ArchiveSample(ctx context.Context) (float64, error)
 }
 
 // Storages opens the storages a unit reads, each once, and closes them at
@@ -164,12 +172,6 @@ type Config struct {
 	// ScheduleInterval is how often a tenant's scheduled scrubs are looked
 	// at; 0 is DefaultScheduleInterval.
 	ScheduleInterval time.Duration
-	// ArchiveSample is the share, from 0 to 1, of the objects online on a
-	// storage of the archive tier whose bytes a scrub reads; the rest are
-	// checked by presence (Stat: size, and the store's own SHA-256 where it
-	// keeps one). Zero, the default, reads no object's bytes there: a
-	// read may bill the site, and a scrub never asks for a recall.
-	ArchiveSample float64
 	// RequestRate is how many requests to scrub one instance a tenant may
 	// make a minute (Supervisor.RequestInstance); 0 is
 	// DefaultRequestRate. MaxRequests is how many wait at most per
@@ -217,8 +219,6 @@ func (c Config) check() (Config, error) {
 		return c, fault.New(fault.Internal, "scrub: the supervisor is given no way to make ids")
 	case c.Keys == nil || c.Keys.SealVersion() == 0 || c.TenantID == nil:
 		return c, fault.New(fault.Internal, "scrub: the supervisor is given no installation keys or tenant ids to check correction records with")
-	case c.ArchiveSample < 0 || c.ArchiveSample > 1 || c.ArchiveSample != c.ArchiveSample:
-		return c, fault.New(fault.Internal, "scrub: the share of archive-tier objects read is 0 to 1")
 	case c.RequestRate < 0 || c.MaxRequests < 0:
 		return c, fault.New(fault.Internal, "scrub: the bounds of requests to scrub an instance are not negative")
 	}
@@ -253,22 +253,7 @@ func (c Config) check() (Config, error) {
 		c.seams.settle = SettleDelay
 	}
 	if c.seams.sleep == nil {
-		c.seams.sleep = sleep
+		c.seams.sleep = pace.Sleep
 	}
 	return c, nil
-}
-
-// sleep waits d, or until ctx ends, and returns ctx's error then.
-func sleep(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return ctx.Err()
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
 }

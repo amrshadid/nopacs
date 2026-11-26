@@ -67,16 +67,21 @@ import "nopacs/v1/scope.proto";
 // installation's admin only, with an installation value; built-in default
 // "4"), import.server-max-units (installation-only; built-in default "8")
 // and import.max-dir-entries (installation-only; built-in default
-// "200000") (JobService). Those of replicas, cold tiers and retention, not
-// yet in use by the server: replica.rate (bytes per second per replica,
-// such as "64MiB", from "1MiB" to "10GiB"; built-in default "64MiB"),
+// "200000") (JobService). Those of replicas, cold tiers and retention:
+// replica.rate (bytes per second put on each replica, "0" for no bound, or a
+// size from "1MiB" to "10GiB"; built-in default "0"),
 // replica.lag-alert (a period from "1m" to "30d"; built-in default "1h"),
-// replica.repair ("manual" or "auto"; built-in default "manual") and
+// replica.repair ("manual" or "auto"; built-in default "manual"),
+// replica.repair-lease (a period from "30s" to "1h"; built-in default "1m",
+// checked at start against the largest object a repair may put) and
 // recall.wait (a period from "1h" to "30d"; built-in default "48h"), each
 // an ordinary setting a tenant may override (ReplicaService);
 // scrub.archive-sample (a percentage from "0%" to "100%"; an ordinary
 // setting a tenant may override; built-in default "0%") (JobService,
-// ScrubJob); retention.shorten-notice (a period from "1d" to "365d";
+// ScrubJob); quarantine.warn-age (a period from "1d" to "3650d"; built-in
+// default "30d") and quarantine.warn-bytes (a size, or "0" for no warning;
+// built-in default "0"), ordinary settings a tenant may override
+// (TenantStatus); retention.shorten-notice (a period from "1d" to "365d";
 // built-in default "30d") and retention.max-per-pass (a whole number from
 // 1 to 100000; built-in default "1000"), each set on a tenant by the
 // installation's admin only, with an installation value, since they bound

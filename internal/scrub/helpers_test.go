@@ -42,10 +42,22 @@ func corpus(t testing.TB, name string) []byte {
 	return b
 }
 
-// settingsOf is the settings a test gives: scrub.rate and scrub.interval.
+// settingsOf is the settings a test gives: scrub.rate, scrub.interval and
+// scrub.archive-sample; sample, when set, is read at each call, so a test
+// can change it between scrubs.
 type settingsOf struct {
 	rate     int64
 	interval time.Duration
+	sample   *atomic.Value
+}
+
+// ArchiveSample answers scrub.archive-sample: 0 when the test set none.
+func (s settingsOf) ArchiveSample(context.Context) (float64, error) {
+	if s.sample == nil {
+		return 0, nil
+	}
+	v, _ := s.sample.Load().(float64)
+	return v, nil
 }
 
 // FailuresKept answers job.failures-kept.

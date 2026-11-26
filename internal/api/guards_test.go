@@ -312,6 +312,12 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		"ListHolds": func(c clients) outcome {
 			return call(c.retention.ListHolds, &v1.ListHoldsRequest{Tenant: name})
 		},
+		"PlaceHold": func(c clients) outcome {
+			return call(c.retention.PlaceHold, &v1.PlaceHoldRequest{Tenant: name, Target: &v1.HoldTarget{SubjectLabel: "S01"}, Reason: "x"})
+		},
+		"ReleaseHold": func(c clients) outcome {
+			return call(c.retention.ReleaseHold, &v1.ReleaseHoldRequest{Tenant: name, Id: correctionULID, Reason: "x"})
+		},
 	}
 }
 

@@ -8,11 +8,16 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/core/layout"
+	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/driver"
+	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/holds"
+	"github.com/amrshadid/nopacs/internal/place"
+	"github.com/amrshadid/nopacs/internal/settingvalue"
 	"github.com/amrshadid/nopacs/internal/tenant"
 	"github.com/amrshadid/nopacs/internal/testkit"
 )
@@ -23,6 +28,52 @@ type keptOpen struct{ blob.Store }
 
 // Close keeps the storage open.
 func (keptOpen) Close() error { return nil }
+
+// TestAStorageNotReadCostsNoHoldOfTheOthers guards the reconcile's
+// adoption of hold records when one storage cannot be read: the holds
+// found active with no row on every storage that was read are adopted, and
+// the reconcile still fails, naming the storage not read.
+func TestAStorageNotReadCostsNoHoldOfTheOthers(t *testing.T) {
+	r := newRig(t, false)
+	ctx := r.ctx
+	id, err := tenant.NewCorrectionID(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := record.EncodeHold(record.Hold{Format: record.Format, Kind: record.HoldKind, ID: id, Level: record.LevelSubject, Subject: "sub-01",
+		State: record.HoldActive, ReasonSHA256: record.ReasonDigest("litigation"), Placed: time.Now().UTC().Truncate(time.Second), Seq: 1},
+		tenantID, r.keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _ := layout.HoldKey(id)
+	if _, err := r.storage.Put(ctx, key, bytes.NewReader(b)); err != nil {
+		t.Fatal(err)
+	}
+	main, err := r.p.Storage(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Listed first, under a root the installation does not have: it cannot
+	// be opened.
+	gone := tenant.Storage{Name: "gone", Type: tenant.StorageDirectory, Directory: tenant.DirectoryStorage{Root: "unknown-root"}}
+	row, err := r.m.TenantByName(ctx, "lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	opener := place.Opener{Values: settingvalue.Reader{Master: r.m}, Keys: r.keys, StaleUploadAge: -1}
+	var res TenantResult
+	err = adoptHolds(ctx, RestoreConfig{Keys: r.keys}, openedTenant{row: row, store: r.st}, opener, []tenant.Storage{gone, main}, time.Now(), &res)
+	if err == nil || !strings.Contains(fault.Message(err), "gone") {
+		t.Fatalf("the adoption with a storage not read answers %v, want an error naming it", err)
+	}
+	if !slices.Equal(res.HoldsAdopted, []string{id}) {
+		t.Fatalf("the holds adopted from the storage read: %v, want %s", res.HoldsAdopted, id)
+	}
+	if h, err := r.p.(tenant.Holds).Hold(ctx, id); err != nil || h.State != tenant.HoldActive || !h.FoundOnStorage {
+		t.Fatalf("the hold adopted is %+v (%v)", h, err)
+	}
+}
 
 // TestAHoldPlacedAfterTheBackupSurvivesItsRestore guards that a hold's
 // record outlives the database the backup brings back, on each database

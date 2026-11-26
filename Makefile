@@ -264,7 +264,7 @@ check-backup-cipher:
 check-record-mac:
 	@test -n "$(PYTHON)" || { echo "check-record-mac: PYTHON is empty; name a Python interpreter" >&2; exit 1; }
 	@command -v "$(PYTHON)" > /dev/null || { echo "check-record-mac: no interpreter $(PYTHON)" >&2; exit 1; }
-	NOPACS_CHECK_RECORD_MAC_PYTHON="$(PYTHON)" $(GO) test -count=1 -v -run '^TestRecordMACInPython$$' ./internal/core/record
+	NOPACS_CHECK_RECORD_MAC_PYTHON="$(PYTHON)" $(GO) test -count=1 -v -run '^Test(Hold)?RecordMACInPython$$' ./internal/core/record
 
 # The outside check of internal/core/auditchain: scripts/check/auditchain.py
 # recomputes the entry encoding and the chain with hashlib and has openssl

@@ -33,15 +33,27 @@ type Replicas interface {
 	HeldInstance(ctx context.Context, path label.Path, sopInstanceUID string) (tenant.ScanInstance, error)
 }
 
+// Recalls is what a read of an object not online asks the tenant's
+// database: the object's recall, so the answer can say whether waiting
+// brings it back (tenant.Recalls).
+type Recalls interface {
+	// Recall answers the row of the object at key on storage, and whether
+	// there is one.
+	Recall(ctx context.Context, storage, key string) (tenant.Recall, bool, error)
+}
+
 // Stores opens the storages a read reaches, each once, for the tenant
 // whose pipeline it holds, and closes them at its end. Its Open, Stat and
 // Source read an archived object from its primary, or from a replica in
 // step when the primary cannot serve it (Open).
 type Stores struct {
-	opener     place.Opener
-	tenantID   func(ctx context.Context, name string) (string, error)
-	p          tenant.Pipeline
-	replicas   Replicas
+	opener   place.Opener
+	tenantID func(ctx context.Context, name string) (string, error)
+	p        tenant.Pipeline
+	replicas Replicas
+	// recalls is the tenant's database's recalls, nil for one that keeps
+	// none: a read not online then says nothing of a recall.
+	recalls    Recalls
 	tenantName string
 	tenant     place.Tenant
 	open       map[string]blob.Store
@@ -64,7 +76,11 @@ type storesSeams struct {
 // tenantID finds the tenant's identifier from its name, once, when the first
 // storage is opened; opener opens a storage for reading.
 func NewStores(opener place.Opener, tenantID func(ctx context.Context, name string) (string, error), p tenant.Pipeline, name string) *Stores {
-	return &Stores{opener: opener, tenantID: tenantID, p: p, replicas: p, tenantName: name, open: map[string]blob.Store{}}
+	s := &Stores{opener: opener, tenantID: tenantID, p: p, replicas: p, tenantName: name, open: map[string]blob.Store{}}
+	if rc, ok := p.(Recalls); ok {
+		s.recalls = rc
+	}
+	return s
 }
 
 // WithCounts makes s count the reads a replica served, and the replicas'

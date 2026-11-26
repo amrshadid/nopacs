@@ -9,7 +9,10 @@ import (
 	"strconv"
 	"time"
 
+	connect "connectrpc.com/connect/v2"
+
 	"github.com/amrshadid/nopacs/internal/access"
+	"github.com/amrshadid/nopacs/internal/api/codes"
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -44,8 +47,30 @@ func (h Handlers) Download(ctx context.Context, w http.ResponseWriter, r *http.R
 	return h.c.download(ctx, w, r)
 }
 
-// download is Download.
+// download is Download. An error before the answer started that carries a
+// retry delay (NOT_ONLINE while a recall of the instance runs) sets
+// Retry-After, in whole seconds rounded up, on the answer the server writes
+// for it (RFC 9110 10.2.3), so a plain HTTP client that reads no error
+// details still learns when to try again.
 func (c *core) download(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	err := c.downloadAnswer(ctx, w, r)
+	setRetryAfter(w.Header(), err)
+	return err
+}
+
+// setRetryAfter sets Retry-After on h from the retry delay of err, an API
+// error, when it carries one.
+func setRetryAfter(h http.Header, err error) {
+	var ce *connect.Error
+	if errors.As(err, &ce) {
+		if delay, ok := codes.RetryOfError(ce); ok && delay > 0 {
+			h.Set("Retry-After", strconv.FormatInt(int64((delay+time.Second-1)/time.Second), 10))
+		}
+	}
+}
+
+// downloadAnswer answers a download, as download says.
+func (c *core) downloadAnswer(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	d, err := c.decision(ctx, DownloadPattern)
 	if err != nil {
 		return err

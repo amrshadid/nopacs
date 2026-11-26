@@ -431,6 +431,23 @@ scan, keeps it whole, and serves it through an API with keys.
   before the scan's lock), and replace, relabel and an instance purge keep
   the metadata file's digest. A switch's empty-compare check reads a
   rebuild compare made from the replica.
+- PlaceHold and ReleaseHold are served (`nopacs hold place`, `hold release`):
+  a hold's record is written on every primary before its row. The hold
+  worker's writes are fenced; retention adopts holds found on storage before
+  its first disposal after a start; a relabel writes the moved holds' records
+  at once; a storage removed or a replica detached keeps no hold record rows;
+  a restore adopts holds from every storage it can read.
+- `replica.lag-alert` (1h): one replica-behind event when a replica's oldest
+  queued copy passes it and one when it catches up, with the metrics
+  `nopacs_replica_lag_seconds` and `nopacs_replica_scans_behind`;
+  `replica.rate` paces the bytes put on each replica (default no bound);
+  `recall.wait` (48h) records a recall that never comes online as failed;
+  `scrub.archive-sample` applies without a restart; NOT_ONLINE carries the
+  object's recall state and, while a recall runs, a retry delay (Retry-After
+  on downloads); scrub coverage is exported as metrics.
+- `retention.max-clock-step` is installation-only and
+  `retention.max-per-pass` is set on a tenant by the installation's admin
+  only.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

@@ -166,6 +166,71 @@ func TestRetentionsPassDisposesThroughTheOrdinaryDelete(t *testing.T) {
 	}
 }
 
+// TestRetentionsFirstPassAdoptsTheHoldsFoundOnStorage guards the first
+// disposal after a start: a hold whose record is on the storage and whose
+// row the database lost (made again, or restored from before the hold) is
+// adopted before the pass, so the pass skips the held session rather than
+// deleting it; the unheld session is disposed of as usual.
+func TestRetentionsFirstPassAdoptsTheHoldsFoundOnStorage(t *testing.T) {
+	r := newWorkRig(t)
+	p := r.pipeline()
+	r.accept(p, workStudy...)
+	r.accept(p, "MR_small.dcm")
+	r.waitFor("both receptions to be archived", time.Minute, func() bool { return r.archived(2) })
+	for name, value := range map[string]string{"retention.shorten-notice": "1d", "retention.max-clock-step": "30d"} {
+		if err := r.db.SetSetting(r.ctx, name, value, r.audit(), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := r.db.AddRetentionRule(r.ctx, tenant.RetentionRule{Name: "trial7", DisposeAfter: tenant.RetentionPeriod{Days: 1},
+		Action: tenant.RetentionDelete}, tenant.RetentionChange{Now: time.Now(), Notice: 24 * time.Hour}, r.audit(), nil); err != nil {
+		t.Fatal(err)
+	}
+	scans, err := r.db.ListScans(r.ctx, tenant.ScanFilter{Order: tenant.OrderLabel}, master.Page{Limit: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	held := scans.Items[0].SubjectLabel
+	lost := putLostHoldRecord(t, r, "main", held)
+	r.w.setEngines(retentionEngines(t, r))
+	r.w.now = func() time.Time { return time.Now().Add(72 * time.Hour) }
+	ret := &tenantRetention{w: r.w, name: "lab", st: r.db, log: r.w.log}
+	if err := ret.once(r.ctx); err != nil {
+		t.Fatalf("the pass: %v", err)
+	}
+	jobs, _, err := r.db.ListJobs(r.ctx, tenant.JobFilter{}, master.Page{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleted := 0
+	for _, j := range jobs {
+		if j.Kind != tenant.JobDispose {
+			continue
+		}
+		dj, err := r.db.DisposeJob(r.ctx, j.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range dj.Sessions {
+			if s.SubjectLabel == held && s.Outcome == tenant.DisposeDeleted {
+				t.Fatalf("the first pass deleted the session of the subject held by a record on storage: %+v", s)
+			}
+			if s.Outcome == tenant.DisposeDeleted {
+				deleted++
+			}
+		}
+	}
+	if deleted != 1 {
+		t.Fatalf("the first pass deleted %d sessions, want the unheld one", deleted)
+	}
+	if got, _, err := r.db.ListHeldInstances(r.ctx, pathOfScan(scans.Items[0]), master.Page{Limit: 1000}); err != nil || len(got) == 0 {
+		t.Fatalf("the held subject's instances: %d (%v)", len(got), err)
+	}
+	if h, err := r.db.Hold(r.ctx, lost); err != nil || h.State != tenant.HoldActive || !h.FoundOnStorage {
+		t.Fatalf("the hold found on storage before the pass is %+v (%v)", h, err)
+	}
+}
+
 // flakyRules is a tenant's database whose first listing of the retention
 // rules fails, as a database that did not answer; it counts the listings,
 // one per daily pass.

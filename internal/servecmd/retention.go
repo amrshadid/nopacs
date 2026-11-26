@@ -50,6 +50,10 @@ type tenantRetention struct {
 	// before the pass runs, so a pass that failed would otherwise wait a
 	// whole day for its next try rather than the next hourly check.
 	owed bool
+	// holdsBack is set once the hold records of every storage of the tenant
+	// were read after this start and each hold found active with no row
+	// adopted (adoptHolds).
+	holdsBack bool
 }
 
 // run checks the clock, and passes when a day has gone since the last
@@ -102,6 +106,12 @@ func (r *tenantRetention) once(ctx context.Context) error {
 	if rc.Paused {
 		return nil
 	}
+	if !r.holdsBack {
+		if err := r.adoptHolds(ctx); err != nil {
+			return err
+		}
+		r.holdsBack = true
+	}
 	es := r.w.engines.Load()
 	if es == nil {
 		return fault.New(fault.Unavailable, "the corrections engines are not ready")
@@ -118,6 +128,30 @@ func (r *tenantRetention) once(ctx context.Context) error {
 	// the hour it was queued.
 	errs = append(errs, r.workDisposals(ctx, es))
 	return errors.Join(errs...)
+}
+
+// adoptHolds reads the hold records of every storage of the tenant and
+// adopts each hold found active with no row (holds.Writer.AdoptFound), as
+// the hold-record worker does at the start, before the first disposal
+// after a start: a database lost and made again, or restored from before a
+// hold was placed, has no row of that hold until its record is adopted, and
+// a disposal before then would delete what the hold keeps. A storage that
+// cannot be read is the error, and no disposal runs until every storage
+// was read; adopting a hold the worker adopted already changes nothing.
+func (r *tenantRetention) adoptHolds(ctx context.Context) error {
+	base := r.base
+	if base == nil {
+		base = r.st
+	}
+	hw, err := r.w.holdWriterOver(ctx, r.name, base, r.st)
+	if err != nil {
+		return err
+	}
+	a, err := hw.AdoptFound(ctx)
+	for _, id := range a.Adopted {
+		r.log.Warn("holds: a hold record was found active with no row before retention's first disposal; the hold holds again", "hold", id)
+	}
+	return err
 }
 
 // pass queues a dispose job for each delete rule with sessions due: one per

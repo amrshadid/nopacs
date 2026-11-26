@@ -31,9 +31,12 @@ type outcome struct {
 
 // unitRun is one claimed unit being worked.
 type unitRun struct {
-	t     *tenantRun
-	sup   *Supervisor
-	p     tenant.Pipeline
+	t   *tenantRun
+	sup *Supervisor
+	p   tenant.Pipeline
+	// st is the tenant's database as a store, which its settings and its
+	// verifications are read through.
+	st    tenant.Store
 	fence tenant.WorkFence
 	log   *slog.Logger
 	// ctx ends when the lease is lost or the supervisor stops hard.
@@ -45,6 +48,8 @@ type unitRun struct {
 	// rate is scrub.rate on the tenant; kept job.failures-kept.
 	rate int64
 	kept int
+	// sample is scrub.archive-sample on the tenant, as a share from 0 to 1.
+	sample float64
 	// job is the unit's job as it started.
 	job tenant.Job
 	// reads counts the reads of each key, for the test's seam.
@@ -63,7 +68,7 @@ func (t *tenantRun) work(p tenant.Pipeline, st tenant.Store, w tenant.Work) {
 	sup := t.sup
 	ctx, cancel := context.WithCancel(sup.hard)
 	defer cancel()
-	u := &unitRun{t: t, sup: sup, p: p, fence: w.Fence(), ctx: ctx, log: t.log.With("unit", w.ID), reads: map[string]int{}}
+	u := &unitRun{t: t, sup: sup, p: p, st: st, fence: w.Fence(), ctx: ctx, log: t.log.With("unit", w.ID), reads: map[string]int{}}
 	renewed := make(chan struct{})
 	go func() {
 		defer close(renewed)
@@ -121,8 +126,9 @@ func (t *tenantRun) work(p tenant.Pipeline, st tenant.Store, w tenant.Work) {
 	u.finish(rec, u.scrubScan(start.Scan, rec))
 }
 
-// settings reads what the unit is bound by: job.failures-kept and
-// scrub.rate on the tenant.
+// settings reads what the unit is bound by: job.failures-kept, scrub.rate
+// and scrub.archive-sample on the tenant, each at the unit's start, so a
+// change applies from the next unit without a restart.
 func (u *unitRun) settings(st tenant.Store) error {
 	ctx, cancel := context.WithTimeout(u.ctx, opTimeout)
 	defer cancel()
@@ -132,8 +138,18 @@ func (u *unitRun) settings(st tenant.Store) error {
 		return err
 	}
 	rate, err := ts.ScrubRate(ctx)
-	u.kept, u.rate = kept, rate
-	return err
+	if err != nil {
+		return err
+	}
+	sample, err := ts.ArchiveSample(ctx)
+	if err != nil {
+		return err
+	}
+	if sample < 0 || sample > 1 || sample != sample {
+		return fault.New(fault.Internal, "scrub: the share of archive-tier objects read is not from 0 to 1")
+	}
+	u.kept, u.rate, u.sample = kept, rate, sample
+	return nil
 }
 
 // renew renews the unit's lease every renew interval until ctx ends, and
@@ -255,8 +271,12 @@ func (u *unitRun) finish(rec *recorder, out outcome) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(u.ctx), opTimeout)
 	defer cancel()
 	if !out.temporary && !out.release {
-		_, err := rec.end(ctx)
-		u.write("EndJobScan", err)
+		job, err := rec.end(ctx)
+		if u.write("EndJobScan", err) && job.State.Ended() {
+			// The job's last scan: its storages' coverage changed, and the
+			// metrics show it from now.
+			u.recordCoverage(u.st, job)
+		}
 		return
 	}
 	if _, _, err := rec.flush(ctx); !u.write("RecordJobProgress", err) {

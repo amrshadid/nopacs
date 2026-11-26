@@ -24,5 +24,3 @@
 nopacs.v1.ReplicaService/BackfillReplica
 nopacs.v1.ReplicaService/Recall
 nopacs.v1.ReplicaService/VerifySample
-nopacs.v1.RetentionService/PlaceHold
-nopacs.v1.RetentionService/ReleaseHold

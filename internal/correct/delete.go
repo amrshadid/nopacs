@@ -305,6 +305,9 @@ func (e *Engine) published(ctx context.Context, c tenant.Correction, run func() 
 		return pc, err
 	}
 	e.settle(ctx, pc)
+	if e.cfg.Published != nil {
+		e.cfg.Published(ctx, pc)
+	}
 	return pc, nil
 }
 

@@ -19,6 +19,17 @@ const (
 	// so the longest one put of an object may take (ParseRepairLease). It is
 	// read before each claim of a repair job's unit.
 	ReplicaRepairLease = "replica.repair-lease"
+	// ReplicaLagAlert is how long a replica's oldest scan not in step may
+	// wait before the server reports the replica behind with an event, and
+	// again when it is back under it (ParseLagAlert).
+	ReplicaLagAlert = "replica.lag-alert"
+	// ReplicaRate is the most bytes a second the replicator puts on one
+	// replica, or "0" for no bound (ParseReplicaRate). It is read at each
+	// claim of scans to copy.
+	ReplicaRate = "replica.rate"
+	// RecallWait is how long a recall may stay requested or in progress
+	// before the server gives it up as failed (ParseRecallWait).
+	RecallWait = "recall.wait"
 	// RetentionShortenNotice is how long after a change of retention rules
 	// that would make data due sooner, or keep it less, the change may take
 	// effect at the soonest (ParseShortenNotice). Set on a tenant by the
@@ -49,6 +60,20 @@ const (
 	// unit of work holds.
 	MinRepairLease = 30 * time.Second
 	MaxRepairLease = time.Hour
+	// MinLagAlert and MaxLagAlert bound replica.lag-alert: at least a
+	// minute, the period the lag is looked at; at most thirty days.
+	MinLagAlert = time.Minute
+	MaxLagAlert = 30 * 24 * time.Hour
+	// MinReplicaRate and MaxReplicaRate bound replica.rate when it is not
+	// "0": at least 1 MiB a second, so a backfill of a large primary ends;
+	// at most 10 GiB a second, past any link to a replica.
+	MinReplicaRate = 1 << 20
+	MaxReplicaRate = 10 << 30
+	// MinRecallWait and MaxRecallWait bound recall.wait: at least an hour,
+	// the quickest a standard restore of a cold class takes; at most thirty
+	// days, past the slowest bulk restore.
+	MinRecallWait = time.Hour
+	MaxRecallWait = 30 * 24 * time.Hour
 	// MinShortenNotice and MaxShortenNotice bound retention.shorten-notice.
 	MinShortenNotice = 24 * time.Hour
 	MaxShortenNotice = 365 * 24 * time.Hour
@@ -75,6 +100,30 @@ func ParseReplicaRepair(v string) (string, error) {
 // from 30s to 1h.
 func ParseRepairLease(v string) (time.Duration, error) {
 	return boundedDuration(v, MinRepairLease, MaxRepairLease, "is a period from 30s to 1h, such as 1m")
+}
+
+// ParseLagAlert reads replica.lag-alert: a duration from 1m to 30d.
+func ParseLagAlert(v string) (time.Duration, error) {
+	return boundedDuration(v, MinLagAlert, MaxLagAlert, "is a period from 1m to 30d, such as 1h")
+}
+
+// ParseReplicaRate reads replica.rate: "0" for no bound, or a size
+// (ParseSize) from 1MiB to 10GiB, the bytes a second put on one replica.
+// Zero means no bound.
+func ParseReplicaRate(v string) (int64, error) {
+	if v == "0" {
+		return 0, nil
+	}
+	n, err := ParseSize(v)
+	if err != nil || n < MinReplicaRate || n > MaxReplicaRate {
+		return 0, errors.New(`is "0" for no bound, or a size from 1MiB to 10GiB, put each second`)
+	}
+	return n, nil
+}
+
+// ParseRecallWait reads recall.wait: a duration from 1h to 30d.
+func ParseRecallWait(v string) (time.Duration, error) {
+	return boundedDuration(v, MinRecallWait, MaxRecallWait, "is a period from 1h to 30d, such as 48h")
 }
 
 // ParseShortenNotice reads retention.shorten-notice: a duration from 1d to
@@ -135,6 +184,29 @@ func replicaDefinitions() []Definition {
 		TenantOverride: true,
 		Validate:       func(v string) error { _, err := ParseRepairLease(v); return err },
 	}, {
+		// An hour: a replica that has not caught up within an hour of a
+		// commit is stuck (a storage down, a key revoked), not busy, and a
+		// person should look.
+		Name:           ReplicaLagAlert,
+		Default:        "1h",
+		TenantOverride: true,
+		Validate:       func(v string) error { _, err := ParseLagAlert(v); return err },
+	}, {
+		// No bound: each put has a time limit, and a bound a site did not
+		// choose would make large objects miss it on a fast link; a site
+		// whose link to a replica is shared sets one.
+		Name:           ReplicaRate,
+		Default:        "0",
+		TenantOverride: true,
+		Validate:       func(v string) error { _, err := ParseReplicaRate(v); return err },
+	}, {
+		// Two days: a bulk restore of the deepest class takes up to 48
+		// hours; one not back by then is lost or refused by the store.
+		Name:           RecallWait,
+		Default:        "48h",
+		TenantOverride: true,
+		Validate:       func(v string) error { _, err := ParseRecallWait(v); return err },
+	}, {
 		// Thirty days: a rule mistyped on a Friday is seen long before
 		// anything it shortened becomes due.
 		Name:                    RetentionShortenNotice,
@@ -144,20 +216,22 @@ func replicaDefinitions() []Definition {
 		Validate:                func(v string) error { _, err := ParseShortenNotice(v); return err },
 	}, {
 		// Two days: a server stopped over a weekend starts again without an
-		// admin, and a clock set years ahead pauses retention.
-		Name:                    RetentionMaxClockStep,
-		Default:                 "2d",
-		TenantOverride:          true,
-		TenantSetByInstallation: true,
-		Validate:                func(v string) error { _, err := ParseMaxClockStep(v); return err },
+		// admin, and a clock set years ahead pauses retention. One value for
+		// the installation: the clock is the server's, not a tenant's.
+		Name:     RetentionMaxClockStep,
+		Default:  "2d",
+		Validate: func(v string) error { _, err := ParseMaxClockStep(v); return err },
 	}, {
 		// A thousand sessions a day: a rule that makes a large backlog due at
 		// once disposes of it over days, each day's deletes small enough for
 		// a person to read in the next morning's list.
-		Name:           RetentionMaxPerPass,
-		Default:        "1000",
-		TenantOverride: true,
-		Validate:       func(v string) error { _, err := ParseMaxPerPass(v); return err },
+		// Set on a tenant by the installation's admin only: it bounds what a
+		// tenant's own admin can make go at once.
+		Name:                    RetentionMaxPerPass,
+		Default:                 "1000",
+		TenantOverride:          true,
+		TenantSetByInstallation: true,
+		Validate:                func(v string) error { _, err := ParseMaxPerPass(v); return err },
 	}, {
 		// Thirty days: a held file is a person's to decide on within a month.
 		Name:           QuarantineWarnAge,

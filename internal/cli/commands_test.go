@@ -434,15 +434,19 @@ func TestSettingCommands(t *testing.T) {
 			"quarantine.warn-bytes           0                built-in default\n"+
 			"read.per-caller                 16               built-in default\n"+
 			"read.per-server                 256              built-in default\n"+
+			"recall.wait                     48h              built-in default\n"+
 			"receiver.allow-as-received      false            built-in default\n"+
 			"receiver.bind-addresses                          built-in default\n"+
 			"receiver.header-limit           64MiB            built-in default\n"+
 			"receiver.ports                                   built-in default\n"+
+			"replica.lag-alert               1h               built-in default\n"+
+			"replica.rate                    0                built-in default\n"+
 			"replica.repair                  manual           built-in default\n"+
 			"replica.repair-lease            1m               built-in default\n"+
 			"retention.max-clock-step        2d               built-in default\n"+
 			"retention.max-per-pass          1000             built-in default\n"+
 			"retention.shorten-notice        30d              built-in default\n"+
+			"scrub.archive-sample            0%               built-in default\n"+
 			"scrub.interval                  30d              built-in default\n"+
 			"scrub.rate                      64MiB            built-in default\n"+
 			"sender.allow-plain-http         false            built-in default\n"+
@@ -464,7 +468,7 @@ func TestSettingCommands(t *testing.T) {
 		t.Errorf("get --json: %v", doc)
 	}
 	document(t, r.run("setting", "set", "key.default-lifetime", "30d", "--json"))
-	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 49 {
+	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 53 {
 		t.Errorf("list --json: %v", ss)
 	}
 	document(t, r.run("setting", "unset", "test.retention", "--tenant", "lab1", "--json"))

@@ -159,6 +159,9 @@ func (k Sending) DetachReplica(ctx context.Context, d tenant.ReplicaDetach, audi
 				return err
 			}
 		}
+		if err := DropHoldRecordsInTx(ctx, tx, d.Replica); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE storages SET replica_of = '', updated = ? WHERE name = ?`, k.D.Time(d.Now), d.Replica); err != nil {
 			return err
 		}

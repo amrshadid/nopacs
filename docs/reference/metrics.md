@@ -27,6 +27,11 @@ number of series stays bounded whatever callers send.
 | `nopacs_audit_seal_failures_unencodable_total` | counter | - | Sealing passes held back by an unsealed audit entry that cannot be encoded. |
 | `nopacs_audit_seal_failures_other_total` | counter | - | Audit logs a sealing pass could not seal, anchor or check for another reason, mostly a database that did not answer. |
 | `nopacs_audit_unsealed_oldest_age_seconds` | gauge | - | Age of the oldest audit entry the last sealing pass left unsealed, 0 for none. |
+| `nopacs_replica_lag_seconds` | gauge | `replica`, `tenant` | How long the oldest scan not in step on a replica has waited, by tenant and replica, 0 when every scan is in step. |
+| `nopacs_replica_scans_behind` | gauge | `replica`, `tenant` | Scans not in step on a replica (pending, copying or damaged), by tenant and replica. |
+| `nopacs_scrub_verified_share` | gauge | `storage`, `tenant` | Share of a storage's objects a scrub read whole within scrub.interval, by tenant and storage, as its last scrub left it. |
+| `nopacs_scrub_oldest_unverified_seconds` | gauge | `storage`, `tenant` | How long a storage's object waiting longest has gone unread by a scrub, by tenant and storage, 0 when every one is within scrub.interval. |
+| `nopacs_scrub_overdue_objects` | gauge | `storage`, `tenant` | Objects of a storage not read whole by a scrub within scrub.interval of their last read, by tenant and storage. |
 
 The buckets of `nopacs_request_duration_seconds`, in seconds, are fixed so a dashboard built on them keeps
 working: 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30.

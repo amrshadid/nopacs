@@ -80,6 +80,12 @@ type tenantWork struct {
 	// replicaIdle is the replicators' wait after a claim that found
 	// nothing; 0 is replicate.DefaultIdle.
 	replicaIdle time.Duration
+	// lagInterval is how often each tenant's replicas' lag is read; 0 is
+	// replicate.DefaultLagInterval.
+	lagInterval time.Duration
+	// wakeFeed, when set, is called with a tenant's name after its
+	// background work wrote events, so a watcher reads them at once.
+	wakeFeed func(name string)
 
 	create sync.Mutex
 
@@ -150,6 +156,7 @@ type tenantSet struct {
 	wg      sync.WaitGroup
 	repl    *replicate.Worker
 	recalls *recall.Worker
+	lag     *replicate.Lag
 	repairs chan struct{}
 }
 
@@ -481,10 +488,29 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	t := place.TenantOf(id, name, st)
 	open := fencedOpen(w.openFor(t, st), state)
 	log := w.log.With("tenant", name)
+	// replica.rate, recall.wait and replica.lag-alert are read through the
+	// tenant's settings at each claim, pass and look, so a change applies
+	// without a restart.
+	values := w.values.OnTenant(st)
 	repl, err := replicate.New(replicate.Config{Queue: db, Catalog: db, Now: w.now, Owner: w.owner, Log: log, Idle: w.replicaIdle,
+		Rate: values.ReplicaRate,
 		Open: func(ctx context.Context, storage string) (blob.Store, error) { return open(ctx, storage) }})
 	if err != nil {
 		return err
+	}
+	var lag *replicate.Lag
+	if lagDB, ok := lagDBOf(st, db, w.fenceOf(name)); ok {
+		lag, err = replicate.NewLag(replicate.LagConfig{Replicas: lagDB, Alert: values.LagAlert,
+			Now: w.now, NewID: server.NewID, Interval: w.lagInterval, Log: log, Wake: func() {
+				if w.wakeFeed != nil {
+					w.wakeFeed(name)
+				}
+			}})
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Warn("tenant work: the tenant's database keeps no events; the replicas' lag is not watched")
 	}
 	// A recall asks a store to restore an object, a write of the store's
 	// state, never of bytes: the store is opened beside the others, removing
@@ -496,13 +522,13 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 		}
 		return w.opener.OpenBeside(ctx, t, row)
 	}, state)
-	recalls, err := recall.New(recall.Config{Queue: db, Now: w.now, Log: log,
+	recalls, err := recall.New(recall.Config{Queue: db, Now: w.now, Log: log, Wait: values.RecallWait,
 		Open: func(ctx context.Context, storage string) (blob.Store, error) { return openBeside(ctx, storage) }})
 	if err != nil {
 		return err
 	}
 	sctx, cancel := context.WithCancel(w.ctx)
-	s := &tenantSet{store: st, cancel: cancel, repl: repl, recalls: recalls, repairs: make(chan struct{}, 1)}
+	s := &tenantSet{store: st, cancel: cancel, repl: repl, recalls: recalls, lag: lag, repairs: make(chan struct{}, 1)}
 	w.mu.Lock()
 	if w.stopped || w.epochs[name] != epoch {
 		w.mu.Unlock()
@@ -520,6 +546,9 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	}
 	run(func(ctx context.Context) { _ = repl.Run(ctx) })
 	run(func(ctx context.Context) { _ = recalls.Run(ctx) })
+	if lag != nil {
+		run(func(ctx context.Context) { _ = lag.Run(ctx) })
+	}
 	r := &tenantRepairs{w: w, name: name, st: db, open: open, gate: sw.Gate(), wake: s.repairs, log: log}
 	run(r.run)
 	run(r.autoLoop)

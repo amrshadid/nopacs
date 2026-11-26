@@ -42,15 +42,39 @@ func (w *tenantWork) HoldWriter(ctx context.Context, name string) (*holds.Writer
 	if err != nil {
 		return nil, err
 	}
+	return w.holdWriterOver(ctx, name, st, st)
+}
+
+// holdWriterOver returns the hold writer of the tenant named whose database
+// writes go to st, and whose storages are opened by their rows in base, the
+// database as the registry answered it (st itself, or st fenced).
+func (w *tenantWork) holdWriterOver(ctx context.Context, name string, base, st tenantDB) (*holds.Writer, error) {
 	id, err := w.tenantID(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	sw, err := w.switcherFor(ctx, name, st)
+	sw, err := w.switcherFor(ctx, name, base)
 	if err != nil {
 		return nil, err
 	}
-	open := fencedOpen(w.openFor(place.TenantOf(id, name, st), st), w.fenceOf(name))
+	open := fencedOpen(w.openFor(place.TenantOf(id, name, base), base), w.fenceOf(name))
 	return holds.New(holds.Config{Tenant: name, TenantID: id, Keys: w.d.Keys, Store: st, Open: open, Pause: sw.Gate(), Now: w.now,
 		Log: w.log.With("tenant", name)})
+}
+
+// WriteHoldsOwed writes at once the hold records the tenant's storages are
+// owed (holds.Writer.WriteOwed), rather than at the hold-record worker's
+// next pass: a relabel's publish that moved a held target owes its holds'
+// records under the new labels, and a rebuild or restore that read a
+// storage before they were written would find a hold on labels the catalog
+// no longer has. A record not written stays owed, and the worker writes it.
+func (w *tenantWork) WriteHoldsOwed(ctx context.Context, name string) {
+	hw, err := w.HoldWriter(ctx, name)
+	if err == nil {
+		_, err = hw.WriteOwed(ctx)
+	}
+	if err != nil && ctx.Err() == nil {
+		w.log.Warn("holds: hold records owed could not all be written at once; the worker writes them", "tenant", name,
+			"kind", fault.KindOf(err).String(), "reason", fault.Message(err))
+	}
 }

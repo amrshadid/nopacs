@@ -5,12 +5,14 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/pace"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -90,8 +92,23 @@ type Config struct {
 	RetryMin     time.Duration
 	RetryMax     time.Duration
 	ChangedDelay time.Duration
+	// Rate, when set, returns replica.rate as it applies on the tenant now:
+	// the most bytes a second put on one replica, 0 for no bound. It is
+	// read at each claim; nil bounds nothing.
+	Rate func(ctx context.Context) (int64, error)
 	// Log receives what the worker does; nil discards it.
 	Log *slog.Logger
+
+	// seams are what a test changes.
+	seams seams
+}
+
+// seams are the parts of a Config only a test sets.
+type seams struct {
+	// now and sleep are the clock and the wait of the pacing of puts; nil
+	// are Config.Now and a timer.
+	now   func() time.Time
+	sleep func(ctx context.Context, d time.Duration) error
 }
 
 // Worker copies the scans of primaries to their replicas. It is safe for
@@ -108,6 +125,11 @@ type Worker struct {
 	// before the next try; a copy ended in step resets it. It is pacing
 	// only, so a restart that forgets it starts again from RetryMin.
 	failures map[string]int
+	// pacers hold the bytes put on each replica to replica.rate, across
+	// every copy to it at once.
+	pacers map[string]*pace.Pacer
+	// rate is replica.rate as the last claim read it, 0 for no bound.
+	rate atomic.Int64
 }
 
 // New returns a worker over cfg, its zero bounds given their defaults.
@@ -147,7 +169,48 @@ func New(cfg Config) (*Worker, error) {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Worker{cfg: cfg, log: log, wake: make(chan struct{}, 1), slots: map[string]chan struct{}{}, failures: map[string]int{}}, nil
+	return &Worker{cfg: cfg, log: log, wake: make(chan struct{}, 1), slots: map[string]chan struct{}{}, failures: map[string]int{},
+		pacers: map[string]*pace.Pacer{}}, nil
+}
+
+// readRate reads replica.rate for the claim about to be made. A read that
+// fails keeps the rate the last claim read, so a database that does not
+// answer for a moment neither lifts a bound nor stops the copies.
+func (w *Worker) readRate(ctx context.Context) {
+	if w.cfg.Rate == nil {
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, opTimeout)
+	defer cancel()
+	n, err := w.cfg.Rate(cctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			w.log.Warn("replicas: replica.rate could not be read; the last rate read holds", "kind", fault.KindOf(err).String())
+		}
+		return
+	}
+	w.rate.Store(max(n, 0))
+}
+
+// pacing returns the replica's pacer and the rate read last, bytes a
+// second; a rate of 0 bounds nothing and returns no pacer.
+func (w *Worker) pacing(replica string) (*pace.Pacer, int64) {
+	rate := w.rate.Load()
+	if rate <= 0 {
+		return nil, 0
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	p := w.pacers[replica]
+	if p == nil {
+		now := w.cfg.seams.now
+		if now == nil {
+			now = w.cfg.Now
+		}
+		p = pace.New(now, w.cfg.seams.sleep)
+		w.pacers[replica] = p
+	}
+	return p, rate
 }
 
 // Wake asks a waiting Run to claim again at once: a commit that made scans
@@ -203,6 +266,7 @@ type Pass struct {
 // and returns what it did. An error is a claim that failed; a scan's own
 // failure is recorded on its row and counted in the Pass.
 func (w *Worker) RunOnce(ctx context.Context) (Pass, error) {
+	w.readRate(ctx)
 	cctx, cancel := context.WithTimeout(ctx, opTimeout)
 	claims, err := w.cfg.Queue.ClaimReplicaScans(cctx, w.cfg.Owner, w.cfg.Now(), w.cfg.Lease, w.cfg.Batch)
 	cancel()

@@ -304,6 +304,9 @@ func (t *Tenant) RemoveStorage(ctx context.Context, name string, audit master.Au
 		if err := sqlkit.DropStorageVerifiedInTx(ctx, sendingTx{tx: tx, t: t}, name); err != nil {
 			return err
 		}
+		if err := sqlkit.DropHoldRecordsInTx(ctx, sendingTx{tx: tx, t: t}, name); err != nil {
+			return err
+		}
 		out = stored
 		return t.audited(ctx, tx, audit, guard)
 	})

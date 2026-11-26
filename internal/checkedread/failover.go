@@ -88,7 +88,7 @@ func (s *Stores) Open(ctx context.Context, obj Object, offset, length int64) (Op
 		return err
 	})
 	if err != nil {
-		return o, err
+		return o, s.notOnline(ctx, obj, err)
 	}
 	if o.Replica {
 		body = checkWhole(body, obj, offset, length)
@@ -121,8 +121,12 @@ func (s *Stores) stat(ctx context.Context, obj Object, record bool) (blob.Info, 
 		info    blob.Info
 		offline *blob.Info
 		other   *blob.Info
+		calls   int
 	)
 	o, err := s.serve(ctx, obj, record, func(st blob.Store) error {
+		calls++
+		// The primary is asked first, unless its object is marked damaged.
+		primary := calls == 1 && !obj.Damaged
 		got, err := st.Stat(ctx, obj.Key)
 		if err == nil {
 			if err = checkFile(obj, got); err != nil && other == nil {
@@ -130,7 +134,7 @@ func (s *Stores) stat(ctx context.Context, obj Object, record bool) (blob.Info, 
 			}
 		}
 		if err == nil && got.State != blob.Online {
-			if offline == nil {
+			if offline == nil && primary {
 				offline = &got
 			}
 			return fault.Wrap(fault.Unavailable, blob.ErrNotOnline, "the object is held in a tier its storage cannot read at once")
@@ -158,7 +162,7 @@ func (s *Stores) stat(ctx context.Context, obj Object, record bool) (blob.Info, 
 		s.servedBy(obj.Storage)
 		return *other, o, nil
 	}
-	return info, o, err
+	return info, o, s.notOnline(ctx, obj, err)
 }
 
 // Readable returns ErrMarked for an object marked damaged that no replica
@@ -229,6 +233,11 @@ func (s *Stores) serve(ctx context.Context, obj Object, record bool, try func(bl
 		// fails as it would with none.
 		return o, first
 	}
+	// cold is the first replica in step that holds the object but not
+	// online (an archive tier): when no storage serves the read, the bytes
+	// are not missing, only cold, and the read is answered so (NOT_ONLINE)
+	// rather than with the primary's not found or damage.
+	var cold error
 	for _, name := range names {
 		st, err := s.Get(ctx, name)
 		if err != nil {
@@ -237,6 +246,9 @@ func (s *Stores) serve(ctx context.Context, obj Object, record bool, try func(bl
 		if err := try(st); err != nil {
 			if ctx.Err() != nil {
 				return o, first
+			}
+			if cold == nil && errors.Is(err, blob.ErrNotOnline) && !errors.Is(first, blob.ErrNotOnline) {
+				cold = &coldCopy{storage: name, err: err}
 			}
 			if record && (fault.KindOf(err) == fault.NotFound || errors.Is(err, ErrOtherFile)) {
 				// In step and still without the object, or holding another
@@ -265,8 +277,26 @@ func (s *Stores) serve(ctx context.Context, obj Object, record bool, try func(bl
 		}
 		return o, nil
 	}
+	if cold != nil {
+		return o, cold
+	}
 	return o, first
 }
+
+// coldCopy is a replica's answer that it holds the object not online,
+// answered when no storage served the read: it names the replica, whose
+// recall of the object says whether waiting brings it back.
+type coldCopy struct {
+	storage string
+	err     error
+}
+
+// Error returns the replica's error's text.
+func (e *coldCopy) Error() string { return e.err.Error() }
+
+// Unwrap returns the replica's error, so its kind and blob.ErrNotOnline
+// pass through.
+func (e *coldCopy) Unwrap() error { return e.err }
 
 // openError is the failure to open an object's own storage, as opposed to
 // a failure to read the object on it.

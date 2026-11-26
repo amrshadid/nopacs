@@ -330,6 +330,9 @@ func eventMessage(name string, e tenant.Event) *v1.Event {
 		m.Payload = &v1.Event_StorageSwitched{StorageSwitched: &v1.StorageSwitched{Primary: p.Primary, Replica: p.Replica,
 			ScansDrained: p.ScansDrained, AssociationsRefused: p.AssociationsRefused, Pause: durationpb.New(time.Duration(p.PauseMicros) * time.Microsecond),
 			Refused: p.Refused, Refusal: p.Refusal, SwitchGeneration: p.SwitchGeneration}}
+	case *tenant.ReplicaBehind:
+		m.Payload = &v1.Event_ReplicaBehind{ReplicaBehind: &v1.ReplicaBehind{Replica: p.Replica, Primary: p.Primary,
+			Lag: durationpb.New(time.Duration(p.LagMicros) * time.Microsecond), ScansBehind: p.ScansBehind, Recovered: p.Recovered}}
 	}
 	return m
 }

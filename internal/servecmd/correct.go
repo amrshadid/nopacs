@@ -6,6 +6,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/api"
 	"github.com/amrshadid/nopacs/internal/clock"
+	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/correct"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/place"
@@ -175,6 +176,14 @@ func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, l
 				},
 				Fence: fence,
 				Pause: pause,
+				// A relabel's publish owes the records of the holds it moved
+				// under their new labels: written at once, not at the
+				// hold-record worker's next pass.
+				Published: func(ctx context.Context, c tenant.Correction) {
+					if c.Kind == record.KindRelabel {
+						work.WriteHoldsOwed(ctx, name)
+					}
+				},
 			}, storages.Close, nil
 		},
 	})

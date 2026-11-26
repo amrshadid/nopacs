@@ -43,6 +43,14 @@ type Gauge struct {
 	Help string
 	// Value is the value.
 	Value float64
+	// Labels are the gauge's labels, as name and value pairs; nil for none.
+	// Gauges of one name with different labels are one metric: they are
+	// given one after another, with the same Help.
+	Labels []string
+	// Empty says the metric has no sample now (no tenant has a replica, no
+	// scrub has ended): its HELP and TYPE are written so the metric is
+	// described, and Value and Labels are ignored.
+	Empty bool
 }
 
 // Sources are the values a scrape reads from the parts that own them. A nil
@@ -152,9 +160,16 @@ func (m *Metrics) WriteText(w io.Writer) error {
 		}
 	}
 	if f := m.sources.Gauges; f != nil {
+		last := ""
 		for _, g := range f() {
-			header(b, g.Name, "gauge", g.Help)
-			sample(b, g.Name, nil, formatFloat(g.Value))
+			// One HELP and TYPE a metric, as for the counters.
+			if g.Name != last {
+				header(b, g.Name, "gauge", g.Help)
+				last = g.Name
+			}
+			if !g.Empty {
+				sample(b, g.Name, g.Labels, formatFloat(g.Value))
+			}
 		}
 	}
 	return b.Flush()

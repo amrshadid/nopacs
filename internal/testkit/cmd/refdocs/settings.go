@@ -42,6 +42,9 @@ var settingForms = map[string]string{
 	"key.max-lifetime":               "A period. No key is made or rotated to live longer.",
 	"quarantine.warn-age":            "A period. Past it, the oldest file held in quarantine makes the tenant's status warn.",
 	"quarantine.warn-bytes":          "A size; `0` for no warning. Past it, the bytes held in quarantine make the tenant's status warn.",
+	"recall.wait":                    "A period. How long a recall may stay requested or in progress; past it the server records it failed (\"the storage did not bring the object back within recall.wait\") and asks the store nothing more. Read at each pass of the recall worker.",
+	"replica.lag-alert":              "A period. When a replica's oldest scan not in step has waited longer, the server writes one `REPLICA_BEHIND` event, and one more (`recovered`) when the replica is back under it. Looked at every minute.",
+	"replica.rate":                   "`0` for no bound, or a size, put each second. The most bytes a second the replicator puts on one replica, shared by every copy to it at once; a put's time limit grows with the time the bound makes it take. Read at each claim of scans to copy.",
 	"replica.repair":                 "`manual` or `auto`. Whether a primary's object a scrub found damaged or missing is repaired from a replica by a person's `nopacs repair`, or by the server by itself after the scrub.",
 	"replica.repair-lease":           "A period. How long a repair's claim holds its unit, which bounds one put of an object. A lease too short to put the largest file a receiver of the tenant accepts at 100 MiB a second is refused, logged, and no repair runs until it is lengthened.",
 	"retention.max-clock-step":       "A period. How far forward the server's clock may move between two checks before retention pauses until an admin confirms the time.",
@@ -53,6 +56,7 @@ var settingForms = map[string]string{
 	"receiver.bind-addresses":        "IP addresses separated by commas; the first is the default. Empty: listen on every address.",
 	"receiver.header-limit":          "A size. The most bytes of a file's header; a longer one is quarantined with its bytes kept.",
 	"receiver.ports":                 "Ports and ranges separated by commas, such as `11112,11120-11129`. The ports a tenant's DIMSE receivers may use. Empty: no DIMSE receiver.",
+	"scrub.archive-sample":           "A whole percentage. The share of the objects online on a storage of the archive tier whose bytes a scrub reads; the rest, and every object not online, are checked by presence only (size, and the store's own SHA-256 where it keeps one). A scrub never asks for a recall. Read at the start of each unit of a scrub.",
 	"scrub.interval":                 "`0` for never, or a period. How often the server checks each of a tenant's storages by itself.",
 	"scrub.rate":                     "A size, read each second. The most bytes a second a scrub reads from one storage.",
 	"sender.allow-plain-http":        "`true` or `false`. Whether a STOW-RS sender's URL may be plain http.",
@@ -91,10 +95,14 @@ var settingBounds = map[string][4]string{
 	"read.per-caller":                {"0", "1", "1024", "1025"},
 	"read.per-server":                {"15", "16", "65536", "65537"},
 	"receiver.header-limit":          {"1023KiB", "1MiB", "4GiB", "5GiB"},
+	"recall.wait":                    {"59m", "1h", "30d", "31d"},
+	"replica.lag-alert":              {"59s", "1m", "30d", "31d"},
+	"replica.rate":                   {"1023KiB", "1MiB", "10GiB", "11GiB"},
 	"replica.repair-lease":           {"29s", "30s", "1h", "61m"},
 	"retention.max-clock-step":       {"59m", "1h", "30d", "31d"},
 	"retention.max-per-pass":         {"0", "1", "100000", "100001"},
 	"retention.shorten-notice":       {"23h", "1d", "365d", "366d"},
+	"scrub.archive-sample":           {"", "0%", "100%", "101%"},
 	"scrub.interval":                 {"23h", "1d", "3650d", "3651d"},
 	"scrub.rate":                     {"1023KiB", "1MiB", "64GiB", "65GiB"},
 	"sender.max-associations":        {"0", "1", "1024", "1025"},
@@ -150,7 +158,7 @@ func renderSettings(string) (string, error) {
 		rng := "-"
 		if r, ok := settingBounds[d.Name]; ok {
 			rng = "`" + r[1] + "` to `" + r[2] + "`"
-			if d.Name == "audit.retention" || d.Name == "scrub.interval" {
+			if d.Name == "audit.retention" || d.Name == "scrub.interval" || d.Name == "replica.rate" {
 				rng = "`0`, or " + rng
 			}
 		}

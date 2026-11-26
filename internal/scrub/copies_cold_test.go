@@ -105,8 +105,9 @@ func (r *replicaRig) addColdReplica(name string) *archiveStore {
 // of an archive-tier replica held cold and asks for no recall: it checks
 // each by presence, its size and the store's SHA-256 where the store keeps
 // one, records a difference in either as the replica's damage, and passes
-// an object whose store keeps no checksum on its size alone; and that with
-// a sample of every object, the bytes of an object online there are read.
+// an object whose store keeps no checksum on its size alone; and that once
+// scrub.archive-sample is changed to every object, the next scrub of the
+// same supervisor reads the bytes of an object online there.
 func TestArchiveTierIsCheckedByPresence(t *testing.T) {
 	r := newReplicaRig(t)
 	files := synthetic("1.2.826.0.1.3680043.10.504", 4)
@@ -122,7 +123,15 @@ func TestArchiveTierIsCheckedByPresence(t *testing.T) {
 	cold.sums[k(2)] = sha256.Sum256([]byte("other bytes"))
 	cold.sizes[k(3)] = int64(len(files[3].b)) + 1
 
-	j := r.scrubAll(r.config())
+	// One supervisor serves both scrubs: scrub.archive-sample is read at
+	// each unit, so changing it between them changes the second without a
+	// new supervisor.
+	sample := &atomic.Value{}
+	sample.Store(0.0)
+	cfg := r.config()
+	cfg.TenantSettings = func(tenant.Store) TenantSettings { return settingsOf{rate: 64 << 30, sample: sample} }
+	s := r.start(cfg)
+	j := r.waitEnded(s, r.createScrub("").ID)
 	if n := cold.dataReads.Load(); n != 0 {
 		t.Errorf("the scrub read %d objects of the archive tier held cold; want none", n)
 	}
@@ -142,10 +151,11 @@ func TestArchiveTierIsCheckedByPresence(t *testing.T) {
 		}
 	}
 
+	cold.mu.Lock()
 	cold.online[k(0)] = true
-	cfg := r.config()
-	cfg.ArchiveSample = 1
-	j = r.scrubAll(cfg)
+	cold.mu.Unlock()
+	sample.Store(1.0)
+	j = r.waitEnded(s, r.createScrub("").ID)
 	if n := cold.dataReads.Load(); n != 1 {
 		t.Errorf("with every object sampled the scrub read %d objects of the archive tier; want the one online", n)
 	}

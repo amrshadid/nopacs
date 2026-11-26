@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/pace"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -28,6 +29,8 @@ type Supervisor struct {
 	stop chan struct{}
 	// requests are the requests to scrub one instance waiting, by tenant.
 	requests *requests
+	// covered is each storage's coverage as its last scrub left it.
+	covered coverages
 	// hard ends everything in flight: canceled when Stop's ctx ends before
 	// the units have been given back.
 	hard   context.Context
@@ -120,6 +123,7 @@ func (s *Supervisor) Poke(name string) {
 // the tenant's requests waiting. It never blocks.
 func (s *Supervisor) TenantRemoved(name string) {
 	s.requests.forget(name)
+	s.covered.forget(name)
 	select {
 	case s.poke <- struct{}{}:
 	default:
@@ -259,7 +263,7 @@ func (t *tenantRun) pacer(name string) *pacer {
 	defer t.pacersMu.Unlock()
 	p := t.pacers[name]
 	if p == nil {
-		p = &pacer{now: t.sup.cfg.Now, sleep: t.sup.cfg.seams.sleep}
+		p = pace.New(t.sup.cfg.Now, t.sup.cfg.seams.sleep)
 		t.pacers[name] = p
 	}
 	return p

@@ -48,17 +48,11 @@ func TestHoldListAndShow(t *testing.T) {
 	}
 }
 
-// TestHoldPlaceAndReleaseNotServed guards the way holds are placed and
-// released while a server does not serve them: one plain line, exit 1,
-// nothing changed; and once served, placing needs a target or --whole-tenant
-// and a reason, and releasing asks for the hold's id typed unless --yes.
-func TestHoldPlaceAndReleaseNotServed(t *testing.T) {
+// TestHoldPlaceAndRelease guards the way holds are placed and released:
+// placing needs a target or --whole-tenant and a reason, refused before
+// anything is sent, and releasing asks for the hold's id typed unless --yes.
+func TestHoldPlaceAndRelease(t *testing.T) {
 	r := newArchiveRig(t)
-	expect(t, r.run("hold", "place", "lab1", "sub-1", "--reason", "litigation"), 1, "",
-		"nopacs: hold place: not served: this server does not serve it yet; nothing was changed\n")
-	expect(t, r.run("hold", "release", "lab1", "hold_a", "--reason", "closed", "--yes"), 1, "",
-		"nopacs: hold release: not served: this server does not serve it yet; nothing was changed\n")
-
 	r.fake.ServeHolds()
 	before := r.fake.Requests()
 	for _, args := range [][]string{

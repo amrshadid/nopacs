@@ -420,6 +420,7 @@ func newEnvChecking(t testing.TB, interval time.Duration) *env {
 	h, err := api.New(api.Config{Access: e.access, Registry: e.registry, Master: e.faulty, NewID: tenantID, Log: logger, Settings: e.known, Keys: e.keys, Now: e.now,
 		Incoming: e.parts, Headers: e.parts, HeldFiles: e.parts, Receivers: e.parts, Feeds: feeds, Installation: testInstallation,
 		Corrections: e.engines, ReplaceSources: testReplaceSources{e}, Handoffs: &e.handoffs, Switches: &e.switches, StorageReports: &e.reports,
+		Holds: e.holdWriter,
 		SealPause: func(context.Context) (func(), error) {
 			e.sealPauses.Add(1)
 			return func() { e.sealPauses.Add(-1) }, nil

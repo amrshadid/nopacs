@@ -24,7 +24,8 @@ import (
 // drain waits for it (tenantWork.Quiesce).
 
 // fencedDB is a tenant's database as its background work writes it: every
-// write the replicator, the recall worker, the repairs and retention make
+// write the replicator, the recall worker, the repairs, retention and the
+// hold-record worker make
 // asks fence first and is refused, writing nothing, when it errs. Reads
 // pass through unasked.
 type fencedDB struct {
@@ -200,6 +201,54 @@ func (d fencedDB) EndDisposeJob(ctx context.Context, id string, now time.Time) (
 		return tenant.Job{}, err
 	}
 	return d.tenantDB.EndDisposeJob(ctx, id, now)
+}
+
+// AdoptHold asks the fence, then adopts the hold found.
+func (d fencedDB) AdoptHold(ctx context.Context, f tenant.HoldFound, audit master.AuditEntry) (tenant.Hold, bool, error) {
+	if err := d.fence(); err != nil {
+		return tenant.Hold{}, false, err
+	}
+	return d.tenantDB.AdoptHold(ctx, f, audit)
+}
+
+// MarkHoldRecord asks the fence, then marks the record written.
+func (d fencedDB) MarkHoldRecord(ctx context.Context, id, storage string, seq int64, sealVersion uint32) error {
+	if err := d.fence(); err != nil {
+		return err
+	}
+	return d.tenantDB.MarkHoldRecord(ctx, id, storage, seq, sealVersion)
+}
+
+// BeginHoldRelease asks the fence, then begins the release.
+func (d fencedDB) BeginHoldRelease(ctx context.Context, r tenant.HoldRelease) (tenant.Hold, error) {
+	if err := d.fence(); err != nil {
+		return tenant.Hold{}, err
+	}
+	return d.tenantDB.BeginHoldRelease(ctx, r)
+}
+
+// AbortHoldRelease asks the fence, then ends the release.
+func (d fencedDB) AbortHoldRelease(ctx context.Context, id string, seq int64) (tenant.Hold, error) {
+	if err := d.fence(); err != nil {
+		return tenant.Hold{}, err
+	}
+	return d.tenantDB.AbortHoldRelease(ctx, id, seq)
+}
+
+// AbortStaleHoldReleases asks the fence, then ends the stale releases.
+func (d fencedDB) AbortStaleHoldReleases(ctx context.Context, before time.Time) ([]string, error) {
+	if err := d.fence(); err != nil {
+		return nil, err
+	}
+	return d.tenantDB.AbortStaleHoldReleases(ctx, before)
+}
+
+// OweHoldRecordsNotSealedUnder asks the fence, then owes the records again.
+func (d fencedDB) OweHoldRecordsNotSealedUnder(ctx context.Context, version uint32) (int, error) {
+	if err := d.fence(); err != nil {
+		return 0, err
+	}
+	return d.tenantDB.OweHoldRecordsNotSealedUnder(ctx, version)
 }
 
 // fencedOpen returns open whose stores ask fence before each write of

@@ -474,16 +474,36 @@ func (s *countingStore) Recall(context.Context, string, blob.RecallRequest) (blo
 
 // TestAFencedDatabaseRefusesEveryWorkWrite guards fencedDB: while the
 // fence refuses, the writes of the background work (a claim of the
-// replicator, a claim of a repair unit, a job made, retention's clock)
-// answer the fence's refusal and reach nothing; reads pass.
+// replicator, a claim of a repair unit, a job made, retention's clock, and
+// each write of the hold-record worker) answer the fence's refusal and
+// reach nothing; reads pass.
 func TestAFencedDatabaseRefusesEveryWorkWrite(t *testing.T) {
 	r := newWorkRig(t)
 	f := &refusingFence{}
 	f.refuse.Store(true)
 	db := fenceDB(r.db, f.check)
 	now := time.Now()
+	found := tenant.HoldFound{ID: mustCorrectionID(t), Target: tenant.HoldTarget{Subject: "sub-07"}, Reason: "kept by the record", Placed: now,
+		Storage: "main", Now: now}
 	writes := map[string]func() error{
-		"replica claim": func() error { _, err := db.ClaimReplicaScans(r.ctx, "w-1", now, time.Minute, 1); return err },
+		"hold adopted": func() error {
+			_, _, err := db.AdoptHold(r.ctx, found, serverAudit("lab", "hold.adopt", found.ID, now))
+			return err
+		},
+		"hold record marked": func() error {
+			return db.MarkHoldRecord(r.ctx, found.ID, "main", 1, 1)
+		},
+		"hold release begun": func() error {
+			_, err := db.BeginHoldRelease(r.ctx, tenant.HoldRelease{ID: found.ID, Reason: "done", Now: now})
+			return err
+		},
+		"hold release ended": func() error { _, err := db.AbortHoldRelease(r.ctx, found.ID, 2); return err },
+		"stale hold releases ended": func() error {
+			_, err := db.AbortStaleHoldReleases(r.ctx, now)
+			return err
+		},
+		"hold records owed again": func() error { _, err := db.OweHoldRecordsNotSealedUnder(r.ctx, 2); return err },
+		"replica claim":           func() error { _, err := db.ClaimReplicaScans(r.ctx, "w-1", now, time.Minute, 1); return err },
 		"repair claim": func() error {
 			_, err := db.ClaimWork(r.ctx, string(tenant.JobRepair), "w-1", now, time.Minute)
 			return err
@@ -505,6 +525,9 @@ func TestAFencedDatabaseRefusesEveryWorkWrite(t *testing.T) {
 	}
 	if jobs, _, err := r.db.ListJobs(r.ctx, tenant.JobFilter{}, master.Page{Limit: 10}); err != nil || len(jobs) != 0 {
 		t.Fatalf("the refused job was written: %d jobs (%v)", len(jobs), err)
+	}
+	if _, err := r.db.Hold(r.ctx, found.ID); fault.KindOf(err) != fault.NotFound {
+		t.Fatalf("the refused adoption made a hold: %v", err)
 	}
 	if _, err := db.Storage(r.ctx, "main"); err != nil {
 		t.Fatalf("a read while the tenant is moved: %v", err)

@@ -56,6 +56,9 @@ const (
 	ReasonRejected = "the recall request was refused as invalid"
 	// ReasonUnopenable: the storage is not configured any more.
 	ReasonUnopenable = "the storage is not configured"
+	// ReasonTimedOut: the object was not back online within recall.wait of
+	// the recall's request.
+	ReasonTimedOut = "the storage did not bring the object back within recall.wait"
 )
 
 // opTimeout bounds one write to the database and one call to a store.
@@ -76,6 +79,11 @@ type Config struct {
 	Idle     time.Duration
 	RetryMin time.Duration
 	RetryMax time.Duration
+	// Wait, when set, returns recall.wait as it applies on the tenant now,
+	// read at each pass: a recall still not online that long after it was
+	// requested is recorded failed (ReasonTimedOut) rather than polled for
+	// ever. Nil gives no recall up.
+	Wait func(ctx context.Context) (time.Duration, error)
 	// Log receives what the worker does; nil discards it. It never
 	// receives an object's key.
 	Log *slog.Logger
@@ -93,6 +101,39 @@ type Worker struct {
 	// wait before the next try. It is pacing only: a restart that forgets it
 	// starts again from RetryMin.
 	failures map[objectID]int
+	// wait is recall.wait as the last pass read it, zero for none.
+	wait time.Duration
+}
+
+// readWait reads recall.wait for the pass about to answer. A read that
+// fails keeps the value the last pass read: a database that does not
+// answer for a moment neither gives recalls up early nor keeps them for
+// ever.
+func (w *Worker) readWait(ctx context.Context) {
+	if w.cfg.Wait == nil {
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, opTimeout)
+	defer cancel()
+	d, err := w.cfg.Wait(cctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			w.log.Warn("recalls: recall.wait could not be read; the last value read holds", "kind", fault.KindOf(err).String())
+		}
+		return
+	}
+	w.mu.Lock()
+	w.wait = max(d, 0)
+	w.mu.Unlock()
+}
+
+// expired reports whether r, not online, has waited past recall.wait since
+// it was requested, at now.
+func (w *Worker) expired(r tenant.Recall, now time.Time) bool {
+	w.mu.Lock()
+	wait := w.wait
+	w.mu.Unlock()
+	return wait > 0 && !r.Requested.IsZero() && !now.Before(r.Requested.Add(wait))
 }
 
 // objectID names one recall's object.
@@ -190,6 +231,9 @@ func (w *Worker) RunOnce(ctx context.Context) (Pass, error) {
 		return Pass{}, err
 	}
 	pass := Pass{Due: len(due)}
+	if len(due) > 0 {
+		w.readWait(ctx)
+	}
 	stores := map[string]blob.Store{}
 	defer func() {
 		for _, s := range stores {
@@ -247,7 +291,7 @@ func (w *Worker) step(ctx context.Context, r tenant.Recall, stores map[string]bl
 		} else {
 			a.Next = a.Now.Add(w.cfg.Poll)
 		}
-		w.record(ctx, a)
+		w.recordOrGiveUp(ctx, r, a, pass)
 		return
 	}
 	// In progress: the store was asked; look at the object.
@@ -288,6 +332,18 @@ func (w *Worker) step(ctx context.Context, r tenant.Recall, stores map[string]bl
 	default:
 		a.State, a.Next = tenant.RecallInProgress, a.Now.Add(w.cfg.Poll)
 	}
+	w.recordOrGiveUp(ctx, r, a, pass)
+}
+
+// recordOrGiveUp records a, the store's answer of r, unless r is still not
+// online past recall.wait: then it is recorded failed with ReasonTimedOut,
+// so a reader's NOT_ONLINE and a job unit waiting on it stop being told to
+// wait for a recall that will not come.
+func (w *Worker) recordOrGiveUp(ctx context.Context, r tenant.Recall, a tenant.RecallAnswer, pass *Pass) {
+	if a.State != tenant.RecallOnline && w.expired(r, a.Now) {
+		w.fail(ctx, r, ReasonTimedOut, pass)
+		return
+	}
 	w.record(ctx, a)
 }
 
@@ -317,8 +373,12 @@ func (w *Worker) answerError(ctx context.Context, r tenant.Recall, err error, op
 		w.fail(ctx, r, ReasonRejected, pass)
 		return
 	}
-	pass.Retried++
 	now := w.cfg.Now()
+	if w.expired(r, now) {
+		w.fail(ctx, r, ReasonTimedOut, pass)
+		return
+	}
+	pass.Retried++
 	w.log.Warn("recalls: the storage could not answer; the recall is tried again later", "storage", r.Storage, "kind", fault.KindOf(err).String())
 	// A recall not yet asked is recorded in progress: the next pass looks
 	// at the object and asks again if it is still cold, which the store

@@ -81,6 +81,13 @@ type Config struct {
 	// Fence refuses a step that starts while a switch runs; Pause holds one
 	// that started before. Nil admits every write.
 	Pause WritePause
+	// Published, when not nil, is called once a correction's publish has
+	// committed and its records were rewritten, with the correction as
+	// published, before the call that published it returns. The server's
+	// writes at once the hold records a relabel owes under the labels it
+	// moved, so a rebuild or restore read soon after finds each hold on the
+	// labels the catalog has.
+	Published func(ctx context.Context, c tenant.Correction)
 }
 
 // WritePause is the gate a write to a tenant's storage asks before it lands

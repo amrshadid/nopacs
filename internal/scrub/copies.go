@@ -53,7 +53,7 @@ import (
 // On a storage of the archive tier an object held cold is checked by
 // presence (blob.Store's Stat: its size, and the store's own SHA-256 where
 // it keeps one), never read and never recalled; the bytes of an object
-// online there are read only for the share Config.ArchiveSample names.
+// online there are read only for the share scrub.archive-sample names.
 
 // The tallies a scrub of replicas adds, beside the contract's.
 const (
@@ -544,11 +544,11 @@ func (c *copyCheck) presence(key string, size int64, sum tenant.SHA256, objectSi
 }
 
 // sampled reports whether the bytes of the archive-tier object at key are
-// read: for the share Config.ArchiveSample of keys, chosen by the key's
-// SHA-256 so the same objects are chosen each time and a sample can be
-// told again.
+// read: for the share scrub.archive-sample names of keys (read at the
+// unit's start), chosen by the key's SHA-256 so the same objects are chosen
+// each time and a sample can be told again.
 func (u *unitRun) sampled(key string) bool {
-	share := u.sup.cfg.ArchiveSample
+	share := u.sample
 	if share <= 0 {
 		return false
 	}

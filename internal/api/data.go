@@ -10,11 +10,13 @@ import (
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
 	"github.com/amrshadid/nopacs/internal/access"
+	"github.com/amrshadid/nopacs/internal/api/codes"
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/recall"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -437,12 +439,31 @@ const reasonNotOnline = "NOT_ONLINE"
 // notOnline is a read of an object its storage cannot read at once (an S3
 // object in an archive storage class, blob.ErrNotOnline): unavailable,
 // never not found or data loss, since the bytes are neither missing nor
-// damaged; waiting brings nothing back until the object is recalled, so
-// the message says so rather than asking for a retry. "not_online" is the
-// word the scrub's tally and a job's failure use for the same case.
+// damaged. "not_online" is the word the scrub's tally and a job's failure
+// use for the same case.
+//
+// When the read learned the object's recall (checkedread.NotOnline), the
+// answer carries it as the reason's metadata "recall_state" (none,
+// requested, in_progress, failed), and a retry delay of the recall
+// worker's poll only while a recall is requested or in progress: waiting
+// then brings the bytes back, and otherwise it brings nothing, so the
+// message says so rather than asking for a retry (access.proto). A read
+// that could not learn it is marked by the reason alone.
 func notOnline(err error, message string) error {
-	return fault.Wrap(fault.Unavailable, err, reasonNotOnline+": "+message+
-		": its storage holds it in a tier it cannot read at once (not_online); it is neither missing nor damaged, and reads again once it is back online")
+	var no *checkedread.NotOnline
+	if !errors.As(err, &no) {
+		return fault.Wrap(fault.Unavailable, err, reasonNotOnline+": "+message+
+			": its storage holds it in a tier it cannot read at once (not_online); it is neither missing nor damaged, and reads again once it is back online")
+	}
+	meta := map[string]string{"recall_state": no.RecallState}
+	if no.Waiting() {
+		return codes.WithReason(fault.Wrap(fault.Unavailable, err, reasonNotOnline+": "+message+
+			": its storage holds it in a tier it cannot read at once (not_online); a recall of it runs, so it reads again once the recall brings it back online"),
+			reasonNotOnline, meta, recall.DefaultPoll)
+	}
+	return codes.WithReason(fault.Wrap(fault.Unavailable, err, reasonNotOnline+": "+message+
+		": its storage holds it in a tier it cannot read at once (not_online); it is neither missing nor damaged, and reads again once it is back online, after a recall"),
+		reasonNotOnline, meta, 0)
 }
 
 // isFault reports whether err carries a fault kind: an error of this

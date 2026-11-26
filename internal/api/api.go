@@ -23,6 +23,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/deid/check"
 	"github.com/amrshadid/nopacs/internal/dirimport"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/holds"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/place"
 	"github.com/amrshadid/nopacs/internal/receive/stow"
@@ -157,6 +158,11 @@ type Config struct {
 	// status. Nil leaves both out: an S3 storage's encryption answered
 	// unknown, a directory's what its admin declared, and no coverage.
 	StorageReports StorageReports
+	// Holds returns the hold writer of the tenant named (holds.Writer),
+	// which PlaceHold and ReleaseHold act through, so a hold's record is on
+	// every primary its target touches before its row commits. Nil answers
+	// both unavailable.
+	Holds func(ctx context.Context, tenant string) (*holds.Writer, error)
 }
 
 // Handlers is the services of the contract this package serves, each an
@@ -232,7 +238,7 @@ func New(cfg Config) (Handlers, error) {
 		reads: cfg.Reads, readCounts: cfg.ReadCounts, heldFiles: cfg.HeldFiles, trials: make(chan struct{}, MaxTrialsAtOnce), deidMemory: cfg.DeidMemory,
 		installation: cfg.Installation, importGuarded: cfg.ImportGuarded, corrections: cfg.Corrections, replaceSources: cfg.ReplaceSources,
 		handoffs: cfg.Handoffs, cleanups: cfg.StorageCleanups, sealPause: cfg.SealPause,
-		switches: cfg.Switches, storageReports: cfg.StorageReports,
+		switches: cfg.Switches, storageReports: cfg.StorageReports, holds: cfg.Holds,
 	}
 	if c.cleanups == nil {
 		c.cleanups = &place.Cleanups{}
@@ -421,6 +427,8 @@ type core struct {
 	// storageReports answers a storage's encryption and coverage
 	// (Config.StorageReports); nil for none.
 	storageReports StorageReports
+	// holds returns a tenant's hold writer (Config.Holds); nil for none.
+	holds func(ctx context.Context, tenant string) (*holds.Writer, error)
 	// places orders the changes that depend on where the installation lets
 	// data go (its roots, endpoints, ports and bind addresses) against the
 	// changes of those settings: a storage or a receiver is checked and

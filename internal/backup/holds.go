@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -17,8 +18,10 @@ import (
 // after the recovery point outlives the restore. It runs after the rebuild,
 // so the storages a hold adopted is owed on are those of the catalog made
 // again. A record that does not verify for the tenant makes no hold and is
-// named in the report; a storage that cannot be read fails the reconcile,
-// since a hold it may hold would otherwise be lost.
+// named in the report. A storage that cannot be read fails the reconcile,
+// naming it, since a hold it may hold would otherwise be lost; the holds
+// found on every storage that was read are adopted first, so one storage
+// that does not answer costs none of the holds recorded on the others.
 func adoptHolds(ctx context.Context, cfg RestoreConfig, t openedTenant, opener place.Opener, storages []tenant.Storage, now time.Time,
 	res *TenantResult) error {
 	ad, ok := t.store.(holds.Adopter)
@@ -27,15 +30,18 @@ func adoptHolds(ctx context.Context, cfg RestoreConfig, t openedTenant, opener p
 	}
 	pt := place.TenantOf(t.row.ID, t.row.Name, t.store)
 	var found []holds.Found
+	var unread []error
 	for _, s := range storages {
 		st, err := opener.Open(ctx, pt, s)
 		if err != nil {
-			return prefixed(err, "the storage "+s.Name+" cannot be opened: ")
+			unread = append(unread, prefixed(err, "the storage "+s.Name+" cannot be opened: "))
+			continue
 		}
 		f, err := holds.ReadRecords(ctx, st, s.Name, t.row.ID, cfg.Keys)
 		_ = st.Close()
 		if err != nil {
-			return prefixed(err, "the hold records of "+s.Name+" cannot be read: ")
+			unread = append(unread, prefixed(err, "the hold records of "+s.Name+" cannot be read: "))
+			continue
 		}
 		found = append(found, f)
 	}
@@ -52,5 +58,5 @@ func adoptHolds(ctx context.Context, cfg RestoreConfig, t openedTenant, opener p
 	res.HoldsAdopted = a.Adopted
 	res.HoldsRefused = len(a.Refused)
 	res.HoldsRefusedRecords = a.Refused[:min(len(a.Refused), maxDisagreements)]
-	return err
+	return errors.Join(append(unread, err)...)
 }
