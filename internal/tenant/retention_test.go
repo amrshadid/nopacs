@@ -117,7 +117,8 @@ func TestHoldTargetCovers(t *testing.T) {
 // person's is refused by the later of the stored keep and the keep the
 // rules give now, unless it overrides; a disposal's is refused while
 // paused, unless due both as stored and as the rules give now, and, for
-// the daily pass, when a person's undo exempts the session.
+// the daily pass, when a person's undo exempts the session, and whenever
+// its target's labels no longer name the session the job listed.
 func TestCheckRetentionDelete(t *testing.T) {
 	now := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 	stored, rules := now.Add(time.Hour), now.Add(2*time.Hour)
@@ -132,8 +133,9 @@ func TestCheckRetentionDelete(t *testing.T) {
 		t.Errorf("an overriding delete answers %v", err)
 	}
 	due := RetentionTimes{Due: now.Add(-time.Hour), Rule: "d"}
-	o := &RetentionOrigin{Rule: "d", Scheduled: true}
-	disposal := RetentionDeleteCheck{Origin: o, Now: now, Effective: now, Sessions: []SessionKept{{Found: true, Stored: due, Rules: due}}}
+	o := &RetentionOrigin{Rule: "d", StudyUID: "1.2.3", Scheduled: true}
+	disposal := RetentionDeleteCheck{Origin: o, Now: now, Effective: now, Sessions: []SessionKept{{Found: true, Stored: due, Rules: due}},
+		Studies: []string{"1.2.3"}}
 	if err := CheckRetentionDelete(disposal); err != nil {
 		t.Errorf("a due session's disposal answers %v", err)
 	}
@@ -148,6 +150,8 @@ func TestCheckRetentionDelete(t *testing.T) {
 		{"kept by the rules now", func(c *RetentionDeleteCheck) { c.Sessions[0].Rules.KeepUntil = now.Add(time.Hour) }, ErrNotDue},
 		{"under another rule now", func(c *RetentionDeleteCheck) { c.Sessions[0].Rules.Rule = "e" }, ErrNotDue},
 		{"exempt from the pass", func(c *RetentionDeleteCheck) { c.Sessions[0].Exempt = "d" }, ErrNotDue},
+		{"whose target now holds another session", func(c *RetentionDeleteCheck) { c.Studies = []string{"1.2.4"} }, ErrNotDue},
+		{"whose target no longer holds a session", func(c *RetentionDeleteCheck) { c.Studies = nil }, ErrNotDue},
 	} {
 		d := disposal
 		d.Sessions = []SessionKept{disposal.Sessions[0]}

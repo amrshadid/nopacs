@@ -264,17 +264,41 @@ func (e *Engine) publish(ctx context.Context, c tenant.Correction, manifests map
 // replicas in step (tenant.CorrectionCommit.ReplicaManifests).
 func (e *Engine) publishWith(ctx context.Context, c tenant.Correction, manifests map[string]tenant.SHA256,
 	snapshots map[string]tenant.ScanSnapshot, replicas map[string]map[string]tenant.SHA256) (tenant.Correction, error) {
+	return e.published(ctx, c, func() (tenant.Correction, string, error) {
+		return e.commit(ctx, tenant.CorrectionCommit{ID: c.ID, Manifests: manifests, Snapshots: snapshots, ReplicaManifests: replicas})
+	}, func() {})
+}
+
+// commit runs the publishing transaction cc names, at now with the
+// tenant's grace, and answers the correction published, or why it was not
+// (a state reason) and the error. It writes nothing to a storage, so a step
+// holding its storages' gates (hold) runs it before it lets them go.
+func (e *Engine) commit(ctx context.Context, cc tenant.CorrectionCommit) (tenant.Correction, string, error) {
 	g, err := e.grace(ctx)
 	if err != nil {
-		return e.abandon(ctx, c, reasonStopped, err)
+		return tenant.Correction{}, reasonStopped, err
 	}
-	pc, err := e.cfg.Store.CommitCorrection(ctx, tenant.CorrectionCommit{ID: c.ID, Now: e.now(), Grace: g, Manifests: manifests,
-		Snapshots: snapshots, ReplicaManifests: replicas})
+	cc.Now, cc.Grace = e.now(), g
+	pc, err := e.cfg.Store.CommitCorrection(ctx, cc)
 	if err != nil {
 		why := reasonPublish
 		if errors.Is(err, tenant.ErrTargetChanged) {
 			why = reasonChanged
 		}
+		return pc, why, err
+	}
+	return pc, "", nil
+}
+
+// published ends a publish run by run: release lets go of the gates its
+// writes held (hold) once the publish is answered; then a publish refused
+// abandons c, and one made rewrites its records, each of whose writes
+// enters the gate again.
+func (e *Engine) published(ctx context.Context, c tenant.Correction, run func() (tenant.Correction, string, error),
+	release func()) (tenant.Correction, error) {
+	pc, why, err := run()
+	release()
+	if err != nil {
 		return e.abandon(ctx, c, why, err)
 	}
 	if err := e.reached(c, "committed"); err != nil {

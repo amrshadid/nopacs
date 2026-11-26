@@ -39,7 +39,8 @@ const maxDisagreements = 20
 // generation past both the record found and the database's), adopts every
 // correction record they hold (tenant.Restoring), then rebuilds the catalog
 // from them through a rebuild job of replace mode, which begins a new event
-// history.
+// history, and adopts the holds whose records are found active with no row
+// (adoptHolds).
 func reconcile(ctx context.Context, cfg RestoreConfig, m master.Store, installation string, t openedTenant, now time.Time) (TenantResult, error) {
 	res := TenantResult{Tenant: t.row.Name}
 	p, ok := t.store.(tenant.Pipeline)
@@ -132,6 +133,9 @@ func reconcile(ctx context.Context, cfg RestoreConfig, m master.Store, installat
 	job, tallies, err := rebuildCatalog(ctx, cfg, m, t, p, opener, now)
 	res.Rebuild, res.Tallies = job, tallies
 	if err != nil {
+		return res, err
+	}
+	if err := adoptHolds(ctx, cfg, t, opener, storages, now, &res); err != nil {
 		return res, err
 	}
 	hidden, err := rs.HideDeletes(ctx, deletes)
@@ -440,6 +444,9 @@ func rebuildCatalog(ctx context.Context, cfg RestoreConfig, m master.Store, t op
 		},
 		Keys:     cfg.Keys,
 		TenantID: tenantID,
+		// The reconcile adopts the hold records itself, after the rebuild,
+		// and reports them (adoptHolds).
+		LeaveHolds: true,
 	})
 	if err != nil {
 		return job, nil, err

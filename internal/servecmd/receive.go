@@ -160,8 +160,11 @@ func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantNam
 			defer func() { _ = s.Close() }()
 			return s.Usage(ctx)
 		},
-		Wake:   wake,
-		Logger: log,
+		// A receiver whose storage switches to its replica refuses new
+		// associations as a temporary failure while the switch runs.
+		Switches: work.switchGate,
+		Wake:     wake,
+		Logger:   log,
 	})
 }
 

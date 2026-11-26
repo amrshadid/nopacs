@@ -13,10 +13,10 @@ import (
 )
 
 // pagedSource answers a fixed set of verifications two at a time.
-type pagedSource []ScanVerification
+type pagedSource []tenant.ScanVerification
 
 // ScanVerifications answers the page after the cursor.
-func (s pagedSource) ScanVerifications(_ context.Context, _ string, after string, _ int) ([]ScanVerification, string, error) {
+func (s pagedSource) ScanVerifications(_ context.Context, _ string, after string, _ int) ([]tenant.ScanVerification, string, error) {
 	from := 0
 	if after != "" {
 		from, _ = strconv.Atoi(after)
@@ -76,7 +76,7 @@ type memVerifications struct {
 }
 
 // RecordScanVerified records v by storage, scan and whether by presence.
-func (m *memVerifications) RecordScanVerified(_ context.Context, v ScanVerified) error {
+func (m *memVerifications) RecordScanVerified(_ context.Context, v tenant.ScanVerified) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.got[v.Storage+" "+v.Path.Scan+" presence="+strconv.FormatBool(v.ByPresence)] = true
@@ -108,7 +108,7 @@ func TestScrubRecordsEachCopyVerified(t *testing.T) {
 	r.archiveTwo("s2", "1.2.826.0.1.3680043.10.509") // pending on both replicas
 	mem := &memVerifications{got: map[string]bool{}}
 	cfg := r.config()
-	cfg.Verifications = func(tenant.Store) VerificationRecorder { return mem }
+	cfg.Verifications = func(tenant.Store) tenant.VerificationRecorder { return mem }
 	r.scrubAll(cfg)
 	want := []string{"cold s1 presence=true", "copy s1 presence=false", "main s1 presence=false", "main s2 presence=false"}
 	if got := mem.list(); len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] || got[3] != want[3] {

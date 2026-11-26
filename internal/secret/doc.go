@@ -75,7 +75,9 @@
 // Ed25519 seed (RFC 8032 5.1.5) that signs the audit's checkpoints,
 // "nopacs/backup/v1" for the backup key, "nopacs/confirm-token/v1" for the
 // HMAC key of a delete's confirm token, and "nopacs/correction-record/v1" for
-// the HMAC key of the correction records on the storages (Keys.RecordMAC).
+// the HMAC key of the correction records on the storages (Keys.RecordMAC),
+// "nopacs/owner-record/v1" for that of the owner records (Keys.OwnerMAC),
+// and "nopacs/hold-record/v1" for that of the hold records (Keys.HoldMAC).
 // Purposes are a closed set of
 // constants, so no caller can choose a label, and a key derived for one
 // purpose is refused by the code of another. A derived key, and the Ed25519

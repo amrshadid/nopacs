@@ -102,6 +102,19 @@ func (r Report) Print(w io.Writer) error {
 			}
 			b.WriteString("\n")
 		}
+		if len(t.HoldsAdopted) > 0 {
+			fmt.Fprintf(&b, "  %d holds found active on the storages with no row in %s, each placed after its recovery point,\n"+
+				"    are active again (their reason is not on a storage: only its digest): %s\n", len(t.HoldsAdopted), src,
+				strings.Join(cleanAll(t.HoldsAdopted), ", "))
+		}
+		if t.HoldsRefused > 0 {
+			fmt.Fprintf(&b, "  %d hold records do not verify under this key file for this tenant, or are not in their form: each\n"+
+				"    makes no hold: %s", t.HoldsRefused, strings.Join(cleanAll(t.HoldsRefusedRecords), ", "))
+			if t.HoldsRefused > len(t.HoldsRefusedRecords) {
+				fmt.Fprintf(&b, " and %d more", t.HoldsRefused-len(t.HoldsRefusedRecords))
+			}
+			b.WriteString("\n")
+		}
 		fmt.Fprintf(&b, "  catalog rebuilt from the storages by job %s (%s)", c(t.Rebuild.ID), c(string(t.Rebuild.State)))
 		var left []string
 		for _, x := range t.Tallies {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 )
 
@@ -44,8 +46,15 @@ type Disposal interface {
 	DisposeJob(ctx context.Context, id string) (DisposeJob, error)
 	// RecordDisposed records what became of one session of a dispose job:
 	// deleted by the correction named, or skipped for a reason. A session
-	// recorded already keeps its first outcome.
+	// recorded already keeps its first outcome. A job ended (done or
+	// canceled) refuses it (ErrDisposeJobEnded): its tallies are final.
 	RecordDisposed(ctx context.Context, jobID, studyUID string, outcome DisposeOutcome, correction string) error
+	// EndDisposeJob ends the dispose job of that id (done) once every
+	// session it lists has its outcome, deleted or skipped, with its event,
+	// and answers it; a job ended already is answered as it is. A session
+	// whose outcome is not recorded refuses it (a precondition failure). Until
+	// the job ends, the daily pass queues no other of its rule.
+	EndDisposeJob(ctx context.Context, id string, now time.Time) (Job, error)
 }
 
 // The bounds of disposal.
@@ -130,7 +139,13 @@ func (d DisposeQueue) Validate() error {
 // DisposeOutcome is what became of one session of a dispose job.
 type DisposeOutcome string
 
-// The outcomes, the job's tallies.
+// The outcomes, the job's tallies. A dispose job is not tried again, so
+// every refusal of a session's delete that would not pass by itself is a
+// skip with its reason: a session left without an outcome keeps the job
+// open, and a job not ended keeps its rule from the daily pass. Only a
+// temporary failure (a database or storage not answering, retention paused
+// for its clock) leaves a session for the next pass. A session skipped is
+// listed again by the rule's next job while it stays due.
 const (
 	DisposePending        DisposeOutcome = ""
 	DisposeDeleted        DisposeOutcome = "deleted"
@@ -138,15 +153,49 @@ const (
 	DisposeSkippedNotDue  DisposeOutcome = "skipped|not_due"
 	DisposeSkippedDeleted DisposeOutcome = "skipped|already_deleted"
 	DisposeSkippedUndone  DisposeOutcome = "skipped|undone"
+	// DisposeSkippedOverlap is a session another correction not ended
+	// holds (ErrOverlap): it may stay prepared or purging for as long as a
+	// hold stands.
+	DisposeSkippedOverlap DisposeOutcome = "skipped|overlap"
+	// DisposeSkippedRefused is a session whose delete was refused for any
+	// other reason that does not pass by itself (the request or the
+	// session's state).
+	DisposeSkippedRefused DisposeOutcome = "skipped|refused"
 )
 
 // Valid reports whether o is an outcome RecordDisposed takes.
 func (o DisposeOutcome) Valid() bool {
 	switch o {
-	case DisposeDeleted, DisposeSkippedHeld, DisposeSkippedNotDue, DisposeSkippedDeleted, DisposeSkippedUndone:
+	case DisposeDeleted, DisposeSkippedHeld, DisposeSkippedNotDue, DisposeSkippedDeleted, DisposeSkippedUndone, DisposeSkippedOverlap,
+		DisposeSkippedRefused:
 		return true
 	}
 	return false
+}
+
+// The refusals of a disposal's steps, each a case inside the precondition
+// kind.
+var (
+	// ErrOverlap is in the chain of a correction refused because another
+	// correction not ended (prepared, committed or purging) covers some of
+	// its target.
+	ErrOverlap = errors.New("another correction holds the target")
+	// ErrDisposeJobEnded is in the chain of a disposal's step refused
+	// because its dispose job has ended (done, or canceled): a cancel stops
+	// the job's deletes, even one whose session was read before the cancel.
+	ErrDisposeJobEnded = errors.New("the dispose job has ended")
+)
+
+// OverlapError returns the precondition failure of a correction another
+// correction not ended overlaps.
+func OverlapError() error {
+	return fault.Wrap(fault.Precondition, ErrOverlap, "a correction on the target is prepared or not yet purged")
+}
+
+// DisposeJobEndedError returns the precondition failure of a disposal's
+// step whose job has ended.
+func DisposeJobEndedError() error {
+	return fault.Wrap(fault.Precondition, ErrDisposeJobEnded, "the dispose job has ended; it deletes and records nothing more")
 }
 
 // DisposeJob is a dispose job's own part.
@@ -178,11 +227,20 @@ type DisposeSession struct {
 type RetentionOrigin struct {
 	// Rule names the rule the session is due under.
 	Rule string
+	// StudyUID is the Study Instance UID of the session the dispose job
+	// listed: the prepare refuses the delete (NotDue) when the target's
+	// labels no longer name that session.
+	StudyUID string
 	// Due is the due time listed for it.
 	Due time.Time
 	// Scheduled says the daily pass made it, whose deletes leave alone a
 	// session a person's undo exempts.
 	Scheduled bool
+	// JobID is the dispose job the delete is made for: the prepare refuses
+	// it (ErrDisposeJobEnded) in its transaction once that job has ended,
+	// so a cancel that lands after the runner read the job still stops the
+	// delete. Empty for a delete bound to no job.
+	JobID string
 }
 
 // DisposeConfirm returns a disposal preview's token: the time it was

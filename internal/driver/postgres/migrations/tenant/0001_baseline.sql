@@ -2142,7 +2142,9 @@ INSERT INTO retention_state (one, trusted, last_pass, paused, pause_reason, paus
 -- rewrites them) and case folded, its reason, who placed and released it,
 -- whether it was made from a record found on a storage with no row, and
 -- seq, which counts its changes (placed, relabeled, released) so a record
--- written at an older count is owed again.
+-- written at an older count is owed again. releasing_at is set while a
+-- release is under way: the hold still holds, its count already moved to
+-- the release's, before any record says released.
 CREATE TABLE holds (
     id               text        COLLATE "C" NOT NULL,
     level            text        COLLATE "C" NOT NULL,
@@ -2161,12 +2163,14 @@ CREATE TABLE holds (
     released_at      timestamptz,
     found_on_storage boolean     NOT NULL,
     seq              bigint      NOT NULL,
+    releasing_at     timestamptz,
     CONSTRAINT holds_pkey PRIMARY KEY (id),
     CONSTRAINT holds_id_check CHECK (length(id) = 26),
     CONSTRAINT holds_level_check CHECK (level IN ('tenant', 'subject', 'session', 'scan')),
     CONSTRAINT holds_state_check CHECK (state IN ('active', 'released')),
     CONSTRAINT holds_seq_check CHECK (seq >= 1),
-    CONSTRAINT holds_released_check CHECK ((state = 'released') = (released_at IS NOT NULL))
+    CONSTRAINT holds_released_check CHECK ((state = 'released') = (released_at IS NOT NULL)),
+    CONSTRAINT holds_releasing_check CHECK (releasing_at IS NULL OR state = 'active')
 );
 
 -- The active holds of a subject, which a delete, a purge and a disposal
@@ -2174,15 +2178,18 @@ CREATE TABLE holds (
 CREATE INDEX holds_active     ON holds (subject_folded, session_folded, scan_folded) WHERE state = 'active';
 CREATE INDEX holds_by_subject ON holds (subject_folded, id);
 
--- The storages a hold's record goes on, and the hold's count its record
--- was last written at there (0 before the first): owed while below the
--- hold's seq.
+-- The storages a hold's record goes on, the hold's count its record was
+-- last written at there (0 before the first): owed while below the hold's
+-- seq; and the version of the installation key it was sealed under (0
+-- when not known), so a record under a retired version is written again.
 CREATE TABLE hold_records (
-    hold_id     text   COLLATE "C" NOT NULL,
-    storage     text   COLLATE "C" NOT NULL,
-    written_seq bigint NOT NULL,
+    hold_id      text   COLLATE "C" NOT NULL,
+    storage      text   COLLATE "C" NOT NULL,
+    written_seq  bigint NOT NULL,
+    seal_version bigint NOT NULL DEFAULT 0,
     CONSTRAINT hold_records_pkey PRIMARY KEY (hold_id, storage),
-    CONSTRAINT hold_records_seq_check CHECK (written_seq >= 0)
+    CONSTRAINT hold_records_seq_check CHECK (written_seq >= 0),
+    CONSTRAINT hold_records_seal_check CHECK (seal_version >= 0)
 );
 
 -- A dispose job's own part: its rule, the admin's reason ('' for the
@@ -2218,7 +2225,8 @@ CREATE TABLE dispose_sessions (
     CONSTRAINT dispose_sessions_pkey PRIMARY KEY (job_id, ord),
     CONSTRAINT dispose_sessions_counts_check CHECK (ord >= 1 AND instances >= 0 AND bytes >= 0),
     CONSTRAINT dispose_sessions_outcome_check CHECK (outcome IN ('', 'deleted', 'skipped|held', 'skipped|not_due',
-        'skipped|already_deleted', 'skipped|undone'))
+        'skipped|already_deleted', 'skipped|undone',
+        'skipped|overlap', 'skipped|refused'))
 );
 
 CREATE UNIQUE INDEX dispose_sessions_by_study ON dispose_sessions (job_id, study_uid);

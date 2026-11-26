@@ -10,6 +10,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/holds"
 	"github.com/amrshadid/nopacs/internal/interrupt"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
@@ -250,6 +251,7 @@ func (u *unitRun) end() error {
 		if err == nil {
 			u.reached("activated")
 			u.log.Info("rebuilds: the shadow is the catalog in use", "instances", j.Counts.InstancesSent, "left_out", j.Counts.InstancesRefused)
+			u.adoptHolds()
 		}
 		return err
 	}
@@ -378,6 +380,16 @@ func (u *unitRun) build() error {
 			u.log.Warn("rebuilds: correction records on a storage do not verify under the installation key; they hide nothing",
 				"storage", name, "records", h.unauthenticated)
 		}
+		// The hold records are read here only to count those refused; a
+		// replace adopts the holds after its activation (adoptHolds).
+		found, err := holds.ReadRecords(u.ctx, st, name, tenantID, u.sup.cfg.Keys)
+		if err != nil {
+			return storageErr(err)
+		}
+		if len(found.Refused) > 0 {
+			u.log.Warn("rebuilds: hold records on a storage do not verify under the installation key, or are not in their form; "+
+				"they make no hold", "storage", name, "records", len(found.Refused))
+		}
 		if err := listScans(u.ctx, st, prog.Cursor.After, func(k scanKeys) error {
 			if err := u.stopping(); err != nil {
 				return err
@@ -402,6 +414,9 @@ func (u *unitRun) build() error {
 		}
 		if h.unauthenticated > 0 {
 			tallies[tenant.TallyUnauthenticatedCorrection] = h.unauthenticated
+		}
+		if len(found.Refused) > 0 {
+			tallies[tenant.TallyUnauthenticatedHold] = int64(len(found.Refused))
 		}
 		if len(tallies) == 0 {
 			tallies = nil

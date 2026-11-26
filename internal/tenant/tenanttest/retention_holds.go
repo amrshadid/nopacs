@@ -235,7 +235,7 @@ func testHoldRecordsFollowTarget(e *tenv) {
 	if o, err := e.p.Hold(e.ctx, other.ID); err != nil || !slices.Equal(o.Storages, []string{"copy", "store"}) {
 		e.Fatalf("a hold the new scan is not under is on %v (%v), want its primary and the replica attached", o.Storages, err)
 	}
-	owed, err := e.p.HoldRecordsOwed(e.ctx, 10)
+	owed, err := e.p.HoldRecordsOwed(e.ctx, tenant.HoldOwedPage{Limit: 10})
 	e.ok("HoldRecordsOwed", err)
 	var pairs []string
 	for _, o := range owed {
@@ -267,15 +267,15 @@ func testHoldRecords(e *tenv) {
 	if !slices.Equal(h.StoragesPending, []string{"copy"}) {
 		e.Fatalf("a hold not written on its replica owes %v", h.StoragesPending)
 	}
-	owed, err := e.p.HoldRecordsOwed(e.ctx, 10)
+	owed, err := e.p.HoldRecordsOwed(e.ctx, tenant.HoldOwedPage{Limit: 10})
 	e.ok("HoldRecordsOwed", err)
 	if len(owed) != 1 || owed[0].Hold.ID != h.ID || owed[0].Storage != "copy" {
 		e.Fatalf("the records owed are %+v", owed)
 	}
-	e.wantKind("a count the hold has not reached", e.p.MarkHoldRecord(e.ctx, h.ID, "copy", 2), fault.Precondition)
-	e.wantKind("a storage the hold is not on", e.p.MarkHoldRecord(e.ctx, h.ID, "other", 1), fault.NotFound)
-	e.ok("MarkHoldRecord", e.p.MarkHoldRecord(e.ctx, h.ID, "copy", 1))
-	if owed, _ := e.p.HoldRecordsOwed(e.ctx, 10); len(owed) != 0 {
+	e.wantKind("a count the hold has not reached", e.p.MarkHoldRecord(e.ctx, h.ID, "copy", 2, 1), fault.Precondition)
+	e.wantKind("a storage the hold is not on", e.p.MarkHoldRecord(e.ctx, h.ID, "other", 1, 1), fault.NotFound)
+	e.ok("MarkHoldRecord", e.p.MarkHoldRecord(e.ctx, h.ID, "copy", 1, 1))
+	if owed, _ := e.p.HoldRecordsOwed(e.ctx, tenant.HoldOwedPage{Limit: 10}); len(owed) != 0 {
 		e.Fatalf("after the mark the records owed are %+v", owed)
 	}
 	found := tenant.HoldFound{ID: e.holdID(20), Target: tenant.HoldTarget{Subject: "sub-07"}, Reason: "kept by the record",
@@ -289,4 +289,6 @@ func testHoldRecords(e *tenv) {
 	if _, adopted, err := e.p.AdoptHold(e.ctx, found, e.audit()); err != nil || adopted {
 		e.Fatalf("a record adopted again answers adopted %v, %v", adopted, err)
 	}
+	holdRecordsPagedAndResealed(e, h, a)
+	holdReleaseReserved(e, h, a)
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the MAC of a NoPACs correction record against Python's standard.
+"""Check the MAC of a NoPACs correction or hold record against Python's standard.
 
 The work is in nopacs_scripts.checks.record_mac; this file only starts it.
 """

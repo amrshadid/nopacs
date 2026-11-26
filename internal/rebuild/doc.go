@@ -42,6 +42,13 @@
 //     instance held by a scan of another storage
 //     (tenant.TallySeriesOnTwoStorages).
 //
+// It reads each storage's hold records under meta/.holds/ too (package
+// holds): those refused, whose MAC does not verify or that are not in their
+// form, are tallied (tenant.TallyUnauthenticatedHold) and make no hold; once
+// a replace's shadow is the catalog in use, each hold found active with no
+// row is made an active hold again (Config.LeaveHolds), so a catalog made
+// again after its database was lost holds what it held.
+//
 // A correction record that cannot be read stops the build (the unit fails,
 // and is tried again): what it would hide cannot be known, and a rebuild
 // that showed it anyway would undo a withdrawal.

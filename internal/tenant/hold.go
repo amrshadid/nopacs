@@ -45,6 +45,20 @@ import (
 // with that storage's replicas (Pipeline.CommitScan).
 // A record found active on a storage with no row (AdoptHold) becomes an
 // active hold, since keeping data longer is the lesser error.
+//
+// # A release reserves its count first
+//
+// A released record is written only at a count the database has already
+// given the release, so no released record can outrank the hold if the
+// release does not commit. A release begins (BeginHoldRelease): the hold,
+// still holding, moves to its next count with every record owed; the
+// caller writes the released records at that count; then the release
+// commits (ReleaseHold) at it. A release that does not commit is ended
+// (AbortHoldRelease, or AbortStaleHoldReleases for one its writer left):
+// the hold is active at the count after, so its active records, written
+// again, outrank every released record written or kept from the release.
+// While a release is under way no record of the hold is owed to the
+// background writer: its own writer writes them.
 type Holds interface {
 	// HoldStorages answers the storages, by name, a hold of target must be
 	// on: those of the scans it covers (in the catalog, or hidden by a
@@ -61,22 +75,52 @@ type Holds interface {
 	// reason, and false when there is none: a caller asks it before it
 	// writes the records of a new one.
 	MatchingHold(ctx context.Context, target HoldTarget, reason string) (Hold, bool, error)
-	// ReleaseHold releases the hold (its records owed again, as released),
-	// with its audit entry; one released already is answered as it stands.
+	// ReleaseHold releases the hold with its audit entry; one released
+	// already is answered as it stands. A hold whose release was begun is
+	// released at the count its beginning reserved, which r.Seq names,
+	// each record standing as it was marked; one with no release begun,
+	// and r.Seq 0, is released at its next count, every record owed. An
+	// r.Seq that is not the count of the release under way, or a count
+	// named when none was begun, or none named when one was, is a
+	// precondition failure.
 	ReleaseHold(ctx context.Context, r HoldRelease, audit master.AuditEntry, guard Guard) (Hold, error)
+	// BeginHoldRelease begins the release of the active hold r.ID: in one
+	// transaction the hold, still holding, moves to its next count with a
+	// release under way (Hold.Releasing), so every record is owed at that
+	// count before any says released. It answers the hold; one released
+	// already is answered as it stands; one whose release is under way is
+	// a precondition failure.
+	BeginHoldRelease(ctx context.Context, r HoldRelease) (Hold, error)
+	// AbortHoldRelease ends a release under way, begun at count seq or
+	// later, that did not commit: the hold is active at the count after
+	// its own, every record owed. A hold with no release under way from
+	// seq on is answered as it stands.
+	AbortHoldRelease(ctx context.Context, id string, seq int64) (Hold, error)
+	// AbortStaleHoldReleases ends, as AbortHoldRelease does, every release
+	// under way begun before before, and answers their ids: a writer that
+	// stopped between beginning a release and ending it leaves none for
+	// ever.
+	AbortStaleHoldReleases(ctx context.Context, before time.Time) ([]string, error)
 	// Hold answers the hold of that id, or NotFound.
 	Hold(ctx context.Context, id string) (Hold, error)
 	// ListHolds answers a page of the holds the filter keeps, newest
 	// first.
 	ListHolds(ctx context.Context, f HoldFilter, page master.Page) ([]Hold, string, error)
-	// HoldRecordsOwed answers, oldest hold first, at most limit (1 to
-	// MaxHoldList) records owed: a storage that has no record of a hold
-	// as it stands.
-	HoldRecordsOwed(ctx context.Context, limit int) ([]HoldRecordOwed, error)
+	// HoldRecordsOwed answers a page of the records owed, in order of hold
+	// id then storage: a storage of the tenant that has no record of a
+	// hold as it stands. A hold whose release is under way owes none.
+	HoldRecordsOwed(ctx context.Context, page HoldOwedPage) ([]HoldRecordOwed, error)
 	// MarkHoldRecord records the hold's record written on the storage at
-	// the hold's count seq. A count older than the one recorded changes
+	// the hold's count seq, sealed under version sealVersion of the
+	// installation key. A count older than the one recorded changes
 	// nothing; a storage the hold is not on is NotFound.
-	MarkHoldRecord(ctx context.Context, id, storage string, seq int64) error
+	MarkHoldRecord(ctx context.Context, id, storage string, seq int64, sealVersion uint32) error
+	// OweHoldRecordsNotSealedUnder owes again each record of an active
+	// hold written under a version of the installation key other than
+	// version, and answers how many: a record under a version retired from
+	// the key file would no longer verify, and a database lost after would
+	// lose the hold.
+	OweHoldRecordsNotSealedUnder(ctx context.Context, version uint32) (int, error)
 	// AdoptHold makes an active hold of a record found active on a
 	// storage with no row (found_on_storage), with its audit entry, and
 	// answers it and true; a hold that has a row is answered as it stands,
@@ -94,9 +138,21 @@ const (
 	MaxHoldReason = 1024
 	// MaxHoldList is the most records one HoldRecordsOwed answers.
 	MaxHoldList = 1000
+	// MaxHoldSkip bounds the storages one HoldRecordsOwed leaves out.
+	MaxHoldSkip = 256
 	// MaxHoldStates bounds a filter's states.
 	MaxHoldStates = 16
+	// MaxHoldSeq bounds a hold's count of changes, as its record keeps it:
+	// below 2^53, so a JSON number reads back exactly in every tool.
+	MaxHoldSeq = 1<<53 - 1
 )
+
+// TallyUnauthenticatedHold is the tally of a rebuild job that counts the
+// hold records in a storage's meta/.holds/ that are refused: their MAC is
+// missing or does not verify under the installation key for the tenant, or
+// they are not in the record's form. Each makes no hold; the start that
+// finds it logs it too.
+const TallyUnauthenticatedHold = "unauthenticated_hold"
 
 // HoldState is whether a hold holds: active to released only.
 type HoldState string
@@ -191,6 +247,9 @@ type Hold struct {
 	FoundOnStorage bool
 	// Seq counts its changes: placed, relabeled, released.
 	Seq int64
+	// Releasing says a release is under way (BeginHoldRelease): the hold
+	// is active and holds, at the count the release reserved.
+	Releasing bool
 	// Storages are the storages its record is on, by name; StoragesPending
 	// those still owed its record as it stands.
 	Storages, StoragesPending []string
@@ -218,6 +277,9 @@ type HoldPlace struct {
 	// every primary HoldStorages answered, and the replicas that
 	// answered.
 	Written []string
+	// SealVersion is the version of the installation key those records
+	// were sealed under; 0 when not known, and they are written again.
+	SealVersion uint32
 	// Now is when.
 	Now time.Time
 }
@@ -250,6 +312,9 @@ func (p HoldPlace) Validate() error {
 type HoldRelease struct {
 	// ID names it; Reason is the person's; KeyID the key releasing it.
 	ID, Reason, KeyID string
+	// Seq is the count BeginHoldRelease reserved for the release, 0 for a
+	// release with none begun.
+	Seq int64
 	// Now is when.
 	Now time.Time
 }
@@ -267,7 +332,49 @@ func (r HoldRelease) Validate() error {
 			return err
 		}
 	}
+	if r.Seq < 0 || r.Seq > MaxHoldSeq {
+		return invalid("a release's count is 0 to " + strconv.FormatInt(MaxHoldSeq, 10))
+	}
 	return master.ValidateTime("release time", r.Now)
+}
+
+// HoldOwedPage is a page of the records owed to ask for.
+type HoldOwedPage struct {
+	// AfterHold and AfterStorage are the last record of the page before;
+	// empty for the first page.
+	AfterHold, AfterStorage string
+	// Skip are storages to leave out: those that did not take a record
+	// earlier in the same pass, so a storage that does not answer cannot
+	// hold back the records every other storage is owed.
+	Skip []string
+	// Limit is 1 to MaxHoldList.
+	Limit int
+}
+
+// Validate returns an Invalid error unless p is well formed.
+func (p HoldOwedPage) Validate() error {
+	if p.Limit < 1 || p.Limit > MaxHoldList {
+		return invalid("a page of hold records owed is 1 to " + strconv.Itoa(MaxHoldList))
+	}
+	if p.AfterHold != "" {
+		if err := ValidateHoldID(p.AfterHold); err != nil {
+			return err
+		}
+		if err := ValidateName("storage", p.AfterStorage); err != nil {
+			return err
+		}
+	} else if p.AfterStorage != "" {
+		return invalid("a page of hold records owed names a storage after a hold")
+	}
+	if len(p.Skip) > MaxHoldSkip {
+		return invalid("a page of hold records owed leaves out at most " + strconv.Itoa(MaxHoldSkip) + " storages")
+	}
+	for _, s := range p.Skip {
+		if err := ValidateName("storage", s); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // HoldFilter keeps the holds a list answers: every filter given must hold.
@@ -310,6 +417,13 @@ type HoldFound struct {
 	Reason   string
 	PlacedBy string
 	Placed   time.Time
+	// Seq is the record's count of the hold's changes, which the hold
+	// adopted goes on from, so a record written later of the same hold is
+	// told from this one; 0 is 1.
+	Seq int64
+	// SealVersion is the version of the installation key it was sealed
+	// under.
+	SealVersion uint32
 	// Storage is the storage it was found on.
 	Storage string
 	// Now is when.
@@ -334,6 +448,9 @@ func (f HoldFound) Validate() error {
 	}
 	if err := ValidateName("storage", f.Storage); err != nil {
 		return err
+	}
+	if f.Seq < 0 || f.Seq > MaxHoldSeq {
+		return invalid("a hold record's count is 1 to " + strconv.FormatInt(MaxHoldSeq, 10))
 	}
 	if err := master.ValidateTime("placed time", f.Placed); err != nil {
 		return err

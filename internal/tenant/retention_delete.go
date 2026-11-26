@@ -30,6 +30,10 @@ type RetentionDeleteCheck struct {
 	Now time.Time
 	// Sessions are the target's sessions; a disposal's names one.
 	Sessions []SessionKept
+	// Studies are the Study Instance UIDs of every session the target
+	// holds now, read for a disposal's delete, which must hold exactly the
+	// one its origin names.
+	Studies []string
 	// Paused says retention is paused for its clock; Effective is the time
 	// due times are read at (RetentionClock.Effective). Both are read only
 	// for a disposal's delete.
@@ -62,6 +66,15 @@ func CheckRetentionDelete(c RetentionDeleteCheck) error {
 			return RetentionMinimumError(until)
 		}
 		return nil
+	}
+	if err := ValidateStudyUID(o.StudyUID); err != nil {
+		return err
+	}
+	// The job listed the session by its labels, which a relabel since may
+	// have given to another session: deleting by the labels alone would
+	// delete a session the disposal never listed.
+	if len(c.Studies) != 1 || c.Studies[0] != o.StudyUID {
+		return NotDueError("the target no longer holds the session the disposal listed")
 	}
 	if c.Paused {
 		return RetentionPausedError()

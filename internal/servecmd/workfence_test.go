@@ -113,6 +113,8 @@ type registryRig struct {
 	w      *tenantWork
 	fenced atomic.Bool
 	seq    atomic.Int64
+	// fences counts the fence's checks of the owner records.
+	fences atomic.Int64
 }
 
 // newRegistryRig makes the rig with the tenant lab created.
@@ -134,6 +136,7 @@ func newRegistryRig(t *testing.T) *registryRig {
 	r.reg, err = registry.New(registry.Config{Master: m, Keys: keys, Drivers: map[string]registry.Driver{driver.SQLiteDriver: r.drv},
 		Now: time.Now, Interval: time.Hour, OpenTimeout: 30 * time.Second, PingTimeout: 10 * time.Second, MaxOpening: 2,
 		Fence: fenceNotice(func(context.Context, string, string, tenant.Store) (string, error) {
+			r.fences.Add(1)
 			if r.fenced.Load() {
 				return "the storage main is owned by another installation", nil
 			}

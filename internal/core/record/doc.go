@@ -1,8 +1,10 @@
-// Package record is the form of the two small records a storage holds
-// beside the scans' trees, so that the catalog and the right to write can be
-// found again from the storage alone, without the tenant's database:
+// Package record is the form of the three small records a storage holds
+// beside the scans' trees, so that the catalog, its holds and the right to
+// write can be found again from the storage alone, without the tenant's
+// database:
 //
 //	meta/.corrections/<operation id>.json   what a correction does and how far it got
+//	meta/.holds/<hold id>.json              a hold, what it covers, and whether it holds
 //	meta/.owner.json                        the installation that may write the tenant's objects
 //
 // A correction (a delete, a relabel, a replace) is made and committed in the
@@ -19,7 +21,11 @@
 // write a tenant's objects. A server that finds another installation, or a
 // higher generation than its own database holds, stops writing.
 //
-// Both records are JSON, written whole, read within a bound, and refused
+// A hold record is written before its hold's row commits and rewritten
+// when the hold is released or a relabel moves what it names; like a
+// correction record it carries the reason's SHA-256, never the reason.
+//
+// Every record is JSON, written whole, read within a bound, and refused
 // when they hold an unknown field, a trailing byte, or a value that breaks a
 // rule below. Keys are built and parsed by package layout.
 //

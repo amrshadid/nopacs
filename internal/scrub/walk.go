@@ -470,8 +470,8 @@ func (u *unitRun) walkLevel(store Storage, storage, prefix string, labels []stri
 			w.add(e)
 			continue
 		}
-		if e == layout.CorrectionsPrefix {
-			continue // the correction records, not a scan's
+		if e == layout.CorrectionsPrefix || e == layout.HoldsPrefix {
+			continue // the correction and hold records, not a scan's
 		}
 		segment := strings.TrimSuffix(strings.TrimPrefix(e, prefix), "/")
 		if !label.Valid(segment) {

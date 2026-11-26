@@ -354,7 +354,9 @@ class JobServiceStub:
     the instances of the sessions deleted; refused, those of the sessions
     skipped; scans and scans_done count sessions. Its tallies: "deleted",
     "skipped|held", "skipped|not_due", "skipped|already_deleted",
-    "skipped|undone". A cancel stops it within one session; the deletes made
+    "skipped|undone", "skipped|overlap" (another correction holds the
+    session), "skipped|refused" (its delete was refused for a reason that does
+    not pass by itself). A cancel stops it within one session; the deletes made
     stay, each undone by UndoCorrection during its grace. While the
     tenant's retention is paused for a clock jump, a dispose job the daily
     pass made waits with the reason "clock jumped". The daily pass queues no
@@ -886,7 +888,9 @@ class JobServiceServicer:
     the instances of the sessions deleted; refused, those of the sessions
     skipped; scans and scans_done count sessions. Its tallies: "deleted",
     "skipped|held", "skipped|not_due", "skipped|already_deleted",
-    "skipped|undone". A cancel stops it within one session; the deletes made
+    "skipped|undone", "skipped|overlap" (another correction holds the
+    session), "skipped|refused" (its delete was refused for a reason that does
+    not pass by itself). A cancel stops it within one session; the deletes made
     stay, each undone by UndoCorrection during its grace. While the
     tenant's retention is paused for a clock jump, a dispose job the daily
     pass made waits with the reason "clock jumped". The daily pass queues no
@@ -1659,7 +1663,9 @@ class JobService:
     the instances of the sessions deleted; refused, those of the sessions
     skipped; scans and scans_done count sessions. Its tallies: "deleted",
     "skipped|held", "skipped|not_due", "skipped|already_deleted",
-    "skipped|undone". A cancel stops it within one session; the deletes made
+    "skipped|undone", "skipped|overlap" (another correction holds the
+    session), "skipped|refused" (its delete was refused for a reason that does
+    not pass by itself). A cancel stops it within one session; the deletes made
     stay, each undone by UndoCorrection during its grace. While the
     tenant's retention is paused for a clock jump, a dispose job the daily
     pass made waits with the reason "clock jumped". The daily pass queues no

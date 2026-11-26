@@ -532,12 +532,24 @@ type InstanceReads interface {
 	HeldInstance(ctx context.Context, path label.Path, sopInstanceUID string) (ScanInstance, error)
 }
 
+// InstanceSizes reads the bounds of what the catalog's instances take on a
+// storage.
+type InstanceSizes interface {
+	// LargestInstance returns the most bytes one instance the catalog
+	// holds takes on its storage (its file's size, or the end of its
+	// range in the object that holds it, whichever is larger), 0 for a
+	// catalog that holds none. It reads every instance row: a caller reads
+	// it seldom (a repair's check of its lease), never per request.
+	LargestInstance(ctx context.Context) (int64, error)
+}
+
 // CatalogReads is every read of the catalog, which PipelineParts embeds.
 type CatalogReads interface {
 	SubjectReads
 	SessionReads
 	ScanReads
 	InstanceReads
+	InstanceSizes
 }
 
 // ValidateInstanceUID returns an Invalid error unless s is a SOP Instance

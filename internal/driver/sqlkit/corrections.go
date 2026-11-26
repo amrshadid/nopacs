@@ -402,7 +402,7 @@ func checkOverlap(ctx context.Context, tx SendingTx, path label.Path, except str
 		return err
 	}
 	if busy {
-		return tenant.Precondition("a correction on the target is prepared or not yet purged")
+		return tenant.OverlapError()
 	}
 	return nil
 }

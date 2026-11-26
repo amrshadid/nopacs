@@ -194,6 +194,14 @@ func (d fencedDB) RecordDisposed(ctx context.Context, jobID, studyUID string, ou
 	return d.tenantDB.RecordDisposed(ctx, jobID, studyUID, outcome, correction)
 }
 
+// EndDisposeJob asks the fence, then ends the job.
+func (d fencedDB) EndDisposeJob(ctx context.Context, id string, now time.Time) (tenant.Job, error) {
+	if err := d.fence(); err != nil {
+		return tenant.Job{}, err
+	}
+	return d.tenantDB.EndDisposeJob(ctx, id, now)
+}
+
 // fencedOpen returns open whose stores ask fence before each write of
 // bytes or of state (Put, Delete, Purge, a recall); a nil fence returns
 // open as it is.

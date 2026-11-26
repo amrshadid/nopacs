@@ -1,5 +1,5 @@
-"""Check the MAC of a NoPACs correction record against Python's standard
-library.
+"""Check the MAC of a NoPACs correction record or hold record against
+Python's standard library.
 
 A MAC that only the code that made it can check proves nothing about the
 format. This script computes it from the description in
@@ -7,15 +7,19 @@ internal/core/record/auth.go and internal/secret/doc.go, with HKDF written
 out from RFC 5869 over hmac and hashlib, and nothing of NoPACs':
 
     key     = HKDF-SHA-256(installation key of version mac_key_version,
-                           no salt, "nopacs/correction-record/v1")
+                           no salt, label)
+    label   = "nopacs/hold-record/v1" for a hold record (its "kind" is
+              "hold"), "nopacs/correction-record/v1" for a correction
+              record
     body    = the record's bytes without the newline after it and without
               `,"mac":"<64 hex digits>"` before the closing brace
     message = len(tenant) || tenant || len(id) || id || body
               (each len 4 bytes, big-endian)
     mac     = HMAC-SHA-256(key, message)
 
-The Go test TestRecordMACInPython (internal/core/record/outside_test.go) runs
-it with `make check-record-mac`:
+The Go tests TestRecordMACInPython (internal/core/record/outside_test.go)
+and TestHoldRecordMACInPython (internal/core/record/hold_test.go) run it
+with `make check-record-mac`:
 
     record-mac.py <key file> <tenant id> <record file>
 
@@ -35,6 +39,7 @@ from nopacs_scripts.keys import KeyFileError, hkdf, read_keys as read_key_file
 from nopacs_scripts.report import failing
 
 LABEL = b"nopacs/correction-record/v1"
+HOLD_LABEL = b"nopacs/hold-record/v1"
 MAC_FIELD = re.compile(rb',"mac":"([0-9a-f]{64})"}\n?$')
 
 
@@ -59,7 +64,8 @@ def mac_of(keys, tenant, data):
     version, op = record["mac_key_version"], record["id"]
     if version not in keys:
         return None, m.group(1).decode()
-    key = hkdf(keys[version], None, LABEL)
+    label = HOLD_LABEL if record.get("kind") == "hold" else LABEL
+    key = hkdf(keys[version], None, label)
     t, i = tenant.encode(), op.encode()
     message = struct.pack(">I", len(t)) + t + struct.pack(">I", len(i)) + i + body
     return hmac.new(key, message, hashlib.sha256).hexdigest(), m.group(1).decode()

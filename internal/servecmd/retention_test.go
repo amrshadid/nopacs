@@ -89,8 +89,9 @@ func TestRetentionsPassDisposesThroughTheOrdinaryDelete(t *testing.T) {
 	for _, h := range hs {
 		written = append(written, h.Name)
 	}
-	if _, _, err := r.db.PlaceHold(r.ctx, tenant.HoldPlace{ID: mustCorrectionID(t), Target: target, Reason: "litigation", Written: written,
-		Now: time.Now()}, r.audit(), nil); err != nil {
+	hold, _, err := r.db.PlaceHold(r.ctx, tenant.HoldPlace{ID: mustCorrectionID(t), Target: target, Reason: "litigation", Written: written,
+		Now: time.Now()}, r.audit(), nil)
+	if err != nil {
 		t.Fatal(err)
 	}
 	r.w.setEngines(retentionEngines(t, r))
@@ -133,6 +134,35 @@ func TestRetentionsPassDisposesThroughTheOrdinaryDelete(t *testing.T) {
 	// it is counted held and its data is all still served.
 	if got, _, err := r.db.ListHeldInstances(r.ctx, pathOfScan(scans.Items[0]), master.Page{Limit: 1000}); err != nil || len(got) == 0 {
 		t.Fatalf("the held subject's instances: %d (%v)", len(got), err)
+	}
+	// Every session it listed has its outcome, so the job has ended, and the
+	// rule's next daily pass queues its next disposal: the hold released, the
+	// held subject's session is disposed of by a second job.
+	if j, err := r.db.Job(r.ctx, dj.Job.ID); err != nil || j.State != tenant.JobDone {
+		t.Fatalf("the dispose job after its every session's outcome: %+v (%v), want done", j, err)
+	}
+	if _, err := r.db.ReleaseHold(r.ctx, tenant.HoldRelease{ID: hold.ID, Reason: "settled", Now: time.Now()}, r.audit(), nil); err != nil {
+		t.Fatal(err)
+	}
+	r.w.now = func() time.Time { return time.Now().Add(100 * time.Hour) }
+	if err := ret.once(r.ctx); err != nil {
+		t.Fatalf("the next pass: %v", err)
+	}
+	jobs, _, err = r.db.ListJobs(r.ctx, tenant.JobFilter{}, master.Page{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var second tenant.DisposeJob
+	for _, j := range jobs {
+		if j.Kind == tenant.JobDispose && j.ID != dj.Job.ID {
+			if second, err = r.db.DisposeJob(r.ctx, j.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if len(second.Sessions) != 1 || second.Sessions[0].SubjectLabel != held || second.Sessions[0].Outcome != tenant.DisposeDeleted ||
+		second.Job.State != tenant.JobDone {
+		t.Fatalf("the rule's next disposal: %+v, want the released subject's session deleted and the job done", second)
 	}
 }
 

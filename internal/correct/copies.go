@@ -189,10 +189,10 @@ func (e *Engine) checkGone(ctx context.Context, c tenant.Correction) error {
 					return fault.New(fault.Precondition, "the purge is held")
 				}
 				// The removal enters the storage's gate and reopens the
-				// storage inside it (removeGated): the store the presence was
+				// storage inside it (gated): the store the presence was
 				// read from may name the place a switch swapped away meanwhile.
 				var removals []blob.Removal
-				err = e.removeGated(ctx, name, func(st blob.Store) error {
+				err = e.gated(ctx, name, func(st blob.Store) error {
 					var err error
 					removals, err = e.purgeKey(ctx, st, key)
 					return err

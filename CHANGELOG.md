@@ -412,6 +412,25 @@ scan, keeps it whole, and serves it through an API with keys.
   replicas, repair, switch, retention, holds, corrections, scrub findings,
   profiles, routes and the audit seal's verification, each destructive step
   confirmed by typing its target.
+- Holds outlive a lost database: placing a hold writes a sealed record,
+  `meta/.holds/<id>.json` (under its own derived key, never the reason's
+  text), on every primary its target touches before the hold commits, and
+  owes it to replicas; a release first reserves its count in the database, so
+  a release that does not commit never leaves a released record that
+  outranks the hold; records are rewritten on relabel and when the
+  installation's key version changes; a rebuild, a restore and every start
+  make an active hold again of a record found with no row, and a record that
+  does not verify is refused and reported, never adopted.
+- A dispose job always ends: a session another correction holds, or whose
+  delete is refused, is skipped with its reason; a canceled job deletes
+  nothing more; a retention delete is refused when the session's labels name
+  another study since it was listed. The repair lease is checked against the
+  largest instance the tenant holds.
+- Every write of a correction to a storage enters the storage's switch gate
+  (a relabel and a replace hold it until their publish, an instance purge
+  before the scan's lock), and replace, relabel and an instance purge keep
+  the metadata file's digest. A switch's empty-compare check reads a
+  rebuild compare made from the replica.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

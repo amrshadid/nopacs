@@ -102,6 +102,7 @@ func runPipeline(t *testing.T, open OpenPipeline) {
 		{"CatalogValuesKept", testCatalogValuesKept},
 		{"CatalogValuesFilled", testCatalogValuesFilled},
 		{"CatalogTotals", testCatalogTotals},
+		{"CatalogLargest", testCatalogLargest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

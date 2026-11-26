@@ -21,12 +21,19 @@ import (
 func newScrubs(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots) (*scrub.Supervisor, error) {
 	values := settingvalue.Reader{Master: d.Master}
 	opener := place.Opener{Values: values, Keys: d.Keys, StaleUploadAge: -1}
+	return scrub.New(scrubConfig(d, values, opener, registryTenants{master: d.Master, registry: reg}, wake, reads))
+}
+
+// scrubConfig returns the scrubs' configuration as serve wires it, over the
+// tenants given, their storages opened for reading through opener.
+func scrubConfig(d Deps, values settingvalue.Reader, opener place.Opener, tenants scrub.Tenants, wake func(tenantName string),
+	reads *checkedread.Slots) scrub.Config {
 	tenantID := func(ctx context.Context, name string) (string, error) {
 		row, err := d.Master.TenantByName(ctx, name)
 		return row.ID, err
 	}
-	return scrub.New(scrub.Config{
-		Tenants:        registryTenants{master: d.Master, registry: reg},
+	return scrub.Config{
+		Tenants:        tenants,
 		TenantSettings: func(st tenant.Store) scrub.TenantSettings { return values.OnTenant(st) },
 		OpenStorages: func(name string, p tenant.Pipeline) scrub.Storages {
 			return checkedread.NewStores(opener, tenantID, p, name)
@@ -41,11 +48,11 @@ func newScrubs(d Deps, reg *registry.Registry, wake func(tenantName string), rea
 		// When each scan was last read whole on each storage, the ground of
 		// a storage's coverage, kept by a tenant database that records it;
 		// one that does not records nothing and its coverage is not told.
-		Verifications: func(st tenant.Store) scrub.VerificationRecorder {
-			if v, ok := st.(scrub.VerificationRecorder); ok {
+		Verifications: func(st tenant.Store) tenant.VerificationRecorder {
+			if v, ok := st.(tenant.VerificationRecorder); ok {
 				return v
 			}
 			return nil
 		},
-	})
+	}
 }

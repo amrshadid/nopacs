@@ -47,6 +47,11 @@ const (
 	// who can write to the storage but does not hold the key file put
 	// there is told apart, and treated as another owner's.
 	OwnerRecord
+	// HoldRecord derives the HMAC-SHA-256 key (RFC 2104) that authenticates
+	// each hold record on a storage (see HoldMAC): a key of its own, so a
+	// hold record's MAC is never a correction record's, whatever the two
+	// encodings have in common.
+	HoldRecord
 )
 
 // labels holds each purpose's HKDF info string, in ASCII.
@@ -56,6 +61,7 @@ var labels = map[Purpose]string{ //nolint:gosec // G101: public HKDF info string
 	ConfirmToken:     "nopacs/confirm-token/v1",
 	CorrectionRecord: "nopacs/correction-record/v1",
 	OwnerRecord:      "nopacs/owner-record/v1",
+	HoldRecord:       "nopacs/hold-record/v1",
 }
 
 // derivedSize is the length of every derived key: 32 bytes, which is the
@@ -228,6 +234,24 @@ func (k *Keys) OwnerMAC(version uint32, message []byte) ([]byte, error) {
 		return nil, err
 	}
 	dd, err := d.need(OwnerRecord)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dd.key[:])
+	return hmacSHA256(dd.key, message), nil
+}
+
+// HoldMAC returns the HMAC-SHA-256 (RFC 2104) of message under the key
+// derived for HoldRecord from the given version of the installation key,
+// as RecordMAC does for a correction record: a writer passes SealVersion
+// and stores it beside the MAC, a reader passes the stored version. A
+// version the key file does not hold is NotFound.
+func (k *Keys) HoldMAC(version uint32, message []byte) ([]byte, error) {
+	d, err := k.DeriveVersion(HoldRecord, version)
+	if err != nil {
+		return nil, err
+	}
+	dd, err := d.need(HoldRecord)
 	if err != nil {
 		return nil, err
 	}

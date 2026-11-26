@@ -199,13 +199,17 @@ func Parse(key string) (Key, error) {
 
 // The keys of the records a storage holds apart from the scans' trees. A
 // label never starts with a dot (package label), so nothing under
-// meta/.corrections/ or at meta/.owner.json is ever a subject's tree.
+// meta/.corrections/ or meta/.holds/, or at meta/.owner.json, is ever a
+// subject's tree.
 const (
 	// CorrectionsPrefix is the prefix under which a storage lists the
 	// correction records.
 	CorrectionsPrefix = MetaRoot + ".corrections/"
-	// CorrectionExt ends a correction record's key.
+	// CorrectionExt ends a correction record's key, and a hold record's.
 	CorrectionExt = ".json"
+	// HoldsPrefix is the prefix under which a storage lists the hold
+	// records.
+	HoldsPrefix = MetaRoot + ".holds/"
 	// OwnerKey is the key of the owner record.
 	OwnerKey = MetaRoot + ".owner.json"
 	// OperationIDLength is the length of an operation id, in bytes: a ULID.
@@ -254,6 +258,31 @@ func ParseCorrectionKey(key string) (string, error) {
 		return "", fmt.Errorf("%w: not a correction record's key", ErrKey)
 	}
 	if _, err := CorrectionKey(id); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// HoldKey returns the key of the record of a hold, whose id is an
+// operation id.
+func HoldKey(holdID string) (string, error) {
+	if err := ValidOperationID(holdID); err != nil {
+		return "", err
+	}
+	return HoldsPrefix + holdID + CorrectionExt, nil
+}
+
+// ParseHoldKey returns the hold id a hold record's key names, or an error
+// wrapping ErrKey for any other string.
+func ParseHoldKey(key string) (string, error) {
+	id, ok := strings.CutPrefix(key, HoldsPrefix)
+	if ok {
+		id, ok = strings.CutSuffix(id, CorrectionExt)
+	}
+	if !ok {
+		return "", fmt.Errorf("%w: not a hold record's key", ErrKey)
+	}
+	if _, err := HoldKey(id); err != nil {
 		return "", err
 	}
 	return id, nil

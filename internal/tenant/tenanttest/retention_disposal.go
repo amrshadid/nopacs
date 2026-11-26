@@ -149,7 +149,7 @@ func testDisposalDeletes(e *tenv) {
 		e.ok("PreviewDelete", err)
 		c, _, err := e.p.PrepareCorrection(e.ctx, tenant.CorrectionPrepare{ID: e.newID(int(at.Sub(T0).Seconds())), Kind: record.KindDelete,
 			Target: target, Reason: "retention rule d, due " + s.Due.Format("2006-01-02"), Confirm: p.Confirm,
-			Retention: &tenant.RetentionOrigin{Rule: ruleName, Due: s.Due, Scheduled: scheduled}, Now: at}, e.audit(), nil)
+			Retention: &tenant.RetentionOrigin{Rule: ruleName, StudyUID: s.StudyUID, Due: s.Due, Scheduled: scheduled}, Now: at}, e.audit(), nil)
 		return c, err
 	}
 	_, err := prep(s.Due.Add(-time.Hour), true, "d")

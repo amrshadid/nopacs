@@ -102,14 +102,34 @@ func (t *Tenant) ListHolds(ctx context.Context, f tenant.HoldFilter, page master
 	return t.sending().ListHolds(ctx, f, page)
 }
 
+// BeginHoldRelease implements tenant.Holds.
+func (t *Tenant) BeginHoldRelease(ctx context.Context, r tenant.HoldRelease) (tenant.Hold, error) {
+	return t.sending().BeginHoldRelease(ctx, r)
+}
+
+// AbortHoldRelease implements tenant.Holds.
+func (t *Tenant) AbortHoldRelease(ctx context.Context, id string, seq int64) (tenant.Hold, error) {
+	return t.sending().AbortHoldRelease(ctx, id, seq)
+}
+
+// AbortStaleHoldReleases implements tenant.Holds.
+func (t *Tenant) AbortStaleHoldReleases(ctx context.Context, before time.Time) ([]string, error) {
+	return t.sending().AbortStaleHoldReleases(ctx, before)
+}
+
 // HoldRecordsOwed implements tenant.Holds.
-func (t *Tenant) HoldRecordsOwed(ctx context.Context, limit int) ([]tenant.HoldRecordOwed, error) {
-	return t.sending().HoldRecordsOwed(ctx, limit)
+func (t *Tenant) HoldRecordsOwed(ctx context.Context, page tenant.HoldOwedPage) ([]tenant.HoldRecordOwed, error) {
+	return t.sending().HoldRecordsOwed(ctx, page)
 }
 
 // MarkHoldRecord implements tenant.Holds.
-func (t *Tenant) MarkHoldRecord(ctx context.Context, id, storage string, seq int64) error {
-	return t.sending().MarkHoldRecord(ctx, id, storage, seq)
+func (t *Tenant) MarkHoldRecord(ctx context.Context, id, storage string, seq int64, sealVersion uint32) error {
+	return t.sending().MarkHoldRecord(ctx, id, storage, seq, sealVersion)
+}
+
+// OweHoldRecordsNotSealedUnder implements tenant.Holds.
+func (t *Tenant) OweHoldRecordsNotSealedUnder(ctx context.Context, version uint32) (int, error) {
+	return t.sending().OweHoldRecordsNotSealedUnder(ctx, version)
 }
 
 // AdoptHold implements tenant.Holds.
@@ -141,4 +161,9 @@ func (t *Tenant) DisposeJob(ctx context.Context, id string) (tenant.DisposeJob, 
 // RecordDisposed implements tenant.Disposal.
 func (t *Tenant) RecordDisposed(ctx context.Context, jobID, studyUID string, outcome tenant.DisposeOutcome, correction string) error {
 	return t.sending().RecordDisposed(ctx, jobID, studyUID, outcome, correction)
+}
+
+// EndDisposeJob implements tenant.Disposal.
+func (t *Tenant) EndDisposeJob(ctx context.Context, id string, now time.Time) (tenant.Job, error) {
+	return t.sending().EndDisposeJob(ctx, id, now)
 }

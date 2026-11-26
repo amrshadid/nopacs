@@ -90,6 +90,11 @@ func (t *Tenant) ListHeldInstances(ctx context.Context, p label.Path, page maste
 	return t.catalog().ListHeldInstances(ctx, p, page)
 }
 
+// LargestInstance implements tenant.InstanceSizes.
+func (t *Tenant) LargestInstance(ctx context.Context) (int64, error) {
+	return t.catalog().LargestInstance(ctx)
+}
+
 // HeldInstance implements tenant.InstanceReads.
 func (t *Tenant) HeldInstance(ctx context.Context, p label.Path, uid string) (tenant.ScanInstance, error) {
 	return t.catalog().HeldInstance(ctx, p, uid)

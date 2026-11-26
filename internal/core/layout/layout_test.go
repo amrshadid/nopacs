@@ -286,3 +286,36 @@ func TestCorrectionKey(t *testing.T) {
 		}
 	}
 }
+
+// TestHoldKey guards the hold record's key: built from an operation id
+// and parsed back; refused for an id that is not one, and for a key under
+// another prefix (a correction record's above all), so a record of one
+// kind is never read as the other.
+func TestHoldKey(t *testing.T) {
+	const op = "01jd5x7k2m3n4p5q6r7s8t9v0w"
+	got, err := HoldKey(op)
+	if err != nil || got != "meta/.holds/"+op+".json" {
+		t.Fatalf("%q %v", got, err)
+	}
+	if id, err := ParseHoldKey(got); err != nil || id != op {
+		t.Fatalf("%q %v", id, err)
+	}
+	for _, id := range []string{"", op[:25], strings.ToUpper(op), "81jd5x7k2m3n4p5q6r7s8t9v0w", "01jd5x7k2m3n4p5q6r7s8t9v/w"} {
+		if s, err := HoldKey(id); err == nil || !errors.Is(err, ErrKey) {
+			t.Errorf("%.30q: built %q, %v", id, s, err)
+		}
+	}
+	correction, _ := CorrectionKey(op)
+	for _, s := range []string{"", "meta/.holds/.json", "meta/.holds/" + op + ".JSON", "meta/.holds/a/" + op + ".json", correction,
+		"meta/holds/" + op + ".json", OwnerKey} {
+		if id, err := ParseHoldKey(s); err == nil {
+			t.Errorf("%q parsed as %q", s, id)
+		}
+	}
+	if _, err := ParseCorrectionKey(got); err == nil {
+		t.Errorf("a hold record's key %q parsed as a correction record's", got)
+	}
+	if k, err := Parse(got); err == nil {
+		t.Errorf("%q parsed as a scan file: %+v", got, k)
+	}
+}

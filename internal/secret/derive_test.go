@@ -36,6 +36,35 @@ var knownDerived = []struct {
 	{2, CorrectionRecord, "811c154fcf6ee89f6529a94e484b12af4cf925149f33c7c6018dc70a4eac2d48", ""},
 	{1, OwnerRecord, "d0d7c08a405ec222dc509792a4264f5abbdcdabc0fe7341e64a9ac79b50b5f89", ""},
 	{2, OwnerRecord, "92a81033ff033b7c658f3aa6f6e22c56f5107f594f66e9f208809380d75a0e92", ""},
+	{1, HoldRecord, "773d6eeaa6933c7bca02c4a8237a5436f838899a81e65ff643024f3b3b61b8bd", ""},
+	{2, HoldRecord, "8c10bed8c300b071a2955c64e2c27f4bdb5f7603b4f07d259bfff9caa930a297", ""},
+}
+
+// TestHoldMACKnownAnswer guards that HoldMAC is HMAC-SHA-256 under the key
+// derived for HoldRecord from the version named: each value equals
+// Python's hmac.new(okm, message, hashlib.sha256) with okm computed as
+// above, and differs from a correction record's MAC of the same message.
+func TestHoldMACKnownAnswer(t *testing.T) {
+	keys := mustKeys(t, keyLine(1, 1)+keyLine(2, 2))
+	for v, want := range map[uint32]string{
+		1: "2362152720130136bc13c30f52b9de7d521db8e639fc70aa193b3a8e2a1635e7",
+		2: "8f7c735ca7c218d28e44d772218efdb60d4ebf3563c98532a20cfd423d7e211f",
+	} {
+		got, err := keys.HoldMAC(v, []byte("hold message"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hex.EncodeToString(got) != want {
+			t.Errorf("version %d: HoldMAC = %x, want %s", v, got, want)
+		}
+		other, _ := keys.RecordMAC(v, []byte("hold message"))
+		if hex.EncodeToString(other) == want {
+			t.Errorf("version %d: a hold record's MAC equals a correction record's", v)
+		}
+	}
+	if _, err := keys.HoldMAC(3, []byte("x")); fault.KindOf(err) != fault.NotFound {
+		t.Errorf("a version the file does not hold: err = %v, want NotFound", err)
+	}
 }
 
 // TestOwnerMACKnownAnswer guards that OwnerMAC is HMAC-SHA-256 under the
@@ -233,7 +262,7 @@ func TestPurposesNeverShareAKey(t *testing.T) {
 // version is missing), and no key at all.
 func TestDeriveRefuses(t *testing.T) {
 	keys := mustKeys(t, keyLine(1, 1))
-	for _, p := range []Purpose{0, OwnerRecord + 1, 255} {
+	for _, p := range []Purpose{0, HoldRecord + 1, 255} {
 		if _, err := keys.DeriveVersion(p, 1); fault.KindOf(err) != fault.Internal {
 			t.Errorf("purpose %d: err = %v, want Internal", p, err)
 		}

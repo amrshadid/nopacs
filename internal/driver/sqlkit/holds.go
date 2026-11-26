@@ -19,16 +19,17 @@ const ListHolds = "tenant-holds"
 
 // holdColumns are a hold's columns as the store reads them.
 const holdColumns = `id, subject_label, session_label, scan_label, level, reason, state, placed_by, placed_at, release_reason,
-	released_by, released_at, found_on_storage, seq`
+	released_by, released_at, found_on_storage, seq, releasing_at`
 
 // scanHold reads one row of holdColumns.
 func scanHold(r Row) (tenant.Hold, error) {
 	var h tenant.Hold
 	var level, state string
-	var placed, released DBTime
+	var placed, released, releasing DBTime
 	err := r.Scan(&h.ID, &h.Target.Subject, &h.Target.Session, &h.Target.Scan, &level, &h.Reason, &state, &h.PlacedBy, &placed,
-		&h.ReleaseReason, &h.ReleasedBy, &released, &h.FoundOnStorage, &h.Seq)
+		&h.ReleaseReason, &h.ReleasedBy, &released, &h.FoundOnStorage, &h.Seq, &releasing)
 	h.Target.WholeTenant, h.State, h.Placed, h.Released = level == "tenant", tenant.HoldState(state), placed.T, released.T
+	h.Releasing = !releasing.T.IsZero()
 	return h, err
 }
 
@@ -308,12 +309,12 @@ func (k Sending) PlaceHold(ctx context.Context, p tenant.HoldPlace, audit master
 			return err
 		}
 		for _, s := range storages {
-			written := 0
+			written, sealed := 0, int64(0)
 			if slices.Contains(p.Written, s.Name) {
-				written = 1
+				written, sealed = 1, int64(p.SealVersion)
 			}
-			if _, err := tx.Exec(ctx, `INSERT INTO hold_records (hold_id, storage, written_seq) VALUES (?, ?, ?)`, p.ID, s.Name,
-				written); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO hold_records (hold_id, storage, written_seq, seal_version) VALUES (?, ?, ?, ?)`, p.ID,
+				s.Name, written, sealed); err != nil {
 				return err
 			}
 		}
@@ -324,40 +325,6 @@ func (k Sending) PlaceHold(ctx context.Context, p tenant.HoldPlace, audit master
 		return tx.Audited(ctx, withObject(audit, p.ID), guard)
 	})
 	return out, made, err
-}
-
-// ReleaseHold implements tenant.Holds.
-func (k Sending) ReleaseHold(ctx context.Context, r tenant.HoldRelease, audit master.AuditEntry, guard tenant.Guard) (tenant.Hold, error) {
-	if err := r.Validate(); err != nil {
-		return tenant.Hold{}, err
-	}
-	if err := audit.Validate(); err != nil {
-		return tenant.Hold{}, err
-	}
-	var out tenant.Hold
-	err := k.Host.Write(ctx, "the hold cannot be released", func(tx SendingTx) error {
-		if err := k.lockRetention(ctx, tx); err != nil {
-			return err
-		}
-		h, found, err := holdIn(ctx, tx, r.ID, k.D.Lock)
-		if err != nil {
-			return err
-		}
-		if !found {
-			return notFound("the tenant has no hold with this id")
-		}
-		if h.State == tenant.HoldActive {
-			if _, err := tx.Exec(ctx, `UPDATE holds SET state = 'released', release_reason = ?, released_by = ?, released_at = ?,
-				seq = seq + 1 WHERE id = ?`, r.Reason, r.KeyID, k.D.Time(r.Now), r.ID); err != nil {
-				return err
-			}
-		}
-		if out, _, err = holdIn(ctx, tx, r.ID, ""); err != nil {
-			return err
-		}
-		return tx.Audited(ctx, withObject(audit, r.ID), guard)
-	})
-	return out, err
 }
 
 // Hold implements tenant.Holds.
@@ -442,65 +409,6 @@ func (k Sending) ListHolds(ctx context.Context, f tenant.HoldFilter, page master
 	return out, EncodeCursor(ListHolds, binding, last.ID), nil
 }
 
-// HoldRecordsOwed implements tenant.Holds.
-func (k Sending) HoldRecordsOwed(ctx context.Context, limit int) ([]tenant.HoldRecordOwed, error) {
-	if limit < 1 || limit > tenant.MaxHoldList {
-		return nil, fault.New(fault.Invalid, "a limit of hold records is 1 to 1000")
-	}
-	var out []tenant.HoldRecordOwed
-	err := k.Host.Read(ctx, "the hold records owed cannot be read", func(tx SendingTx) error {
-		out = nil
-		type owed struct{ id, storage string }
-		var rows []owed
-		if err := tx.Query(ctx, `SELECT r.hold_id, r.storage FROM hold_records AS r JOIN holds AS h ON h.id = r.hold_id
-			WHERE r.written_seq < h.seq ORDER BY r.hold_id, r.storage LIMIT ?`, []any{limit}, func(r Row) error {
-			var o owed
-			err := r.Scan(&o.id, &o.storage)
-			rows = append(rows, o)
-			return err
-		}); err != nil {
-			return err
-		}
-		for _, o := range rows {
-			h, _, err := holdIn(ctx, tx, o.id, "")
-			if err != nil {
-				return err
-			}
-			out = append(out, tenant.HoldRecordOwed{Hold: h, Storage: o.storage})
-		}
-		return nil
-	})
-	return out, err
-}
-
-// MarkHoldRecord implements tenant.Holds.
-func (k Sending) MarkHoldRecord(ctx context.Context, id, storage string, seq int64) error {
-	if err := tenant.ValidateHoldID(id); err != nil {
-		return err
-	}
-	if err := tenant.ValidateName("storage", storage); err != nil {
-		return err
-	}
-	if seq < 1 {
-		return fault.New(fault.Invalid, "a hold's count is 1 or more")
-	}
-	return k.Host.Write(ctx, "the hold record cannot be marked", func(tx SendingTx) error {
-		h, found, err := holdIn(ctx, tx, id, k.D.Lock)
-		if err != nil {
-			return err
-		}
-		if !found || !slices.Contains(h.Storages, storage) {
-			return notFound("the hold is not on this storage")
-		}
-		if seq > h.Seq {
-			return tenant.Precondition("the hold has not reached this count")
-		}
-		_, err = tx.Exec(ctx, `UPDATE hold_records SET written_seq = ? WHERE hold_id = ? AND storage = ? AND written_seq < ?`, seq, id,
-			storage, seq)
-		return err
-	})
-}
-
 // AdoptHold implements tenant.Holds.
 func (k Sending) AdoptHold(ctx context.Context, f tenant.HoldFound, audit master.AuditEntry) (tenant.Hold, bool, error) {
 	if err := f.Validate(); err != nil {
@@ -525,11 +433,14 @@ func (k Sending) AdoptHold(ctx context.Context, f tenant.HoldFound, audit master
 			return nil
 		}
 		t := f.Target
+		// The hold goes on from the record's count, so the next change's
+		// records are told from the one found, which the storage keeps.
+		seq := max(f.Seq, 1)
 		if _, err := tx.Exec(ctx, `INSERT INTO holds (id, level, subject_label, session_label, scan_label, subject_folded, session_folded,
 			scan_folded, reason, state, placed_by, placed_at, release_reason, released_by, released_at, found_on_storage, seq)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, '', '', NULL, ?, 1)`, f.ID, t.Level(), t.Subject, t.Session, t.Scan,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, '', '', NULL, ?, ?)`, f.ID, t.Level(), t.Subject, t.Session, t.Scan,
 			label.Fold(t.Subject), label.Fold(t.Session), label.Fold(t.Scan), f.Reason, f.PlacedBy, k.D.Time(f.Placed),
-			k.D.Bool(true)); err != nil {
+			k.D.Bool(true), seq); err != nil {
 			return err
 		}
 		// The storages its target touches now are owed its record; the one
@@ -543,12 +454,12 @@ func (k Sending) AdoptHold(ctx context.Context, f tenant.HoldFound, audit master
 			storages = append(storages, tenant.HoldStorage{Name: f.Storage})
 		}
 		for _, s := range storages {
-			written := 0
+			written, sealed := int64(0), int64(0)
 			if s.Name == f.Storage {
-				written = 1
+				written, sealed = seq, int64(f.SealVersion)
 			}
-			if _, err := tx.Exec(ctx, `INSERT INTO hold_records (hold_id, storage, written_seq) VALUES (?, ?, ?)`, f.ID, s.Name,
-				written); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO hold_records (hold_id, storage, written_seq, seal_version) VALUES (?, ?, ?, ?)`, f.ID,
+				s.Name, written, sealed); err != nil {
 				return err
 			}
 		}

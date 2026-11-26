@@ -194,7 +194,11 @@ func TestAnObjectFoundAgainIsRemovedInsideTheGate(t *testing.T) {
 	if _, ok := r.objects()[back]; ok {
 		t.Fatalf("%s was not removed by the purge", back)
 	}
-	// The object comes back, as a copy put while the purge ran would.
+	// The object comes back, as a copy put while the purge ran would, in
+	// the directory the purge emptied and removed.
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(r.root, filepath.FromSlash(back))), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(r.root, filepath.FromSlash(back)), []byte(body), 0o600); err != nil { // #nosec G703 -- the test's own storage and key.
 		t.Fatal(err)
 	}

@@ -35,6 +35,18 @@ func (f fakeKeys) RecordMAC(version uint32, message []byte) ([]byte, error) {
 	return m.Sum(nil), nil
 }
 
+// HoldMAC implements Keyring, under keys of its own: the version's key with
+// a byte appended, so a hold record's MAC is never a correction record's.
+func (f fakeKeys) HoldMAC(version uint32, message []byte) ([]byte, error) {
+	k, ok := f.keys[version]
+	if !ok {
+		return nil, fmt.Errorf("no key version %d", version)
+	}
+	m := hmac.New(sha256.New, append(bytes.Clone(k), 'h'))
+	m.Write(message)
+	return m.Sum(nil), nil
+}
+
 // OwnerMAC implements OwnerKeyring, under keys of its own: the version's
 // key with its bytes inverted, so an owner record's MAC is never a
 // correction record's.
@@ -227,3 +239,6 @@ func (f *fakeKeysNil) SealVersion() uint32 { return 0 }
 
 // RecordMAC implements Keyring and is never reached.
 func (f *fakeKeysNil) RecordMAC(uint32, []byte) ([]byte, error) { return nil, errors.New("no key") }
+
+// HoldMAC implements Keyring and is never reached.
+func (f *fakeKeysNil) HoldMAC(uint32, []byte) ([]byte, error) { return nil, errors.New("no key") }

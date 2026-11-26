@@ -64,9 +64,19 @@ type tenantWork struct {
 	// which a build for the proofs of retention moves.
 	now func() time.Time
 	// checkFence is the registry's fence (registry.Registry.CheckFence),
-	// which every write of a tenant's background work asks first
-	// (fencedDB, fencedOpen); nil asks nothing.
+	// which every write of a tenant's background work to its database asks
+	// first (fencedDB); nil asks nothing. It reads every storage's owner
+	// record, a request per storage on S3.
 	checkFence func(name string) error
+	// checkState is the registry's state of the tenant as it holds it now
+	// (registry.Registry.Store: no owner record read), which every write of
+	// the background work to a storage asks first (fencedOpen); nil asks
+	// nothing. Asking checkFence there would cost a request per storage for
+	// every object put; the state is what the last fence check found, and
+	// the database write that ends each step (an end of a copy, a repair
+	// completed) asks checkFence itself, so a tenant another installation
+	// took over records nothing more of what was put.
+	checkState func(name string) error
 	// replicaIdle is the replicators' wait after a claim that found
 	// nothing; 0 is replicate.DefaultIdle.
 	replicaIdle time.Duration
@@ -162,6 +172,10 @@ func newTenantWork(d Deps, reg *registry.Registry, cleanups *place.Cleanups, ins
 	return &tenantWork{d: d, reg: reg, tenants: registryTenants{master: d.Master, registry: reg}, values: values,
 		opener: writingOpener(values, d.Keys, cleanups), installation: installation, confirmKey: key, owners: owners,
 		owner: workerName(host, os.Getpid()), log: log, interval: TenantWorkInterval, now: clock.Now, checkFence: reg.CheckFence,
+		checkState: func(name string) error {
+			_, err := reg.Store(name)
+			return err
+		},
 		switchers: map[string]*tenantSwitcher{}, sets: map[string]*tenantSet{}, ctx: ctx, cancel: cancel}, nil
 }
 
@@ -430,8 +444,8 @@ func (w *tenantWork) openFor(t place.Tenant, st tenant.Pipeline) func(ctx contex
 	}
 }
 
-// fenceOf returns the fence every write of the tenant's background work
-// asks (checkFence), or nil when there is none.
+// fenceOf returns the fence every write of the tenant's background work to
+// its database asks (checkFence), or nil when there is none.
 func (w *tenantWork) fenceOf(name string) func() error {
 	if w.checkFence == nil {
 		return nil
@@ -439,10 +453,20 @@ func (w *tenantWork) fenceOf(name string) func() error {
 	return func() error { return w.checkFence(name) }
 }
 
+// stateOf returns the check every write of the tenant's background work to
+// a storage asks (checkState), or nil when there is none.
+func (w *tenantWork) stateOf(name string) func() error {
+	if w.checkState == nil {
+		return nil
+	}
+	return func() error { return w.checkState(name) }
+}
+
 // startSet starts the background work of the tenant named over st, unless
 // the tenant's work was taken away since epoch was read (epochOf). Every
-// write the work makes, to st or to a storage, asks the registry's fence
-// first (fencedDB, fencedOpen).
+// write the work makes to st asks the registry's fence first (fencedDB),
+// and every write to a storage the registry's state of the tenant
+// (fencedOpen, stateOf).
 func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epoch uint64) error {
 	id, err := w.tenantID(ctx, name)
 	if err != nil {
@@ -452,10 +476,10 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	if err != nil {
 		return err
 	}
-	fence := w.fenceOf(name)
-	db := fenceDB(st, fence)
+	db := fenceDB(st, w.fenceOf(name))
+	state := w.stateOf(name)
 	t := place.TenantOf(id, name, st)
-	open := fencedOpen(w.openFor(t, st), fence)
+	open := fencedOpen(w.openFor(t, st), state)
 	log := w.log.With("tenant", name)
 	repl, err := replicate.New(replicate.Config{Queue: db, Catalog: db, Now: w.now, Owner: w.owner, Log: log, Idle: w.replicaIdle,
 		Open: func(ctx context.Context, storage string) (blob.Store, error) { return open(ctx, storage) }})
@@ -471,7 +495,7 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 			return nil, err
 		}
 		return w.opener.OpenBeside(ctx, t, row)
-	}, fence)
+	}, state)
 	recalls, err := recall.New(recall.Config{Queue: db, Now: w.now, Log: log,
 		Open: func(ctx context.Context, storage string) (blob.Store, error) { return openBeside(ctx, storage) }})
 	if err != nil {
@@ -501,6 +525,7 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	run(r.autoLoop)
 	ret := &tenantRetention{w: w, name: name, st: db, base: st, log: log}
 	run(ret.run)
+	run(w.holdRecords(id, name, db, open, sw.Gate(), log))
 	return nil
 }
 

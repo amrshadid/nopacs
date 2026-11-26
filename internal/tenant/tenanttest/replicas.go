@@ -64,6 +64,7 @@ func runReplication(t *testing.T, open OpenEvents, scratch Scratch) {
 		{"SidecarDigest", testSidecarDigest},
 		{"ForgetSidecar", testForgetSidecar},
 		{"PurgeKeepsNoMetadataDigest", testPurgeKeepsNoMetadataDigest},
+		{"PreparedKeepsTheMetadataDigest", testPreparedKeepsTheMetadataDigest},
 		{"VerifiedFollowsTheScan", testVerifiedFollowsTheScan},
 		{"ReplicaScanDamageKeepsBothFindings", testReplicaScanDamageKeepsBothFindings},
 		{"RebuildFromStorage", testRebuildFromStorage},

@@ -16,7 +16,6 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
-	"github.com/amrshadid/nopacs/internal/receive/sidecar"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -151,9 +150,7 @@ func (e *Engine) purge(ctx context.Context, c tenant.Correction) (tenant.Correct
 	} else {
 		for _, s := range scans {
 			for _, name := range copies.of(s.Storage) {
-				if st, err := e.cfg.OpenStorage(ctx, name); err == nil {
-					e.pruneDirs(ctx, st, s.Path)
-				}
+				e.pruneDirs(ctx, name, s.Path)
 			}
 		}
 	}
@@ -170,22 +167,34 @@ func (e *Engine) purge(ctx context.Context, c tenant.Correction) (tenant.Correct
 // replica that holds none of the scan yet has nothing to write); the end
 // queues the scan for the replicas, which check them against the new
 // manifest.
+//
+// The write gates of every copy are held before the scan's lock is taken,
+// and released after the last write: a reception, the frames pass and a
+// replace enter the gate first and then take the scan's lock, so a purge
+// that took the lock first and then waited at a gate a switch paused would
+// wait on a reception that waits on the purge, until the gate refused it.
 func (e *Engine) purgeInstance(ctx context.Context, c tenant.Correction, s tenant.CorrectionScan, copies copySet) (tenant.Correction, error) {
 	mk, err := layout.ManifestKey(s.Path)
 	if err != nil {
 		return c, fault.Wrap(fault.Internal, err, "a manifest's key cannot be made")
 	}
+	release, err := e.hold(ctx, copies.of(s.Storage))
+	if err != nil {
+		return c, e.waitStorage(ctx, c, err)
+	}
+	defer release()
+	ctx = holding(ctx, copies.of(s.Storage))
 	unlock := e.lockScan(s.Storage, mk)
 	defer unlock()
 	if err := e.purgeTargets(ctx, c, copies); err != nil {
 		return c, err
 	}
-	before, after, err := e.rewriteMetaLocked(ctx, s.Storage, s.Path, c.Target.Instance, nil, nil)
+	before, after, metaSum, err := e.rewriteMetaLocked(ctx, s.Storage, s.Path, c.Target.Instance, nil, nil)
 	if err != nil {
 		return c, err
 	}
 	for _, name := range copies.replicas(s.Storage) {
-		_, _, err := e.rewriteMetaLocked(ctx, name, s.Path, c.Target.Instance, nil, nil)
+		_, _, _, err := e.rewriteMetaLocked(ctx, name, s.Path, c.Target.Instance, nil, nil)
 		if err != nil && fault.KindOf(err) != fault.NotFound {
 			return c, e.waitStorage(ctx, c, err)
 		}
@@ -205,7 +214,12 @@ func (e *Engine) purgeInstance(ctx context.Context, c tenant.Correction, s tenan
 		// one from before the delete.
 		before = tenant.SHA256{}
 	}
-	return e.finish(ctx, c, after, before)
+	f, err := e.finish(ctx, c, after, before)
+	if err != nil {
+		return f, err
+	}
+	e.recordMeta(ctx, s, after, metaSum)
+	return f, nil
 }
 
 // finish checks every key the purge removed absent on every copy
@@ -350,7 +364,7 @@ func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.
 			return pending(out), fault.New(fault.Precondition, "the purge is held")
 		}
 		var removals []blob.Removal
-		err := e.removeGated(ctx, name, func(st blob.Store) error {
+		err := e.gated(ctx, name, func(st blob.Store) error {
 			var err error
 			removals, err = e.purgeKey(ctx, st, key)
 			return err
@@ -380,25 +394,6 @@ func (e *Engine) purgeTarget(ctx context.Context, c tenant.Correction, t tenant.
 func pending(s tenant.PurgeSettled) tenant.PurgeSettled {
 	s.Outcome = tenant.OutcomePending
 	return s
-}
-
-// removeGated runs remove on the storage named inside its write gate
-// (Config.Pause): the gate is entered first, the storage opened only once
-// admitted, and the gate released after the removal. A switch swaps the
-// storage's place while the gate holds its writes, so a store opened before
-// the gate admitted may be the place the name no longer names, and a
-// removal through it would land on the old place.
-func (e *Engine) removeGated(ctx context.Context, storage string, remove func(st blob.Store) error) error {
-	release, err := e.enter(ctx, storage)
-	if err != nil {
-		return err
-	}
-	defer release()
-	st, err := e.cfg.OpenStorage(ctx, storage)
-	if err != nil {
-		return err
-	}
-	return remove(st)
 }
 
 // purgeKey removes one key through its storage's Purge and answers what
@@ -438,7 +433,7 @@ func (e *Engine) purgeOlderMeta(ctx context.Context, c tenant.Correction, storag
 			return fault.Wrap(fault.Internal, err, "a scan's key cannot be made")
 		}
 		var removals []blob.Removal
-		err = e.removeGated(ctx, storage, func(st blob.Store) error {
+		err = e.gated(ctx, storage, func(st blob.Store) error {
 			vp, ok := st.(blob.VersionPurger)
 			if !ok {
 				return nil
@@ -470,7 +465,7 @@ func (e *Engine) repurge(ctx context.Context, now time.Time) error {
 	for _, o := range due {
 		var r blob.Removal
 		purged := false
-		err := e.removeGated(ctx, o.Storage, func(st blob.Store) error {
+		err := e.gated(ctx, o.Storage, func(st blob.Store) error {
 			vp, ok := st.(blob.VersionPurger)
 			if !ok {
 				return nil
@@ -557,12 +552,24 @@ func (e *Engine) seedTargets(ctx context.Context, c tenant.Correction, scans []t
 	return nil
 }
 
-// pruneDirs removes, on a storage whose directories outlive their objects,
+// pruneDirs removes, on the storage named, inside its write gate (gated),
+// the directories of a scan's path a purge left empty (pruneOn). A storage
+// that cannot be opened or admitted keeps them: a directory is never
+// listed as an object, and the next purge or sweep of the path tries again.
+func (e *Engine) pruneDirs(ctx context.Context, storage string, p label.Path) {
+	_ = e.gated(ctx, storage, func(st blob.Store) error {
+		e.pruneOn(ctx, st, p)
+		return nil
+	})
+}
+
+// pruneOn removes, on a storage whose directories outlive their objects,
 // the directories of a scan's path a purge or a sweep left empty, and those
 // above them left empty: a directory named for a withdrawn subject would
 // otherwise still name it. Only empty ones go; a failure is logged, since
-// the objects are gone and a directory is never listed as one.
-func (e *Engine) pruneDirs(ctx context.Context, st blob.Store, p label.Path) {
+// the objects are gone and a directory is never listed as one. The caller
+// holds the storage's write gate.
+func (e *Engine) pruneOn(ctx context.Context, st blob.Store, p label.Path) {
 	pr, ok := st.(blob.DirPruner)
 	if !ok {
 		return
@@ -578,83 +585,4 @@ func (e *Engine) pruneDirs(ctx context.Context, st blob.Store, p label.Path) {
 			e.cfg.Log.Warn("an emptied directory could not be removed", "error", fault.Message(err))
 		}
 	}
-}
-
-// rewriteMeta writes a scan's manifest and metadata again at their keys
-// under the scan's lock (rewriteMetaLocked), and answers the new
-// manifest's SHA-256.
-func (e *Engine) rewriteMeta(ctx context.Context, storage string, p label.Path, drop string, add *sidecar.Instance,
-	file *manifest.File) (tenant.SHA256, error) {
-	mk, err := layout.ManifestKey(p)
-	if err != nil {
-		return tenant.SHA256{}, fault.Wrap(fault.Internal, err, "a manifest's key cannot be made")
-	}
-	unlock := e.lockScan(storage, mk)
-	defer unlock()
-	_, after, err := e.rewriteMetaLocked(ctx, storage, p, drop, add, file)
-	return after, err
-}
-
-// rewriteMetaLocked writes a scan's manifest and metadata again at their
-// keys: the instance drop left out (or replaced by add and file, a
-// replace's new revision), and answers the SHA-256 of the manifest it read
-// and of the one it wrote. The metadata is written first: the manifest
-// names what the scan holds. The caller holds the scan's lock.
-func (e *Engine) rewriteMetaLocked(ctx context.Context, storage string, p label.Path, drop string, add *sidecar.Instance,
-	file *manifest.File) (before, after tenant.SHA256, err error) {
-	st, err := e.cfg.OpenStorage(ctx, storage)
-	if err != nil {
-		return before, after, err
-	}
-	mk, _ := layout.ManifestKey(p)
-	sk, _ := layout.MetadataKey(p)
-	raw, err := readAll(ctx, st, mk, int64(manifest.MaxBytes))
-	if err != nil {
-		return before, after, err
-	}
-	before = sha256.Sum256(raw)
-	if err := e.seams.at("meta-read"); err != nil {
-		return before, after, err
-	}
-	m, err := manifest.Decode(bytes.NewReader(raw))
-	if err != nil {
-		return before, after, fault.Wrap(fault.Unavailable, err, "a scan's manifest cannot be read")
-	}
-	var files []manifest.File
-	for _, f := range m.Files {
-		if f.SOPInstanceUID != drop {
-			files = append(files, f)
-		}
-	}
-	if file != nil {
-		files = append(files, *file)
-	}
-	old, err := st.Read(ctx, sk, 0, -1)
-	switch {
-	case fault.KindOf(err) == fault.NotFound:
-	case err != nil:
-		return before, after, err
-	default:
-		var buf bytes.Buffer
-		var added []sidecar.Instance
-		if add != nil {
-			added = append(added, *add)
-		}
-		_, merr := sidecar.Merge(&buf, old, sidecar.List(added), func(uid string) bool { return uid == drop })
-		_ = old.Close()
-		if merr != nil {
-			return before, after, fault.Wrap(fault.Unavailable, merr, "a scan's metadata cannot be written again")
-		}
-		if _, err := st.Put(ctx, sk, &buf); err != nil {
-			return before, after, err
-		}
-	}
-	b, err := manifest.Encode(manifest.Manifest{Files: files})
-	if err != nil {
-		return before, after, fault.Wrap(fault.Internal, err, "a scan's manifest cannot be made")
-	}
-	if _, err := st.Put(ctx, mk, bytes.NewReader(b)); err != nil {
-		return before, after, err
-	}
-	return before, sha256.Sum256(b), nil
 }

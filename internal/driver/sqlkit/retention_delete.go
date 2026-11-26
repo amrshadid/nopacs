@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -77,8 +78,11 @@ func (k Sending) checkRetentionDelete(ctx context.Context, tx SendingTx, p tenan
 		return tenant.HoldRefusalError(id)
 	}
 	studies := r.targetStudies()
+	c := tenant.RetentionDeleteCheck{Origin: p.Retention, Override: p.OverrideRetention, Now: p.Now}
 	if p.Retention != nil {
-		// A disposal's delete takes one session.
+		// A disposal's delete takes one session, and the check refuses it
+		// unless the target holds exactly the one the job listed.
+		c.Studies = studies
 		studies = studies[:min(len(studies), 1)]
 	}
 	rows, err := retentionRowsIn(ctx, tx, studies)
@@ -89,7 +93,6 @@ func (k Sending) checkRetentionDelete(ctx context.Context, tx SendingTx, p tenan
 	if err != nil {
 		return err
 	}
-	c := tenant.RetentionDeleteCheck{Origin: p.Retention, Override: p.OverrideRetention, Now: p.Now}
 	for _, study := range studies {
 		row, found := rows[study]
 		s := tenant.SessionKept{Found: found, Stored: row.times(), Exempt: row.exempt}
@@ -110,6 +113,32 @@ func (k Sending) checkRetentionDelete(ctx context.Context, tx SendingTx, p tenan
 		c.Paused, c.Effective = clock.Paused, clock.Effective(p.Now)
 	}
 	return tenant.CheckRetentionDelete(c)
+}
+
+// checkDisposeJobOpen refuses a disposal's step (ErrDisposeJobEnded) unless
+// the dispose job of that id exists and has not ended. The job's row is
+// read under the dialect's row lock, which a cancel's update of it takes
+// too, so a cancel committed before this transaction reads the row stops
+// the step, and one after it waits for the step's commit: a canceled job
+// never deletes another session.
+func (k Sending) checkDisposeJobOpen(ctx context.Context, tx SendingTx, id string) error {
+	if err := master.ValidateID("dispose job id", id); err != nil {
+		return err
+	}
+	if has, err := exists(ctx, tx, `SELECT 1 FROM dispose_jobs WHERE job_id = ?`, id); err != nil || !has {
+		if err != nil {
+			return err
+		}
+		return tenant.DisposeJobEndedError()
+	}
+	j, err := jobInTx(ctx, tx, id, k.D.Lock)
+	if err != nil {
+		return err
+	}
+	if j.job.State.Ended() {
+		return tenant.DisposeJobEndedError()
+	}
+	return nil
 }
 
 // markRetention records on a prepared delete its origin, rule and due time

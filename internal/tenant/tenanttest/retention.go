@@ -39,6 +39,9 @@ func runRetention(t *testing.T, open OpenEvents) {
 		{"DisposalPreview", testDisposalPreview},
 		{"DisposalTokenKeepsItsTime", testDisposalTokenKeepsItsTime},
 		{"DisposalDeletes", testDisposalDeletes},
+		{"DisposalEnds", testDisposalEnds},
+		{"DisposalAfterRelabel", testDisposalAfterRelabel},
+		{"DisposalStopsWhenEnded", testDisposalStopsWhenEnded},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

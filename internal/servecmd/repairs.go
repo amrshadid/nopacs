@@ -53,6 +53,10 @@ type tenantRepairs struct {
 	// refused is the lease last refused, so the refusal is logged once per
 	// value, not once a claim.
 	refused time.Duration
+	// largest and largestAt are the largest instance the catalog holds and
+	// when it was read (largestHeld).
+	largest   int64
+	largestAt time.Time
 }
 
 // run claims and runs the tenant's repair jobs until ctx ends. The lease is
@@ -104,7 +108,11 @@ func (r *tenantRepairs) runner(ctx context.Context) (*repair.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := checkRepairLease(ctx, r.st, lease); err != nil {
+	held, err := r.largestHeld(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkRepairLease(ctx, r.st, lease, held); err != nil {
 		if lease != r.refused {
 			r.refused = lease
 			r.log.Error("repairs: replica.repair-lease is refused; no repair runs until it is lengthened", "lease", lease.String(),
@@ -117,17 +125,37 @@ func (r *tenantRepairs) runner(ctx context.Context) (*repair.Runner, error) {
 		Pause: r.gate, Log: r.log})
 }
 
+// largestHeld returns the largest instance the tenant's catalog holds
+// (tenant.InstanceSizes), read again at most every largestHeldInterval:
+// the read goes through every instance row, too costly before each claim,
+// and an instance larger than every receiver's bound arrives only through
+// a bound since lowered or an import, both rare.
+func (r *tenantRepairs) largestHeld(ctx context.Context) (int64, error) {
+	now := r.w.now()
+	if !r.largestAt.IsZero() && now.Sub(r.largestAt) < largestHeldInterval && !now.Before(r.largestAt) {
+		return r.largest, nil
+	}
+	n, err := r.st.LargestInstance(ctx)
+	if err != nil {
+		return 0, err
+	}
+	r.largest, r.largestAt = n, now
+	return n, nil
+}
+
+// largestHeldInterval is how long the largest instance read is kept.
+const largestHeldInterval = time.Hour
+
 // checkRepairLease refuses a lease too short to put the largest object the
 // tenant may hold at repairPutFloor: each put of a repair has the lease
-// less repair.DefaultPutMargin, and the largest object is bounded by the
-// largest file a receiver of the tenant accepts, of every type (DIMSE,
-// STOW-RS and import receivers alike are listed, each with its own
-// MaxFileBytes), or tenant.DefaultMaxFileBytes when it has none. An
-// instance archived under a larger bound since lowered is not counted: the
-// catalog offers no read of its largest instance yet. No speed of the
-// storage is measured yet, so the floor is a fixed one rather than the
-// storage's own.
-func checkRepairLease(ctx context.Context, st tenant.Pipeline, lease time.Duration) error {
+// less repair.DefaultPutMargin, and the largest object is the larger of
+// held, the largest instance the catalog holds (one archived under a
+// bound since lowered counts), and the largest file a receiver of the
+// tenant accepts, of every type (DIMSE, STOW-RS and import receivers alike
+// are listed, each with its own MaxFileBytes), or tenant.DefaultMaxFileBytes
+// when it has none. No speed of the storage is measured yet, so the floor
+// is a fixed one rather than the storage's own.
+func checkRepairLease(ctx context.Context, st tenant.Pipeline, lease time.Duration, held int64) error {
 	largest := int64(0)
 	page := master.Page{Limit: master.MaxPageLimit}
 	for {
@@ -146,11 +174,15 @@ func checkRepairLease(ctx context.Context, st tenant.Pipeline, lease time.Durati
 	if largest == 0 {
 		largest = tenant.DefaultMaxFileBytes
 	}
+	what := "the largest file a receiver of the tenant accepts"
+	if held > largest {
+		largest, what = held, "the largest instance the tenant holds"
+	}
 	window := lease - repair.DefaultPutMargin
 	need := time.Duration(largest/repairPutFloor+1) * time.Second
 	if window < need {
 		return fault.New(fault.Invalid, "a repair's put has "+window.String()+" within a lease of "+lease.String()+
-			", and the largest file a receiver of the tenant accepts ("+strconv.FormatInt(largest, 10)+" bytes) needs "+need.String()+
+			", and "+what+" ("+strconv.FormatInt(largest, 10)+" bytes) needs "+need.String()+
 			" at 100 MiB a second; set replica.repair-lease to at least "+(need+repair.DefaultPutMargin).String())
 	}
 	return nil

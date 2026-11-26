@@ -184,38 +184,70 @@ func (r *tenantRetention) workDisposals(ctx context.Context, es *correct.Engines
 	return errors.Join(errs...)
 }
 
-// workDisposal works one dispose job.
+// workDisposal works one dispose job. The job is read again before each
+// session, and the work stops once it has ended: a cancel stops the job
+// within one session, and the delete's prepare refuses, in its own
+// transaction, a job that ended after this read (RetentionOrigin.JobID).
 func (r *tenantRetention) workDisposal(ctx context.Context, es *correct.Engines, id string) error {
 	dj, err := r.st.DisposeJob(ctx, id)
 	if err != nil {
 		return err
 	}
 	var errs []error
-	for _, s := range dj.Sessions {
-		if s.Outcome != tenant.DisposePending {
-			continue
-		}
+	for i := range dj.Sessions {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if dj.Sessions[i].Outcome != tenant.DisposePending {
+			continue
+		}
+		if i > 0 {
+			if dj, err = r.st.DisposeJob(ctx, id); err != nil {
+				return errors.Join(append(errs, err)...)
+			}
+		}
+		if dj.Job.State.Ended() {
+			return nil
+		}
+		s := dj.Sessions[i]
+		if s.Outcome != tenant.DisposePending {
+			continue
+		}
 		outcome, correction, err := r.dispose(ctx, es, dj, s)
+		if errors.Is(err, tenant.ErrDisposeJobEnded) {
+			return nil
+		}
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		if err := r.st.RecordDisposed(ctx, id, s.StudyUID, outcome, correction); err != nil {
+		err = r.st.RecordDisposed(ctx, id, s.StudyUID, outcome, correction)
+		switch {
+		case errors.Is(err, tenant.ErrDisposeJobEnded):
+			return nil
+		case err != nil:
 			errs = append(errs, err)
 		}
 	}
-	return errors.Join(errs...)
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	// Every session has its outcome: the job ends, so the rule's next
+	// daily pass may queue another (QueueDispose refuses one while a job
+	// of the rule has not ended).
+	if _, err := r.st.EndDisposeJob(ctx, id, r.w.now()); err != nil {
+		return err
+	}
+	return nil
 }
 
 // dispose deletes one session of a dispose job through the corrections
 // engine, as a person's delete is made, with the rule and due time it was
 // listed under; the store checks again, in the delete's transaction, that
-// it is due under the rule and not held. A session held, not due, or gone
-// is a skip; any other failure is answered, and the session is tried again
-// at the next pass.
+// it is due under the rule, not held, and that the job has not ended. A
+// dispose job is not tried again, so every refusal that would not pass by
+// itself is a skip with its reason (skipOf); only a temporary failure is
+// answered, and the session is tried again at the next pass.
 func (r *tenantRetention) dispose(ctx context.Context, es *correct.Engines, dj tenant.DisposeJob, s tenant.DisposeSession) (tenant.DisposeOutcome, string, error) {
 	base := r.base
 	if base == nil {
@@ -228,11 +260,8 @@ func (r *tenantRetention) dispose(ctx context.Context, es *correct.Engines, dj t
 	defer release()
 	target := tenant.CorrectionTarget{Subject: s.SubjectLabel, Session: s.SessionLabel}
 	p, err := e.Preview(ctx, target)
-	switch {
-	case fault.KindOf(err) == fault.NotFound:
-		return tenant.DisposeSkippedDeleted, "", nil
-	case err != nil:
-		return "", "", err
+	if err != nil {
+		return r.skipOf(ctx, err)
 	}
 	reason := dj.Reason
 	if reason == "" {
@@ -240,17 +269,42 @@ func (r *tenantRetention) dispose(ctx context.Context, es *correct.Engines, dj t
 	}
 	now := r.w.now()
 	c, err := e.Delete(ctx, correct.DeleteRequest{Target: target, Reason: reason, Confirm: p.Confirm, KeyID: dj.Job.CreatedByKeyID,
-		Retention: &tenant.RetentionOrigin{Rule: dj.Rule, Due: s.Due, Scheduled: dj.Scheduled},
+		Retention: &tenant.RetentionOrigin{Rule: dj.Rule, StudyUID: s.StudyUID, Due: s.Due, Scheduled: dj.Scheduled, JobID: dj.Job.ID},
 		Audit:     serverAudit(r.name, disposeMethod, s.StudyUID, now)})
+	if err != nil {
+		return r.skipOf(ctx, err)
+	}
+	return tenant.DisposeDeleted, c.ID, nil
+}
+
+// skipOf answers what a refusal of a session's delete makes of the session:
+// the skip for its reason, or the error itself when it may pass by itself
+// (a database, storage or engine not answering, the call's own end,
+// retention paused for its clock, which keeps the job waiting by design)
+// and when the job has ended (the caller stops). Every other refusal is a
+// skip: a session left without an outcome would keep the job, and with it
+// the rule's next job, from ever ending, for as long as, say, a hold keeps
+// another correction of the session purging. A refusal of no known reason
+// is logged with its message, which the skip's fixed reason does not keep.
+func (r *tenantRetention) skipOf(ctx context.Context, err error) (tenant.DisposeOutcome, string, error) {
 	switch {
+	case ctx.Err() != nil, errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded),
+		errors.Is(err, tenant.ErrDisposeJobEnded), errors.Is(err, tenant.ErrRetentionPaused):
+		return "", "", err
 	case errors.Is(err, tenant.ErrHeld):
 		return tenant.DisposeSkippedHeld, "", nil
 	case errors.Is(err, tenant.ErrNotDue):
 		return tenant.DisposeSkippedNotDue, "", nil
-	case fault.KindOf(err) == fault.NotFound:
+	case errors.Is(err, tenant.ErrOverlap):
+		return tenant.DisposeSkippedOverlap, "", nil
+	}
+	switch fault.KindOf(err) {
+	case fault.NotFound:
 		return tenant.DisposeSkippedDeleted, "", nil
-	case err != nil:
+	case fault.Unavailable, fault.Exhausted:
 		return "", "", err
 	}
-	return tenant.DisposeDeleted, c.ID, nil
+	r.log.Warn("retention: a session's delete was refused; the dispose job skips it", "kind", fault.KindOf(err).String(),
+		"reason", fault.Message(err))
+	return tenant.DisposeSkippedRefused, "", nil
 }

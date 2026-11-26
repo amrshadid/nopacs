@@ -11,6 +11,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/place"
 	"github.com/amrshadid/nopacs/internal/receive"
+	"github.com/amrshadid/nopacs/internal/receive/supervise"
 	"github.com/amrshadid/nopacs/internal/storageswitch"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -230,7 +231,11 @@ func (w *tenantWork) switcherFor(ctx context.Context, name string, st tenantDB) 
 		Reseal: func(ctx context.Context, primary, replica tenant.Storage) ([]byte, []byte, error) {
 			return place.SwapSecrets(ctx, w.d.Keys, t, primary, replica)
 		},
-		ConfirmKey:       w.confirmKey,
+		ConfirmKey: w.confirmKey,
+		// A rebuild compare built from the replica alone is the check
+		// without the primary a switch asks for (its empty-compare
+		// blocker): the job's rebuild names that one storage.
+		CompareFrom:      compareFrom,
 		Wake:             func() { w.WakeReplicas(name) },
 		WriteRecordsOwed: func(ctx context.Context, _ string) error { return w.writeRecordsOwed(ctx, name, st) },
 		Clock:            switchClock{},
@@ -251,6 +256,32 @@ func (w *tenantWork) switcherFor(ctx context.Context, name string, st tenantDB) 
 	}
 	w.switchers[name] = &tenantSwitcher{store: st, sw: sw}
 	return sw, nil
+}
+
+// switchGate returns the gate of the switches of the tenant named, which
+// the receivers' supervisor reads at each check of space
+// (supervise.Config.Switches): a receiver whose storage switches refuses
+// new associations, counted on the gate, rather than take files the
+// pipeline would hold at the gate. A tenant with no switcher yet (its
+// pipeline not started, which makes it) has none, so nothing switches.
+func (w *tenantWork) switchGate(name string) supervise.SwitchGate {
+	w.mu.Lock()
+	s := w.switchers[name]
+	w.mu.Unlock()
+	if s == nil {
+		return nil
+	}
+	return s.sw.Gate()
+}
+
+// compareFrom answers the one storage a rebuild compare job read
+// (tenant.RebuildJob.FromStorage), "" for one of every storage
+// (storageswitch.CompareFrom).
+func compareFrom(j tenant.Job) string {
+	if j.Rebuild == nil {
+		return ""
+	}
+	return j.Rebuild.FromStorage
 }
 
 // receptionWrites returns what the reception pipeline of the tenant named is

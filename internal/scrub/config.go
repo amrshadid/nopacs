@@ -179,7 +179,7 @@ type Config struct {
 	// Verifications, when set, records when each scan was last read whole
 	// on each storage, the ground of a storage's coverage (Coverage). Nil
 	// records nothing.
-	Verifications func(st tenant.Store) VerificationRecorder
+	Verifications func(st tenant.Store) tenant.VerificationRecorder
 	// Logger receives the supervisor's lines: names, labels, ids, counts
 	// and fixed phrases, never a key or a UID. Nil discards them.
 	Logger *slog.Logger

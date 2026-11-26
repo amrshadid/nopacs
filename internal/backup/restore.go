@@ -135,6 +135,16 @@ type TenantResult struct {
 	// Relinked counts the rows a delete in its grace period hid that were
 	// pointed at their parents' new ids (tenant.Restoring.RelinkHidden).
 	Relinked int64
+	// HoldsAdopted are the ids of the holds made active again from their
+	// records found active on the storages with no row: holds placed after
+	// the recovery point (holds.Adopt).
+	HoldsAdopted []string
+	// HoldsRefused counts the hold records that make no hold: their MAC
+	// does not verify for the tenant under the key file, or they are not in
+	// their form; HoldsRefusedRecords names the first of them (at most
+	// maxDisagreements), as "<storage>: <key>".
+	HoldsRefused        int
+	HoldsRefusedRecords []string
 	// Loss is what could not be brought back.
 	Loss TenantLoss
 	// Credentials are the TLS files its receivers and senders name that the

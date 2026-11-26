@@ -316,13 +316,18 @@ type SidecarRewrites interface {
 	// recorded: a series the catalog does not hold, a scan now on another
 	// storage, or one with no manifest digest records nothing, and so does
 	// a scan an instance delete's purge is rewriting (its purge puts its own
-	// file next).
+	// file next), and a scan a replace or relabel prepared touches (its
+	// publish keeps the digest of the file it wrote).
 	RecordSidecarRewritten(ctx context.Context, seriesUID, storage string, sidecar SHA256, now time.Time) (bool, error)
 	// ForgetSidecar drops the digest kept of the metadata file of the scan
 	// of the series while it is on the storage named, and answers whether
 	// there was one: what a writer calls before it puts a new file whose
 	// digest it records after, so a record that fails leaves the file
-	// unchecked rather than checked against the file it replaced.
+	// unchecked rather than checked against the file it replaced. While a
+	// replace or relabel prepared touches the scan it is refused
+	// (Unavailable) and the writer puts nothing: the correction's publish
+	// keeps the digest of the file it wrote, which a file put between its
+	// write and its publish would no longer be.
 	ForgetSidecar(ctx context.Context, seriesUID, storage string) (bool, error)
 }
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -68,13 +69,17 @@ type Config struct {
 	// (the registry's CheckFence), so a tenant another installation took
 	// over since its last check, or one handed off, writes nothing more.
 	Fence func(ctx context.Context) error
-	// Pause, when not nil, is entered before a purge removes an object from
-	// one copy, and released once the removal returned (storageswitch.Gate):
-	// a switch of that storage to its replica waits for a removal admitted
-	// and holds the next one, so a purge already running when the switch
-	// began never removes from a place its storage's name no longer names.
-	// Fence refuses a purge that starts while a switch runs; Pause holds one
-	// that started before. Nil admits every removal.
+	// Pause, when not nil, is entered before every write to a storage and
+	// every removal from one (a record, a purge's removal and its manifest
+	// and metadata rewritten, a relabel's copies, a replace's new revision,
+	// what an abandon undoes), the storage opened only once admitted, and
+	// released once the write returned (storageswitch.Gate): a switch of
+	// that storage to its replica waits for a write admitted and holds the
+	// next one, so no step running when the switch began writes to a place
+	// its storage's name no longer names. A relabel and a replace hold their
+	// storages from their first copy until their publish is answered (hold).
+	// Fence refuses a step that starts while a switch runs; Pause holds one
+	// that started before. Nil admits every write.
 	Pause WritePause
 }
 
@@ -95,13 +100,85 @@ func (e *Engine) fence(ctx context.Context) error {
 	return e.cfg.Fence(ctx)
 }
 
-// enter asks Config.Pause, when there is one, to admit a removal from the
-// storage named, and returns its release.
+// enter asks Config.Pause, when there is one, to admit a write to (or a
+// removal from) the storage named, and returns its release. A storage
+// whose gate the caller holds already (holding) is admitted at once: a
+// gate paused by a switch waits for that hold to end, so entering it a
+// second time under the hold would wait for itself until the gate refuses.
 func (e *Engine) enter(ctx context.Context, storage string) (func(), error) {
-	if e.cfg.Pause == nil {
+	if e.cfg.Pause == nil || isHeld(ctx, storage) {
 		return func() {}, nil
 	}
 	return e.cfg.Pause.Enter(ctx, storage)
+}
+
+// heldKey is the context key of the storages whose gates a step holds.
+type heldKey struct{}
+
+// holding returns ctx carrying that the caller holds the gates of the
+// storages named (hold), so the writes it makes under them do not enter
+// those gates again.
+func holding(ctx context.Context, storages []string) context.Context {
+	held, _ := ctx.Value(heldKey{}).([]string)
+	return context.WithValue(ctx, heldKey{}, append(slices.Clone(held), storages...))
+}
+
+// isHeld reports whether ctx carries a hold of the gate of storage.
+func isHeld(ctx context.Context, storage string) bool {
+	held, _ := ctx.Value(heldKey{}).([]string)
+	return slices.Contains(held, storage)
+}
+
+// gated runs write on the storage named inside its write gate
+// (Config.Pause): the gate is entered first, the storage opened only once
+// admitted, and the gate released after write returned. A switch swaps the
+// storage's place while the gate holds its writes, so a store opened before
+// the gate admitted may be the place the name no longer names, and a write
+// or a removal through it would land on the old place.
+func (e *Engine) gated(ctx context.Context, storage string, write func(st blob.Store) error) error {
+	release, err := e.enter(ctx, storage)
+	if err != nil {
+		return err
+	}
+	defer release()
+	st, err := e.cfg.OpenStorage(ctx, storage)
+	if err != nil {
+		return err
+	}
+	return write(st)
+}
+
+// hold enters the write gate of each storage named, in order of name, and
+// returns one release of them all, which may be called more than once. A
+// step whose writes must all land on one place per storage (a relabel's
+// copies and the publish that names them, a replace's new revision and the
+// manifest that names it) holds its storages from before it opens them until
+// after its publish: a switch swapping a place between two of its writes
+// would leave the first on a place its storage no longer names, while the
+// catalog names it there. The caller releases before it abandons, whose
+// own writes enter the gate again.
+func (e *Engine) hold(ctx context.Context, storages []string) (func(), error) {
+	names := slices.Clone(storages)
+	slices.Sort(names)
+	names = slices.Compact(names)
+	var releases []func()
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			for i := len(releases) - 1; i >= 0; i-- {
+				releases[i]()
+			}
+		})
+	}
+	for _, name := range names {
+		r, err := e.enter(ctx, name)
+		if err != nil {
+			release()
+			return func() {}, err
+		}
+		releases = append(releases, r)
+	}
+	return release, nil
 }
 
 // Engine makes corrections on a tenant's storages and database.
@@ -351,22 +428,22 @@ func (e *Engine) writeRecords(ctx context.Context, c tenant.Correction) error {
 	return e.writeReplicaRecords(ctx, c, groups)
 }
 
-// putRecord puts c's record on the storage named, naming scans.
+// putRecord puts c's record on the storage named, naming scans, inside the
+// storage's write gate (gated): a record put on a place a switch swapped
+// away would be on the old store only.
 func (e *Engine) putRecord(ctx context.Context, c tenant.Correction, scans []tenant.CorrectionScan, storage string) error {
 	b, err := record.EncodeCorrection(recordOf(c, scans, storage), e.cfg.TenantID, e.cfg.Keys)
 	if err != nil {
 		return fault.Wrap(fault.Internal, err, "a correction record cannot be made")
 	}
-	st, err := e.cfg.OpenStorage(ctx, storage)
-	if err != nil {
-		return err
-	}
 	key, err := recordOf(c, nil, "").Key()
 	if err != nil {
 		return fault.Wrap(fault.Internal, err, "a correction record's key cannot be made")
 	}
-	_, err = st.Put(ctx, key, bytes.NewReader(b))
-	return err
+	return e.gated(ctx, storage, func(st blob.Store) error {
+		_, err := st.Put(ctx, key, bytes.NewReader(b))
+		return err
+	})
 }
 
 // settle rewrites c's records after a step whose row is committed; a

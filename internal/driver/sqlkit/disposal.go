@@ -304,6 +304,11 @@ func (k Sending) RecordDisposed(ctx context.Context, jobID, studyUID string, out
 			}
 			return notFound("the dispose job does not list this session")
 		}
+		// An ended job's tallies are final: a cancel stops what the runner
+		// records, as it stops what it deletes.
+		if err := k.checkDisposeJobOpen(ctx, tx, jobID); err != nil {
+			return err
+		}
 		_, err := tx.Exec(ctx, `UPDATE dispose_sessions SET outcome = ?, correction_id = ? WHERE job_id = ? AND study_uid = ? AND outcome = ''`,
 			string(outcome), correction, jobID, studyUID)
 		return err

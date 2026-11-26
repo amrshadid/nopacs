@@ -454,6 +454,21 @@ func (c CatalogReader[T]) ListHeldInstances(ctx context.Context, p label.Path, p
 	return out, EncodeCursor(ListHeldInstances, binding, last.SOPInstanceUID), nil
 }
 
+// largestInstanceSQL reads the largest instance file and the furthest end
+// of an instance's range in its object: an aggregate, so always one row.
+const largestInstanceSQL = `SELECT COALESCE(MAX(size), 0), COALESCE(MAX(byte_offset + byte_length), 0) FROM instances`
+
+// LargestInstance implements tenant.InstanceSizes.
+func (c CatalogReader[T]) LargestInstance(ctx context.Context) (int64, error) {
+	var size, extent int64
+	err := c.Run.One(ctx, "the catalog's instances cannot be read", "the largest instance cannot be read", CatalogRead{SQL: largestInstanceSQL},
+		func(row Row) error { return row.Scan(&size, &extent) })
+	if err != nil {
+		return 0, err
+	}
+	return max(size, extent), nil
+}
+
 // HeldInstance implements tenant.InstanceReads.
 func (c CatalogReader[T]) HeldInstance(ctx context.Context, p label.Path, uid string) (tenant.ScanInstance, error) {
 	if err := tenant.ValidateScanPath(p); err != nil {

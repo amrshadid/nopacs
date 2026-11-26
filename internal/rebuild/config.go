@@ -127,6 +127,14 @@ type Config struct {
 	// back look again at once rather than at their next periodic read; nil
 	// does nothing.
 	Resume func(tenantName string)
+	// LeaveHolds, when set, leaves the hold records found to the caller: a
+	// replace adopts none after its activation. A restore sets it, since it
+	// adopts them itself and reports them. Unset, a replace that made its
+	// shadow the catalog in use reads every storage's hold records and makes
+	// an active hold of each found active with no row (holds.Adopt), so a
+	// catalog made again from the storages after its database was lost is
+	// held as before.
+	LeaveHolds bool
 
 	// seams are what a test changes.
 	seams seams

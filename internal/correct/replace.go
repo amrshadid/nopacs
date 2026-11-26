@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/core/manifest"
@@ -100,9 +101,26 @@ func (e *Engine) Replace(ctx context.Context, r ReplaceRequest) (tenant.Correcti
 	if err != nil {
 		return e.abandon(ctx, c, reasonUnreadable, fault.Wrap(fault.Internal, err, "a revision key cannot be made"))
 	}
+	// The new revision, the manifest and metadata naming it and the publish
+	// all land on one place: the storage's gate is held from before it is
+	// opened again until the publish is answered, so a switch waits for
+	// them, and never leaves the new revision on a place the catalog then
+	// names no longer.
+	release, err := e.hold(ctx, []string{r.Storage})
+	if err != nil {
+		return e.abandon(ctx, c, reasonStorage, err)
+	}
+	defer release()
+	abandon := func(why string, err error) (tenant.Correction, error) {
+		release()
+		return e.abandon(ctx, c, why, err)
+	}
+	if st, err = e.cfg.OpenStorage(ctx, r.Storage); err != nil {
+		return abandon(reasonStorage, err)
+	}
 	rc, err := r.Open()
 	if err != nil {
-		return e.abandon(ctx, c, reasonUnreadable, err)
+		return abandon(reasonUnreadable, err)
 	}
 	w, err := st.Put(ctx, key, rc)
 	_ = rc.Close()
@@ -116,7 +134,7 @@ func (e *Engine) Replace(ctx context.Context, r ReplaceRequest) (tenant.Correcti
 		}
 	}
 	if err != nil {
-		return e.abandon(ctx, c, reasonUnreadable, err)
+		return abandon(reasonUnreadable, err)
 	}
 	if err := e.reached(c, "object"); err != nil {
 		return c, err
@@ -139,18 +157,25 @@ func (e *Engine) Replace(ctx context.Context, r ReplaceRequest) (tenant.Correcti
 		line.ReceivedSHA256 = sha256Text(c.ReceivedSHA256)
 	}
 	file := manifest.File{Key: key, Length: size, Size: size, SHA256: sha256Text(sum), SOPInstanceUID: r.UID}
-	msum, err := e.rewriteMeta(ctx, r.Storage, r.Path, r.UID, &line, &file)
+	meta, err := e.rewriteMeta(ctx, st, r.Storage, r.Path, r.UID, &line, &file)
 	if err != nil {
-		return e.abandon(ctx, c, reasonStorage, err)
+		return abandon(reasonStorage, err)
 	}
 	if err := e.reached(c, "meta"); err != nil {
 		return c, err
 	}
 	scans, err := e.cfg.Store.CorrectionScans(ctx, c.ID)
 	if err != nil || len(scans) != 1 {
-		return e.abandon(ctx, c, reasonStopped, errors.Join(fault.New(fault.Internal, "a replace touches one scan"), err))
+		return abandon(reasonStopped, errors.Join(fault.New(fault.Internal, "a replace touches one scan"), err))
 	}
-	return e.publish(ctx, c, map[string]tenant.SHA256{scans[0].SeriesUID: msum}, nil)
+	// The metadata file's digest is kept with the new manifest, so the
+	// scan's metadata stays checked after the replace.
+	series := scans[0].SeriesUID
+	cc := tenant.CorrectionCommit{ID: c.ID, Manifests: map[string]tenant.SHA256{series: meta.after}}
+	if !meta.metadata.IsZero() {
+		cc.Sidecars = map[string]tenant.SHA256{series: meta.metadata}
+	}
+	return e.published(ctx, c, func() (tenant.Correction, string, error) { return e.commit(ctx, cc) }, release)
 }
 
 // hashReader reads what open gives and returns its size and SHA-256.
@@ -213,24 +238,24 @@ func (e *Engine) rollbackReplace(ctx context.Context, c tenant.Correction) error
 		return errors.Join(fault.New(fault.Internal, "a replace touches one scan"), err)
 	}
 	s := scans[0]
-	st, err := e.cfg.OpenStorage(ctx, s.Storage)
-	if err != nil {
-		return err
-	}
-	if len(c.RestoreLine) > 0 {
-		var old sidecar.Instance
-		if err := json.Unmarshal(c.RestoreLine, &old); err != nil {
-			return fault.Wrap(fault.Internal, err, "a replace's kept line cannot be read")
-		}
-		file := manifest.File{Key: c.InstanceKey, Length: c.InstanceSize, Size: c.InstanceSize, SHA256: sha256Text(c.OldSHA256),
-			SOPInstanceUID: c.Target.Instance}
-		if _, err := e.rewriteMeta(ctx, s.Storage, s.Path, c.Target.Instance, &old, &file); err != nil {
-			return err
-		}
-	}
 	key, err := layout.RevisionKey(s.Path, c.Target.Instance, c.NewRevision)
 	if err != nil {
 		return fault.Wrap(fault.Internal, err, "a revision key cannot be made")
 	}
-	return st.Delete(ctx, key)
+	// Inside the storage's gate, like the writes it undoes: what it writes
+	// back must land where the replace wrote.
+	return e.gated(ctx, s.Storage, func(st blob.Store) error {
+		if len(c.RestoreLine) > 0 {
+			var old sidecar.Instance
+			if err := json.Unmarshal(c.RestoreLine, &old); err != nil {
+				return fault.Wrap(fault.Internal, err, "a replace's kept line cannot be read")
+			}
+			file := manifest.File{Key: c.InstanceKey, Length: c.InstanceSize, Size: c.InstanceSize, SHA256: sha256Text(c.OldSHA256),
+				SOPInstanceUID: c.Target.Instance}
+			if _, err := e.rewriteMeta(ctx, st, s.Storage, s.Path, c.Target.Instance, &old, &file); err != nil {
+				return err
+			}
+		}
+		return st.Delete(ctx, key)
+	})
 }

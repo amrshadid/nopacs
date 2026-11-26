@@ -24,22 +24,6 @@ import (
 // and a request to scrub one instance all read objects, and only the time
 // of the read says whether an object is covered.
 
-// ScanVerified is tenant.ScanVerified, the record of one copy of a scan a
-// unit read to its end.
-type ScanVerified = tenant.ScanVerified
-
-// VerificationRecorder is tenant.VerificationRecorder, which records when
-// each scan was last read whole on each storage.
-type VerificationRecorder = tenant.VerificationRecorder
-
-// ScanVerification is tenant.ScanVerification, what is recorded of one
-// scan on one storage, as Coverage reads it.
-type ScanVerification = tenant.ScanVerification
-
-// VerificationSource is tenant.VerificationSource, which answers what is
-// recorded of the scans of a storage, a page at a time.
-type VerificationSource = tenant.VerificationSource
-
 // StorageCoverage is one storage's coverage.
 type StorageCoverage struct {
 	// Storage names it.
@@ -67,7 +51,7 @@ const coveragePage = 1000
 // Coverage computes the coverage of the storage named storage at now for a
 // scrub.interval of interval (zero for never: then nothing is overdue, and
 // every object ever read counts as verified), from what src records.
-func Coverage(ctx context.Context, src VerificationSource, storage string, interval time.Duration, now time.Time) (StorageCoverage, error) {
+func Coverage(ctx context.Context, src tenant.VerificationSource, storage string, interval time.Duration, now time.Time) (StorageCoverage, error) {
 	out := StorageCoverage{Storage: storage}
 	after := ""
 	for range maxListPages {
@@ -91,7 +75,7 @@ func Coverage(ctx context.Context, src VerificationSource, storage string, inter
 }
 
 // add counts one scan.
-func (c *StorageCoverage) add(s ScanVerification, interval time.Duration, now time.Time) {
+func (c *StorageCoverage) add(s tenant.ScanVerification, interval time.Duration, now time.Time) {
 	c.Objects += s.Objects
 	within := func(t time.Time) bool { return !t.IsZero() && (interval <= 0 || !t.Before(now.Add(-interval))) }
 	if within(s.Verified) {
@@ -125,7 +109,7 @@ func (u *unitRun) verified(storage string, path label.Path, byPresence bool) out
 	}
 	ctx, cancel := context.WithTimeout(u.ctx, opTimeout)
 	defer cancel()
-	err := rec.RecordScanVerified(ctx, ScanVerified{Fence: u.fence, Storage: storage, Path: path, ByPresence: byPresence, At: u.sup.cfg.Now()})
+	err := rec.RecordScanVerified(ctx, tenant.ScanVerified{Fence: u.fence, Storage: storage, Path: path, ByPresence: byPresence, At: u.sup.cfg.Now()})
 	if err != nil {
 		return u.failure(err, reasonDatabase)
 	}

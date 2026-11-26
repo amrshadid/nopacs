@@ -46,7 +46,7 @@ func TestReplicaThatFailsReadsIsPassedOver(t *testing.T) {
 	r.copyAll()
 	mem := &memVerifications{got: map[string]bool{}}
 	cfg := r.config()
-	cfg.Verifications = func(tenant.Store) VerificationRecorder { return mem }
+	cfg.Verifications = func(tenant.Store) tenant.VerificationRecorder { return mem }
 	stores := named{"main": readOnly{Store: r.store, writes: &r.writes}, "copy": readOnly{Store: unanswering{copy1}, writes: &r.writes}}
 	cfg.OpenStorages = func(string, tenant.Pipeline) Storages { return stores }
 
@@ -96,7 +96,7 @@ func TestScanWithAnObjectNotOnlineIsNotVerified(t *testing.T) {
 	f.archiveEntries("s2", "1.2.826.0.1.3680043.10.515.90", "1.2.826.0.1.3680043.10.515.80", synthetic("1.2.826.0.1.3680043.10.515", 2))
 	mem := &memVerifications{got: map[string]bool{}}
 	cfg := f.config()
-	cfg.Verifications = func(tenant.Store) VerificationRecorder { return mem }
+	cfg.Verifications = func(tenant.Store) tenant.VerificationRecorder { return mem }
 	cold := notOnlineStore{Store: f.store, key: f.keys[files[1].uid]}
 	cfg.OpenStorages = func(string, tenant.Pipeline) Storages { return storages{s: readOnly{Store: cold, writes: &f.writes}} }
 	j := f.scrub(cfg)

@@ -385,6 +385,13 @@ func (k Sending) prepareDelete(ctx context.Context, tx SendingTx, p tenant.Corre
 	if !ok || p.Now.Sub(issued) > tenant.MaxConfirmAge || issued.After(p.Now.Add(time.Minute)) {
 		return tenant.Precondition("the confirm token is not one of a preview made within the hour")
 	}
+	// A disposal's delete first: its job canceled refuses it whatever else
+	// would, so the runner stops rather than record a skip.
+	if p.Retention != nil && p.Retention.JobID != "" {
+		if err := k.checkDisposeJobOpen(ctx, tx, p.Retention.JobID); err != nil {
+			return err
+		}
+	}
 	if err := checkOverlap(ctx, tx, p.Target.Path(), p.ID); err != nil {
 		return err
 	}

@@ -35,6 +35,15 @@ const sidecarSQL = `SELECT sha256 FROM scan_sidecars WHERE series_uid = ? AND ma
 const purgeRewritesSQL = `SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
 	AND cs.series_uid = ? WHERE c.state = 'purging' AND c.kind = 'delete' AND c.level = 'instance' LIMIT 1`
 
+// preparedRewritesSQL finds a replace or a relabel prepared that touches
+// the scan of a series: a replace writes the scan's metadata file again
+// and releases the scan's lock before its publish keeps that file's digest,
+// and a relabel copies the file to its new keys before its publish keeps
+// the copy's. A file another writer puts between the two would be named by
+// a digest of another file once the publish commits.
+const preparedRewritesSQL = `SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
+	AND cs.series_uid = ? WHERE c.state = 'prepared' AND c.kind IN ('replace', 'relabel') LIMIT 1`
+
 // SetSidecarInTx keeps, in the caller's transaction, sidecar as the digest
 // of the metadata file of the scan of series written with the manifest of
 // digest manifest; a zero sidecar keeps none for the scan. A zero manifest
@@ -98,6 +107,17 @@ func (k Sending) ForgetSidecar(ctx context.Context, seriesUID, storage string) (
 	}
 	var dropped bool
 	err := k.Host.Write(ctx, "the scan's metadata digest cannot be dropped", func(tx SendingTx) error {
+		dropped = false
+		// The writer puts its file after this answers: refused while a
+		// replace or relabel of the scan is prepared, it puts nothing, and
+		// tries again once the publish (which keeps the digest of the file
+		// it wrote) or the abandon has ended the correction.
+		if busy, err := exists(ctx, tx, preparedRewritesSQL, seriesUID); err != nil || busy {
+			if err != nil {
+				return err
+			}
+			return fault.New(fault.Unavailable, "a correction of the scan is under way; its metadata file is rewritten after it")
+		}
 		n, err := tx.Exec(ctx, `DELETE FROM scan_sidecars WHERE series_uid = ?
 			AND EXISTS (SELECT 1 FROM scans WHERE series_uid = ? AND storage = ?)`, seriesUID, seriesUID, storage)
 		dropped = n > 0
@@ -139,6 +159,12 @@ func (k Sending) RecordSidecarRewritten(ctx context.Context, seriesUID, storage 
 		// A purge rewriting the scan's files puts its own metadata file on
 		// every copy next; a digest kept now would name the file it replaces.
 		if purging, err := exists(ctx, tx, purgeRewritesSQL, seriesUID); err != nil || purging {
+			return err
+		}
+		// A replace or relabel prepared keeps, at its publish, the digest of
+		// the file it wrote: one kept now would name a file it writes over,
+		// or be replaced by its digest while this file stays.
+		if busy, err := exists(ctx, tx, preparedRewritesSQL, seriesUID); err != nil || busy {
 			return err
 		}
 		if err := SetSidecarInTx(ctx, tx, seriesUID, ToSHA256(manifest), sidecar); err != nil {

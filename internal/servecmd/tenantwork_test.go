@@ -152,12 +152,19 @@ func TestRepairLeaseRefusedWhenTooShort(t *testing.T) {
 		DIMSE: tenant.DIMSEReceiver{Port: 11113, AETitle: "BIG", AnyCaller: true}}, time.Now(), r.audit(), nil); err != nil {
 		t.Fatal(err)
 	}
-	err := checkRepairLease(r.ctx, r.db, 30*time.Second)
+	err := checkRepairLease(r.ctx, r.db, 30*time.Second, 0)
 	if fault.KindOf(err) != fault.Invalid || !strings.Contains(fault.Message(err), "replica.repair-lease to at least 56s") {
 		t.Fatalf("a lease of 30s for files of 4 GiB: %v", err)
 	}
-	if err := checkRepairLease(r.ctx, r.db, time.Minute); err != nil {
+	if err := checkRepairLease(r.ctx, r.db, time.Minute, 0); err != nil {
 		t.Fatalf("the default lease for files of 4 GiB: %v", err)
+	}
+	// An instance the catalog holds that is larger than every receiver's
+	// bound (archived under a bound since lowered) needs its own time.
+	err = checkRepairLease(r.ctx, r.db, time.Minute, 1<<33)
+	if fault.KindOf(err) != fault.Invalid || !strings.Contains(fault.Message(err), "the largest instance the tenant holds") ||
+		!strings.Contains(fault.Message(err), "at least 1m37s") {
+		t.Fatalf("the default lease for an instance of 8 GiB held: %v", err)
 	}
 	if err := r.db.SetSetting(r.ctx, "replica.repair-lease", "30s", r.audit(), nil); err != nil {
 		t.Fatal(err)
