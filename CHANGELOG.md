@@ -153,7 +153,8 @@ scan, keeps it whole, and serves it through an API with keys.
 
 - The API contract `nopacs.v1` in `api/proto/nopacs/v1`, served over gRPC,
   gRPC-web and Connect, every reply carrying a `Nopacs-Request-Id` header.
-  Defined and not yet served: `ReplicaService` and `RetentionService`.
+  Defined and not yet served: replica backfill, recall and sample checks
+  (`api/not-served.txt`).
 - The command line `nopacs` for every service, with `--json` output and named
   client contexts, and an interactive program (`nopacs` with no arguments).
 - `nopacs job scrub`, `job rebuild` (`--mode compare|replace`; a replace needs
@@ -292,15 +293,14 @@ scan, keeps it whole, and serves it through an API with keys.
   a correction or a rebuild is open and taking each moved S3 secret sealed
   again for its new name. Storages gain a tier, recall days and speed, a
   directory's declared encryption at rest and a switch generation. Both
-  database drivers; nothing is served yet.
+  database drivers.
 - The replicator copies each queued scan of a primary to its replicas: every
   object the committed manifest names is streamed through a put checked
   against its SHA-256 and read back when the replica cannot confirm it; an
   object already there counts only when the replica's own verified manifest
   lists it; the sidecar and the manifest go last and are checked again on the
   primary; the lease is renewed on a timer and a lost lease writes nothing;
-  a scan is recorded in step only at the manifest it copied. Not yet started
-  by the server.
+  a scan is recorded in step only at the manifest it copied.
 - The tenant database keeps retention rules and each session's keep and due
   times, stored and indexed, clamped by `retention.shorten-notice`, on a clock
   that pauses on a forward jump until an admin confirms it (a step back only
@@ -308,7 +308,7 @@ scan, keeps it whole, and serves it through an API with keys.
   owed as records on every storage their target reaches; and dispose jobs that
   delete due sessions through the ordinary delete. A rule change and a commit
   are ordered, so a keep is never lost; a delete a rule keeps needs
-  `override_retention` with its own reason. Not served yet.
+  `override_retention` with its own reason.
 - Reads of archived instances (downloads, ReadFiles, DICOMweb with frames and
   metadata, senders, de-identification jobs) turn, before their first byte, to
   a replica in step for the scan when the primary's object is missing, marked
@@ -323,7 +323,7 @@ scan, keeps it whole, and serves it through an API with keys.
 - The recall worker asks an archive-tier store once to bring a cold object
   back, polls until it reads, and records the answer in the tenant's shared
   recall row (online until a time, or failed with a fixed reason, never the
-  store's text). Not yet started by the server.
+  store's text).
 - The storage switch runs a primary's move onto its replica on the server's
   own goroutine: a preview names its blockers (a clean scrub of the replica
   and an empty compare from it, each the newest of its kind) and gives a
@@ -333,7 +333,7 @@ scan, keeps it whole, and serves it through an API with keys.
   flight, drains until every scan is in step, takes the owner record, seals
   moved S3 secrets again for their new names and swaps both places in one
   transaction; a restart refuses an accepted switch and finishes a swapped one.
-  Not yet started by the server.
+ 
 - Corrections reach every replica: a correction's record goes on each replica
   (owed and retried when one does not answer, and owed to a replica attached
   later); the purge removes each object from the primary and every replica,
@@ -362,7 +362,7 @@ scan, keeps it whole, and serves it through an API with keys.
   to that scan is refused as retryable, and the repair is refused while a
   correction of the scan or a switch is under way; if the catalog changed by
   the end, the finding stays open. One repair per storage at a time, with
-  counts, tallies and cancel like other jobs. Not yet started by the server.
+  counts, tallies and cancel like other jobs.
 - A scrub of a replica reads its primary's scans on the replica; a scrub can
   name one scan, and a read that finds an instance's bytes wrong makes a scrub
   of that scan without moving the storage's scheduled scrub; when each scan
@@ -491,28 +491,3 @@ scan, keeps it whole, and serves it through an API with keys.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.
-
-### Fixed
-
-- A copy to a replica under way when a delete was published or purged could
-  leave the deleted data on the replica, a whole deleted scan with no record
-  of it: the purge's start and the delete's publish now end the copy's lease,
-  every put ends before its lease's due, the purge removes nothing until no
-  such put can land (state reason "copies in flight"), copies enter the
-  replica's write gate, a copy that did not end removes what it put that the
-  catalog no longer names (but never what a delete that can still be undone
-  hides), and a scan whose instance delete is purging is copied without its
-  manifest or metadata file until the purge ends.
-- A storage switch could not be started on a running server: the API was
-  never given the switch runner. Storage status now also shows scrub coverage
-  and an S3 storage's encryption at rest. A correction purge waits after a
-  start or a catalog activation until the holds found on storage are
-  adopted.
-- A session archived while the clock was set back could be deleted early once
-  the clock was put right: retention times are never stored earlier than the
-  time last trusted. Automatic purges use `retention.max-clock-step` and pause
-  retention on a jump; a clock run fast in small steps is caught against the
-  process's monotonic clock; a rebuild keeps the retention rows of sessions it
-  leaves out; holds are adopted again after every catalog activation before
-  any disposal; a person's disposal stops when its key is revoked, suspended
-  or no longer an admin of the tenant.
