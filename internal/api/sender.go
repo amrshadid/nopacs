@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
@@ -19,6 +20,54 @@ import (
 
 // messageNoSender answers a sender name the tenant does not have.
 const messageNoSender = "the tenant has no sender with this name"
+
+// messageMarkNotAdmin answers a request that sets or clears a sender's
+// allow_identified from a caller who is not the installation's admin.
+const messageMarkNotAdmin = "sender.allow_identified: only an admin on the installation, or the local operator, sets or clears it; " +
+	"what may leave the archive identified is the installation's to decide, not a tenant's"
+
+// messageRedirectNotAdmin answers a change of where a sender marked
+// allow_identified sends from a caller who is not the installation's
+// admin.
+const messageRedirectNotAdmin = "the sender is marked allow_identified: only an admin on the installation, or the local operator, " +
+	"changes where it sends (its host, port, AE titles, URL, TLS or account), as only they set the mark"
+
+// mayMark refuses, as permission denied with message, a change of a
+// sender's allow_identified, or of where a marked sender sends, by a caller
+// who is not the installation's admin, or by a masked key whatever its
+// grants: the mark lets data leave the archive identified, so neither a
+// tenant's admin nor an agent's key may choose it, nor point a marked
+// sender elsewhere. The check refuses a masked key every change of a sender
+// first; this holds even if that rule moves.
+func mayMark(d access.Decision, message string) error {
+	if d.Masked() || !d.Principal().Role(master.Installation).Includes(master.RoleAdmin) {
+		return fault.New(fault.Denied, message)
+	}
+	return nil
+}
+
+// markRefused records a change of a sender's mark that mayMark refused, as
+// refused in the installation's log, as the check's own refusals are (a
+// refused caller causes no write in a tenant's database), with the check's
+// details (the type added, or the mask's paths), and returns its API error.
+func (c *core) markRefused(d access.Decision, tenantName string, err error) error {
+	return c.failWith(d, nil, access.Facts{TenantName: tenantName}, err)
+}
+
+// markGuard is the guard of a change that sets or clears a sender's mark:
+// the tenant's admin, as every change of a sender, and the installation's
+// admin, both checked again in the change's transaction, so a grant revoked
+// meanwhile refuses it.
+func (c *core) markGuard(d access.Decision) tenant.Guard {
+	onTenant := c.adminGuard(d)
+	onInstallation := d.Actor(master.Installation, master.RoleAdmin)
+	return func(ctx context.Context) error {
+		if err := c.master.CheckActor(ctx, onInstallation); err != nil {
+			return err
+		}
+		return onTenant(ctx)
+	}
+}
 
 // senderService is SenderService: a tenant's senders, kept in its store,
 // toward the destinations the installation allows. Whether a sender reaches
@@ -142,6 +191,15 @@ func (s senderService) AddSender(ctx context.Context, req *v1.AddSenderRequest) 
 	if err != nil {
 		return nil, err
 	}
+	guard := c.adminGuard(d)
+	// The role is judged before the request is validated, so a caller
+	// without it learns nothing from the shape of its request.
+	if req.GetSender().GetAllowIdentified() {
+		if err := mayMark(d, messageMarkNotAdmin); err != nil {
+			return nil, c.markRefused(d, req.GetTenant(), err)
+		}
+		guard = c.markGuard(d)
+	}
 	in, credential, err := senderFromRequest("sender", req.GetSender())
 	if err != nil {
 		return nil, c.failIn(d, st, err)
@@ -161,7 +219,7 @@ func (s senderService) AddSender(ctx context.Context, req *v1.AddSenderRequest) 
 			return nil, c.failIn(d, st, err)
 		}
 	}
-	out, err := p.AddSender(ctx, in, c.now(), changeEntry(d, access.Facts{}), c.adminGuard(d))
+	out, err := p.AddSender(ctx, in, c.now(), changeEntry(d, access.Facts{}), guard)
 	if err != nil {
 		return nil, c.failIn(d, st, fieldOf("sender", err))
 	}
@@ -245,8 +303,16 @@ func (s senderService) SetSender(ctx context.Context, req *v1.SetSenderRequest) 
 		return nil, c.failIn(d, st, err)
 	}
 	fields := make([]tenant.SenderField, len(paths))
+	guard := c.adminGuard(d)
 	for i, p := range paths {
 		fields[i] = tenant.SenderField(p)
+		// Setting and clearing alike: either changes what may leave.
+		if fields[i] == tenant.FieldSenderAllowIdentified {
+			if err := mayMark(d, messageMarkNotAdmin); err != nil {
+				return nil, c.markRefused(d, req.GetTenant(), err)
+			}
+			guard = c.markGuard(d)
+		}
 	}
 	change, credential, err := senderChange(in, fields)
 	if err != nil {
@@ -269,6 +335,16 @@ func (s senderService) SetSender(ctx context.Context, req *v1.SetSenderRequest) 
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}
+	// A marked sender pointed elsewhere would send identified data where
+	// the installation's admin did not choose: such a change is theirs, as
+	// the mark is. Read under the write lock, so the mark cannot be set
+	// between this read and the change (AddSender, SetSender).
+	if stored.AllowIdentified && slices.ContainsFunc(fields, tenant.RedirectsSender) {
+		if err := mayMark(d, messageRedirectNotAdmin); err != nil {
+			return nil, c.markRefused(d, req.GetTenant(), err)
+		}
+		guard = c.markGuard(d)
+	}
 	if newCredential && credential != "" {
 		if change.STOW.SealedCredential, err = place.SealCredential(c.keys, ref.ID, in.GetName(), credential); err != nil {
 			return nil, c.failIn(d, st, err)
@@ -286,7 +362,7 @@ func (s senderService) SetSender(ctx context.Context, req *v1.SetSenderRequest) 
 			return nil, c.failIn(d, st, err)
 		}
 	}
-	out, err := p.SetSender(ctx, change, fields, c.now(), changeEntry(d, access.Facts{}), c.adminGuard(d))
+	out, err := p.SetSender(ctx, change, fields, c.now(), changeEntry(d, access.Facts{}), guard)
 	if err != nil {
 		return nil, c.failIn(d, st, fieldOf("sender", err))
 	}

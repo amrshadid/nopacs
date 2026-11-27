@@ -111,7 +111,7 @@ func fillHeld(b *testing.B, path string) {
 		 INSERT INTO scans (id, session_id, series_uid, label, folded, instances, bytes, manifest_sha256, created, updated, storage, study_uid)
 		 SELECT i, i, '2.25.2.' || i, 'scan-' || i, 'scan-' || i, 1000, 524288000, NULL, 0, 0, 'store', '2.25.1.' || i FROM n`,
 		`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 999999)
-		 INSERT INTO instances SELECT i / 1000 + 1, '2.25.3.' || (i + 1), 'held' || (i / 1000), randomblob(32), NULL, '', 0, 524288, 524288, 0, NULL
+		 INSERT INTO instances SELECT i / 1000 + 1, '2.25.3.' || (i + 1), 'held' || (i / 1000), randomblob(32), NULL, '', 0, 524288, 524288, 0, NULL, 0
 		 FROM n`,
 		`UPDATE catalog_totals SET subjects = 1, sessions = 1000, scans = 1000, instances = 1000000`,
 		`INSERT INTO receptions SELECT 'claimer', 'dimse', '2.25.1.5000', 1, 'identified', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

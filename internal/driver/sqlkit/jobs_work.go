@@ -201,7 +201,7 @@ func streamInstances(ctx context.Context, tx SendingTx, s jobScanRow, query stri
 		var held DBTime
 		var mark string
 		err := row.Scan(&in.SOPInstanceUID, &in.ReceptionID, &in.Key, &in.Offset, &in.Length, &in.Size, &sum, &archived, &held,
-			&in.Profile.Name, &in.Profile.Version, &mark)
+			&in.Profile.Name, &in.Profile.Version, &mark, &in.PixelRiskAccepted)
 		in.SHA256, in.ArchivedSHA256, in.Held, in.Damaged = ToSHA256(sum), ToSHA256(archived), held.T, mark != ""
 		out = append(out, in)
 		return err

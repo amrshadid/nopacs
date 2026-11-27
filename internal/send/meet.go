@@ -33,7 +33,36 @@ func (u *unitRun) meet(in tenant.ScanInstance) (jobmeet.Meeting, *result, *outco
 		r := u.deletedResult()
 		return m, &r, nil
 	}
+	if code, refuse := tenant.SendRefusal(m.Instance.Provenance(), u.allowIdentified()); refuse {
+		r := refused(code, 0, eligibilityDetail(code))
+		return m, &r, nil
+	}
 	return m, nil, nil
+}
+
+// allowIdentified reports whether the unit may send instances the default
+// rule refuses (tenant.SendRefusal): only while both the row it started
+// with and the row the supervisor read last say so, so a mark cleared
+// while the unit sends takes effect at the next instance after the
+// supervisor reads it, and one set takes effect at the next unit.
+func (u *unitRun) allowIdentified() bool {
+	if !u.row.AllowIdentified {
+		return false
+	}
+	last := u.sr.row.Load()
+	return last != nil && last.AllowIdentified
+}
+
+// eligibilityDetail is the phrase a refusal of tenant.SendRefusal records:
+// the fact of the catalog that refused it, never a value of the file.
+func eligibilityDetail(code tenant.JobFailureCode) string {
+	switch code {
+	case tenant.FailureAsReceived:
+		return detailAsReceived
+	case tenant.FailureNoProfileProvenance:
+		return detailNoProvenance
+	}
+	return detailPixelRisk
 }
 
 // deletedResult is the result of an instance a correction deleted after the

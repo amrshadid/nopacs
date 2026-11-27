@@ -17,7 +17,7 @@ const ListSenders = "tenant-senders"
 // senderColumns are a sender's columns as a read returns them: the
 // credential only as whether one is held, so no read can carry it out.
 const senderColumns = `name, type, enabled, config, credential IS NOT NULL, max_associations, max_bytes_per_second,
-	connect_us, response_us, created, updated`
+	connect_us, response_us, created, updated, allow_identified`
 
 // senderConfig is a sender's configuration of its type as its config column
 // holds it, written and read here so both drivers keep the same text. The
@@ -70,7 +70,7 @@ func scanSender(row Row) (tenant.Sender, error) {
 	var connect, response int64
 	var created, updated DBTime
 	if err := row.Scan(&s.Name, &typ, &s.Enabled, &config, &set, &s.MaxAssociations, &s.MaxBytesPerSecond, &connect,
-		&response, &created, &updated); err != nil {
+		&response, &created, &updated, &s.AllowIdentified); err != nil {
 		return s, err
 	}
 	s.Type = tenant.SenderType(typ)
@@ -130,7 +130,25 @@ func (d SendingDialect) senderArgs(s tenant.Sender) ([]any, error) {
 		return nil, err
 	}
 	return []any{d.Bool(s.Enabled), config, s.MaxAssociations, s.MaxBytesPerSecond, s.ConnectTimeout.Microseconds(),
-		s.ResponseTimeout.Microseconds(), d.Time(s.Updated)}, nil
+		s.ResponseTimeout.Microseconds(), d.Time(s.Updated), d.Bool(s.AllowIdentified)}, nil
+}
+
+// markChanged returns, for a sender whose mark moved from before to after,
+// the audit entry with DetailAllowIdentified and the event that reports it;
+// audit as it is and no event when the mark did not move.
+func markChanged(audit master.AuditEntry, name string, before, after bool, now time.Time) (master.AuditEntry, []tenant.EventRecord, error) {
+	if before == after {
+		return audit, nil, nil
+	}
+	a, err := AddDetails(audit, tenant.DetailAllowIdentified, strconv.FormatBool(after))
+	if err != nil {
+		return audit, nil, err
+	}
+	e, err := tenant.NewEvent(&tenant.SenderAllowIdentifiedChanged{Sender: name, AllowIdentified: after}, now)
+	if err != nil {
+		return audit, nil, err
+	}
+	return a, []tenant.EventRecord{e}, nil
 }
 
 // AddSender implements tenant.Senders.
@@ -160,6 +178,11 @@ func (k Sending) AddSender(ctx context.Context, s tenant.Sender, now time.Time, 
 	if err != nil {
 		return tenant.Sender{}, err
 	}
+	// A sender added marked is a change of what may leave the archive.
+	a, events, err := markChanged(a, s.Name, false, s.AllowIdentified, now)
+	if err != nil {
+		return tenant.Sender{}, err
+	}
 	var out tenant.Sender
 	err = k.Host.Write(ctx, "the sender cannot be added", func(tx SendingTx) error {
 		if err := tx.LockConfig(ctx); err != nil {
@@ -180,11 +203,14 @@ func (k Sending) AddSender(ctx context.Context, s tenant.Sender, now time.Time, 
 			return fault.New(fault.Conflict, "the name "+s.Name+" is still named by jobs of a sender removed")
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO senders (name, type, enabled, config, max_associations, max_bytes_per_second,
-			connect_us, response_us, updated, created, credential) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			connect_us, response_us, updated, allow_identified, created, credential) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			append(append([]any{s.Name, string(s.Type)}, args...), k.D.Time(now), credential)...); err != nil {
 			return err
 		}
 		if out, err = senderInTx(ctx, tx, s.Name, ""); err != nil {
+			return err
+		}
+		if err := tx.WriteEvents(ctx, events...); err != nil {
 			return err
 		}
 		return tx.Audited(ctx, a, guard)
@@ -296,7 +322,7 @@ func (k Sending) SetSender(ctx context.Context, s tenant.Sender, fields []tenant
 		// (coalesce keeps the held one otherwise), and removed when the
 		// authentication became none.
 		if _, err := tx.Exec(ctx, `UPDATE senders SET enabled = ?, config = ?, max_associations = ?, max_bytes_per_second = ?,
-			connect_us = ?, response_us = ?, updated = ?, credential = coalesce(?, credential) WHERE name = ?`,
+			connect_us = ?, response_us = ?, updated = ?, allow_identified = ?, credential = coalesce(?, credential) WHERE name = ?`,
 			append(args, credential, s.Name)...); err != nil {
 			return err
 		}
@@ -308,7 +334,14 @@ func (k Sending) SetSender(ctx context.Context, s tenant.Sender, fields []tenant
 		if out, err = senderInTx(ctx, tx, s.Name, ""); err != nil {
 			return err
 		}
-		return tx.Audited(ctx, audit, guard)
+		a, events, err := markChanged(audit, s.Name, stored.AllowIdentified, out.AllowIdentified, now)
+		if err != nil {
+			return err
+		}
+		if err := tx.WriteEvents(ctx, events...); err != nil {
+			return err
+		}
+		return tx.Audited(ctx, a, guard)
 	})
 	if err != nil {
 		return tenant.Sender{}, err

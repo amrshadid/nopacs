@@ -39,6 +39,7 @@ type senderFlags struct {
 	tlsServerName   string
 	noTLS           bool
 	enabled         bool
+	allowIdentified bool
 	maxAssociations int
 	maxBytesPerSec  string
 	connectTimeout  string
@@ -81,6 +82,7 @@ func (f *senderFlags) add(cmd *cobra.Command, forSet bool) {
 	fl.StringVar(&f.tlsPrivateKey, "tls-private-key-file", "", "the name of the PEM private key file of that certificate, in the tenant's TLS directory; it is a file name, not the key")
 	fl.StringVar(&f.tlsServerName, "tls-server-name", "", "the name the peer's certificate must be issued for, when it is not the sender's host")
 	fl.BoolVar(&f.enabled, "enabled", false, "whether the sender sends; false, the default, keeps it stopped and its jobs wait (--enabled=false stops one)")
+	fl.BoolVar(&f.allowIdentified, "allow-identified", false, "whether the sender may also send instances archived as received, without their profile version recorded whole, or with an accepted pixel risk; false, the default, sends only de-identified instances. Needs admin on the installation, never a masked key (--allow-identified=false clears it)")
 	fl.IntVar(&f.maxAssociations, "max-associations", 0, "the most associations (for a stow sender, requests) it holds open at once, from 1 to 16 (default 2)")
 	fl.StringVar(&f.maxBytesPerSec, "max-bytes-per-second", "", "the most bytes per second it sends, a size such as 10MiB, from 64KiB to 1TiB; 0 for no bound of its own")
 	fl.StringVar(&f.connectTimeout, "connect-timeout", "", "how long to wait for a connection, the TLS handshake and an association: a number and s or m, from 1s to 5m (default 30s)")
@@ -254,6 +256,9 @@ func (f *senderFlags) sender(cmd *cobra.Command, name, tlsType string) (s *v1.Se
 	}
 	if touch("enabled", "enabled") {
 		s.Enabled = f.enabled
+	}
+	if touch("allow-identified", "allow_identified") {
+		s.AllowIdentified = f.allowIdentified
 	}
 	if touch("max-associations", "max_associations") {
 		s.MaxAssociations = int32(f.maxAssociations) // #nosec G115 -- a value above 2^31 is refused by the server either way

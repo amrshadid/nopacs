@@ -31,6 +31,15 @@
 // its last byte (an A-ABORT, or a request cut before its part ends), so the
 // peer never holds it whole; it is refused as damaged_in_storage.
 //
+// Before an instance is read it is judged by tenant.SendRefusal against the
+// catalog's row as it is now and the sender's allow_identified: an
+// instance archived as received, one whose profile version is recorded only
+// in part, and one with an accepted pixel risk are refused for that reason
+// to a sender not marked, never read, and the unit goes on. The same check
+// serves every kind of job, since it runs per instance as the transfer
+// starts; the mark counts only while both the row the unit started with and
+// the row the supervisor read last say so.
+//
 // The peer's answers are recorded (tenant.JobWork.RecordJobProgress) in
 // batches of at most MaxBatch instances or BatchInterval, whichever comes
 // first, each write fenced by the unit's attempt: a worker whose lease was

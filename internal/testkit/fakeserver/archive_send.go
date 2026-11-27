@@ -275,6 +275,8 @@ func (h senderHandler) SetSender(_ context.Context, req *v1.SetSenderRequest) (*
 		switch p {
 		case "enabled":
 			next.Enabled = in.GetEnabled()
+		case "allow_identified":
+			next.AllowIdentified = in.GetAllowIdentified()
 		case "max_associations":
 			next.MaxAssociations = in.GetMaxAssociations()
 		case "max_bytes_per_second":

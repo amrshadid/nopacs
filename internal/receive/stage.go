@@ -218,6 +218,10 @@ func (p *Pipeline) deidentify(ctx context.Context, r tenant.Reception, rcv tenan
 	}
 	p.at("archive.after-deid")
 	wr.made, wr.size, wr.sum, wr.profile = true, made.Size, made.SHA256, ref
+	// An image at risk of burned-in text that a pixel rule accepted as it is
+	// is recorded with the file, so no sender sends it unless marked
+	// (tenant.SendRefusal).
+	wr.pixelRiskAccepted = rec.Pixels.RiskAccepted()
 	out, size, err := p.area.OpenDerived(wr.f.Incoming)
 	if err != nil {
 		return wr, nil, err

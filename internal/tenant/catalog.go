@@ -46,6 +46,9 @@ type ConfirmedInstance struct {
 	// Profile is the profile version that de-identified the file, which
 	// the tenant must have; the zero ref for a file archived as received.
 	Profile ProfileRef
+	// PixelRiskAccepted says the file's image was at risk of burned-in text
+	// and a pixel rule of Profile accepted it as it is; only with Profile.
+	PixelRiskAccepted bool
 }
 
 // ScanCommit is the catalog rows of one scan, or of a part of one, that a
@@ -126,6 +129,8 @@ func (c ScanCommit) Validate() error {
 			if err := in.Profile.Validate(); err != nil {
 				return err
 			}
+		} else if in.PixelRiskAccepted {
+			return invalid("an instance records an accepted pixel risk only with the profile version that accepted it")
 		}
 		seen[in.SOPInstanceUID] = true
 		k, err := layout.Parse(in.Key)

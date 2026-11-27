@@ -97,13 +97,21 @@ type SenderServiceClient interface {
 	// TestSender tries the peer. A masked key (Key.masked) is refused it:
 	// where the archive's data is sent is a person's choice.
 	//
+	// A sender added with allow_identified set needs admin on the
+	// installation as well; a caller without it is refused before the request
+	// is validated, recorded refused in the installation's log.
+	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the sender's name as its
 	// object, and its type and destination (host and port, or the URL's host
-	// with its port when the URL names one) in details; never its credential.
+	// with its port when the URL names one) in details, and allow_identified
+	// "true" when it is set; never its credential. A sender added with
+	// allow_identified set is also an event
+	// (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED).
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
 	// does not exist, for a caller who may not list every tenant; also a
-	// masked key), invalid,
+	// masked key; also allow_identified set by a caller without admin on the
+	// installation), invalid,
 	// not found (a tenant that does not exist, for a caller who may list every
 	// tenant), conflict (the tenant has a sender with that name, or a removed
 	// sender of that name is still named by jobs), precondition (a host or
@@ -151,15 +159,30 @@ type SenderServiceClient interface {
 	// stow.authentication names stow.credential too, unless the
 	// authentication becomes none, which clears the held credential. A mask
 	// that breaks this rule is invalid. A masked key (Key.masked) is refused
-	// it, as AddSender.
+	// it, as AddSender. A mask that names "allow_identified" needs admin on
+	// the installation as well, whether it sets or clears the mark; a caller
+	// without it is refused before the request is validated, recorded refused
+	// in the installation's log. So does a change of where a sender whose
+	// allow_identified is set sends: its host, port, AE titles, URL, TLS or
+	// account (dimse.host, dimse.port, the AE titles, stow.url, any TLS
+	// field, stow.authentication, stow.username, stow.header_name and
+	// stow.credential, since on a DICOMweb peer with several accounts the
+	// account decides where data lands), so a tenant's admin cannot point a
+	// marked sender somewhere the installation's admin did not choose; the change is
+	// refused, recorded refused in the installation's log, and the mark is
+	// not cleared.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the sender's name as its
-	// object and the mask's paths in details; never a value of the
-	// credential.
+	// object and the mask's paths in details, and allow_identified with the
+	// mark after when the change moved it; never a value of the credential.
+	// A change that moves the mark is also an event
+	// (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED), written with it.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
 	// does not exist, for a caller who may not list every tenant; also a
-	// masked key), invalid
+	// masked key; also "allow_identified" in the mask, or a change of where a
+	// marked sender sends, from a caller without admin on the installation),
+	// invalid
 	// (also an empty mask, a path that names no field, a read-only field or a
 	// type's whole message, a path into the other type's configuration, a
 	// URL or authentication without the credential, and every rule AddSender
@@ -234,13 +257,21 @@ type SenderServiceHandler interface {
 	// TestSender tries the peer. A masked key (Key.masked) is refused it:
 	// where the archive's data is sent is a person's choice.
 	//
+	// A sender added with allow_identified set needs admin on the
+	// installation as well; a caller without it is refused before the request
+	// is validated, recorded refused in the installation's log.
+	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the sender's name as its
 	// object, and its type and destination (host and port, or the URL's host
-	// with its port when the URL names one) in details; never its credential.
+	// with its port when the URL names one) in details, and allow_identified
+	// "true" when it is set; never its credential. A sender added with
+	// allow_identified set is also an event
+	// (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED).
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
 	// does not exist, for a caller who may not list every tenant; also a
-	// masked key), invalid,
+	// masked key; also allow_identified set by a caller without admin on the
+	// installation), invalid,
 	// not found (a tenant that does not exist, for a caller who may list every
 	// tenant), conflict (the tenant has a sender with that name, or a removed
 	// sender of that name is still named by jobs), precondition (a host or
@@ -288,15 +319,30 @@ type SenderServiceHandler interface {
 	// stow.authentication names stow.credential too, unless the
 	// authentication becomes none, which clears the held credential. A mask
 	// that breaks this rule is invalid. A masked key (Key.masked) is refused
-	// it, as AddSender.
+	// it, as AddSender. A mask that names "allow_identified" needs admin on
+	// the installation as well, whether it sets or clears the mark; a caller
+	// without it is refused before the request is validated, recorded refused
+	// in the installation's log. So does a change of where a sender whose
+	// allow_identified is set sends: its host, port, AE titles, URL, TLS or
+	// account (dimse.host, dimse.port, the AE titles, stow.url, any TLS
+	// field, stow.authentication, stow.username, stow.header_name and
+	// stow.credential, since on a DICOMweb peer with several accounts the
+	// account decides where data lands), so a tenant's admin cannot point a
+	// marked sender somewhere the installation's admin did not choose; the change is
+	// refused, recorded refused in the installation's log, and the mark is
+	// not cleared.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the sender's name as its
-	// object and the mask's paths in details; never a value of the
-	// credential.
+	// object and the mask's paths in details, and allow_identified with the
+	// mark after when the change moved it; never a value of the credential.
+	// A change that moves the mark is also an event
+	// (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED), written with it.
 	// Errors: unauthenticated, permission denied (no grant; also a tenant that
 	// does not exist, for a caller who may not list every tenant; also a
-	// masked key), invalid
+	// masked key; also "allow_identified" in the mask, or a change of where a
+	// marked sender sends, from a caller without admin on the installation),
+	// invalid
 	// (also an empty mask, a path that names no field, a read-only field or a
 	// type's whole message, a path into the other type's configuration, a
 	// URL or authentication without the credential, and every rule AddSender

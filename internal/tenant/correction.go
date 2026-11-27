@@ -545,6 +545,14 @@ type CorrectionCommit struct {
 	// catalog holds of each scan whose instances it set them on
 	// (EditCatalogValues).
 	Values map[string]EditValues
+	// Replaced is, for a replace, how its new revision was archived: the
+	// profile version that de-identified it (zero for bytes archived as
+	// received, which the tenant must otherwise have) and whether a pixel
+	// rule of it accepted an image at risk of burned-in text. The publish
+	// writes both to the instance's row, so the catalog judges the bytes it
+	// points to (SendRefusal), never the revision they replace; a replace
+	// published without it is Invalid. Nil for every other kind.
+	Replaced *InstanceProvenance
 }
 
 // CorrectionScan is a scan a correction touches.

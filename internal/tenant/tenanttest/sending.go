@@ -62,6 +62,8 @@ func runSending(t *testing.T, open OpenEvents) {
 		{"DeidJobs", testDeidJobs},
 		{"DeidJobTallies", testDeidJobTallies},
 		{"SeenUIDs", testSeenUIDs},
+		{"SenderMark", testSenderMark},
+		{"InstancePixelRisk", testInstancePixelRisk},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -89,6 +91,9 @@ type senv struct {
 	// profile is the profile version archive records for each instance
 	// it commits; zero archives as received.
 	profile tenant.ProfileRef
+	// pixelRisk says archive records each instance with profile as an image
+	// whose accepted pixel risk a sender refuses unless marked.
+	pixelRisk bool
 }
 
 // sealed is the stand-in for a credential sealed by the caller: the store
@@ -178,7 +183,7 @@ func (e *senv) archiveRouted(receiver string, study, scans, per, base int, when 
 			key, err := layout.InstanceKey(p, f.SOPInstanceUID)
 			e.ok("InstanceKey", err)
 			c.Instances = append(c.Instances, tenant.ConfirmedInstance{SOPInstanceUID: f.SOPInstanceUID, Key: key,
-				Length: f.Size, Size: f.Size, ArchivedSHA256: f.SHA256, Profile: e.profile})
+				Length: f.Size, Size: f.Size, ArchivedSHA256: f.SHA256, Profile: e.profile, PixelRiskAccepted: e.pixelRisk})
 		}
 		_, err := e.p.CommitScan(e.ctx, c)
 		e.ok("CommitScan", err)

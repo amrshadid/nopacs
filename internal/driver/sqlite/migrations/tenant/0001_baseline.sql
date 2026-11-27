@@ -653,9 +653,12 @@ CREATE INDEX instance_claims_by_reception ON instance_claims (reception_id);
 -- storage_key is '' for the layout's key of the instance's scan and UID, the
 -- only key a commit is given, so a read makes it again from the scan's
 -- labels. profile_version_id is the profile version that de-identified it
--- (an id of profile_versions), NULL for one archived as received. These
--- keep the row small: at ten million instances a wider row and its indexes
--- took about 7 GB.
+-- (an id of profile_versions), NULL for one archived as received.
+-- pixel_risk_accepted is 1 when a pixel rule of that version accepted an
+-- image at risk of burned-in text as it is, which a sender refuses unless
+-- marked; SQLite stores 0 and 1 in the record's header alone. These keep
+-- the row small: at ten million instances a wider row and its indexes took
+-- about 7 GB.
 CREATE TABLE instances (
     scan_id          INTEGER NOT NULL,
     sop_instance_uid TEXT    NOT NULL,
@@ -668,6 +671,7 @@ CREATE TABLE instances (
     size             INTEGER NOT NULL CHECK (size >= 0),
     held_at          INTEGER NOT NULL,
     profile_version_id INTEGER,
+    pixel_risk_accepted INTEGER NOT NULL DEFAULT 0 CHECK (pixel_risk_accepted IN (0, 1)),
     PRIMARY KEY (scan_id, sop_instance_uid)
 ) STRICT, WITHOUT ROWID;
 
@@ -843,11 +847,14 @@ CREATE UNIQUE INDEX lookup_codes_by_code ON lookup_codes (table_name, code);
 -- titles and TLS files; a stow peer's URL, authentication and request
 -- bounds) is JSON, stored and returned whole. The credential is sealed by
 -- the caller and never read back by a read operation: it is selected only
--- as whether it is set.
+-- as whether it is set. allow_identified is 1 when the installation's admin
+-- let it send instances archived as received, without full profile
+-- provenance, or with an accepted pixel risk.
 CREATE TABLE senders (
     name                 TEXT    NOT NULL PRIMARY KEY,
     type                 TEXT    NOT NULL CHECK (type IN ('dimse', 'stow')),
     enabled              INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    allow_identified     INTEGER NOT NULL DEFAULT 0 CHECK (allow_identified IN (0, 1)),
     config               TEXT    NOT NULL,
     credential           BLOB,
     max_associations     INTEGER NOT NULL CHECK (max_associations BETWEEN 1 AND 16),
@@ -1660,6 +1667,7 @@ CREATE TABLE hidden_instances (
     size               INTEGER NOT NULL,
     held_at            INTEGER NOT NULL,
     profile_version_id INTEGER,
+    pixel_risk_accepted INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (correction_id, sop_instance_uid)
 ) STRICT, WITHOUT ROWID;
 

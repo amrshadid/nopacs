@@ -100,6 +100,10 @@ type PixelWork struct {
 	syntax    string
 }
 
+// RiskAccepted reports whether the image was at risk of burned-in text and
+// an accept rule let it through as it is.
+func (w *PixelWork) RiskAccepted() bool { return w != nil && w.AtRisk && w.Action == pixelAccept }
+
 // The pixel rule actions, as PixelWork.Action names them.
 const (
 	pixelRedact = "redact"

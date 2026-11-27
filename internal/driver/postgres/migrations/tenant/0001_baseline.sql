@@ -714,7 +714,10 @@ CREATE INDEX instance_claims_by_reception ON instance_claims (reception_id);
 -- is '' for the layout's key of the instance's scan and UID, the only key a
 -- commit is given, so a read makes it again from the scan's labels.
 -- profile_version_id is the profile version that de-identified it (an id of
--- profile_versions), NULL for one archived as received. These keep the row
+-- profile_versions), NULL for one archived as received. pixel_risk_accepted
+-- is true when a pixel rule of that version accepted an image at risk of
+-- burned-in text as it is, which a sender refuses unless marked; it takes
+-- the alignment padding after the bigint before it. These keep the row
 -- small: at ten million instances a wider row took 6.6 GB and its indexes
 -- 2.3 GB.
 CREATE TABLE instances (
@@ -729,6 +732,7 @@ CREATE TABLE instances (
     size               bigint      NOT NULL,
     held_at            timestamptz NOT NULL,
     profile_version_id bigint,
+    pixel_risk_accepted boolean    NOT NULL DEFAULT false,
     CONSTRAINT instances_pkey PRIMARY KEY (sop_instance_uid),
     CONSTRAINT instances_sha256_check CHECK (octet_length(sha256) = 32),
     CONSTRAINT instances_archived_check CHECK (archived_sha256 IS NULL OR octet_length(archived_sha256) = 32),
@@ -935,11 +939,14 @@ CREATE TABLE lookup_codes (
 -- titles and TLS files; a stow peer's URL, authentication and request
 -- bounds) is JSON, stored and returned whole. The credential is sealed by
 -- the caller and never read back by a read operation: it is selected only
--- as whether it is set.
+-- as whether it is set. allow_identified is true when the installation's
+-- admin let it send instances archived as received, without full profile
+-- provenance, or with an accepted pixel risk.
 CREATE TABLE senders (
     name                 text        COLLATE "C" NOT NULL,
     type                 text        COLLATE "C" NOT NULL,
     enabled              boolean     NOT NULL,
+    allow_identified     boolean     NOT NULL DEFAULT false,
     config               text        NOT NULL,
     credential           bytea,
     max_associations     integer     NOT NULL,
@@ -1813,6 +1820,7 @@ CREATE TABLE hidden_instances (
     size               bigint      NOT NULL,
     held_at            timestamptz NOT NULL,
     profile_version_id bigint,
+    pixel_risk_accepted boolean    NOT NULL DEFAULT false,
     PRIMARY KEY (correction_id, sop_instance_uid)
 );
 

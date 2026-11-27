@@ -192,6 +192,7 @@ func (p *Pipeline) lineOf(m sidecarMeta, wr written) sidecar.Instance {
 	if !wr.profile.IsZero() {
 		in.Profile = wr.profile.String()
 		in.ProfileSHA256 = p.profileSum(wr.profile)
+		in.PixelRiskAccepted = wr.pixelRiskAccepted
 	}
 	return in
 }

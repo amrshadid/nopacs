@@ -171,7 +171,10 @@ func (e *Engine) Replace(ctx context.Context, r ReplaceRequest) (tenant.Correcti
 	// The metadata file's digest is kept with the new manifest, so the
 	// scan's metadata stays checked after the replace.
 	series := scans[0].SeriesUID
-	cc := tenant.CorrectionCommit{ID: c.ID, Manifests: map[string]tenant.SHA256{series: meta.after}}
+	// The row takes the new revision's provenance from the line written for
+	// it, so the catalog and the metadata say the same of the bytes.
+	replaced := line.Provenance()
+	cc := tenant.CorrectionCommit{ID: c.ID, Manifests: map[string]tenant.SHA256{series: meta.after}, Replaced: &replaced}
 	if !meta.metadata.IsZero() {
 		cc.Sidecars = map[string]tenant.SHA256{series: meta.metadata}
 	}

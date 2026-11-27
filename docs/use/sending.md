@@ -49,6 +49,53 @@ address only with `private-address`, and a link-local one only with
 `link-local`; the cloud metadata addresses (`169.254.169.254`,
 `fd00:ec2::254`) are never allowed. See [Settings](../operate/settings.md).
 
+## What a sender may send
+
+By default a sender sends only instances archived **de-identified**: those whose
+catalog row records the profile version that de-identified them, and whose image
+no pixel rule accepted while it was at risk of burned-in text. Every other
+instance is refused, counted and listed on the job with a fixed reason, and the
+job goes on with the rest:
+
+| Reason | What it means |
+|---|---|
+| `as_received` | The instance was archived as received: its receiver did not de-identify it. |
+| `no_profile_provenance` | The catalog names the profile version that did it only in part, so which version did it cannot be told. |
+| `pixel_risk_accepted` | Its image was at risk of burned-in text and a pixel rule of its profile accepted it as it is, so what its pixels show was not removed. |
+
+A refused instance is never read, and the reason names a fact of the catalog,
+never a value of the file. The rule is judged for each instance as its transfer
+would start, never when the job is made, and it is one rule for every job: one a
+person makes, a receiver's forward, a retry, and one a restored database still
+holds. A job made while the sender was allowed more, and run after that was taken
+back, refuses what the sender may no longer send. A replace (`correction
+replace`) gives the instance the provenance of its new revision: bytes a later
+profile version accepted at risk, or bytes archived as received, are judged as
+such from the moment the replace is published.
+
+A sender that must receive more (a clinical PACS that takes identified data, a
+site's own archive) is marked by an admin on the installation, who also needs
+admin on the tenant to change a sender at all:
+
+```sh
+nopacs sender set lab1 pacs --allow-identified
+nopacs sender set lab1 pacs --allow-identified=false
+```
+
+A tenant's admin alone is refused (exit 3), and so is a masked key, whatever its
+grants. The same holds for a change of where a marked sender sends (its host,
+port, AE titles, URL, TLS or account, the account being a stow sender's
+authentication, user name, header name and credential, since on a DICOMweb peer
+with several accounts the account decides where data lands): only an admin on
+the installation points
+a marked sender elsewhere, and the mark is never cleared to let such a change
+through. Each change is written to the tenant's audit log with the detail
+`allow_identified` and is an event (`SENDER_ALLOW_IDENTIFIED`) in the tenant's
+feed. A mark taken back while a scan is being sent stops at that scan's next
+instance once the server reads the change, which `sender set` makes at once; a
+mark given starts at the next scan. `sender show` prints `Allow identified: yes`
+for a marked sender.
+
 ## The steps
 
 1. An installation admin allows the destination:
@@ -151,3 +198,6 @@ ends one that is queued or running.
 - A peer that keeps both copies of an instance sent twice keeps both: the same
   SOP Instance UID with the same bytes is a repeat to every peer tried, but not
   to every peer there is.
+- What a sender may send is judged from what the catalog records, not from the
+  file: an instance a profile de-identified is trusted as de-identified as far as
+  that profile and the check after it go.

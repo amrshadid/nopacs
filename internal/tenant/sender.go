@@ -100,6 +100,11 @@ type Sender struct {
 	STOW STOWSender
 	// Enabled says whether it sends; a disabled sender's jobs wait.
 	Enabled bool
+	// AllowIdentified says it may also send instances SendRefusal refuses
+	// by default: archived as received, without profile provenance, or with
+	// an accepted pixel risk. Only the installation's admin sets or clears
+	// it; false by default.
+	AllowIdentified bool
 	// MaxAssociations is how many associations or requests it holds open
 	// at once.
 	MaxAssociations int
@@ -172,6 +177,7 @@ type SenderField string
 // The fields of a sender a change can name.
 const (
 	FieldSenderEnabled         SenderField = "enabled"
+	FieldSenderAllowIdentified SenderField = "allow_identified"
 	FieldSenderAssociations    SenderField = "max_associations"
 	FieldSenderByteRate        SenderField = "max_bytes_per_second"
 	FieldSenderConnectTimeout  SenderField = "connect_timeout"
@@ -197,7 +203,7 @@ const (
 	FieldSTOWTLSServerName     SenderField = "stow.tls.server_name"
 	FieldSTOWMaxInstances      SenderField = "stow.max_instances_per_request"
 	FieldSTOWMaxRequestBytes   SenderField = "stow.max_request_bytes"
-	maxSenderFieldCount                    = 26
+	maxSenderFieldCount                    = 27
 )
 
 // destinationFields are the fields whose change moves where a sender
@@ -205,6 +211,24 @@ const (
 var destinationFields = []SenderField{FieldDIMSEHost, FieldDIMSEPeerPort, FieldDIMSESenderTLS, FieldDIMSETLSCAFile,
 	FieldDIMSETLSCertFile, FieldDIMSETLSKeyFile, FieldDIMSETLSServerName, FieldSTOWURL, FieldSTOWTLS, FieldSTOWTLSCAFile,
 	FieldSTOWTLSCertFile, FieldSTOWTLSKeyFile, FieldSTOWTLSServerName}
+
+// RedirectsSender reports whether a change of field moves where a sender's
+// bytes go, or to which application or account they are addressed: its
+// host, port, AE titles, URL, TLS settings, or a stow sender's account
+// (authentication, user name, header name, credential), since on a
+// DICOMweb peer with several accounts the account decides where data
+// lands, as the called AE title does on a DICOM peer. On a sender marked
+// AllowIdentified such a change is the installation's admin's to make, as
+// the mark is, so a tenant's admin cannot point a marked sender somewhere
+// else.
+func RedirectsSender(field SenderField) bool {
+	return slices.Contains(destinationFields, field) || slices.Contains(accountFields, field)
+}
+
+// accountFields are the fields that say to which application or account a
+// sender's bytes are addressed at its destination.
+var accountFields = []SenderField{FieldDIMSECalledAETitle, FieldDIMSECallingAETitle, FieldSTOWAuthentication,
+	FieldSTOWUsername, FieldSTOWHeaderName, FieldSTOWCredential}
 
 // ValidateSenderName returns an Invalid error unless name follows the rule
 // of a tenant's name and is at most MaxSenderNameLength characters.
@@ -516,6 +540,8 @@ func ApplySender(stored, change Sender, fields []SenderField) (out Sender, desti
 		switch f {
 		case FieldSenderEnabled:
 			out.Enabled = change.Enabled
+		case FieldSenderAllowIdentified:
+			out.AllowIdentified = change.AllowIdentified
 		case FieldSenderAssociations:
 			out.MaxAssociations = change.MaxAssociations
 		case FieldSenderByteRate:

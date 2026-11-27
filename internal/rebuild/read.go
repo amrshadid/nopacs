@@ -355,6 +355,7 @@ func instanceOf(line sidecar.Instance, files map[string]manifest.File) (tenant.R
 			return tenant.RebuiltInstance{}, "an instance's profile version is not name@version"
 		}
 		in.Profile = tenant.ProfileRef{Name: name, Version: int32(n)}
+		in.PixelRiskAccepted = line.PixelRiskAccepted
 	}
 	return in, ""
 }

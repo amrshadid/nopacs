@@ -68,6 +68,9 @@ class JobFailureCode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     JOB_FAILURE_CODE_TOO_LARGE: _ClassVar[JobFailureCode]
     JOB_FAILURE_CODE_DELETED_IN_ARCHIVE: _ClassVar[JobFailureCode]
     JOB_FAILURE_CODE_NOT_ONLINE: _ClassVar[JobFailureCode]
+    JOB_FAILURE_CODE_AS_RECEIVED: _ClassVar[JobFailureCode]
+    JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE: _ClassVar[JobFailureCode]
+    JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED: _ClassVar[JobFailureCode]
 
 class ImportFileKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -127,6 +130,9 @@ JOB_FAILURE_CODE_NOT_DEIDENTIFIED: JobFailureCode
 JOB_FAILURE_CODE_TOO_LARGE: JobFailureCode
 JOB_FAILURE_CODE_DELETED_IN_ARCHIVE: JobFailureCode
 JOB_FAILURE_CODE_NOT_ONLINE: JobFailureCode
+JOB_FAILURE_CODE_AS_RECEIVED: JobFailureCode
+JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE: JobFailureCode
+JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED: JobFailureCode
 IMPORT_FILE_KIND_UNSPECIFIED: ImportFileKind
 IMPORT_FILE_KIND_SKIPPED: ImportFileKind
 IMPORT_FILE_KIND_QUARANTINED: ImportFileKind

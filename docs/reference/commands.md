@@ -1430,6 +1430,7 @@ Usage: `nopacs sender add <tenant> <name> --type dimse --host H --port N --calle
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
+| `--allow-identified` | bool |  | whether the sender may also send instances archived as received, without their profile version recorded whole, or with an accepted pixel risk; false, the default, sends only de-identified instances. Needs admin on the installation, never a masked key (--allow-identified=false clears it) |
 | `--authentication` | string |  | stow: how requests prove who sends them: none, basic, bearer, header (required on add) |
 | `--called-aet` | string |  | dimse: the peer's AE title, the Called AE Title of each association: 1 to 16 printable characters |
 | `--calling-aet` | string |  | dimse: the AE title the server calls with, which the peer commonly admits by: 1 to 16 printable characters |
@@ -1484,6 +1485,7 @@ Usage: `nopacs sender set <tenant> <name> [flags of the fields to change] [flags
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
+| `--allow-identified` | bool |  | whether the sender may also send instances archived as received, without their profile version recorded whole, or with an accepted pixel risk; false, the default, sends only de-identified instances. Needs admin on the installation, never a masked key (--allow-identified=false clears it) |
 | `--authentication` | string |  | stow: how requests prove who sends them: none, basic, bearer, header (required on add) |
 | `--called-aet` | string |  | dimse: the peer's AE title, the Called AE Title of each association: 1 to 16 printable characters |
 | `--calling-aet` | string |  | dimse: the AE title the server calls with, which the peer commonly admits by: 1 to 16 printable characters |

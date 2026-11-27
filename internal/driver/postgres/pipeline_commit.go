@@ -197,16 +197,18 @@ const confirmSQL = `WITH taken AS (
 
 // confirmDeidentifiedSQL is confirmSQL for a commit any of whose instances
 // a profile version de-identified: each records its version's id, given in
-// $11, 0 there and NULL in the row for one archived as received.
+// $11, 0 there and NULL in the row for one archived as received, and
+// whether a pixel rule of it accepted an image at risk of burned-in text,
+// in $12.
 const confirmDeidentifiedSQL = `WITH taken AS (
 	DELETE FROM instance_claims AS c WHERE c.sop_instance_uid = ANY($3::text[]) AND c.reception_id = $8
 		AND c.study_uid = $9 AND c.series_uid = $10
 	RETURNING c.sop_instance_uid, c.sha256)
 	INSERT INTO instances (sop_instance_uid, scan_id, reception_id, sha256, archived_sha256, storage_key, byte_offset, byte_length,
-		size, held_at, profile_version_id)
-	SELECT u.uid, $1, $8, t.sha256, nullif(u.sha, t.sha256), '', u.off, u.len, u.size, $2, nullif(u.pv, 0)
-	FROM unnest($3::text[], $4::bigint[], $5::bigint[], $6::bigint[], $7::bytea[], $11::bigint[])
-		WITH ORDINALITY AS u(uid, off, len, size, sha, pv, n)
+		size, held_at, profile_version_id, pixel_risk_accepted)
+	SELECT u.uid, $1, $8, t.sha256, nullif(u.sha, t.sha256), '', u.off, u.len, u.size, $2, nullif(u.pv, 0), u.pr
+	FROM unnest($3::text[], $4::bigint[], $5::bigint[], $6::bigint[], $7::bytea[], $11::bigint[], $12::boolean[])
+		WITH ORDINALITY AS u(uid, off, len, size, sha, pv, pr, n)
 	JOIN taken AS t ON t.sop_instance_uid = u.uid ORDER BY u.n
 	RETURNING sop_instance_uid`
 
@@ -288,6 +290,7 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 			byUID[r.uid] = r.h
 		}
 		var offs, lens, sizes, pvs []int64
+		var risks []bool
 		var sums [][]byte
 		var confirm []string
 		// Each instance confirmed with its received checksum, the claim's,
@@ -307,6 +310,7 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 			offs, lens, sizes = append(offs, in.Offset), append(lens, in.Length), append(sizes, in.Size)
 			sums = append(sums, sumBytes(in.ArchivedSHA256))
 			pvs = append(pvs, profiles[in.Profile])
+			risks = append(risks, in.PixelRiskAccepted)
 			newBytes += in.Size
 		}
 		var newInstances int64
@@ -314,7 +318,7 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 			query, args := confirmSQL, []any{scanID, micros(c.At), confirm, offs, lens, sizes, sums,
 				c.ReceptionID, c.StudyUID, c.SeriesUID}
 			if len(profiles) > 0 {
-				query, args = confirmDeidentifiedSQL, append(args, pvs)
+				query, args = confirmDeidentifiedSQL, append(args, pvs, risks)
 			}
 			rows, err := tx.Query(ctx, query, args...)
 			done, err := collect(rows, err, func(row scanner) (string, error) {

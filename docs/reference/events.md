@@ -27,3 +27,4 @@ not know and takes its cursor, so a type added in a later version breaks no clie
 | `HOLD_CHANGED` | 16 | A hold was placed or released, or found on a storage and made active. |
 | `RETENTION_CLOCK` | 17 | The tenant's retention was paused for a clock jump, or resumed when an admin confirmed the time. |
 | `QUARANTINE_AGING` | 18 | What the tenant holds in quarantine passed quarantine.warn-age or quarantine.warn-bytes, or is no longer past one of them. |
+| `SENDER_ALLOW_IDENTIFIED` | 19 | A sender's allow_identified was set or cleared (SenderService), or a sender was added with it set. |

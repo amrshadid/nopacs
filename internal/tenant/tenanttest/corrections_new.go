@@ -378,7 +378,10 @@ func testReplace(e *cenv) {
 		e.Fatalf("the same file replaced again answers %+v, %v, %v", again, made, err)
 	}
 	before := e.totals()
-	e.commit(c.ID, 600, map[string]tenant.SHA256{in.SeriesUID: sum(6000)})
+	// The new revision was archived as received, as the one it replaces.
+	_, err = e.p.CommitCorrection(e.ctx, tenant.CorrectionCommit{ID: c.ID, Now: at(600), Grace: grace,
+		Manifests: map[string]tenant.SHA256{in.SeriesUID: sum(6000)}, Replaced: &tenant.InstanceProvenance{}})
+	e.ok("CommitCorrection of a replace", err)
 	got := e.wantState(c.ID, record.StateCommitted)
 	if got.RestoreLine != nil {
 		e.Fatal("a published replace keeps its line to write back")

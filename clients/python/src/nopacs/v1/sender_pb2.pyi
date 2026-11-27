@@ -97,7 +97,7 @@ SENDER_TEST_OUTCOME_FAILED: SenderTestOutcome
 SENDER_TEST_OUTCOME_SKIPPED: SenderTestOutcome
 
 class Sender(_message.Message):
-    __slots__ = ("name", "dimse", "stow", "enabled", "max_associations", "max_bytes_per_second", "connect_timeout", "response_timeout", "health", "create_time", "update_time")
+    __slots__ = ("name", "dimse", "stow", "enabled", "max_associations", "max_bytes_per_second", "connect_timeout", "response_timeout", "health", "create_time", "update_time", "allow_identified")
     NAME_FIELD_NUMBER: _ClassVar[int]
     DIMSE_FIELD_NUMBER: _ClassVar[int]
     STOW_FIELD_NUMBER: _ClassVar[int]
@@ -109,6 +109,7 @@ class Sender(_message.Message):
     HEALTH_FIELD_NUMBER: _ClassVar[int]
     CREATE_TIME_FIELD_NUMBER: _ClassVar[int]
     UPDATE_TIME_FIELD_NUMBER: _ClassVar[int]
+    ALLOW_IDENTIFIED_FIELD_NUMBER: _ClassVar[int]
     name: str
     dimse: DimseSender
     stow: StowSender
@@ -120,7 +121,8 @@ class Sender(_message.Message):
     health: SenderHealth
     create_time: _timestamp_pb2.Timestamp
     update_time: _timestamp_pb2.Timestamp
-    def __init__(self, name: _Optional[str] = ..., dimse: _Optional[_Union[DimseSender, _Mapping]] = ..., stow: _Optional[_Union[StowSender, _Mapping]] = ..., enabled: _Optional[bool] = ..., max_associations: _Optional[int] = ..., max_bytes_per_second: _Optional[int] = ..., connect_timeout: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., response_timeout: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., health: _Optional[_Union[SenderHealth, _Mapping]] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    allow_identified: bool
+    def __init__(self, name: _Optional[str] = ..., dimse: _Optional[_Union[DimseSender, _Mapping]] = ..., stow: _Optional[_Union[StowSender, _Mapping]] = ..., enabled: _Optional[bool] = ..., max_associations: _Optional[int] = ..., max_bytes_per_second: _Optional[int] = ..., connect_timeout: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., response_timeout: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., health: _Optional[_Union[SenderHealth, _Mapping]] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., allow_identified: _Optional[bool] = ...) -> None: ...
 
 class DimseSender(_message.Message):
     __slots__ = ("host", "port", "called_ae_title", "calling_ae_title", "tls")

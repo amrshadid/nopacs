@@ -66,10 +66,13 @@ const (
 	// before its condition (SendingDialect.stream): the instances' key.
 	streamCountSQL = `SELECT count(*), CAST(coalesce(sum(i.size), 0) AS BIGINT) FROM instances AS i WHERE `
 	// The profile version an instance records is read by its key, and its
-	// scrub's mark by instance_damage's (damageColumn).
+	// scrub's mark by instance_damage's (damageColumn); whether a pixel risk
+	// was accepted is the row's own, which every send asks of each instance
+	// (tenant.SendRefusal).
 	streamPageSQL = `SELECT i.sop_instance_uid, i.reception_id, i.storage_key, i.byte_offset, i.byte_length, i.size,
 		i.sha256, coalesce(i.archived_sha256, i.sha256), i.held_at, coalesce(pv.name, ''), coalesce(pv.version, 0),
-		coalesce((SELECT d.finding_id FROM instance_damage AS d WHERE d.sop_instance_uid = i.sop_instance_uid), '')
+		coalesce((SELECT d.finding_id FROM instance_damage AS d WHERE d.sop_instance_uid = i.sop_instance_uid), ''),
+		i.pixel_risk_accepted
 		FROM instances AS i LEFT JOIN profile_versions AS pv ON pv.id = i.profile_version_id WHERE `
 	// scanRefusedSQL reads the instances an ended job's scan refused, by
 	// the scan's key: job_failures_by_scan.

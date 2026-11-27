@@ -53,12 +53,14 @@ const (
 	// primary key of instance_damage, a table that is empty while the
 	// archive is whole. A scalar subquery rather than EXISTS: Postgres may
 	// answer an EXISTS by hashing the whole table once, where this is one
-	// probe of its key per row read.
+	// probe of its key per row read. Whether a pixel risk was accepted is the
+	// row's own (tenant.SendRefusal).
 	HeldInstanceColumns = `sop_instance_uid, reception_id, storage_key, byte_offset, byte_length, size, sha256,
 		coalesce(archived_sha256, sha256), held_at,
 		coalesce((SELECT pv.name FROM profile_versions AS pv WHERE pv.id = instances.profile_version_id), ''),
 		coalesce((SELECT pv.version FROM profile_versions AS pv WHERE pv.id = instances.profile_version_id), 0),
-		coalesce((SELECT d.finding_id FROM instance_damage AS d WHERE d.sop_instance_uid = instances.sop_instance_uid), '')`
+		coalesce((SELECT d.finding_id FROM instance_damage AS d WHERE d.sop_instance_uid = instances.sop_instance_uid), ''),
+		pixel_risk_accepted`
 )
 
 // The bounds of a newest-first range of keyRange with no time given. Every

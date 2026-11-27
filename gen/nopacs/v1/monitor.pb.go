@@ -148,6 +148,9 @@ const (
 	// What the tenant holds in quarantine passed quarantine.warn-age or
 	// quarantine.warn-bytes, or is no longer past one of them.
 	EventType_EVENT_TYPE_QUARANTINE_AGING EventType = 18
+	// A sender's allow_identified was set or cleared (SenderService), or a
+	// sender was added with it set.
+	EventType_EVENT_TYPE_SENDER_ALLOW_IDENTIFIED EventType = 19
 )
 
 // Enum value maps for EventType.
@@ -172,27 +175,29 @@ var (
 		16: "EVENT_TYPE_HOLD_CHANGED",
 		17: "EVENT_TYPE_RETENTION_CLOCK",
 		18: "EVENT_TYPE_QUARANTINE_AGING",
+		19: "EVENT_TYPE_SENDER_ALLOW_IDENTIFIED",
 	}
 	EventType_value = map[string]int32{
-		"EVENT_TYPE_UNSPECIFIED":        0,
-		"EVENT_TYPE_ASSOCIATION_FAILED": 1,
-		"EVENT_TYPE_RECEPTION_STEP":     2,
-		"EVENT_TYPE_FILE_QUARANTINED":   3,
-		"EVENT_TYPE_QUARANTINE_DECIDED": 4,
-		"EVENT_TYPE_RECEIVER_HEALTH":    5,
-		"EVENT_TYPE_STORAGE_SPACE":      6,
-		"EVENT_TYPE_FRAMES_ADDED":       7,
-		"EVENT_TYPE_JOB_STEP":           8,
-		"EVENT_TYPE_JOB_PROGRESS":       9,
-		"EVENT_TYPE_SENDER_HEALTH":      10,
-		"EVENT_TYPE_SCRUB_FINDING":      11,
-		"EVENT_TYPE_CATALOG_CHANGED":    12,
-		"EVENT_TYPE_CATALOG_REBUILT":    13,
-		"EVENT_TYPE_REPLICA_BEHIND":     14,
-		"EVENT_TYPE_STORAGE_SWITCHED":   15,
-		"EVENT_TYPE_HOLD_CHANGED":       16,
-		"EVENT_TYPE_RETENTION_CLOCK":    17,
-		"EVENT_TYPE_QUARANTINE_AGING":   18,
+		"EVENT_TYPE_UNSPECIFIED":             0,
+		"EVENT_TYPE_ASSOCIATION_FAILED":      1,
+		"EVENT_TYPE_RECEPTION_STEP":          2,
+		"EVENT_TYPE_FILE_QUARANTINED":        3,
+		"EVENT_TYPE_QUARANTINE_DECIDED":      4,
+		"EVENT_TYPE_RECEIVER_HEALTH":         5,
+		"EVENT_TYPE_STORAGE_SPACE":           6,
+		"EVENT_TYPE_FRAMES_ADDED":            7,
+		"EVENT_TYPE_JOB_STEP":                8,
+		"EVENT_TYPE_JOB_PROGRESS":            9,
+		"EVENT_TYPE_SENDER_HEALTH":           10,
+		"EVENT_TYPE_SCRUB_FINDING":           11,
+		"EVENT_TYPE_CATALOG_CHANGED":         12,
+		"EVENT_TYPE_CATALOG_REBUILT":         13,
+		"EVENT_TYPE_REPLICA_BEHIND":          14,
+		"EVENT_TYPE_STORAGE_SWITCHED":        15,
+		"EVENT_TYPE_HOLD_CHANGED":            16,
+		"EVENT_TYPE_RETENTION_CLOCK":         17,
+		"EVENT_TYPE_QUARANTINE_AGING":        18,
+		"EVENT_TYPE_SENDER_ALLOW_IDENTIFIED": 19,
 	}
 )
 
@@ -3443,6 +3448,63 @@ func (x *QuarantineAging) GetRecovered() bool {
 	return false
 }
 
+// SenderAllowIdentifiedChanged is a sender's allow_identified set or
+// cleared, or a sender added with it set: a change of what the tenant lets
+// leave the archive, written in the transaction of the change.
+type SenderAllowIdentifiedChanged struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The sender's name.
+	Sender string `protobuf:"bytes,1,opt,name=sender,proto3" json:"sender,omitempty"`
+	// The mark after the change.
+	AllowIdentified bool `protobuf:"varint,2,opt,name=allow_identified,json=allowIdentified,proto3" json:"allow_identified,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SenderAllowIdentifiedChanged) Reset() {
+	*x = SenderAllowIdentifiedChanged{}
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SenderAllowIdentifiedChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SenderAllowIdentifiedChanged) ProtoMessage() {}
+
+func (x *SenderAllowIdentifiedChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SenderAllowIdentifiedChanged.ProtoReflect.Descriptor instead.
+func (*SenderAllowIdentifiedChanged) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *SenderAllowIdentifiedChanged) GetSender() string {
+	if x != nil {
+		return x.Sender
+	}
+	return ""
+}
+
+func (x *SenderAllowIdentifiedChanged) GetAllowIdentified() bool {
+	if x != nil {
+		return x.AllowIdentified
+	}
+	return false
+}
+
 // CatalogRebuilt is a catalog made again from the storages and put in use
 // in one transaction. When it begins a new history (after a restore, an
 // import or a load), it is that history's first event, and a consumer that
@@ -3463,7 +3525,7 @@ type CatalogRebuilt struct {
 
 func (x *CatalogRebuilt) Reset() {
 	*x = CatalogRebuilt{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[32]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3475,7 +3537,7 @@ func (x *CatalogRebuilt) String() string {
 func (*CatalogRebuilt) ProtoMessage() {}
 
 func (x *CatalogRebuilt) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[32]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3488,7 +3550,7 @@ func (x *CatalogRebuilt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogRebuilt.ProtoReflect.Descriptor instead.
 func (*CatalogRebuilt) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{32}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *CatalogRebuilt) GetJob() string {
@@ -3548,6 +3610,7 @@ type Event struct {
 	//	*Event_HoldChanged
 	//	*Event_RetentionClock
 	//	*Event_QuarantineAging
+	//	*Event_SenderAllowIdentified
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3555,7 +3618,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3567,7 +3630,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3580,7 +3643,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{33}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Event) GetCursor() string {
@@ -3780,6 +3843,15 @@ func (x *Event) GetQuarantineAging() *QuarantineAging {
 	return nil
 }
 
+func (x *Event) GetSenderAllowIdentified() *SenderAllowIdentifiedChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_SenderAllowIdentified); ok {
+			return x.SenderAllowIdentified
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -3874,6 +3946,11 @@ type Event_QuarantineAging struct {
 	QuarantineAging *QuarantineAging `protobuf:"bytes,22,opt,name=quarantine_aging,json=quarantineAging,proto3,oneof"`
 }
 
+type Event_SenderAllowIdentified struct {
+	// A sender's allow_identified was set or cleared.
+	SenderAllowIdentified *SenderAllowIdentifiedChanged `protobuf:"bytes,23,opt,name=sender_allow_identified,json=senderAllowIdentified,proto3,oneof"`
+}
+
 func (*Event_AssociationFailed) isEvent_Payload() {}
 
 func (*Event_ReceptionStep) isEvent_Payload() {}
@@ -3909,6 +3986,8 @@ func (*Event_HoldChanged) isEvent_Payload() {}
 func (*Event_RetentionClock) isEvent_Payload() {}
 
 func (*Event_QuarantineAging) isEvent_Payload() {}
+
+func (*Event_SenderAllowIdentified) isEvent_Payload() {}
 
 // WatchKeepAlive opens every stream, and is sent again when no event has
 // been sent for 15 seconds.
@@ -3958,7 +4037,7 @@ type WatchKeepAlive struct {
 
 func (x *WatchKeepAlive) Reset() {
 	*x = WatchKeepAlive{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3970,7 +4049,7 @@ func (x *WatchKeepAlive) String() string {
 func (*WatchKeepAlive) ProtoMessage() {}
 
 func (x *WatchKeepAlive) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3983,7 +4062,7 @@ func (x *WatchKeepAlive) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchKeepAlive.ProtoReflect.Descriptor instead.
 func (*WatchKeepAlive) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{34}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *WatchKeepAlive) GetTime() *timestamppb.Timestamp {
@@ -4068,7 +4147,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4080,7 +4159,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4093,7 +4172,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{35}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *WatchRequest) GetScope() *Scope {
@@ -4147,7 +4226,7 @@ type WatchResponse struct {
 
 func (x *WatchResponse) Reset() {
 	*x = WatchResponse{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4159,7 +4238,7 @@ func (x *WatchResponse) String() string {
 func (*WatchResponse) ProtoMessage() {}
 
 func (x *WatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4172,7 +4251,7 @@ func (x *WatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
 func (*WatchResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{36}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *WatchResponse) GetKind() isWatchResponse_Kind {
@@ -4496,11 +4575,14 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"age_passed\x18\x04 \x01(\bR\tagePassed\x12!\n" +
 	"\fbytes_passed\x18\x05 \x01(\bR\vbytesPassed\x12\x1c\n" +
 	"\trecovered\x18\x06 \x01(\bR\trecovered\"a\n" +
+	"\x1cSenderAllowIdentifiedChanged\x12\x16\n" +
+	"\x06sender\x18\x01 \x01(\tR\x06sender\x12)\n" +
+	"\x10allow_identified\x18\x02 \x01(\bR\x0fallowIdentified\"a\n" +
 	"\x0eCatalogRebuilt\x12\x10\n" +
 	"\x03job\x18\x01 \x01(\tR\x03job\x12\x1c\n" +
 	"\tinstances\x18\x02 \x01(\x03R\tinstances\x12\x1f\n" +
 	"\vnew_history\x18\x03 \x01(\bR\n" +
-	"newHistory\"\x87\v\n" +
+	"newHistory\"\xea\v\n" +
 	"\x05Event\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\tR\x06cursor\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x16\n" +
@@ -4524,7 +4606,8 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x10storage_switched\x18\x13 \x01(\v2\x1a.nopacs.v1.StorageSwitchedH\x00R\x0fstorageSwitched\x12;\n" +
 	"\fhold_changed\x18\x14 \x01(\v2\x16.nopacs.v1.HoldChangedH\x00R\vholdChanged\x12D\n" +
 	"\x0fretention_clock\x18\x15 \x01(\v2\x19.nopacs.v1.RetentionClockH\x00R\x0eretentionClock\x12G\n" +
-	"\x10quarantine_aging\x18\x16 \x01(\v2\x1a.nopacs.v1.QuarantineAgingH\x00R\x0fquarantineAgingB\t\n" +
+	"\x10quarantine_aging\x18\x16 \x01(\v2\x1a.nopacs.v1.QuarantineAgingH\x00R\x0fquarantineAging\x12a\n" +
+	"\x17sender_allow_identified\x18\x17 \x01(\v2'.nopacs.v1.SenderAllowIdentifiedChangedH\x00R\x15senderAllowIdentifiedB\t\n" +
 	"\apayload\"\x8b\x04\n" +
 	"\x0eWatchKeepAlive\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x16\n" +
@@ -4560,7 +4643,7 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x16STORAGE_VERSIONING_OFF\x10\x02\x12\x1e\n" +
 	"\x1aSTORAGE_VERSIONING_ENABLED\x10\x03\x12 \n" +
 	"\x1cSTORAGE_VERSIONING_SUSPENDED\x10\x04\x12\x1e\n" +
-	"\x1aSTORAGE_VERSIONING_UNKNOWN\x10\x05*\xd8\x04\n" +
+	"\x1aSTORAGE_VERSIONING_UNKNOWN\x10\x05*\x80\x05\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dEVENT_TYPE_ASSOCIATION_FAILED\x10\x01\x12\x1d\n" +
@@ -4581,7 +4664,8 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x1bEVENT_TYPE_STORAGE_SWITCHED\x10\x0f\x12\x1b\n" +
 	"\x17EVENT_TYPE_HOLD_CHANGED\x10\x10\x12\x1e\n" +
 	"\x1aEVENT_TYPE_RETENTION_CLOCK\x10\x11\x12\x1f\n" +
-	"\x1bEVENT_TYPE_QUARANTINE_AGING\x10\x12*\xba\x03\n" +
+	"\x1bEVENT_TYPE_QUARANTINE_AGING\x10\x12\x12&\n" +
+	"\"EVENT_TYPE_SENDER_ALLOW_IDENTIFIED\x10\x13*\xba\x03\n" +
 	"\x12AssociationFailure\x12#\n" +
 	"\x1fASSOCIATION_FAILURE_UNSPECIFIED\x10\x00\x12*\n" +
 	"&ASSOCIATION_FAILURE_CALLER_NOT_ALLOWED\x10\x01\x126\n" +
@@ -4616,93 +4700,94 @@ func file_nopacs_v1_monitor_proto_rawDescGZIP() []byte {
 }
 
 var file_nopacs_v1_monitor_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_nopacs_v1_monitor_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_nopacs_v1_monitor_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_nopacs_v1_monitor_proto_goTypes = []any{
-	(StorageVersioning)(0),        // 0: nopacs.v1.StorageVersioning
-	(EventType)(0),                // 1: nopacs.v1.EventType
-	(AssociationFailure)(0),       // 2: nopacs.v1.AssociationFailure
-	(StorageSpaceState)(0),        // 3: nopacs.v1.StorageSpaceState
-	(*ReceptionStepCount)(nil),    // 4: nopacs.v1.ReceptionStepCount
-	(*TenantCounts)(nil),          // 5: nopacs.v1.TenantCounts
-	(*JobStateCount)(nil),         // 6: nopacs.v1.JobStateCount
-	(*SenderStatus)(nil),          // 7: nopacs.v1.SenderStatus
-	(*Throughput)(nil),            // 8: nopacs.v1.Throughput
-	(*StorageStatus)(nil),         // 9: nopacs.v1.StorageStatus
-	(*ScrubCoverage)(nil),         // 10: nopacs.v1.ScrubCoverage
-	(*RecallCounts)(nil),          // 11: nopacs.v1.RecallCounts
-	(*ReceiverStatus)(nil),        // 12: nopacs.v1.ReceiverStatus
-	(*TenantStatus)(nil),          // 13: nopacs.v1.TenantStatus
-	(*QuarantineWarnings)(nil),    // 14: nopacs.v1.QuarantineWarnings
-	(*ScrubSummary)(nil),          // 15: nopacs.v1.ScrubSummary
-	(*ScrubFindingCount)(nil),     // 16: nopacs.v1.ScrubFindingCount
-	(*GetStatusRequest)(nil),      // 17: nopacs.v1.GetStatusRequest
-	(*GetStatusResponse)(nil),     // 18: nopacs.v1.GetStatusResponse
-	(*AssociationFailed)(nil),     // 19: nopacs.v1.AssociationFailed
-	(*ReceptionStepReached)(nil),  // 20: nopacs.v1.ReceptionStepReached
-	(*FileQuarantined)(nil),       // 21: nopacs.v1.FileQuarantined
-	(*QuarantineDecided)(nil),     // 22: nopacs.v1.QuarantineDecided
-	(*ReceiverHealthChanged)(nil), // 23: nopacs.v1.ReceiverHealthChanged
-	(*StorageSpaceChanged)(nil),   // 24: nopacs.v1.StorageSpaceChanged
-	(*FramesAdded)(nil),           // 25: nopacs.v1.FramesAdded
-	(*JobStepReached)(nil),        // 26: nopacs.v1.JobStepReached
-	(*JobProgressed)(nil),         // 27: nopacs.v1.JobProgressed
-	(*SenderHealthChanged)(nil),   // 28: nopacs.v1.SenderHealthChanged
-	(*ScrubFindingChanged)(nil),   // 29: nopacs.v1.ScrubFindingChanged
-	(*CatalogChanged)(nil),        // 30: nopacs.v1.CatalogChanged
-	(*ReplicaBehind)(nil),         // 31: nopacs.v1.ReplicaBehind
-	(*StorageSwitched)(nil),       // 32: nopacs.v1.StorageSwitched
-	(*HoldChanged)(nil),           // 33: nopacs.v1.HoldChanged
-	(*RetentionClock)(nil),        // 34: nopacs.v1.RetentionClock
-	(*QuarantineAging)(nil),       // 35: nopacs.v1.QuarantineAging
-	(*CatalogRebuilt)(nil),        // 36: nopacs.v1.CatalogRebuilt
-	(*Event)(nil),                 // 37: nopacs.v1.Event
-	(*WatchKeepAlive)(nil),        // 38: nopacs.v1.WatchKeepAlive
-	(*WatchRequest)(nil),          // 39: nopacs.v1.WatchRequest
-	(*WatchResponse)(nil),         // 40: nopacs.v1.WatchResponse
-	nil,                           // 41: nopacs.v1.WatchKeepAlive.TenantCursorsEntry
-	nil,                           // 42: nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
-	nil,                           // 43: nopacs.v1.WatchRequest.TenantCursorsEntry
-	(ReceptionStep)(0),            // 44: nopacs.v1.ReceptionStep
-	(JobState)(0),                 // 45: nopacs.v1.JobState
-	(*SenderHealth)(nil),          // 46: nopacs.v1.SenderHealth
-	(StorageTier)(0),              // 47: nopacs.v1.StorageTier
-	(*timestamppb.Timestamp)(nil), // 48: google.protobuf.Timestamp
-	(EncryptionAtRest)(0),         // 49: nopacs.v1.EncryptionAtRest
-	(*durationpb.Duration)(nil),   // 50: google.protobuf.Duration
-	(*ReceiverHealth)(nil),        // 51: nopacs.v1.ReceiverHealth
-	(TenantState)(0),              // 52: nopacs.v1.TenantState
-	(*AuditSealStatus)(nil),       // 53: nopacs.v1.AuditSealStatus
-	(*ReplicaStatus)(nil),         // 54: nopacs.v1.ReplicaStatus
-	(*RetentionStatus)(nil),       // 55: nopacs.v1.RetentionStatus
-	(ScrubFindingKind)(0),         // 56: nopacs.v1.ScrubFindingKind
-	(*Scope)(nil),                 // 57: nopacs.v1.Scope
-	(*Key)(nil),                   // 58: nopacs.v1.Key
-	(*Caller)(nil),                // 59: nopacs.v1.Caller
-	(*ReceptionCounts)(nil),       // 60: nopacs.v1.ReceptionCounts
-	(QuarantineReason)(0),         // 61: nopacs.v1.QuarantineReason
-	(QuarantineState)(0),          // 62: nopacs.v1.QuarantineState
-	(ReleaseMode)(0),              // 63: nopacs.v1.ReleaseMode
-	(*JobCounts)(nil),             // 64: nopacs.v1.JobCounts
-	(CorrectionKind)(0),           // 65: nopacs.v1.CorrectionKind
-	(CorrectionState)(0),          // 66: nopacs.v1.CorrectionState
-	(CorrectionOrigin)(0),         // 67: nopacs.v1.CorrectionOrigin
-	(HoldState)(0),                // 68: nopacs.v1.HoldState
+	(StorageVersioning)(0),               // 0: nopacs.v1.StorageVersioning
+	(EventType)(0),                       // 1: nopacs.v1.EventType
+	(AssociationFailure)(0),              // 2: nopacs.v1.AssociationFailure
+	(StorageSpaceState)(0),               // 3: nopacs.v1.StorageSpaceState
+	(*ReceptionStepCount)(nil),           // 4: nopacs.v1.ReceptionStepCount
+	(*TenantCounts)(nil),                 // 5: nopacs.v1.TenantCounts
+	(*JobStateCount)(nil),                // 6: nopacs.v1.JobStateCount
+	(*SenderStatus)(nil),                 // 7: nopacs.v1.SenderStatus
+	(*Throughput)(nil),                   // 8: nopacs.v1.Throughput
+	(*StorageStatus)(nil),                // 9: nopacs.v1.StorageStatus
+	(*ScrubCoverage)(nil),                // 10: nopacs.v1.ScrubCoverage
+	(*RecallCounts)(nil),                 // 11: nopacs.v1.RecallCounts
+	(*ReceiverStatus)(nil),               // 12: nopacs.v1.ReceiverStatus
+	(*TenantStatus)(nil),                 // 13: nopacs.v1.TenantStatus
+	(*QuarantineWarnings)(nil),           // 14: nopacs.v1.QuarantineWarnings
+	(*ScrubSummary)(nil),                 // 15: nopacs.v1.ScrubSummary
+	(*ScrubFindingCount)(nil),            // 16: nopacs.v1.ScrubFindingCount
+	(*GetStatusRequest)(nil),             // 17: nopacs.v1.GetStatusRequest
+	(*GetStatusResponse)(nil),            // 18: nopacs.v1.GetStatusResponse
+	(*AssociationFailed)(nil),            // 19: nopacs.v1.AssociationFailed
+	(*ReceptionStepReached)(nil),         // 20: nopacs.v1.ReceptionStepReached
+	(*FileQuarantined)(nil),              // 21: nopacs.v1.FileQuarantined
+	(*QuarantineDecided)(nil),            // 22: nopacs.v1.QuarantineDecided
+	(*ReceiverHealthChanged)(nil),        // 23: nopacs.v1.ReceiverHealthChanged
+	(*StorageSpaceChanged)(nil),          // 24: nopacs.v1.StorageSpaceChanged
+	(*FramesAdded)(nil),                  // 25: nopacs.v1.FramesAdded
+	(*JobStepReached)(nil),               // 26: nopacs.v1.JobStepReached
+	(*JobProgressed)(nil),                // 27: nopacs.v1.JobProgressed
+	(*SenderHealthChanged)(nil),          // 28: nopacs.v1.SenderHealthChanged
+	(*ScrubFindingChanged)(nil),          // 29: nopacs.v1.ScrubFindingChanged
+	(*CatalogChanged)(nil),               // 30: nopacs.v1.CatalogChanged
+	(*ReplicaBehind)(nil),                // 31: nopacs.v1.ReplicaBehind
+	(*StorageSwitched)(nil),              // 32: nopacs.v1.StorageSwitched
+	(*HoldChanged)(nil),                  // 33: nopacs.v1.HoldChanged
+	(*RetentionClock)(nil),               // 34: nopacs.v1.RetentionClock
+	(*QuarantineAging)(nil),              // 35: nopacs.v1.QuarantineAging
+	(*SenderAllowIdentifiedChanged)(nil), // 36: nopacs.v1.SenderAllowIdentifiedChanged
+	(*CatalogRebuilt)(nil),               // 37: nopacs.v1.CatalogRebuilt
+	(*Event)(nil),                        // 38: nopacs.v1.Event
+	(*WatchKeepAlive)(nil),               // 39: nopacs.v1.WatchKeepAlive
+	(*WatchRequest)(nil),                 // 40: nopacs.v1.WatchRequest
+	(*WatchResponse)(nil),                // 41: nopacs.v1.WatchResponse
+	nil,                                  // 42: nopacs.v1.WatchKeepAlive.TenantCursorsEntry
+	nil,                                  // 43: nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
+	nil,                                  // 44: nopacs.v1.WatchRequest.TenantCursorsEntry
+	(ReceptionStep)(0),                   // 45: nopacs.v1.ReceptionStep
+	(JobState)(0),                        // 46: nopacs.v1.JobState
+	(*SenderHealth)(nil),                 // 47: nopacs.v1.SenderHealth
+	(StorageTier)(0),                     // 48: nopacs.v1.StorageTier
+	(*timestamppb.Timestamp)(nil),        // 49: google.protobuf.Timestamp
+	(EncryptionAtRest)(0),                // 50: nopacs.v1.EncryptionAtRest
+	(*durationpb.Duration)(nil),          // 51: google.protobuf.Duration
+	(*ReceiverHealth)(nil),               // 52: nopacs.v1.ReceiverHealth
+	(TenantState)(0),                     // 53: nopacs.v1.TenantState
+	(*AuditSealStatus)(nil),              // 54: nopacs.v1.AuditSealStatus
+	(*ReplicaStatus)(nil),                // 55: nopacs.v1.ReplicaStatus
+	(*RetentionStatus)(nil),              // 56: nopacs.v1.RetentionStatus
+	(ScrubFindingKind)(0),                // 57: nopacs.v1.ScrubFindingKind
+	(*Scope)(nil),                        // 58: nopacs.v1.Scope
+	(*Key)(nil),                          // 59: nopacs.v1.Key
+	(*Caller)(nil),                       // 60: nopacs.v1.Caller
+	(*ReceptionCounts)(nil),              // 61: nopacs.v1.ReceptionCounts
+	(QuarantineReason)(0),                // 62: nopacs.v1.QuarantineReason
+	(QuarantineState)(0),                 // 63: nopacs.v1.QuarantineState
+	(ReleaseMode)(0),                     // 64: nopacs.v1.ReleaseMode
+	(*JobCounts)(nil),                    // 65: nopacs.v1.JobCounts
+	(CorrectionKind)(0),                  // 66: nopacs.v1.CorrectionKind
+	(CorrectionState)(0),                 // 67: nopacs.v1.CorrectionState
+	(CorrectionOrigin)(0),                // 68: nopacs.v1.CorrectionOrigin
+	(HoldState)(0),                       // 69: nopacs.v1.HoldState
 }
 var file_nopacs_v1_monitor_proto_depIdxs = []int32{
-	44, // 0: nopacs.v1.ReceptionStepCount.step:type_name -> nopacs.v1.ReceptionStep
+	45, // 0: nopacs.v1.ReceptionStepCount.step:type_name -> nopacs.v1.ReceptionStep
 	4,  // 1: nopacs.v1.TenantCounts.receptions_in_progress:type_name -> nopacs.v1.ReceptionStepCount
 	6,  // 2: nopacs.v1.TenantCounts.jobs_in_progress:type_name -> nopacs.v1.JobStateCount
-	45, // 3: nopacs.v1.JobStateCount.state:type_name -> nopacs.v1.JobState
-	46, // 4: nopacs.v1.SenderStatus.health:type_name -> nopacs.v1.SenderHealth
+	46, // 3: nopacs.v1.JobStateCount.state:type_name -> nopacs.v1.JobState
+	47, // 4: nopacs.v1.SenderStatus.health:type_name -> nopacs.v1.SenderHealth
 	0,  // 5: nopacs.v1.StorageStatus.versioning:type_name -> nopacs.v1.StorageVersioning
-	47, // 6: nopacs.v1.StorageStatus.tier:type_name -> nopacs.v1.StorageTier
-	48, // 7: nopacs.v1.StorageStatus.last_switch_time:type_name -> google.protobuf.Timestamp
-	49, // 8: nopacs.v1.StorageStatus.encryption_at_rest:type_name -> nopacs.v1.EncryptionAtRest
+	48, // 6: nopacs.v1.StorageStatus.tier:type_name -> nopacs.v1.StorageTier
+	49, // 7: nopacs.v1.StorageStatus.last_switch_time:type_name -> google.protobuf.Timestamp
+	50, // 8: nopacs.v1.StorageStatus.encryption_at_rest:type_name -> nopacs.v1.EncryptionAtRest
 	10, // 9: nopacs.v1.StorageStatus.coverage:type_name -> nopacs.v1.ScrubCoverage
-	50, // 10: nopacs.v1.ScrubCoverage.oldest_unverified:type_name -> google.protobuf.Duration
-	51, // 11: nopacs.v1.ReceiverStatus.health:type_name -> nopacs.v1.ReceiverHealth
-	52, // 12: nopacs.v1.TenantStatus.database_state:type_name -> nopacs.v1.TenantState
-	48, // 13: nopacs.v1.TenantStatus.database_state_time:type_name -> google.protobuf.Timestamp
+	51, // 10: nopacs.v1.ScrubCoverage.oldest_unverified:type_name -> google.protobuf.Duration
+	52, // 11: nopacs.v1.ReceiverStatus.health:type_name -> nopacs.v1.ReceiverHealth
+	53, // 12: nopacs.v1.TenantStatus.database_state:type_name -> nopacs.v1.TenantState
+	49, // 13: nopacs.v1.TenantStatus.database_state_time:type_name -> google.protobuf.Timestamp
 	5,  // 14: nopacs.v1.TenantStatus.counts:type_name -> nopacs.v1.TenantCounts
 	8,  // 15: nopacs.v1.TenantStatus.throughput:type_name -> nopacs.v1.Throughput
 	9,  // 16: nopacs.v1.TenantStatus.storages:type_name -> nopacs.v1.StorageStatus
@@ -4710,48 +4795,48 @@ var file_nopacs_v1_monitor_proto_depIdxs = []int32{
 	7,  // 18: nopacs.v1.TenantStatus.senders:type_name -> nopacs.v1.SenderStatus
 	15, // 19: nopacs.v1.TenantStatus.last_scrub:type_name -> nopacs.v1.ScrubSummary
 	16, // 20: nopacs.v1.TenantStatus.open_findings:type_name -> nopacs.v1.ScrubFindingCount
-	53, // 21: nopacs.v1.TenantStatus.audit_seal:type_name -> nopacs.v1.AuditSealStatus
-	54, // 22: nopacs.v1.TenantStatus.replicas:type_name -> nopacs.v1.ReplicaStatus
+	54, // 21: nopacs.v1.TenantStatus.audit_seal:type_name -> nopacs.v1.AuditSealStatus
+	55, // 22: nopacs.v1.TenantStatus.replicas:type_name -> nopacs.v1.ReplicaStatus
 	11, // 23: nopacs.v1.TenantStatus.recalls:type_name -> nopacs.v1.RecallCounts
-	55, // 24: nopacs.v1.TenantStatus.retention:type_name -> nopacs.v1.RetentionStatus
+	56, // 24: nopacs.v1.TenantStatus.retention:type_name -> nopacs.v1.RetentionStatus
 	14, // 25: nopacs.v1.TenantStatus.quarantine:type_name -> nopacs.v1.QuarantineWarnings
-	50, // 26: nopacs.v1.QuarantineWarnings.oldest_age:type_name -> google.protobuf.Duration
-	45, // 27: nopacs.v1.ScrubSummary.state:type_name -> nopacs.v1.JobState
-	48, // 28: nopacs.v1.ScrubSummary.start_time:type_name -> google.protobuf.Timestamp
-	48, // 29: nopacs.v1.ScrubSummary.end_time:type_name -> google.protobuf.Timestamp
+	51, // 26: nopacs.v1.QuarantineWarnings.oldest_age:type_name -> google.protobuf.Duration
+	46, // 27: nopacs.v1.ScrubSummary.state:type_name -> nopacs.v1.JobState
+	49, // 28: nopacs.v1.ScrubSummary.start_time:type_name -> google.protobuf.Timestamp
+	49, // 29: nopacs.v1.ScrubSummary.end_time:type_name -> google.protobuf.Timestamp
 	16, // 30: nopacs.v1.ScrubSummary.findings:type_name -> nopacs.v1.ScrubFindingCount
-	56, // 31: nopacs.v1.ScrubFindingCount.kind:type_name -> nopacs.v1.ScrubFindingKind
-	57, // 32: nopacs.v1.GetStatusRequest.scope:type_name -> nopacs.v1.Scope
+	57, // 31: nopacs.v1.ScrubFindingCount.kind:type_name -> nopacs.v1.ScrubFindingKind
+	58, // 32: nopacs.v1.GetStatusRequest.scope:type_name -> nopacs.v1.Scope
 	13, // 33: nopacs.v1.GetStatusResponse.tenants:type_name -> nopacs.v1.TenantStatus
-	48, // 34: nopacs.v1.GetStatusResponse.time:type_name -> google.protobuf.Timestamp
-	58, // 35: nopacs.v1.GetStatusResponse.expiring_keys:type_name -> nopacs.v1.Key
-	53, // 36: nopacs.v1.GetStatusResponse.installation_audit_seal:type_name -> nopacs.v1.AuditSealStatus
-	59, // 37: nopacs.v1.AssociationFailed.caller:type_name -> nopacs.v1.Caller
+	49, // 34: nopacs.v1.GetStatusResponse.time:type_name -> google.protobuf.Timestamp
+	59, // 35: nopacs.v1.GetStatusResponse.expiring_keys:type_name -> nopacs.v1.Key
+	54, // 36: nopacs.v1.GetStatusResponse.installation_audit_seal:type_name -> nopacs.v1.AuditSealStatus
+	60, // 37: nopacs.v1.AssociationFailed.caller:type_name -> nopacs.v1.Caller
 	2,  // 38: nopacs.v1.AssociationFailed.failure:type_name -> nopacs.v1.AssociationFailure
-	44, // 39: nopacs.v1.ReceptionStepReached.step:type_name -> nopacs.v1.ReceptionStep
-	44, // 40: nopacs.v1.ReceptionStepReached.previous_step:type_name -> nopacs.v1.ReceptionStep
-	60, // 41: nopacs.v1.ReceptionStepReached.counts:type_name -> nopacs.v1.ReceptionCounts
-	61, // 42: nopacs.v1.FileQuarantined.reason:type_name -> nopacs.v1.QuarantineReason
-	62, // 43: nopacs.v1.QuarantineDecided.state:type_name -> nopacs.v1.QuarantineState
-	63, // 44: nopacs.v1.QuarantineDecided.release_mode:type_name -> nopacs.v1.ReleaseMode
-	51, // 45: nopacs.v1.ReceiverHealthChanged.health:type_name -> nopacs.v1.ReceiverHealth
+	45, // 39: nopacs.v1.ReceptionStepReached.step:type_name -> nopacs.v1.ReceptionStep
+	45, // 40: nopacs.v1.ReceptionStepReached.previous_step:type_name -> nopacs.v1.ReceptionStep
+	61, // 41: nopacs.v1.ReceptionStepReached.counts:type_name -> nopacs.v1.ReceptionCounts
+	62, // 42: nopacs.v1.FileQuarantined.reason:type_name -> nopacs.v1.QuarantineReason
+	63, // 43: nopacs.v1.QuarantineDecided.state:type_name -> nopacs.v1.QuarantineState
+	64, // 44: nopacs.v1.QuarantineDecided.release_mode:type_name -> nopacs.v1.ReleaseMode
+	52, // 45: nopacs.v1.ReceiverHealthChanged.health:type_name -> nopacs.v1.ReceiverHealth
 	3,  // 46: nopacs.v1.StorageSpaceChanged.state:type_name -> nopacs.v1.StorageSpaceState
-	45, // 47: nopacs.v1.JobStepReached.state:type_name -> nopacs.v1.JobState
-	45, // 48: nopacs.v1.JobStepReached.previous_state:type_name -> nopacs.v1.JobState
-	64, // 49: nopacs.v1.JobStepReached.counts:type_name -> nopacs.v1.JobCounts
-	64, // 50: nopacs.v1.JobProgressed.counts:type_name -> nopacs.v1.JobCounts
-	46, // 51: nopacs.v1.SenderHealthChanged.health:type_name -> nopacs.v1.SenderHealth
-	56, // 52: nopacs.v1.ScrubFindingChanged.kind:type_name -> nopacs.v1.ScrubFindingKind
-	65, // 53: nopacs.v1.CatalogChanged.kind:type_name -> nopacs.v1.CorrectionKind
-	66, // 54: nopacs.v1.CatalogChanged.state:type_name -> nopacs.v1.CorrectionState
-	67, // 55: nopacs.v1.CatalogChanged.origin:type_name -> nopacs.v1.CorrectionOrigin
-	50, // 56: nopacs.v1.ReplicaBehind.lag:type_name -> google.protobuf.Duration
-	50, // 57: nopacs.v1.StorageSwitched.pause:type_name -> google.protobuf.Duration
-	68, // 58: nopacs.v1.HoldChanged.state:type_name -> nopacs.v1.HoldState
-	50, // 59: nopacs.v1.RetentionClock.clock_step:type_name -> google.protobuf.Duration
-	48, // 60: nopacs.v1.RetentionClock.last_pass_time:type_name -> google.protobuf.Timestamp
-	50, // 61: nopacs.v1.QuarantineAging.oldest_age:type_name -> google.protobuf.Duration
-	48, // 62: nopacs.v1.Event.time:type_name -> google.protobuf.Timestamp
+	46, // 47: nopacs.v1.JobStepReached.state:type_name -> nopacs.v1.JobState
+	46, // 48: nopacs.v1.JobStepReached.previous_state:type_name -> nopacs.v1.JobState
+	65, // 49: nopacs.v1.JobStepReached.counts:type_name -> nopacs.v1.JobCounts
+	65, // 50: nopacs.v1.JobProgressed.counts:type_name -> nopacs.v1.JobCounts
+	47, // 51: nopacs.v1.SenderHealthChanged.health:type_name -> nopacs.v1.SenderHealth
+	57, // 52: nopacs.v1.ScrubFindingChanged.kind:type_name -> nopacs.v1.ScrubFindingKind
+	66, // 53: nopacs.v1.CatalogChanged.kind:type_name -> nopacs.v1.CorrectionKind
+	67, // 54: nopacs.v1.CatalogChanged.state:type_name -> nopacs.v1.CorrectionState
+	68, // 55: nopacs.v1.CatalogChanged.origin:type_name -> nopacs.v1.CorrectionOrigin
+	51, // 56: nopacs.v1.ReplicaBehind.lag:type_name -> google.protobuf.Duration
+	51, // 57: nopacs.v1.StorageSwitched.pause:type_name -> google.protobuf.Duration
+	69, // 58: nopacs.v1.HoldChanged.state:type_name -> nopacs.v1.HoldState
+	51, // 59: nopacs.v1.RetentionClock.clock_step:type_name -> google.protobuf.Duration
+	49, // 60: nopacs.v1.RetentionClock.last_pass_time:type_name -> google.protobuf.Timestamp
+	51, // 61: nopacs.v1.QuarantineAging.oldest_age:type_name -> google.protobuf.Duration
+	49, // 62: nopacs.v1.Event.time:type_name -> google.protobuf.Timestamp
 	1,  // 63: nopacs.v1.Event.type:type_name -> nopacs.v1.EventType
 	19, // 64: nopacs.v1.Event.association_failed:type_name -> nopacs.v1.AssociationFailed
 	20, // 65: nopacs.v1.Event.reception_step:type_name -> nopacs.v1.ReceptionStepReached
@@ -4765,29 +4850,30 @@ var file_nopacs_v1_monitor_proto_depIdxs = []int32{
 	28, // 73: nopacs.v1.Event.sender_health:type_name -> nopacs.v1.SenderHealthChanged
 	29, // 74: nopacs.v1.Event.scrub_finding:type_name -> nopacs.v1.ScrubFindingChanged
 	30, // 75: nopacs.v1.Event.catalog_changed:type_name -> nopacs.v1.CatalogChanged
-	36, // 76: nopacs.v1.Event.catalog_rebuilt:type_name -> nopacs.v1.CatalogRebuilt
+	37, // 76: nopacs.v1.Event.catalog_rebuilt:type_name -> nopacs.v1.CatalogRebuilt
 	31, // 77: nopacs.v1.Event.replica_behind:type_name -> nopacs.v1.ReplicaBehind
 	32, // 78: nopacs.v1.Event.storage_switched:type_name -> nopacs.v1.StorageSwitched
 	33, // 79: nopacs.v1.Event.hold_changed:type_name -> nopacs.v1.HoldChanged
 	34, // 80: nopacs.v1.Event.retention_clock:type_name -> nopacs.v1.RetentionClock
 	35, // 81: nopacs.v1.Event.quarantine_aging:type_name -> nopacs.v1.QuarantineAging
-	48, // 82: nopacs.v1.WatchKeepAlive.time:type_name -> google.protobuf.Timestamp
-	41, // 83: nopacs.v1.WatchKeepAlive.tenant_cursors:type_name -> nopacs.v1.WatchKeepAlive.TenantCursorsEntry
-	42, // 84: nopacs.v1.WatchKeepAlive.tenant_event_histories:type_name -> nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
-	57, // 85: nopacs.v1.WatchRequest.scope:type_name -> nopacs.v1.Scope
-	1,  // 86: nopacs.v1.WatchRequest.types:type_name -> nopacs.v1.EventType
-	43, // 87: nopacs.v1.WatchRequest.tenant_cursors:type_name -> nopacs.v1.WatchRequest.TenantCursorsEntry
-	37, // 88: nopacs.v1.WatchResponse.event:type_name -> nopacs.v1.Event
-	38, // 89: nopacs.v1.WatchResponse.keep_alive:type_name -> nopacs.v1.WatchKeepAlive
-	17, // 90: nopacs.v1.MonitorService.GetStatus:input_type -> nopacs.v1.GetStatusRequest
-	39, // 91: nopacs.v1.MonitorService.Watch:input_type -> nopacs.v1.WatchRequest
-	18, // 92: nopacs.v1.MonitorService.GetStatus:output_type -> nopacs.v1.GetStatusResponse
-	40, // 93: nopacs.v1.MonitorService.Watch:output_type -> nopacs.v1.WatchResponse
-	92, // [92:94] is the sub-list for method output_type
-	90, // [90:92] is the sub-list for method input_type
-	90, // [90:90] is the sub-list for extension type_name
-	90, // [90:90] is the sub-list for extension extendee
-	0,  // [0:90] is the sub-list for field type_name
+	36, // 82: nopacs.v1.Event.sender_allow_identified:type_name -> nopacs.v1.SenderAllowIdentifiedChanged
+	49, // 83: nopacs.v1.WatchKeepAlive.time:type_name -> google.protobuf.Timestamp
+	42, // 84: nopacs.v1.WatchKeepAlive.tenant_cursors:type_name -> nopacs.v1.WatchKeepAlive.TenantCursorsEntry
+	43, // 85: nopacs.v1.WatchKeepAlive.tenant_event_histories:type_name -> nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
+	58, // 86: nopacs.v1.WatchRequest.scope:type_name -> nopacs.v1.Scope
+	1,  // 87: nopacs.v1.WatchRequest.types:type_name -> nopacs.v1.EventType
+	44, // 88: nopacs.v1.WatchRequest.tenant_cursors:type_name -> nopacs.v1.WatchRequest.TenantCursorsEntry
+	38, // 89: nopacs.v1.WatchResponse.event:type_name -> nopacs.v1.Event
+	39, // 90: nopacs.v1.WatchResponse.keep_alive:type_name -> nopacs.v1.WatchKeepAlive
+	17, // 91: nopacs.v1.MonitorService.GetStatus:input_type -> nopacs.v1.GetStatusRequest
+	40, // 92: nopacs.v1.MonitorService.Watch:input_type -> nopacs.v1.WatchRequest
+	18, // 93: nopacs.v1.MonitorService.GetStatus:output_type -> nopacs.v1.GetStatusResponse
+	41, // 94: nopacs.v1.MonitorService.Watch:output_type -> nopacs.v1.WatchResponse
+	93, // [93:95] is the sub-list for method output_type
+	91, // [91:93] is the sub-list for method input_type
+	91, // [91:91] is the sub-list for extension type_name
+	91, // [91:91] is the sub-list for extension extendee
+	0,  // [0:91] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_monitor_proto_init() }
@@ -4809,7 +4895,7 @@ func file_nopacs_v1_monitor_proto_init() {
 	file_nopacs_v1_tenant_proto_init()
 	file_nopacs_v1_monitor_proto_msgTypes[5].OneofWrappers = []any{}
 	file_nopacs_v1_monitor_proto_msgTypes[20].OneofWrappers = []any{}
-	file_nopacs_v1_monitor_proto_msgTypes[33].OneofWrappers = []any{
+	file_nopacs_v1_monitor_proto_msgTypes[34].OneofWrappers = []any{
 		(*Event_AssociationFailed)(nil),
 		(*Event_ReceptionStep)(nil),
 		(*Event_FileQuarantined)(nil),
@@ -4828,8 +4914,9 @@ func file_nopacs_v1_monitor_proto_init() {
 		(*Event_HoldChanged)(nil),
 		(*Event_RetentionClock)(nil),
 		(*Event_QuarantineAging)(nil),
+		(*Event_SenderAllowIdentified)(nil),
 	}
-	file_nopacs_v1_monitor_proto_msgTypes[36].OneofWrappers = []any{
+	file_nopacs_v1_monitor_proto_msgTypes[37].OneofWrappers = []any{
 		(*WatchResponse_Event)(nil),
 		(*WatchResponse_KeepAlive)(nil),
 	}
@@ -4839,7 +4926,7 @@ func file_nopacs_v1_monitor_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_monitor_proto_rawDesc), len(file_nopacs_v1_monitor_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   40,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

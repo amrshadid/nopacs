@@ -496,9 +496,16 @@ type Sender struct {
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// When its configuration last changed: its create_time until the first
 	// SetSender. Answered by the server; ignored in a request.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// Whether the sender may also send instances the default rule refuses:
+	// archived as received, without the profile version that de-identified
+	// them recorded whole, or with a pixel risk a pixel rule accepted
+	// (SenderService, and JobFailureCode). False, the default, sends only
+	// instances archived de-identified. Set or cleared only by a caller with
+	// admin on the installation, never by a masked key.
+	AllowIdentified bool `protobuf:"varint,12,opt,name=allow_identified,json=allowIdentified,proto3" json:"allow_identified,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Sender) Reset() {
@@ -617,6 +624,13 @@ func (x *Sender) GetUpdateTime() *timestamppb.Timestamp {
 		return x.UpdateTime
 	}
 	return nil
+}
+
+func (x *Sender) GetAllowIdentified() bool {
+	if x != nil {
+		return x.AllowIdentified
+	}
+	return false
 }
 
 type isSender_Type interface {
@@ -1906,7 +1920,7 @@ var File_nopacs_v1_sender_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_sender_proto_rawDesc = "" +
 	"\n" +
-	"\x16nopacs/v1/sender.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xac\x04\n" +
+	"\x16nopacs/v1/sender.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd7\x04\n" +
 	"\x06Sender\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12.\n" +
 	"\x05dimse\x18\x02 \x01(\v2\x16.nopacs.v1.DimseSenderH\x00R\x05dimse\x12+\n" +
@@ -1921,7 +1935,8 @@ const file_nopacs_v1_sender_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTimeB\x06\n" +
+	"updateTime\x12)\n" +
+	"\x10allow_identified\x18\f \x01(\bR\x0fallowIdentifiedB\x06\n" +
 	"\x04type\"\xaf\x01\n" +
 	"\vDimseSender\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +

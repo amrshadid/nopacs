@@ -281,6 +281,29 @@ func TestSenderRemoveRefusals(t *testing.T) {
 	}
 }
 
+// TestSenderAllowIdentified guards --allow-identified: given on add, it is
+// sent as the sender's allow_identified and a marked sender's details say
+// so in a line of their own, which an unmarked sender's leave out; --json
+// carries the field as the contract names it.
+func TestSenderAllowIdentified(t *testing.T) {
+	r := newRig(t)
+	r.must("tenant", "create", "lab1")
+	open := r.run("sender", "add", "lab1", "open", "--type", "dimse", "--host", "pacs.lab.example", "--port", "104",
+		"--called-aet", "ORTHANC", "--calling-aet", "NOPACS", "--allow-identified")
+	if open.code != 0 || !strings.Contains(open.stdout, "Allow identified: yes: also sends instances not de-identified\n") {
+		t.Errorf("add --allow-identified: %+v", open)
+	}
+	plain := r.run("sender", "add", "lab1", "plain", "--type", "dimse", "--host", "pacs.lab.example", "--port", "104",
+		"--called-aet", "ORTHANC", "--calling-aet", "NOPACS")
+	if plain.code != 0 || strings.Contains(plain.stdout, "Allow identified") {
+		t.Errorf("add without the flag: %+v", plain)
+	}
+	doc := document(t, r.run("sender", "show", "lab1", "open", "--json"))
+	if doc["sender"].(map[string]any)["allowIdentified"] != true {
+		t.Errorf("show --json: %v", doc)
+	}
+}
+
 // writeWide writes a file that other users may read, the mode a credential
 // file must be refused for.
 func writeWide(t *testing.T, path, content string) {

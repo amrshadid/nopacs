@@ -47,6 +47,11 @@ type written struct {
 	// profile made; false, the file as received.
 	made    bool
 	profile tenant.ProfileRef
+	// pixelRiskAccepted says the image was at risk of burned-in text and a
+	// pixel rule of profile accepted it as it is; the catalog and the
+	// metadata record it so no sender sends it unless marked
+	// (tenant.SendRefusal).
+	pixelRiskAccepted bool
 }
 
 // archiveScan archives the files of one series into its scan. A file is
@@ -369,7 +374,7 @@ func (p *Pipeline) archiveScan(ctx context.Context, w tenant.Work, r tenant.Rece
 		for _, wr := range part {
 			c.Instances = append(c.Instances, tenant.ConfirmedInstance{
 				SOPInstanceUID: wr.f.SOPInstanceUID, Key: wr.key, Length: wr.size, Size: wr.size, ArchivedSHA256: wr.sum,
-				Profile: wr.profile,
+				Profile: wr.profile, PixelRiskAccepted: wr.pixelRiskAccepted && !wr.profile.IsZero(),
 			})
 		}
 		p.at("archive.before-commit")

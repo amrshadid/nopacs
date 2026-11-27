@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -176,7 +177,15 @@ type fixture struct {
 	// instance's scan label by SOP Instance UID.
 	reception, study string
 	series, scanOf   map[string]string
+	// provenance is how archive records each instance, by SOP Instance UID:
+	// nil records every one de-identified by the fixture's profile version,
+	// with no pixel risk accepted, the default rule lets out.
+	provenance func(uid string) tenant.InstanceProvenance
 }
+
+// fixtureProfile is the profile version newFixture stores and archive
+// records by default.
+var fixtureProfile = tenant.ProfileRef{Name: "research", Version: 1}
 
 // newFixture makes the tenant "lab" with a storage "main" and a receiver.
 func newFixture(t testing.TB) *fixture {
@@ -212,6 +221,14 @@ func newFixture(t testing.TB) *fixture {
 	if _, err := f.p.AddReceiver(f.ctx, tenant.Receiver{Name: "recv", Type: tenant.ReceiverDIMSE, Enabled: true, Storage: "main",
 		QuietPeriod: 5 * time.Second, MaxOpenTime: time.Minute, MaxFileBytes: 1 << 34,
 		DIMSE: tenant.DIMSEReceiver{Port: 11112, AETitle: "ARCHIVE", AnyCaller: true}}, now, f.audit(), nil); err != nil {
+		t.Fatal(err)
+	}
+	// The store keeps a version's texts as given and checks only the
+	// checksum: the send reads no profile, only that one is recorded.
+	expanded := []byte("expanded form of research")
+	sum := sha256.Sum256(expanded)
+	if _, _, err := f.p.(tenant.Profiles).CreateProfileVersion(f.ctx, tenant.NewProfileVersion{Name: fixtureProfile.Name,
+		Source: []byte("source of research"), Expanded: expanded, Checksum: hex.EncodeToString(sum[:])}, now, f.audit(), nil); err != nil {
 		t.Fatal(err)
 	}
 	return f
@@ -332,8 +349,12 @@ func (f *fixture) archive(session string, scans ...scanFiles) {
 				t.Fatal(err)
 			}
 			f.files[h.uid], f.keys[h.uid] = h.b, key
+			prov := tenant.InstanceProvenance{Profile: fixtureProfile}
+			if f.provenance != nil {
+				prov = f.provenance(h.uid)
+			}
 			confirmed = append(confirmed, tenant.ConfirmedInstance{SOPInstanceUID: h.uid, Key: key, Length: int64(len(h.b)),
-				Size: int64(len(h.b)), ArchivedSHA256: h.sum})
+				Size: int64(len(h.b)), ArchivedSHA256: h.sum, Profile: prov.Profile, PixelRiskAccepted: prov.PixelRiskAccepted})
 		}
 		for i := 0; i < len(confirmed); i += 500 {
 			c := tenant.ScanCommit{ReceptionID: r.ID, StudyUID: study, SeriesUID: study + "." + strconv.Itoa(si+1),

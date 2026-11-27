@@ -53,6 +53,7 @@ class EventType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     EVENT_TYPE_HOLD_CHANGED: _ClassVar[EventType]
     EVENT_TYPE_RETENTION_CLOCK: _ClassVar[EventType]
     EVENT_TYPE_QUARANTINE_AGING: _ClassVar[EventType]
+    EVENT_TYPE_SENDER_ALLOW_IDENTIFIED: _ClassVar[EventType]
 
 class AssociationFailure(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -97,6 +98,7 @@ EVENT_TYPE_STORAGE_SWITCHED: EventType
 EVENT_TYPE_HOLD_CHANGED: EventType
 EVENT_TYPE_RETENTION_CLOCK: EventType
 EVENT_TYPE_QUARANTINE_AGING: EventType
+EVENT_TYPE_SENDER_ALLOW_IDENTIFIED: EventType
 ASSOCIATION_FAILURE_UNSPECIFIED: AssociationFailure
 ASSOCIATION_FAILURE_CALLER_NOT_ALLOWED: AssociationFailure
 ASSOCIATION_FAILURE_CALLED_AE_TITLE_NOT_RECOGNIZED: AssociationFailure
@@ -623,6 +625,14 @@ class QuarantineAging(_message.Message):
     recovered: bool
     def __init__(self, oldest_age: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., held_files: _Optional[int] = ..., held_bytes: _Optional[int] = ..., age_passed: _Optional[bool] = ..., bytes_passed: _Optional[bool] = ..., recovered: _Optional[bool] = ...) -> None: ...
 
+class SenderAllowIdentifiedChanged(_message.Message):
+    __slots__ = ("sender", "allow_identified")
+    SENDER_FIELD_NUMBER: _ClassVar[int]
+    ALLOW_IDENTIFIED_FIELD_NUMBER: _ClassVar[int]
+    sender: str
+    allow_identified: bool
+    def __init__(self, sender: _Optional[str] = ..., allow_identified: _Optional[bool] = ...) -> None: ...
+
 class CatalogRebuilt(_message.Message):
     __slots__ = ("job", "instances", "new_history")
     JOB_FIELD_NUMBER: _ClassVar[int]
@@ -634,7 +644,7 @@ class CatalogRebuilt(_message.Message):
     def __init__(self, job: _Optional[str] = ..., instances: _Optional[int] = ..., new_history: _Optional[bool] = ...) -> None: ...
 
 class Event(_message.Message):
-    __slots__ = ("cursor", "time", "tenant", "type", "association_failed", "reception_step", "file_quarantined", "quarantine_decided", "receiver_health", "storage_space", "frames_added", "job_step", "job_progress", "sender_health", "scrub_finding", "catalog_changed", "catalog_rebuilt", "replica_behind", "storage_switched", "hold_changed", "retention_clock", "quarantine_aging")
+    __slots__ = ("cursor", "time", "tenant", "type", "association_failed", "reception_step", "file_quarantined", "quarantine_decided", "receiver_health", "storage_space", "frames_added", "job_step", "job_progress", "sender_health", "scrub_finding", "catalog_changed", "catalog_rebuilt", "replica_behind", "storage_switched", "hold_changed", "retention_clock", "quarantine_aging", "sender_allow_identified")
     CURSOR_FIELD_NUMBER: _ClassVar[int]
     TIME_FIELD_NUMBER: _ClassVar[int]
     TENANT_FIELD_NUMBER: _ClassVar[int]
@@ -657,6 +667,7 @@ class Event(_message.Message):
     HOLD_CHANGED_FIELD_NUMBER: _ClassVar[int]
     RETENTION_CLOCK_FIELD_NUMBER: _ClassVar[int]
     QUARANTINE_AGING_FIELD_NUMBER: _ClassVar[int]
+    SENDER_ALLOW_IDENTIFIED_FIELD_NUMBER: _ClassVar[int]
     cursor: str
     time: _timestamp_pb2.Timestamp
     tenant: str
@@ -679,7 +690,8 @@ class Event(_message.Message):
     hold_changed: HoldChanged
     retention_clock: RetentionClock
     quarantine_aging: QuarantineAging
-    def __init__(self, cursor: _Optional[str] = ..., time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tenant: _Optional[str] = ..., type: _Optional[_Union[EventType, str]] = ..., association_failed: _Optional[_Union[AssociationFailed, _Mapping]] = ..., reception_step: _Optional[_Union[ReceptionStepReached, _Mapping]] = ..., file_quarantined: _Optional[_Union[FileQuarantined, _Mapping]] = ..., quarantine_decided: _Optional[_Union[QuarantineDecided, _Mapping]] = ..., receiver_health: _Optional[_Union[ReceiverHealthChanged, _Mapping]] = ..., storage_space: _Optional[_Union[StorageSpaceChanged, _Mapping]] = ..., frames_added: _Optional[_Union[FramesAdded, _Mapping]] = ..., job_step: _Optional[_Union[JobStepReached, _Mapping]] = ..., job_progress: _Optional[_Union[JobProgressed, _Mapping]] = ..., sender_health: _Optional[_Union[SenderHealthChanged, _Mapping]] = ..., scrub_finding: _Optional[_Union[ScrubFindingChanged, _Mapping]] = ..., catalog_changed: _Optional[_Union[CatalogChanged, _Mapping]] = ..., catalog_rebuilt: _Optional[_Union[CatalogRebuilt, _Mapping]] = ..., replica_behind: _Optional[_Union[ReplicaBehind, _Mapping]] = ..., storage_switched: _Optional[_Union[StorageSwitched, _Mapping]] = ..., hold_changed: _Optional[_Union[HoldChanged, _Mapping]] = ..., retention_clock: _Optional[_Union[RetentionClock, _Mapping]] = ..., quarantine_aging: _Optional[_Union[QuarantineAging, _Mapping]] = ...) -> None: ...
+    sender_allow_identified: SenderAllowIdentifiedChanged
+    def __init__(self, cursor: _Optional[str] = ..., time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tenant: _Optional[str] = ..., type: _Optional[_Union[EventType, str]] = ..., association_failed: _Optional[_Union[AssociationFailed, _Mapping]] = ..., reception_step: _Optional[_Union[ReceptionStepReached, _Mapping]] = ..., file_quarantined: _Optional[_Union[FileQuarantined, _Mapping]] = ..., quarantine_decided: _Optional[_Union[QuarantineDecided, _Mapping]] = ..., receiver_health: _Optional[_Union[ReceiverHealthChanged, _Mapping]] = ..., storage_space: _Optional[_Union[StorageSpaceChanged, _Mapping]] = ..., frames_added: _Optional[_Union[FramesAdded, _Mapping]] = ..., job_step: _Optional[_Union[JobStepReached, _Mapping]] = ..., job_progress: _Optional[_Union[JobProgressed, _Mapping]] = ..., sender_health: _Optional[_Union[SenderHealthChanged, _Mapping]] = ..., scrub_finding: _Optional[_Union[ScrubFindingChanged, _Mapping]] = ..., catalog_changed: _Optional[_Union[CatalogChanged, _Mapping]] = ..., catalog_rebuilt: _Optional[_Union[CatalogRebuilt, _Mapping]] = ..., replica_behind: _Optional[_Union[ReplicaBehind, _Mapping]] = ..., storage_switched: _Optional[_Union[StorageSwitched, _Mapping]] = ..., hold_changed: _Optional[_Union[HoldChanged, _Mapping]] = ..., retention_clock: _Optional[_Union[RetentionClock, _Mapping]] = ..., quarantine_aging: _Optional[_Union[QuarantineAging, _Mapping]] = ..., sender_allow_identified: _Optional[_Union[SenderAllowIdentifiedChanged, _Mapping]] = ...) -> None: ...
 
 class WatchKeepAlive(_message.Message):
     __slots__ = ("time", "cursor", "tenant_cursors", "unanswered_tenants", "full", "event_history", "tenant_event_histories")

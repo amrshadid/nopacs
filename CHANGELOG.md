@@ -148,7 +148,16 @@ scan, keeps it whole, and serves it through an API with keys.
   with CORS origins by setting.
 - Senders (DIMSE C-STORE and DICOMweb STOW-RS) and send jobs, with
   destinations limited by setting (`SenderService`, `JobService`,
-  `nopacs sender`, `nopacs job`).
+  `nopacs sender`, `nopacs job`). A sender sends only instances archived
+  de-identified, with their profile version recorded and no accepted pixel
+  risk; any other is refused per instance as it would be sent, with a fixed
+  reason (`as_received`, `no_profile_provenance`, `pixel_risk_accepted`),
+  unless an admin on the installation marks the sender `allow_identified`
+  (`--allow-identified`), a change that is audited, reported as an event
+  and refused to a masked key. Only that admin changes where a marked
+  sender sends (host, port, AE titles, URL, TLS or account). A replace gives the
+  instance its new revision's profile version and pixel risk, so the rule
+  judges the bytes the catalog points to.
 
 #### Keeping the archive whole
 

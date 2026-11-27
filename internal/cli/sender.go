@@ -117,6 +117,11 @@ func (a *app) senderDetails(w io.Writer, s *v1.Sender) error {
 		{Label: "Enabled", Value: yesNo(s.GetEnabled())},
 		{Label: "Health", Value: output.SenderHealth(s.GetHealth())},
 	}
+	// Shown only when set: the default, sending de-identified instances
+	// alone, needs no line, and a sender that may send more stands out.
+	if s.GetAllowIdentified() {
+		pairs = append(pairs, output.Pair{Label: "Allow identified", Value: "yes: also sends instances not de-identified"})
+	}
 	if h := s.GetHealth(); h.GetSince() != nil {
 		pairs = append(pairs, output.Pair{Label: "Health since", Value: a.when(h.GetSince())})
 	}
@@ -282,9 +287,17 @@ A stow sender's credential is kept unless --credential-file, --credential-stdin
 or --credential-env gives a new one. It is never sent to a place it was not given
 for: --url or --authentication must come with the credential, unless the
 authentication becomes none, which removes the held one. --enabled=false stops a
-sender without removing it. --no-tls turns TLS off.`,
+sender without removing it. --no-tls turns TLS off.
+
+By default a sender sends only instances archived de-identified, with the
+profile version that did it recorded and no pixel risk accepted; any other is
+refused for its reason (as_received, no_profile_provenance, pixel_risk_accepted)
+and the job goes on. --allow-identified lets it send them too, and
+--allow-identified=false takes that back; either needs admin on the
+installation, and a masked key is refused it (exit 3).`,
 		Example: `  nopacs sender set lab1 pacs --enabled=false
   nopacs sender set lab1 pacs --max-associations 4 --max-bytes-per-second 20MiB
+  nopacs sender set lab1 pacs --allow-identified=false
   nopacs sender set lab1 archive2 --url https://pacs3.lab.example/dicom-web --credential-file ./token`,
 		Args: exactArgs(2),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {

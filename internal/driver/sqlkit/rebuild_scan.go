@@ -208,10 +208,14 @@ func (k Rebuild) writeScan(ctx context.Context, tx SendingTx, p string, w tenant
 		if in.ArchivedSHA256 != in.ReceivedSHA256 {
 			archived = in.ArchivedSHA256[:]
 		}
+		// An accepted pixel risk comes back from the metadata with the
+		// instance, so a catalog made again never lets a sender send what
+		// the one before refused (tenant.SendRefusal).
 		if _, err := tx.Exec(ctx, `INSERT INTO `+p+`instances (scan_id, sop_instance_uid, reception_id, sha256, archived_sha256,
-			storage_key, byte_offset, byte_length, size, held_at, profile_version_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			storage_key, byte_offset, byte_length, size, held_at, profile_version_id, pixel_risk_accepted)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			scanID, in.SOPInstanceUID, in.Reception, in.ReceivedSHA256[:], archived, key, in.Offset, in.Length, in.Size,
-			k.D.Time(in.HeldAt), profile); err != nil {
+			k.D.Time(in.HeldAt), profile, k.D.Bool(in.PixelRiskAccepted)); err != nil {
 			return err
 		}
 	}

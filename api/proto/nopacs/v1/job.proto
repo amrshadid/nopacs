@@ -1499,6 +1499,22 @@ enum JobFailureCode {
   // until its attempts ran out. The bytes are not missing, so this is
   // never data loss.
   JOB_FAILURE_CODE_NOT_ONLINE = 14;
+
+  // Not sent: the instance was archived as received, so nothing records
+  // that it was de-identified, and the sender's allow_identified is not
+  // set (SenderService). Judged as its transfer would start; never read.
+  JOB_FAILURE_CODE_AS_RECEIVED = 15;
+
+  // Not sent: the instance's catalog row names the profile version that
+  // de-identified it only in part, so which version did it cannot be told,
+  // and the sender's allow_identified is not set. Never read.
+  JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE = 16;
+
+  // Not sent: the instance's image was at risk of burned-in text (PS3.15
+  // E.3.1) and a pixel rule of its profile accepted it as it is, so what
+  // its pixels show was not removed, and the sender's allow_identified is
+  // not set. Never read.
+  JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED = 17;
 }
 
 // JobFailure is one instance of a job that was refused, or sent with a

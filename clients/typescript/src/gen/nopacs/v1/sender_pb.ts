@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/sender.proto.
  */
 export const file_nopacs_v1_sender: GenFile = /*@__PURE__*/
-  fileDesc("ChZub3BhY3MvdjEvc2VuZGVyLnByb3RvEglub3BhY3MudjEiqwMKBlNlbmRlchIMCgRuYW1lGAEgASgJEicKBWRpbXNlGAIgASgLMhYubm9wYWNzLnYxLkRpbXNlU2VuZGVySAASJQoEc3RvdxgDIAEoCzIVLm5vcGFjcy52MS5TdG93U2VuZGVySAASDwoHZW5hYmxlZBgEIAEoCBIYChBtYXhfYXNzb2NpYXRpb25zGAUgASgFEhwKFG1heF9ieXRlc19wZXJfc2Vjb25kGAYgASgDEjIKD2Nvbm5lY3RfdGltZW91dBgHIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIzChByZXNwb25zZV90aW1lb3V0GAggASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEicKBmhlYWx0aBgJIAEoCzIXLm5vcGFjcy52MS5TZW5kZXJIZWFsdGgSLwoLY3JlYXRlX3RpbWUYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC3VwZGF0ZV90aW1lGAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIGCgR0eXBlIn8KC0RpbXNlU2VuZGVyEgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIXCg9jYWxsZWRfYWVfdGl0bGUYAyABKAkSGAoQY2FsbGluZ19hZV90aXRsZRgEIAEoCRIhCgN0bHMYBSABKAsyFC5ub3BhY3MudjEuU2VuZGVyVGxzIokCCgpTdG93U2VuZGVyEgsKA3VybBgBIAEoCRI1Cg5hdXRoZW50aWNhdGlvbhgCIAEoDjIdLm5vcGFjcy52MS5TdG93QXV0aGVudGljYXRpb24SEAoIdXNlcm5hbWUYAyABKAkSEwoLaGVhZGVyX25hbWUYBCABKAkSFwoKY3JlZGVudGlhbBgFIAEoCUIDgAEBEhYKDmNyZWRlbnRpYWxfc2V0GAYgASgIEiEKA3RscxgHIAEoCzIULm5vcGFjcy52MS5TZW5kZXJUbHMSIQoZbWF4X2luc3RhbmNlc19wZXJfcmVxdWVzdBgIIAEoBRIZChFtYXhfcmVxdWVzdF9ieXRlcxgJIAEoAyJlCglTZW5kZXJUbHMSDwoHY2FfZmlsZRgBIAEoCRIYChBjZXJ0aWZpY2F0ZV9maWxlGAIgASgJEhgKEHByaXZhdGVfa2V5X2ZpbGUYAyABKAkSEwoLc2VydmVyX25hbWUYBCABKAkizwIKDFNlbmRlckhlYWx0aBIlCgVzdGF0ZRgBIAEoDjIWLm5vcGFjcy52MS5TZW5kZXJTdGF0ZRIwCgtkb3duX3JlYXNvbhgCIAEoDjIbLm5vcGFjcy52MS5TZW5kZXJEb3duUmVhc29uEiUKBWZhdWx0GAMgASgOMhYubm9wYWNzLnYxLlNlbmRlckZhdWx0Eg4KBmRldGFpbBgEIAEoCRIpCgVzaW5jZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGgoSZmFpbGVkX2Nvbm5lY3Rpb25zGAYgASgFEjEKDW5leHRfdHJ5X3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjUKEWxhc3Rfc3VjY2Vzc190aW1lGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCLOAQoQU2VuZGVyVGVzdFJlc3VsdBInCgRzdGVwGAEgASgOMhkubm9wYWNzLnYxLlNlbmRlclRlc3RTdGVwEi0KB291dGNvbWUYAiABKA4yHC5ub3BhY3MudjEuU2VuZGVyVGVzdE91dGNvbWUSKwoIZHVyYXRpb24YAyABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SJQoFZmF1bHQYBCABKA4yFi5ub3BhY3MudjEuU2VuZGVyRmF1bHQSDgoGZGV0YWlsGAUgASgJIkUKEEFkZFNlbmRlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiEKBnNlbmRlchgCIAEoCzIRLm5vcGFjcy52MS5TZW5kZXIiNgoRQWRkU2VuZGVyUmVzcG9uc2USIQoGc2VuZGVyGAEgASgLMhEubm9wYWNzLnYxLlNlbmRlciIwChBHZXRTZW5kZXJSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIjYKEUdldFNlbmRlclJlc3BvbnNlEiEKBnNlbmRlchgBIAEoCzIRLm5vcGFjcy52MS5TZW5kZXIiSwoSTGlzdFNlbmRlcnNSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIRCglwYWdlX3NpemUYAiABKAUSEgoKcGFnZV90b2tlbhgDIAEoCSJSChNMaXN0U2VuZGVyc1Jlc3BvbnNlEiIKB3NlbmRlcnMYASADKAsyES5ub3BhY3MudjEuU2VuZGVyEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJ2ChBTZXRTZW5kZXJSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIhCgZzZW5kZXIYAiABKAsyES5ub3BhY3MudjEuU2VuZGVyEi8KC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzayI2ChFTZXRTZW5kZXJSZXNwb25zZRIhCgZzZW5kZXIYASABKAsyES5ub3BhY3MudjEuU2VuZGVyIkgKE1JlbW92ZVNlbmRlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEgwKBG5hbWUYAiABKAkSEwoLY2FuY2VsX2pvYnMYAyABKAgiUAoUUmVtb3ZlU2VuZGVyUmVzcG9uc2USIQoGc2VuZGVyGAEgASgLMhEubm9wYWNzLnYxLlNlbmRlchIVCg1qb2JzX2NhbmNlbGVkGAIgASgDIjEKEVRlc3RTZW5kZXJSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIlIKElRlc3RTZW5kZXJSZXNwb25zZRIOCgZwYXNzZWQYASABKAgSLAoHcmVzdWx0cxgCIAMoCzIbLm5vcGFjcy52MS5TZW5kZXJUZXN0UmVzdWx0KrYBChJTdG93QXV0aGVudGljYXRpb24SIwofU1RPV19BVVRIRU5USUNBVElPTl9VTlNQRUNJRklFRBAAEhwKGFNUT1dfQVVUSEVOVElDQVRJT05fTk9ORRABEh0KGVNUT1dfQVVUSEVOVElDQVRJT05fQkFTSUMQAhIeChpTVE9XX0FVVEhFTlRJQ0FUSU9OX0JFQVJFUhADEh4KGlNUT1dfQVVUSEVOVElDQVRJT05fSEVBREVSEAQqcQoLU2VuZGVyU3RhdGUSHAoYU0VOREVSX1NUQVRFX1VOU1BFQ0lGSUVEEAASGAoUU0VOREVSX1NUQVRFX1VOS05PV04QARITCg9TRU5ERVJfU1RBVEVfVVAQAhIVChFTRU5ERVJfU1RBVEVfRE9XThADKuQBChBTZW5kZXJEb3duUmVhc29uEiIKHlNFTkRFUl9ET1dOX1JFQVNPTl9VTlNQRUNJRklFRBAAEh8KG1NFTkRFUl9ET1dOX1JFQVNPTl9ESVNBQkxFRBABEiMKH1NFTkRFUl9ET1dOX1JFQVNPTl9QRUVSX0ZBSUxJTkcQAhInCiNTRU5ERVJfRE9XTl9SRUFTT05fVEVOQU5UX05PVF9SRUFEWRADEh8KG1NFTkRFUl9ET1dOX1JFQVNPTl9TVE9QUElORxAEEhwKGFNFTkRFUl9ET1dOX1JFQVNPTl9PVEhFUhAFKuUBCgtTZW5kZXJGYXVsdBIcChhTRU5ERVJfRkFVTFRfVU5TUEVDSUZJRUQQABIcChhTRU5ERVJfRkFVTFRfVU5SRUFDSEFCTEUQARIkCiBTRU5ERVJfRkFVTFRfQUREUkVTU19OT1RfQUxMT1dFRBACEhsKF1NFTkRFUl9GQVVMVF9UTFNfRkFJTEVEEAMSGQoVU0VOREVSX0ZBVUxUX1JFSkVDVEVEEAQSHQoZU0VOREVSX0ZBVUxUX05PVF9BQ0NFUFRFRBAFEh0KGVNFTkRFUl9GQVVMVF9XUk9OR19BTlNXRVIQBirkAQoOU2VuZGVyVGVzdFN0ZXASIAocU0VOREVSX1RFU1RfU1RFUF9VTlNQRUNJRklFRBAAEhwKGFNFTkRFUl9URVNUX1NURVBfUkVTT0xWRRABEhwKGFNFTkRFUl9URVNUX1NURVBfQ09OTkVDVBACEhgKFFNFTkRFUl9URVNUX1NURVBfVExTEAMSHgoaU0VOREVSX1RFU1RfU1RFUF9BU1NPQ0lBVEUQBBIcChhTRU5ERVJfVEVTVF9TVEVQX1JFUVVFU1QQBRIcChhTRU5ERVJfVEVTVF9TVEVQX1JFTEVBU0UQBiqZAQoRU2VuZGVyVGVzdE91dGNvbWUSIwofU0VOREVSX1RFU1RfT1VUQ09NRV9VTlNQRUNJRklFRBAAEh4KGlNFTkRFUl9URVNUX09VVENPTUVfUEFTU0VEEAESHgoaU0VOREVSX1RFU1RfT1VUQ09NRV9GQUlMRUQQAhIfChtTRU5ERVJfVEVTVF9PVVRDT01FX1NLSVBQRUQQAzLqAwoNU2VuZGVyU2VydmljZRJGCglBZGRTZW5kZXISGy5ub3BhY3MudjEuQWRkU2VuZGVyUmVxdWVzdBocLm5vcGFjcy52MS5BZGRTZW5kZXJSZXNwb25zZRJLCglHZXRTZW5kZXISGy5ub3BhY3MudjEuR2V0U2VuZGVyUmVxdWVzdBocLm5vcGFjcy52MS5HZXRTZW5kZXJSZXNwb25zZSIDkAIBElEKC0xpc3RTZW5kZXJzEh0ubm9wYWNzLnYxLkxpc3RTZW5kZXJzUmVxdWVzdBoeLm5vcGFjcy52MS5MaXN0U2VuZGVyc1Jlc3BvbnNlIgOQAgESSwoJU2V0U2VuZGVyEhsubm9wYWNzLnYxLlNldFNlbmRlclJlcXVlc3QaHC5ub3BhY3MudjEuU2V0U2VuZGVyUmVzcG9uc2UiA5ACAhJUCgxSZW1vdmVTZW5kZXISHi5ub3BhY3MudjEuUmVtb3ZlU2VuZGVyUmVxdWVzdBofLm5vcGFjcy52MS5SZW1vdmVTZW5kZXJSZXNwb25zZSIDkAICEk4KClRlc3RTZW5kZXISHC5ub3BhY3MudjEuVGVzdFNlbmRlclJlcXVlc3QaHS5ub3BhY3MudjEuVGVzdFNlbmRlclJlc3BvbnNlIgOQAgJiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
+  fileDesc("ChZub3BhY3MvdjEvc2VuZGVyLnByb3RvEglub3BhY3MudjEixQMKBlNlbmRlchIMCgRuYW1lGAEgASgJEicKBWRpbXNlGAIgASgLMhYubm9wYWNzLnYxLkRpbXNlU2VuZGVySAASJQoEc3RvdxgDIAEoCzIVLm5vcGFjcy52MS5TdG93U2VuZGVySAASDwoHZW5hYmxlZBgEIAEoCBIYChBtYXhfYXNzb2NpYXRpb25zGAUgASgFEhwKFG1heF9ieXRlc19wZXJfc2Vjb25kGAYgASgDEjIKD2Nvbm5lY3RfdGltZW91dBgHIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIzChByZXNwb25zZV90aW1lb3V0GAggASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEicKBmhlYWx0aBgJIAEoCzIXLm5vcGFjcy52MS5TZW5kZXJIZWFsdGgSLwoLY3JlYXRlX3RpbWUYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC3VwZGF0ZV90aW1lGAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIYChBhbGxvd19pZGVudGlmaWVkGAwgASgIQgYKBHR5cGUifwoLRGltc2VTZW5kZXISDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhcKD2NhbGxlZF9hZV90aXRsZRgDIAEoCRIYChBjYWxsaW5nX2FlX3RpdGxlGAQgASgJEiEKA3RscxgFIAEoCzIULm5vcGFjcy52MS5TZW5kZXJUbHMiiQIKClN0b3dTZW5kZXISCwoDdXJsGAEgASgJEjUKDmF1dGhlbnRpY2F0aW9uGAIgASgOMh0ubm9wYWNzLnYxLlN0b3dBdXRoZW50aWNhdGlvbhIQCgh1c2VybmFtZRgDIAEoCRITCgtoZWFkZXJfbmFtZRgEIAEoCRIXCgpjcmVkZW50aWFsGAUgASgJQgOAAQESFgoOY3JlZGVudGlhbF9zZXQYBiABKAgSIQoDdGxzGAcgASgLMhQubm9wYWNzLnYxLlNlbmRlclRscxIhChltYXhfaW5zdGFuY2VzX3Blcl9yZXF1ZXN0GAggASgFEhkKEW1heF9yZXF1ZXN0X2J5dGVzGAkgASgDImUKCVNlbmRlclRscxIPCgdjYV9maWxlGAEgASgJEhgKEGNlcnRpZmljYXRlX2ZpbGUYAiABKAkSGAoQcHJpdmF0ZV9rZXlfZmlsZRgDIAEoCRITCgtzZXJ2ZXJfbmFtZRgEIAEoCSLPAgoMU2VuZGVySGVhbHRoEiUKBXN0YXRlGAEgASgOMhYubm9wYWNzLnYxLlNlbmRlclN0YXRlEjAKC2Rvd25fcmVhc29uGAIgASgOMhsubm9wYWNzLnYxLlNlbmRlckRvd25SZWFzb24SJQoFZmF1bHQYAyABKA4yFi5ub3BhY3MudjEuU2VuZGVyRmF1bHQSDgoGZGV0YWlsGAQgASgJEikKBXNpbmNlGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIaChJmYWlsZWRfY29ubmVjdGlvbnMYBiABKAUSMQoNbmV4dF90cnlfdGltZRgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoRbGFzdF9zdWNjZXNzX3RpbWUYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIs4BChBTZW5kZXJUZXN0UmVzdWx0EicKBHN0ZXAYASABKA4yGS5ub3BhY3MudjEuU2VuZGVyVGVzdFN0ZXASLQoHb3V0Y29tZRgCIAEoDjIcLm5vcGFjcy52MS5TZW5kZXJUZXN0T3V0Y29tZRIrCghkdXJhdGlvbhgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIlCgVmYXVsdBgEIAEoDjIWLm5vcGFjcy52MS5TZW5kZXJGYXVsdBIOCgZkZXRhaWwYBSABKAkiRQoQQWRkU2VuZGVyUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSIQoGc2VuZGVyGAIgASgLMhEubm9wYWNzLnYxLlNlbmRlciI2ChFBZGRTZW5kZXJSZXNwb25zZRIhCgZzZW5kZXIYASABKAsyES5ub3BhY3MudjEuU2VuZGVyIjAKEEdldFNlbmRlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEgwKBG5hbWUYAiABKAkiNgoRR2V0U2VuZGVyUmVzcG9uc2USIQoGc2VuZGVyGAEgASgLMhEubm9wYWNzLnYxLlNlbmRlciJLChJMaXN0U2VuZGVyc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIlIKE0xpc3RTZW5kZXJzUmVzcG9uc2USIgoHc2VuZGVycxgBIAMoCzIRLm5vcGFjcy52MS5TZW5kZXISFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJInYKEFNldFNlbmRlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiEKBnNlbmRlchgCIAEoCzIRLm5vcGFjcy52MS5TZW5kZXISLwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrIjYKEVNldFNlbmRlclJlc3BvbnNlEiEKBnNlbmRlchgBIAEoCzIRLm5vcGFjcy52MS5TZW5kZXIiSAoTUmVtb3ZlU2VuZGVyUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtjYW5jZWxfam9icxgDIAEoCCJQChRSZW1vdmVTZW5kZXJSZXNwb25zZRIhCgZzZW5kZXIYASABKAsyES5ub3BhY3MudjEuU2VuZGVyEhUKDWpvYnNfY2FuY2VsZWQYAiABKAMiMQoRVGVzdFNlbmRlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEgwKBG5hbWUYAiABKAkiUgoSVGVzdFNlbmRlclJlc3BvbnNlEg4KBnBhc3NlZBgBIAEoCBIsCgdyZXN1bHRzGAIgAygLMhsubm9wYWNzLnYxLlNlbmRlclRlc3RSZXN1bHQqtgEKElN0b3dBdXRoZW50aWNhdGlvbhIjCh9TVE9XX0FVVEhFTlRJQ0FUSU9OX1VOU1BFQ0lGSUVEEAASHAoYU1RPV19BVVRIRU5USUNBVElPTl9OT05FEAESHQoZU1RPV19BVVRIRU5USUNBVElPTl9CQVNJQxACEh4KGlNUT1dfQVVUSEVOVElDQVRJT05fQkVBUkVSEAMSHgoaU1RPV19BVVRIRU5USUNBVElPTl9IRUFERVIQBCpxCgtTZW5kZXJTdGF0ZRIcChhTRU5ERVJfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRTRU5ERVJfU1RBVEVfVU5LTk9XThABEhMKD1NFTkRFUl9TVEFURV9VUBACEhUKEVNFTkRFUl9TVEFURV9ET1dOEAMq5AEKEFNlbmRlckRvd25SZWFzb24SIgoeU0VOREVSX0RPV05fUkVBU09OX1VOU1BFQ0lGSUVEEAASHwobU0VOREVSX0RPV05fUkVBU09OX0RJU0FCTEVEEAESIwofU0VOREVSX0RPV05fUkVBU09OX1BFRVJfRkFJTElORxACEicKI1NFTkRFUl9ET1dOX1JFQVNPTl9URU5BTlRfTk9UX1JFQURZEAMSHwobU0VOREVSX0RPV05fUkVBU09OX1NUT1BQSU5HEAQSHAoYU0VOREVSX0RPV05fUkVBU09OX09USEVSEAUq5QEKC1NlbmRlckZhdWx0EhwKGFNFTkRFUl9GQVVMVF9VTlNQRUNJRklFRBAAEhwKGFNFTkRFUl9GQVVMVF9VTlJFQUNIQUJMRRABEiQKIFNFTkRFUl9GQVVMVF9BRERSRVNTX05PVF9BTExPV0VEEAISGwoXU0VOREVSX0ZBVUxUX1RMU19GQUlMRUQQAxIZChVTRU5ERVJfRkFVTFRfUkVKRUNURUQQBBIdChlTRU5ERVJfRkFVTFRfTk9UX0FDQ0VQVEVEEAUSHQoZU0VOREVSX0ZBVUxUX1dST05HX0FOU1dFUhAGKuQBCg5TZW5kZXJUZXN0U3RlcBIgChxTRU5ERVJfVEVTVF9TVEVQX1VOU1BFQ0lGSUVEEAASHAoYU0VOREVSX1RFU1RfU1RFUF9SRVNPTFZFEAESHAoYU0VOREVSX1RFU1RfU1RFUF9DT05ORUNUEAISGAoUU0VOREVSX1RFU1RfU1RFUF9UTFMQAxIeChpTRU5ERVJfVEVTVF9TVEVQX0FTU09DSUFURRAEEhwKGFNFTkRFUl9URVNUX1NURVBfUkVRVUVTVBAFEhwKGFNFTkRFUl9URVNUX1NURVBfUkVMRUFTRRAGKpkBChFTZW5kZXJUZXN0T3V0Y29tZRIjCh9TRU5ERVJfVEVTVF9PVVRDT01FX1VOU1BFQ0lGSUVEEAASHgoaU0VOREVSX1RFU1RfT1VUQ09NRV9QQVNTRUQQARIeChpTRU5ERVJfVEVTVF9PVVRDT01FX0ZBSUxFRBACEh8KG1NFTkRFUl9URVNUX09VVENPTUVfU0tJUFBFRBADMuoDCg1TZW5kZXJTZXJ2aWNlEkYKCUFkZFNlbmRlchIbLm5vcGFjcy52MS5BZGRTZW5kZXJSZXF1ZXN0Ghwubm9wYWNzLnYxLkFkZFNlbmRlclJlc3BvbnNlEksKCUdldFNlbmRlchIbLm5vcGFjcy52MS5HZXRTZW5kZXJSZXF1ZXN0Ghwubm9wYWNzLnYxLkdldFNlbmRlclJlc3BvbnNlIgOQAgESUQoLTGlzdFNlbmRlcnMSHS5ub3BhY3MudjEuTGlzdFNlbmRlcnNSZXF1ZXN0Gh4ubm9wYWNzLnYxLkxpc3RTZW5kZXJzUmVzcG9uc2UiA5ACARJLCglTZXRTZW5kZXISGy5ub3BhY3MudjEuU2V0U2VuZGVyUmVxdWVzdBocLm5vcGFjcy52MS5TZXRTZW5kZXJSZXNwb25zZSIDkAICElQKDFJlbW92ZVNlbmRlchIeLm5vcGFjcy52MS5SZW1vdmVTZW5kZXJSZXF1ZXN0Gh8ubm9wYWNzLnYxLlJlbW92ZVNlbmRlclJlc3BvbnNlIgOQAgISTgoKVGVzdFNlbmRlchIcLm5vcGFjcy52MS5UZXN0U2VuZGVyUmVxdWVzdBodLm5vcGFjcy52MS5UZXN0U2VuZGVyUmVzcG9uc2UiA5ACAmIGcHJvdG8z", [file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
 
 /**
  * Sender is one destination a tenant's archived data may be sent to, and
@@ -141,6 +141,18 @@ export type Sender = Message<"nopacs.v1.Sender"> & {
    * @generated from field: google.protobuf.Timestamp update_time = 11;
    */
   updateTime?: Timestamp | undefined;
+
+  /**
+   * Whether the sender may also send instances the default rule refuses:
+   * archived as received, without the profile version that de-identified
+   * them recorded whole, or with a pixel risk a pixel rule accepted
+   * (SenderService, and JobFailureCode). False, the default, sends only
+   * instances archived de-identified. Set or cleared only by a caller with
+   * admin on the installation, never by a masked key.
+   *
+   * @generated from field: bool allow_identified = 12;
+   */
+  allowIdentified: boolean;
 };
 
 /**
@@ -1331,6 +1343,27 @@ export const SenderTestOutcomeSchema: GenEnum<SenderTestOutcome> = /*@__PURE__*/
  * seconds to an hour, and the sender is up at the first answer. Each change
  * of health is an event (EVENT_TYPE_SENDER_HEALTH).
  *
+ * What a sender may send is judged per instance, as its transfer starts,
+ * never when a job is made, by one rule for every kind of job (made by a
+ * person, a forward, a retry, and one a restored database holds). By
+ * default a sender sends only an instance archived de-identified, whose
+ * catalog row records the profile version that de-identified it, and whose
+ * image no pixel rule accepted while it was at risk of burned-in text. Any
+ * other instance is refused for its reason
+ * (JOB_FAILURE_CODE_AS_RECEIVED, JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE,
+ * JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED), counted and listed as a refusal,
+ * never read, and the job goes on with the rest. A sender whose
+ * allow_identified is set sends them too. Only a caller with admin on the
+ * installation (and admin on the tenant, to change a sender at all) sets or
+ * clears it, never a masked key, and only such a caller changes where a
+ * marked sender sends (its host, port, AE titles, URL, TLS or account);
+ * each change of the mark is audited with the detail
+ * allow_identified and reported as an event
+ * (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED). A mark cleared while a scan is
+ * being sent takes effect at its next instance once the server has read
+ * the change (at once after SetSender); a mark set takes effect at the
+ * next scan.
+ *
  * Every method acts inside one tenant, named by the request's tenant field,
  * so a request into a tenant that is not ready is answered UNAVAILABLE. No
  * answer of this service speaks of another tenant.
@@ -1343,13 +1376,21 @@ export const SenderService: GenService<{
    * TestSender tries the peer. A masked key (Key.masked) is refused it:
    * where the archive's data is sent is a person's choice.
    *
+   * A sender added with allow_identified set needs admin on the
+   * installation as well; a caller without it is refused before the request
+   * is validated, recorded refused in the installation's log.
+   *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the sender's name as its
    * object, and its type and destination (host and port, or the URL's host
-   * with its port when the URL names one) in details; never its credential.
+   * with its port when the URL names one) in details, and allow_identified
+   * "true" when it is set; never its credential. A sender added with
+   * allow_identified set is also an event
+   * (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED).
    * Errors: unauthenticated, permission denied (no grant; also a tenant that
    * does not exist, for a caller who may not list every tenant; also a
-   * masked key), invalid,
+   * masked key; also allow_identified set by a caller without admin on the
+   * installation), invalid,
    * not found (a tenant that does not exist, for a caller who may list every
    * tenant), conflict (the tenant has a sender with that name, or a removed
    * sender of that name is still named by jobs), precondition (a host or
@@ -1421,15 +1462,30 @@ export const SenderService: GenService<{
    * stow.authentication names stow.credential too, unless the
    * authentication becomes none, which clears the held credential. A mask
    * that breaks this rule is invalid. A masked key (Key.masked) is refused
-   * it, as AddSender.
+   * it, as AddSender. A mask that names "allow_identified" needs admin on
+   * the installation as well, whether it sets or clears the mark; a caller
+   * without it is refused before the request is validated, recorded refused
+   * in the installation's log. So does a change of where a sender whose
+   * allow_identified is set sends: its host, port, AE titles, URL, TLS or
+   * account (dimse.host, dimse.port, the AE titles, stow.url, any TLS
+   * field, stow.authentication, stow.username, stow.header_name and
+   * stow.credential, since on a DICOMweb peer with several accounts the
+   * account decides where data lands), so a tenant's admin cannot point a
+   * marked sender somewhere the installation's admin did not choose; the change is
+   * refused, recorded refused in the installation's log, and the mark is
+   * not cleared.
    *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the sender's name as its
-   * object and the mask's paths in details; never a value of the
-   * credential.
+   * object and the mask's paths in details, and allow_identified with the
+   * mark after when the change moved it; never a value of the credential.
+   * A change that moves the mark is also an event
+   * (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED), written with it.
    * Errors: unauthenticated, permission denied (no grant; also a tenant that
    * does not exist, for a caller who may not list every tenant; also a
-   * masked key), invalid
+   * masked key; also "allow_identified" in the mask, or a change of where a
+   * marked sender sends, from a caller without admin on the installation),
+   * invalid
    * (also an empty mask, a path that names no field, a read-only field or a
    * type's whole message, a path into the other type's configuration, a
    * URL or authentication without the credential, and every rule AddSender

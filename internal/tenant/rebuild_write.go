@@ -53,6 +53,10 @@ type RebuiltInstance struct {
 	// Profile is the profile version that de-identified it; zero for one
 	// archived as received.
 	Profile ProfileRef
+	// PixelRiskAccepted says its metadata records an image at risk of
+	// burned-in text that a pixel rule accepted as it is; only with
+	// Profile.
+	PixelRiskAccepted bool
 	// Reception names the reception that confirmed it; HeldAt is when.
 	Reception string
 	HeldAt    time.Time
@@ -178,6 +182,8 @@ func (in RebuiltInstance) validate(path label.Path) error {
 		if err := in.Profile.Validate(); err != nil {
 			return err
 		}
+	} else if in.PixelRiskAccepted {
+		return invalid("an instance records an accepted pixel risk only with the profile version that accepted it")
 	}
 	if err := master.ValidateID("reception id", in.Reception); err != nil {
 		return err

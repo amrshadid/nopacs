@@ -19,7 +19,8 @@ const MaxCredentialLength = 4096
 // SetSenderRequest.update_mask).
 var senderMask = maskRules{
 	fields: []string{
-		string(tenant.FieldSenderEnabled), string(tenant.FieldSenderAssociations), string(tenant.FieldSenderByteRate),
+		string(tenant.FieldSenderEnabled), string(tenant.FieldSenderAllowIdentified), string(tenant.FieldSenderAssociations),
+		string(tenant.FieldSenderByteRate),
 		string(tenant.FieldSenderConnectTimeout), string(tenant.FieldSenderResponseTimeout),
 		string(tenant.FieldDIMSEHost), string(tenant.FieldDIMSEPeerPort), string(tenant.FieldDIMSECalledAETitle),
 		string(tenant.FieldDIMSECallingAETitle), string(tenant.FieldDIMSESenderTLS), string(tenant.FieldDIMSETLSCAFile),
@@ -52,7 +53,7 @@ var senderMask = maskRules{
 // mask does not name.
 func senderValues(field string, m *v1.Sender, stated bool) (s tenant.Sender, credential string, connect, response bool, err error) {
 	s = tenant.Sender{
-		Name: m.GetName(), Enabled: m.GetEnabled(), MaxAssociations: int(m.GetMaxAssociations()),
+		Name: m.GetName(), Enabled: m.GetEnabled(), AllowIdentified: m.GetAllowIdentified(), MaxAssociations: int(m.GetMaxAssociations()),
 		MaxBytesPerSecond: m.GetMaxBytesPerSecond(),
 	}
 	if dm := m.GetDimse(); dm != nil {
@@ -282,7 +283,7 @@ func senderMessage(s tenant.Sender, h SenderHealth) *v1.Sender {
 		Name: s.Name, Enabled: s.Enabled, MaxAssociations: int32(s.MaxAssociations), //nolint:gosec // G115: 1 to 16.
 		MaxBytesPerSecond: s.MaxBytesPerSecond, ConnectTimeout: seconds(s.ConnectTimeout),
 		ResponseTimeout: seconds(s.ResponseTimeout), Health: senderHealthMessage(h),
-		CreateTime: timestamp(s.Created), UpdateTime: timestamp(s.Updated),
+		CreateTime: timestamp(s.Created), UpdateTime: timestamp(s.Updated), AllowIdentified: s.AllowIdentified,
 	}
 	switch s.Type {
 	case tenant.SenderDIMSE:

@@ -122,6 +122,9 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 		if err := k.checkCorrectionNotHeld(ctx, tx, c.ID, cc.Now); err != nil {
 			return err
 		}
+		if cc.Replaced != nil && c.Kind != corr.KindReplace {
+			return fault.New(fault.Invalid, "only a replace's publish names a new revision's provenance")
+		}
 		var err error
 		switch c.Kind {
 		case corr.KindDelete:
@@ -327,12 +330,19 @@ func (k Sending) publishReplace(ctx context.Context, tx SendingTx, c tenant.Corr
 	if c.NewSHA256 != c.ReceivedSHA256 {
 		archived = c.NewSHA256[:]
 	}
+	profile, risk, err := replacedProvenance(ctx, tx, cc.Replaced)
+	if err != nil {
+		return err
+	}
 	if err := k.ownSuperseded(ctx, tx, c.ID, s.storage, s.path, in.uid, in.key, in.raw, in.size, in.archived, in.revision); err != nil {
 		return err
 	}
+	// The row takes the new revision's provenance with its bytes: what a
+	// sender may send is judged by the bytes the row points to, never by the
+	// revision they replace (tenant.SendRefusal).
 	if _, err := tx.Exec(ctx, `UPDATE instances SET storage_key = ?, sha256 = ?, archived_sha256 = ?, size = ?, byte_offset = 0,
-		byte_length = ?, reception_id = ? WHERE scan_id = ? AND sop_instance_uid = ?`, key, c.ReceivedSHA256[:], archived, c.NewSize,
-		c.NewSize, reception, s.id, in.uid); err != nil {
+		byte_length = ?, reception_id = ?, profile_version_id = ?, pixel_risk_accepted = ? WHERE scan_id = ? AND sop_instance_uid = ?`,
+		key, c.ReceivedSHA256[:], archived, c.NewSize, c.NewSize, reception, profile, k.D.Bool(risk), s.id, in.uid); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE reception_scans SET instances = instances - 1, bytes = bytes - ? WHERE reception_id = ?
@@ -364,6 +374,37 @@ func (k Sending) publishReplace(ctx context.Context, tx SendingTx, c tenant.Corr
 		return err
 	}
 	return k.releaseOverwritten(ctx, tx, c.Quarantine, q, cc.Now)
+}
+
+// replacedProvenance returns what a replace's publish writes to the
+// instance's row of its new revision's provenance: the id of its profile
+// version (nil, as received) and its accepted pixel risk. A replace that
+// names none is Invalid, so no caller keeps the replaced revision's facts
+// by leaving them out; a profile version the tenant does not have is a
+// precondition failure.
+func replacedProvenance(ctx context.Context, tx SendingTx, p *tenant.InstanceProvenance) (any, bool, error) {
+	if p == nil {
+		return nil, false, fault.New(fault.Invalid, "a replace's publish names how its new revision was archived")
+	}
+	if p.Profile.IsZero() {
+		if p.PixelRiskAccepted {
+			return nil, false, fault.New(fault.Invalid, "an accepted pixel risk goes with the profile version that accepted it")
+		}
+		return nil, false, nil
+	}
+	if err := p.Profile.Validate(); err != nil {
+		return nil, false, err
+	}
+	var id int64
+	found, err := tx.QueryRow(ctx, `SELECT id FROM profile_versions WHERE name = ? AND version = ?`,
+		[]any{p.Profile.Name, p.Profile.Version}, &id)
+	if err != nil {
+		return nil, false, err
+	}
+	if !found {
+		return nil, false, fault.Wrap(fault.Precondition, tenant.ErrProfileUnknown, "the tenant has no profile version "+p.Profile.String())
+	}
+	return id, p.PixelRiskAccepted, nil
 }
 
 // heldFile is a quarantined file still held, as a replace's publish reads

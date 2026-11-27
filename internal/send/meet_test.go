@@ -66,8 +66,11 @@ func (f *fixture) replace(scan, uid string, file []byte) {
 		return
 	}
 	manifest := tenant.SHA256(sha256.Sum256([]byte(uid)))
+	// The new revision de-identified by the fixture's profile version, as the
+	// one it replaces, so the default rule lets it out.
+	replaced := tenant.InstanceProvenance{Profile: fixtureProfile}
 	if _, err := f.p.CommitCorrection(f.ctx, tenant.CorrectionCommit{ID: c.ID, Now: now, Grace: grace,
-		Manifests: map[string]tenant.SHA256{f.series[scan]: manifest}}); err != nil {
+		Manifests: map[string]tenant.SHA256{f.series[scan]: manifest}, Replaced: &replaced}); err != nil {
 		f.t.Error("CommitCorrection of a replace:", err)
 	}
 }

@@ -170,6 +170,14 @@ type Instance struct {
 	// text, which names the version whatever database holds it. Version 3
 	// only, and only with Profile; empty when the writer did not know it.
 	ProfileSHA256 string `json:"profile_sha256,omitempty"`
+	// PixelRiskAccepted says the instance's image was at risk of burned-in
+	// text and a pixel rule of Profile accepted it as it is, as its catalog
+	// row records it, so a catalog made again from the metadata refuses to
+	// send it as the one before did. Only with Profile; left out (false)
+	// otherwise. Kept in a sidecar of any version, never dropped as a field
+	// of a later version is when a line joins an older sidecar: dropping it
+	// would let a catalog made again send what the archive refused.
+	PixelRiskAccepted bool `json:"pixel_risk_accepted,omitempty"`
 	// Reception is the id of the reception that confirmed this revision of
 	// the instance. Version 3 only, and always there in it.
 	Reception string `json:"reception,omitempty"`
@@ -223,6 +231,14 @@ var (
 	// ErrNoSuchFrame is a frame number that is not one of the instance's.
 	ErrNoSuchFrame = errors.New("sidecar: no such frame")
 )
+
+// Provenance returns how the line says its instance was archived: the
+// profile version that de-identified it (zero for one archived as received,
+// and for a profile that is not name@version, which a line read or written
+// here never holds) and its accepted pixel risk.
+func (in Instance) Provenance() tenant.InstanceProvenance {
+	return tenant.InstanceProvenance{Profile: profileRef(in.Profile), PixelRiskAccepted: in.PixelRiskAccepted}
+}
 
 // NeedsFrames reports whether the line has pixel data and no frame table,
 // as a line written before frame tables existed has.
@@ -409,6 +425,9 @@ func check(in Instance, version int) error {
 	}
 	if !validProfile(in.Profile) {
 		return fmt.Errorf("%w: profile is not name@version", ErrFormat)
+	}
+	if in.PixelRiskAccepted && in.Profile == "" {
+		return fmt.Errorf("%w: pixel_risk_accepted goes with a profile", ErrFormat)
 	}
 	if p := in.PixelData; p != nil && (p.Offset < 0 || p.Length < 0 || p.Offset+p.Length > in.Size) {
 		return fmt.Errorf("%w: pixel_data lies outside the file", ErrFormat)

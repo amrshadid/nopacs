@@ -108,7 +108,7 @@ func (c CatalogReader[T]) scanHeld(row Row, in *tenant.ScanInstance) error {
 	var held T
 	var mark string
 	err := row.Scan(&in.SOPInstanceUID, &in.ReceptionID, &in.Key, &in.Offset, &in.Length, &in.Size, &sum, &archived, &held,
-		&in.Profile.Name, &in.Profile.Version, &mark)
+		&in.Profile.Name, &in.Profile.Version, &mark, &in.PixelRiskAccepted)
 	in.SHA256, in.ArchivedSHA256, in.Held, in.Damaged = ToSHA256(sum), ToSHA256(archived), c.Time(held), mark != ""
 	return err
 }

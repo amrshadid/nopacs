@@ -102,6 +102,27 @@ class SenderServiceStub:
     seconds to an hour, and the sender is up at the first answer. Each change
     of health is an event (EVENT_TYPE_SENDER_HEALTH).
 
+    What a sender may send is judged per instance, as its transfer starts,
+    never when a job is made, by one rule for every kind of job (made by a
+    person, a forward, a retry, and one a restored database holds). By
+    default a sender sends only an instance archived de-identified, whose
+    catalog row records the profile version that de-identified it, and whose
+    image no pixel rule accepted while it was at risk of burned-in text. Any
+    other instance is refused for its reason
+    (JOB_FAILURE_CODE_AS_RECEIVED, JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE,
+    JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED), counted and listed as a refusal,
+    never read, and the job goes on with the rest. A sender whose
+    allow_identified is set sends them too. Only a caller with admin on the
+    installation (and admin on the tenant, to change a sender at all) sets or
+    clears it, never a masked key, and only such a caller changes where a
+    marked sender sends (its host, port, AE titles, URL, TLS or account);
+    each change of the mark is audited with the detail
+    allow_identified and reported as an event
+    (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED). A mark cleared while a scan is
+    being sent takes effect at its next instance once the server has read
+    the change (at once after SetSender); a mark set takes effect at the
+    next scan.
+
     Every method acts inside one tenant, named by the request's tenant field,
     so a request into a tenant that is not ready is answered UNAVAILABLE. No
     answer of this service speaks of another tenant.
@@ -222,6 +243,27 @@ class SenderServiceServicer:
     seconds to an hour, and the sender is up at the first answer. Each change
     of health is an event (EVENT_TYPE_SENDER_HEALTH).
 
+    What a sender may send is judged per instance, as its transfer starts,
+    never when a job is made, by one rule for every kind of job (made by a
+    person, a forward, a retry, and one a restored database holds). By
+    default a sender sends only an instance archived de-identified, whose
+    catalog row records the profile version that de-identified it, and whose
+    image no pixel rule accepted while it was at risk of burned-in text. Any
+    other instance is refused for its reason
+    (JOB_FAILURE_CODE_AS_RECEIVED, JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE,
+    JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED), counted and listed as a refusal,
+    never read, and the job goes on with the rest. A sender whose
+    allow_identified is set sends them too. Only a caller with admin on the
+    installation (and admin on the tenant, to change a sender at all) sets or
+    clears it, never a masked key, and only such a caller changes where a
+    marked sender sends (its host, port, AE titles, URL, TLS or account);
+    each change of the mark is audited with the detail
+    allow_identified and reported as an event
+    (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED). A mark cleared while a scan is
+    being sent takes effect at its next instance once the server has read
+    the change (at once after SetSender); a mark set takes effect at the
+    next scan.
+
     Every method acts inside one tenant, named by the request's tenant field,
     so a request into a tenant that is not ready is answered UNAVAILABLE. No
     answer of this service speaks of another tenant.
@@ -232,13 +274,21 @@ class SenderServiceServicer:
         TestSender tries the peer. A masked key (Key.masked) is refused it:
         where the archive's data is sent is a person's choice.
 
+        A sender added with allow_identified set needs admin on the
+        installation as well; a caller without it is refused before the request
+        is validated, recorded refused in the installation's log.
+
         Role: admin on the tenant.
         Audit: one entry in the tenant's log, with the sender's name as its
         object, and its type and destination (host and port, or the URL's host
-        with its port when the URL names one) in details; never its credential.
+        with its port when the URL names one) in details, and allow_identified
+        "true" when it is set; never its credential. A sender added with
+        allow_identified set is also an event
+        (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED).
         Errors: unauthenticated, permission denied (no grant; also a tenant that
         does not exist, for a caller who may not list every tenant; also a
-        masked key), invalid,
+        masked key; also allow_identified set by a caller without admin on the
+        installation), invalid,
         not found (a tenant that does not exist, for a caller who may list every
         tenant), conflict (the tenant has a sender with that name, or a removed
         sender of that name is still named by jobs), precondition (a host or
@@ -301,15 +351,30 @@ class SenderServiceServicer:
         stow.authentication names stow.credential too, unless the
         authentication becomes none, which clears the held credential. A mask
         that breaks this rule is invalid. A masked key (Key.masked) is refused
-        it, as AddSender.
+        it, as AddSender. A mask that names "allow_identified" needs admin on
+        the installation as well, whether it sets or clears the mark; a caller
+        without it is refused before the request is validated, recorded refused
+        in the installation's log. So does a change of where a sender whose
+        allow_identified is set sends: its host, port, AE titles, URL, TLS or
+        account (dimse.host, dimse.port, the AE titles, stow.url, any TLS
+        field, stow.authentication, stow.username, stow.header_name and
+        stow.credential, since on a DICOMweb peer with several accounts the
+        account decides where data lands), so a tenant's admin cannot point a
+        marked sender somewhere the installation's admin did not choose; the change is
+        refused, recorded refused in the installation's log, and the mark is
+        not cleared.
 
         Role: admin on the tenant.
         Audit: one entry in the tenant's log, with the sender's name as its
-        object and the mask's paths in details; never a value of the
-        credential.
+        object and the mask's paths in details, and allow_identified with the
+        mark after when the change moved it; never a value of the credential.
+        A change that moves the mark is also an event
+        (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED), written with it.
         Errors: unauthenticated, permission denied (no grant; also a tenant that
         does not exist, for a caller who may not list every tenant; also a
-        masked key), invalid
+        masked key; also "allow_identified" in the mask, or a change of where a
+        marked sender sends, from a caller without admin on the installation),
+        invalid
         (also an empty mask, a path that names no field, a read-only field or a
         type's whole message, a path into the other type's configuration, a
         URL or authentication without the credential, and every rule AddSender
@@ -501,6 +566,27 @@ class SenderService:
     or the stow probe of TestSender) after a wait that doubles from 10
     seconds to an hour, and the sender is up at the first answer. Each change
     of health is an event (EVENT_TYPE_SENDER_HEALTH).
+
+    What a sender may send is judged per instance, as its transfer starts,
+    never when a job is made, by one rule for every kind of job (made by a
+    person, a forward, a retry, and one a restored database holds). By
+    default a sender sends only an instance archived de-identified, whose
+    catalog row records the profile version that de-identified it, and whose
+    image no pixel rule accepted while it was at risk of burned-in text. Any
+    other instance is refused for its reason
+    (JOB_FAILURE_CODE_AS_RECEIVED, JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE,
+    JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED), counted and listed as a refusal,
+    never read, and the job goes on with the rest. A sender whose
+    allow_identified is set sends them too. Only a caller with admin on the
+    installation (and admin on the tenant, to change a sender at all) sets or
+    clears it, never a masked key, and only such a caller changes where a
+    marked sender sends (its host, port, AE titles, URL, TLS or account);
+    each change of the mark is audited with the detail
+    allow_identified and reported as an event
+    (EVENT_TYPE_SENDER_ALLOW_IDENTIFIED). A mark cleared while a scan is
+    being sent takes effect at its next instance once the server has read
+    the change (at once after SetSender); a mark set takes effect at the
+    next scan.
 
     Every method acts inside one tenant, named by the request's tenant field,
     so a request into a tenant that is not ready is answered UNAVAILABLE. No

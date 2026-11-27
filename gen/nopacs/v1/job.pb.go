@@ -472,6 +472,19 @@ const (
 	// until its attempts ran out. The bytes are not missing, so this is
 	// never data loss.
 	JobFailureCode_JOB_FAILURE_CODE_NOT_ONLINE JobFailureCode = 14
+	// Not sent: the instance was archived as received, so nothing records
+	// that it was de-identified, and the sender's allow_identified is not
+	// set (SenderService). Judged as its transfer would start; never read.
+	JobFailureCode_JOB_FAILURE_CODE_AS_RECEIVED JobFailureCode = 15
+	// Not sent: the instance's catalog row names the profile version that
+	// de-identified it only in part, so which version did it cannot be told,
+	// and the sender's allow_identified is not set. Never read.
+	JobFailureCode_JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE JobFailureCode = 16
+	// Not sent: the instance's image was at risk of burned-in text (PS3.15
+	// E.3.1) and a pixel rule of its profile accepted it as it is, so what
+	// its pixels show was not removed, and the sender's allow_identified is
+	// not set. Never read.
+	JobFailureCode_JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED JobFailureCode = 17
 )
 
 // Enum value maps for JobFailureCode.
@@ -492,23 +505,29 @@ var (
 		12: "JOB_FAILURE_CODE_TOO_LARGE",
 		13: "JOB_FAILURE_CODE_DELETED_IN_ARCHIVE",
 		14: "JOB_FAILURE_CODE_NOT_ONLINE",
+		15: "JOB_FAILURE_CODE_AS_RECEIVED",
+		16: "JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE",
+		17: "JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED",
 	}
 	JobFailureCode_value = map[string]int32{
-		"JOB_FAILURE_CODE_UNSPECIFIED":         0,
-		"JOB_FAILURE_CODE_PEER_REFUSED":        1,
-		"JOB_FAILURE_CODE_PEER_WARNING":        2,
-		"JOB_FAILURE_CODE_CLASS_NOT_ACCEPTED":  3,
-		"JOB_FAILURE_CODE_SYNTAX_NOT_ACCEPTED": 4,
-		"JOB_FAILURE_CODE_PEER_UNACCOUNTED":    5,
-		"JOB_FAILURE_CODE_DAMAGED_IN_STORAGE":  6,
-		"JOB_FAILURE_CODE_META_UNREADABLE":     7,
-		"JOB_FAILURE_CODE_WOULD_HOLD":          8,
-		"JOB_FAILURE_CODE_CHECK_FAILED":        9,
-		"JOB_FAILURE_CODE_UNDECIDED":           10,
-		"JOB_FAILURE_CODE_NOT_DEIDENTIFIED":    11,
-		"JOB_FAILURE_CODE_TOO_LARGE":           12,
-		"JOB_FAILURE_CODE_DELETED_IN_ARCHIVE":  13,
-		"JOB_FAILURE_CODE_NOT_ONLINE":          14,
+		"JOB_FAILURE_CODE_UNSPECIFIED":           0,
+		"JOB_FAILURE_CODE_PEER_REFUSED":          1,
+		"JOB_FAILURE_CODE_PEER_WARNING":          2,
+		"JOB_FAILURE_CODE_CLASS_NOT_ACCEPTED":    3,
+		"JOB_FAILURE_CODE_SYNTAX_NOT_ACCEPTED":   4,
+		"JOB_FAILURE_CODE_PEER_UNACCOUNTED":      5,
+		"JOB_FAILURE_CODE_DAMAGED_IN_STORAGE":    6,
+		"JOB_FAILURE_CODE_META_UNREADABLE":       7,
+		"JOB_FAILURE_CODE_WOULD_HOLD":            8,
+		"JOB_FAILURE_CODE_CHECK_FAILED":          9,
+		"JOB_FAILURE_CODE_UNDECIDED":             10,
+		"JOB_FAILURE_CODE_NOT_DEIDENTIFIED":      11,
+		"JOB_FAILURE_CODE_TOO_LARGE":             12,
+		"JOB_FAILURE_CODE_DELETED_IN_ARCHIVE":    13,
+		"JOB_FAILURE_CODE_NOT_ONLINE":            14,
+		"JOB_FAILURE_CODE_AS_RECEIVED":           15,
+		"JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE": 16,
+		"JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED":   17,
 	}
 )
 
@@ -4120,7 +4139,7 @@ const file_nopacs_v1_job_proto_rawDesc = "" +
 	"\x1aIMPORT_SKIP_CODE_TOO_LARGE\x10\a\x12\"\n" +
 	"\x1eIMPORT_SKIP_CODE_PATH_TOO_LONG\x10\t\x12\x1d\n" +
 	"\x19IMPORT_SKIP_CODE_BAD_NAME\x10\n" +
-	"\"\x04\b\b\x10\b*\x1dIMPORT_SKIP_CODE_CATALOG_FILE*\xb6\x04\n" +
+	"\"\x04\b\b\x10\b*\x1dIMPORT_SKIP_CODE_CATALOG_FILE*\xae\x05\n" +
 	"\x0eJobFailureCode\x12 \n" +
 	"\x1cJOB_FAILURE_CODE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dJOB_FAILURE_CODE_PEER_REFUSED\x10\x01\x12!\n" +
@@ -4137,7 +4156,10 @@ const file_nopacs_v1_job_proto_rawDesc = "" +
 	"!JOB_FAILURE_CODE_NOT_DEIDENTIFIED\x10\v\x12\x1e\n" +
 	"\x1aJOB_FAILURE_CODE_TOO_LARGE\x10\f\x12'\n" +
 	"#JOB_FAILURE_CODE_DELETED_IN_ARCHIVE\x10\r\x12\x1f\n" +
-	"\x1bJOB_FAILURE_CODE_NOT_ONLINE\x10\x0e*\xc3\x02\n" +
+	"\x1bJOB_FAILURE_CODE_NOT_ONLINE\x10\x0e\x12 \n" +
+	"\x1cJOB_FAILURE_CODE_AS_RECEIVED\x10\x0f\x12*\n" +
+	"&JOB_FAILURE_CODE_NO_PROFILE_PROVENANCE\x10\x10\x12(\n" +
+	"$JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED\x10\x11*\xc3\x02\n" +
 	"\x0eImportFileKind\x12 \n" +
 	"\x1cIMPORT_FILE_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18IMPORT_FILE_KIND_SKIPPED\x10\x01\x12 \n" +

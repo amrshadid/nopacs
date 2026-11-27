@@ -447,7 +447,7 @@ const (
 var jobFailureCodes = []JobFailureCode{FailurePeerRefused, FailurePeerWarning, FailureClassNotAccepted,
 	FailureSyntaxNotAccepted, FailurePeerUnaccounted, FailureDamagedInStorage, FailureMetaUnreadable,
 	FailureWouldHold, FailureCheckFailed, FailureUndecided, FailureNotDeidentified, FailureTooLarge,
-	FailureDeletedInArchive, FailureNotOnline}
+	FailureDeletedInArchive, FailureNotOnline, FailureAsReceived, FailureNoProfileProvenance, FailurePixelRiskAccepted}
 
 // Refused reports whether an instance with code c was refused, not sent
 // with a warning (for a deid job: did not pass, rather than passed with a
@@ -495,7 +495,7 @@ func (f JobFailure) Validate() error {
 		return err
 	}
 	if !slices.Contains(jobFailureCodes, f.Code) {
-		return invalid("a job failure's code is one of peer_refused, peer_warning, class_not_accepted, syntax_not_accepted, peer_unaccounted, damaged_in_storage, meta_unreadable, would_hold, check_failed, undecided, not_deidentified, too_large")
+		return invalid("a job failure's code is one of peer_refused, peer_warning, class_not_accepted, syntax_not_accepted, peer_unaccounted, damaged_in_storage, meta_unreadable, would_hold, check_failed, undecided, not_deidentified, too_large, deleted_in_archive, not_online, as_received, no_profile_provenance, pixel_risk_accepted")
 	}
 	if f.SOPClassUID != "" {
 		if err := validateUID("SOP Class UID", f.SOPClassUID); err != nil {

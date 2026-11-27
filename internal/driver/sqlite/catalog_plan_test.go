@@ -58,7 +58,7 @@ func fillCatalog(tb testing.TB, db *sql.DB, subjects int) {
 		`INSERT INTO session_modalities (session_id, modality, created)
 		 SELECT DISTINCT c.session_id, c.modality, s.created FROM scans AS c JOIN sessions AS s ON s.id = c.session_id`,
 		fmt.Sprintf(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < %d)
-		 INSERT INTO instances SELECT (i - 1) / 2 + 1, '2.25.3.' || i, 'rc', randomblob(32), NULL, '', 0, 1000, 1000, 0, NULL FROM n`, scans*2),
+		 INSERT INTO instances SELECT (i - 1) / 2 + 1, '2.25.3.' || i, 'rc', randomblob(32), NULL, '', 0, 1000, 1000, 0, NULL, 0 FROM n`, scans*2),
 		`ANALYZE`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {

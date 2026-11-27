@@ -278,6 +278,10 @@ type ScanInstance struct {
 	// (JobWork.JobScanInstances) and the catalog's reads of instances
 	// (InstanceReads); zero in the pipeline's own ScanInstances.
 	Profile ProfileRef
+	// PixelRiskAccepted says its image was at risk of burned-in text and a
+	// pixel rule accepted it as it is (SendRefusal). Answered where Profile
+	// is; false in the pipeline's own ScanInstances.
+	PixelRiskAccepted bool
 	// Damaged says a scrub found the instance's bytes missing or not what
 	// was archived and marked it (Scrubbing): a reader answers data loss
 	// before it reads a byte. Answered by the catalog's reads of instances

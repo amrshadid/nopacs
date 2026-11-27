@@ -337,6 +337,9 @@ func eventMessage(name string, e tenant.Event) *v1.Event {
 		m.Payload = &v1.Event_QuarantineAging{QuarantineAging: &v1.QuarantineAging{
 			OldestAge: durationpb.New(time.Duration(p.OldestAgeMicros) * time.Microsecond), HeldFiles: p.HeldFiles, HeldBytes: p.HeldBytes,
 			AgePassed: p.AgePassed, BytesPassed: p.BytesPassed, Recovered: p.Recovered}}
+	case *tenant.SenderAllowIdentifiedChanged:
+		m.Payload = &v1.Event_SenderAllowIdentified{SenderAllowIdentified: &v1.SenderAllowIdentifiedChanged{
+			Sender: p.Sender, AllowIdentified: p.AllowIdentified}}
 	}
 	return m
 }

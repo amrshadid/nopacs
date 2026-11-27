@@ -648,6 +648,10 @@ enum EventType {
   // What the tenant holds in quarantine passed quarantine.warn-age or
   // quarantine.warn-bytes, or is no longer past one of them.
   EVENT_TYPE_QUARANTINE_AGING = 18;
+
+  // A sender's allow_identified was set or cleared (SenderService), or a
+  // sender was added with it set.
+  EVENT_TYPE_SENDER_ALLOW_IDENTIFIED = 19;
 }
 
 // AssociationFailure is why a DIMSE receiver turned a caller away. Each
@@ -1126,6 +1130,17 @@ message QuarantineAging {
   bool recovered = 6;
 }
 
+// SenderAllowIdentifiedChanged is a sender's allow_identified set or
+// cleared, or a sender added with it set: a change of what the tenant lets
+// leave the archive, written in the transaction of the change.
+message SenderAllowIdentifiedChanged {
+  // The sender's name.
+  string sender = 1;
+
+  // The mark after the change.
+  bool allow_identified = 2;
+}
+
 // CatalogRebuilt is a catalog made again from the storages and put in use
 // in one transaction. When it begins a new history (after a restore, an
 // import or a load), it is that history's first event, and a consumer that
@@ -1215,6 +1230,9 @@ message Event {
 
     // What the tenant holds in quarantine passed a warning, or recovered.
     QuarantineAging quarantine_aging = 22;
+
+    // A sender's allow_identified was set or cleared.
+    SenderAllowIdentifiedChanged sender_allow_identified = 23;
   }
 }
 

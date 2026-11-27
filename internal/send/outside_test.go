@@ -157,6 +157,55 @@ func TestOutsidePynetdicom(t *testing.T) {
 	compareReceived(t, f, out, func(b []byte) []byte { return b })
 }
 
+// TestOutsideStorescpGetsOnlyDeidentified sends a session to dcmtk's
+// storescp through a sender not marked to send identified data: the
+// instance archived as received and the one whose accepted pixel risk the
+// catalog records are refused for their reasons, and storescp writes
+// exactly the de-identified ones, each byte for byte the stored data set.
+func TestOutsideStorescpGetsOnlyDeidentified(t *testing.T) {
+	storescp := tool(t, "storescp")
+	f := newFixture(t)
+	out := t.TempDir()
+	addr := freePort(t)
+	_, port, _ := net.SplitHostPort(addr)
+	startProcess(t, addr, storescp, "-aet", "PEER", "+B", "+xa", "-od", out, port)
+	files := outsideFiles(t)
+	asIs, risky := uidOf(t, files[0]), uidOf(t, files[3])
+	f.provenance = func(uid string) tenant.InstanceProvenance {
+		switch uid {
+		case asIs:
+			return tenant.InstanceProvenance{}
+		case risky:
+			return tenant.InstanceProvenance{Profile: fixtureProfile, PixelRiskAccepted: true}
+		}
+		return tenant.InstanceProvenance{Profile: fixtureProfile}
+	}
+	f.archive("ses-1", scanFiles{"a", files})
+	f.addDIMSE("peer", addr)
+	job := f.createJob("peer", "ses-1")
+	s := f.start(f.config())
+	j := f.waitJob(s, job.ID, 60*time.Second, ended)
+	if j.State != tenant.JobPartial || j.Counts.InstancesSent != int64(len(files)-2) || j.Counts.InstancesRefused != 2 {
+		t.Fatalf("job %s %+v, want partial with %d sent and 2 refused; failures %+v", j.State, j.Counts, len(files)-2, f.failures(job.ID))
+	}
+	for _, fl := range f.failures(job.ID) {
+		t.Logf("refused: %s %s (%s)", fl.SOPInstanceUID, fl.Code, fl.Detail)
+	}
+	entries, err := os.ReadDir(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		t.Logf("storescp wrote: %s", e.Name())
+		if strings.Contains(e.Name(), asIs) || strings.Contains(e.Name(), risky) {
+			t.Errorf("storescp received a refused instance: %s", e.Name())
+		}
+	}
+	delete(f.files, asIs)
+	delete(f.files, risky)
+	compareReceived(t, f, out, func(b []byte) []byte { ds, _ := dataSetOfFile(t, b); return ds })
+}
+
 // compareReceived checks that dir holds one file per archived instance,
 // named by its SOP Instance UID or holding it, whose data set (as dataSet
 // finds it) is the stored file's.

@@ -52,6 +52,9 @@ const (
 	detailNoMeta        = "not sent: its file meta information cannot be read, so what its data set is and where it starts are not known"
 	detailTooManyKinds  = "not sent: the scan holds more kinds of instance than one association proposes"
 	detailDeleted       = "not sent: a correction deleted it after the job was made"
+	detailAsReceived    = "not sent: archived as received, and the sender is not allowed identified data"
+	detailNoProvenance  = "not sent: its profile version is not recorded whole, and the sender is not allowed identified data"
+	detailPixelRisk     = "not sent: a pixel rule accepted its image at risk of burned-in text, and the sender is not allowed identified data"
 	detailWholeRequest  = tenant.FailureDetailWholeRequest
 	detailWithoutStatus = "refused by the peer without a status"
 )

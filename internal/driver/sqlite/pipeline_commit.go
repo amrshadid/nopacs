@@ -192,12 +192,13 @@ const insertHeldSQL = `INSERT INTO instances (scan_id, sop_instance_uid, recepti
 	byte_offset, byte_length, size, held_at) VALUES (?1, ?2, ?3, ?4, CASE WHEN ?5 = ?4 THEN NULL ELSE ?5 END, '', ?6, ?7, ?8, ?9)`
 
 // insertDeidentifiedSQL is insertHeldSQL for an instance a profile version
-// de-identified: it records the version's id. An instance archived as
+// de-identified: it records the version's id, and whether a pixel rule of
+// it accepted an image at risk of burned-in text. An instance archived as
 // received is written by insertHeldSQL, the row it was before the catalog
-// had the column.
+// had the columns.
 const insertDeidentifiedSQL = `INSERT INTO instances (scan_id, sop_instance_uid, reception_id, sha256, archived_sha256, storage_key,
-	byte_offset, byte_length, size, held_at, profile_version_id)
-	VALUES (?1, ?2, ?3, ?4, CASE WHEN ?5 = ?4 THEN NULL ELSE ?5 END, '', ?6, ?7, ?8, ?9, ?10)`
+	byte_offset, byte_length, size, held_at, profile_version_id, pixel_risk_accepted)
+	VALUES (?1, ?2, ?3, ?4, CASE WHEN ?5 = ?4 THEN NULL ELSE ?5 END, '', ?6, ?7, ?8, ?9, ?10, ?11)`
 
 // CommitScan implements tenant.Pipeline.
 func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Scan, error) {
@@ -271,7 +272,7 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 			query, args := insertHeldSQL, []any{scanID, in.SOPInstanceUID, c.ReceptionID, sum, in.ArchivedSHA256[:],
 				in.Offset, in.Length, in.Size, micros(c.At)}
 			if id, ok := profiles[in.Profile]; ok {
-				query, args = insertDeidentifiedSQL, append(args, id)
+				query, args = insertDeidentifiedSQL, append(args, id, boolInt(in.PixelRiskAccepted))
 			}
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return err
