@@ -145,19 +145,38 @@ of the version: changing a term makes a new version, as changing a rule does.
 - **The check after** searches every value of every file the version makes for
   every term of every list, whether or not a rule named the list, in the text
   of each element and in the raw bytes, in UTF-8 and in the character set the
-  file was received in, by the same rule of words. Only values that hold
-  numbers are not searched for the terms, since names of four letters occur
-  by chance in a megabyte of random bytes: a standard element whose VR, as
-  sent and in the data dictionary, is one of numbers (OW, OF, OD, OL, OV, FL,
-  FD, SL, SS, SV, UL, US, UV, AT), and pixel data, float and double float
-  pixel data, overlay data (60xx,3000) and waveform data (5400,1010).
-  Everything else is searched: OB and UN values, so an encapsulated document
-  (0042,0011, a PDF or CDA) holding a term holds the file; a Series
-  Description sent as OW, since the dictionary says it is text; a private
-  value whatever its VR; and a value of a tag the dictionary does not know.
-  `clean` does not rewrite an OB or OW value but removes it, and `redact`
-  acts on text only, so a document kept whole with a term inside is held,
-  never archived.
+  file was received in, by the same rule of words. A value of unknown kind
+  (OB, UN, private) too long to decode whole (over 256 KiB) is decoded a
+  piece at a time in the file's character set, the state of its ISO 2022
+  escapes carried from piece to piece, so a Greek name in Title Case in ISO
+  8859-7, or a name an escape or a shift splits, is found in it as in a
+  short value, as a term and as a value the profile removed. A standard
+  element the data dictionary gives binary VRs only (an ICC profile, a LUT,
+  pixel, overlay and waveform data) is not searched for the terms, whatever
+  VR it was sent with, since names of four letters occur by chance in a few
+  hundred kilobytes of random bytes. An encapsulated document (0042,0011)
+  is read by its MIME Type (0042,0012): one of text (`text/*`, such as a
+  CDA's `text/XML`, `application/xml`, `application/json`, or a type ending
+  in `+xml` or `+json`) is searched as text, and a term in it holds the
+  file; any other (a PDF, whose text is compressed) cannot be searched.
+  So under a profile with text lists, **every file that keeps an
+  encapsulated document that is not text, a PDF report or one with no
+  MIME Type, is held** as `residual_value` with the kind
+  `list_unsearchable` and the element's path, whatever the document
+  holds. A site that receives PDF reports removes the document, or
+  replaces it with a dummy of two zero bytes (which keeps the Type 1
+  element present), by a rule:
+
+  ```
+  {"name": "drop-pdf", "selector": {"keyword": "EncapsulatedDocument"},
+   "action": {"dummy": {}}, "reason": "a PDF cannot be searched for the lists' terms"}
+  ```
+
+  (`{"remove": {}}` in place of `{"dummy": {}}` removes it), or receives
+  such files with a profile without lists. Everything else is searched: a
+  standard text element sent as OB (the dictionary says it is text), a
+  value sent as UN, a private value whatever its VR, and a value of a tag
+  the dictionary does not know.
   A label a naming rule made from a value as received is searched too. A term
   found again, in a value the profile kept or anywhere else, holds the file as
   `residual_value` with the kind `list_term` and the element's path, never the term. So a

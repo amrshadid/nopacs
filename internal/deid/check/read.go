@@ -123,6 +123,7 @@ func (p *parsed) survey(elements []*attributes.DataElementValue, prefix string, 
 	if depth > maxDepth {
 		return &Refusal{Cause: CauseTooLarge}
 	}
+	mime := documentMIME(elements)
 	for _, e := range elements {
 		pos := e.Position
 		if depth > 0 && e.Tag.Group() == 0x7FE0 && p.nestedPixels == "" {
@@ -144,7 +145,7 @@ func (p *parsed) survey(elements []*attributes.DataElementValue, prefix string, 
 			continue
 		}
 		text := dataelem.IsTextVR(dataelem.VR(e.VR))
-		if listsSkipped(e) && pos.End > pos.ValueOffset {
+		if listsSkipped(e, mime) && pos.End > pos.ValueOffset {
 			p.skipped = append(p.skipped, [2]int64{pos.ValueOffset, pos.End})
 		}
 		if standardBinary(e) && pos.End > pos.ValueOffset {

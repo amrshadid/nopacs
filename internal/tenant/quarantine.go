@@ -133,8 +133,9 @@ const UnroutedReceiverRemoved = "receiver_removed"
 
 // ResidualKinds are the kinds of value a residual_value record names: a
 // person's name, an identifier or any other text, a date, a UID, a term of
-// one of the profile's text lists.
-var ResidualKinds = []string{"name", "identifier", "date", "uid", "list_term"}
+// one of the profile's text lists, and an encapsulated document not of text
+// kept under a profile with lists, which the terms could not be searched in.
+var ResidualKinds = []string{"name", "identifier", "date", "uid", "list_term", "list_unsearchable"}
 
 // The fault words a quarantine record's details carry under "fault", the API
 // contract's, each listed with the reasons that use it (the label conflict

@@ -29,48 +29,85 @@ import (
 // the check finds again what clean leaves and no more. A finding is
 // KindListTerm at its path, never the term.
 //
-// A list's terms are words of text. What holds only numbers is not
-// searched for them, in its loose readings or its raw bytes, since 10,000
-// names of four letters each occur by chance in a megabyte of random
-// bytes (listsSkipped): a standard value of a numeric VR the data
-// dictionary agrees is numeric (OW, OF, OD, OL, OV, FL, FD, SL, SS, SV, UL,
-// US, UV, AT), image data at any depth (which the pixel rules handle), an
-// overlay's data and a waveform's. Everything else is searched: OB, which
-// holds an encapsulated document (a CDA's XML, a PDF's text) as readily
-// as bytes, UN, any private value, and a text element sent with a numeric
-// VR.
+// A list's terms are words of text. A standard element the data dictionary
+// gives binary VRs only (an ICC profile, a LUT, image, overlay and
+// waveform data) is not searched for them, in its loose readings or its
+// raw bytes, whatever VR it was sent with, since 10,000 names of four
+// letters each occur by chance in a few hundred kilobytes of random bytes
+// (listsSkipped). An Encapsulated Document (0042,0011) is read by its MIME
+// Type (0042,0012): a document of text (a CDA's XML, plain text, JSON) is
+// searched as text; any other (a PDF, whose text is compressed) cannot be
+// searched, and a file that keeps one under a profile with lists is held
+// as KindListUnsearchable (listsUnsearchable). Everything else is
+// searched: a standard text element sent as OB (the dictionary says it is
+// text), UN, any private value, and a tag the dictionary does not know.
 
-// numericVRs are the VRs whose value is numbers, never text (PS3.5 6.2).
-var numericVRs = map[string]bool{
-	"OW": true, "OF": true, "OD": true, "OL": true, "OV": true, "FL": true, "FD": true,
-	"SL": true, "SS": true, "SV": true, "UL": true, "US": true, "UV": true, "AT": true,
-}
+// encapsulatedDocument is the tag of Encapsulated Document (PS3.3 C.24.2),
+// and encapsulatedMIME that of its MIME Type.
+const (
+	encapsulatedDocument = 0x00420011
+	encapsulatedMIME     = 0x00420012
+)
 
-// listsSkipped reports whether e is left out of the lists' search: image
+// listsSkipped reports whether e, of a data set whose Encapsulated
+// Document is of MIME type mime, is left out of the lists' search: image
 // data (Pixel Data, Float and Double Float Pixel Data, at any depth), an
-// overlay's data (60xx,3000), a waveform's (5400,1010), or a standard value
-// of a numeric VR as sent whose tag the dictionary gives numeric VRs only.
-func listsSkipped(e *attributes.DataElementValue) bool {
+// overlay's data (60xx,3000) and a waveform's (5400,1010) whatever their
+// VR; an Encapsulated Document not of text (textMIME); and a standard
+// element not sent as UN whose tag the dictionary gives binary VRs only.
+func listsSkipped(e *attributes.DataElementValue, mime string) bool {
 	t := uint32(e.Tag)
 	switch {
 	case e.Tag.IsPrivate():
 		return false
 	case pixelTags[e.Tag], t&0xFF00FFFF == 0x60003000, t == 0x54001010:
 		return true
+	case e.VR == "UN":
+		// The sender did not say what it is: it may be text.
+		return false
+	case t == encapsulatedDocument:
+		return !textMIME(mime)
 	}
-	if !numericVRs[e.VR] {
+	return dictBinary(t)
+}
+
+// listsUnsearchable reports whether e is an Encapsulated Document, of a
+// data set whose MIME Type is mime, the lists' terms cannot be searched
+// in: a value not of text (textMIME), sent with a VR other than UN. A
+// value of zero bytes only (a dummy a rule wrote in its place) holds no
+// text, and is not.
+func listsUnsearchable(e *attributes.DataElementValue, mime string) bool {
+	if uint32(e.Tag) != encapsulatedDocument || e.VR == "UN" || e.Length == 0 || textMIME(mime) {
 		return false
 	}
-	v := tag.Tag(t).GetVR()
-	if v == "" {
-		return false
+	return len(e.Value) != int(e.Length) || slices.ContainsFunc(e.Value, func(b byte) bool { return b != 0 })
+}
+
+// textMIME reports whether a MIME type is one of text (RFC 6838): text/*,
+// application/xml or application/json, or a type of XML or JSON
+// (+xml, +json, RFC 6839), in any case and with its parameters.
+func textMIME(mime string) bool {
+	m := strings.ToLower(strings.TrimSpace(strings.TrimRight(mime, " \x00")))
+	if i := strings.IndexByte(m, ';'); i >= 0 {
+		m = strings.TrimSpace(m[:i])
 	}
-	for _, part := range strings.Split(v, " or ") {
-		if !numericVRs[part] {
-			return false
+	switch {
+	case strings.HasPrefix(m, "text/"), m == "application/xml", m == "application/json",
+		strings.HasSuffix(m, "+xml"), strings.HasSuffix(m, "+json"):
+		return true
+	}
+	return false
+}
+
+// documentMIME returns the MIME Type (0042,0012) of a data set's
+// Encapsulated Document, as written; "" when it has none.
+func documentMIME(elements []*attributes.DataElementValue) string {
+	for _, e := range elements {
+		if uint32(e.Tag) == encapsulatedMIME {
+			return string(e.Value)
 		}
 	}
-	return true
+	return ""
 }
 
 // standardBinary reports whether e is a standard binary value

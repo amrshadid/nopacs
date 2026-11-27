@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/amrshadid/go-dicom/charset"
 	"github.com/amrshadid/go-dicom/config"
 
 	"github.com/amrshadid/nopacs/internal/deid/engine"
@@ -34,15 +35,51 @@ const (
 	// and under two character sets and folded, each of those up to
 	// textSpread times its bytes, with the decoder's own copies.
 	looseCopies = 16
-	// streamRoom is what reading a long value as a text stream holds
-	// beside the window: the reader's buffers, folded.
-	streamRoom = 160 << 10
+	// streamBase is what reading a long value as a text stream holds
+	// beside the window: the reader's buffers, folded, and when it is
+	// decoded under a character set (decodeReader) a chunk of decodeChunk
+	// raw bytes, with the escape before it, and its text, up to
+	// textSpread times as many bytes, as the decoder builds it, as the
+	// string it returns, in NFC and folded (streamRoom).
+	streamBase = 160<<10 + decodeChunk*(2+4*textSpread)
 	// automatonBytes is the memory of an automaton a byte of its patterns
 	// at most (a node a byte): 19 bytes a node (textmatch.Matcher), in slices that
 	// grow by doubling and so hold up to three times that while one is
 	// copied, and the patterns and their index beside it.
 	automatonBytes = 64
 )
+
+// streamRoom is what reading a long value as a text stream holds beside
+// the window: streamBase, and when a character set a file can declare is
+// of an encoding whose characters' widths the reader does not know
+// (chunksGrow), the room of a chunk grown up to looseMax, its text with
+// it. Every encoding the library reads a DICOM character set in has known
+// widths, so the second is held only if the library gains one.
+func streamRoom() int64 {
+	n := int64(streamBase)
+	if chunksGrow() {
+		n += (looseMax - decodeChunk) * (2 + 4*textSpread)
+	}
+	return n
+}
+
+// chunksGrow reports whether the library reads some DICOM character set in
+// an encoding whose characters' widths decodeReader does not know, so a
+// chunk of it may grow (decodeReader.fill).
+var chunksGrow = sync.OnceValue(func() bool {
+	for _, term := range charset.GetSupportedEncodings() {
+		encs, err := charset.ConvertEncodings([]string{term})
+		if err != nil {
+			continue
+		}
+		for _, e := range encs {
+			if !knownWidths(e) {
+				return true
+			}
+		}
+	}
+	return false
+})
 
 // reservation is what a check of the size bytes of p, for set, takes from
 // Options.Memory, once the raw forms are written (rawBytes of distinct
@@ -61,7 +98,7 @@ func (c *Checker) reservation(size int64, p *parsed, set formSet, rawBytes, rawL
 	n := min(size, window) + int64(rawLongest+2*edgeRoom) + min(size, readerBuffer)
 	n += textCopies*p.largestText + looseCopies*p.largestLoose + c.formBytes(set, rawBytes)
 	if p.streams {
-		n += streamRoom
+		n += streamRoom()
 	}
 	return n
 }
@@ -89,7 +126,7 @@ func (c *Checker) formBytes(set formSet, rawBytes int) int64 {
 func Reservation(ctx context.Context, size, largestText int64, needles engine.Needles, characterSet *string) int64 {
 	n := min(size, window) + min(size, readerBuffer) + looseCopies*min(size, looseMax)
 	if size > looseMax {
-		n += streamRoom
+		n += streamRoom()
 	}
 	n += textCopies * textSpread * min(largestText, DefaultMaxValueBytes)
 	c := New(Options{})

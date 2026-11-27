@@ -121,6 +121,10 @@ const (
 	KindUID Kind = "uid"
 	// KindListTerm is a term of one of the profile's text lists.
 	KindListTerm Kind = "list_term"
+	// KindListUnsearchable is an encapsulated document not of text (a
+	// PDF) kept in a file whose profile has text lists: its terms could
+	// not be searched in it, so the file is held, whatever it holds.
+	KindListUnsearchable Kind = "list_unsearchable"
 )
 
 // kindOf maps the engine's kind of needle to a finding's.

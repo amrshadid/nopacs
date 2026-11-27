@@ -115,19 +115,22 @@ scan, keeps it whole, and serves it through an API with keys.
 - De-identification text lists: named, versioned lists of terms in a profile
   (up to 10,000 terms each) that clean and redact cut from free text where a
   term stands as a word, ignoring case, width, Unicode form and invisible
-  characters. The check after searches every value for the terms, in UTF-8
-  and the received character set, except values that hold numbers (standard
-  elements of a numeric VR, pixel, overlay and waveform data): OB and UN
-  values are searched, so an encapsulated document holding a term holds the
-  file, and a file or label holding one is held (residual_value, kind
-  list_term). The bound on a profile's raw forms counts each term exactly in
-  the character set that writes it longest, so a profile that validates
+  characters. The check after searches every value for the terms, in UTF-8 and
+  the received character set, long values decoded as well as byte by byte; it
+  leaves out standard elements that hold binary data (pixel, overlay,
+  waveform, ICC profiles and the like), and searches private and UN values and
+  a text tag sent with a binary VR. An encapsulated document is searched when
+  its MIME type is text (a CDA, XML or JSON); one of any other type, such as a
+  PDF, kept under a profile with text lists holds the file
+  (list_unsearchable). A file or label holding a term is held (residual_value,
+  kind list_term). The bound on a profile's raw forms counts each term exactly
+  in the character set that writes it longest, so a profile that validates
   never has a file refused for the set it was received in. Terms are never
-  printed: profile describe and diff show each list's name, version, count
-  and SHA-256; a masked key gets no term, list checksum or version checksum
-  of a version with lists, and may not store, try or explain one. The cache
-  of compiled lists is bounded by the setting `deid.list-cache-bytes`
-  (default 256MiB, 64MiB to 16GiB).
+  printed: profile describe and diff show each list's name, version, count and
+  SHA-256; a masked key gets no term, list checksum or version checksum of a
+  version with lists, and may not store, try or explain one. The cache of
+  compiled lists is bounded by the setting `deid.list-cache-bytes` (default
+  256MiB, 64MiB to 16GiB).
 - An order of strictness of de-identification actions and a layer rule
   (tenant, receiver, route, destination) that refuses a layer loosening what
   is below it (loosens_lower_layer, incomparable_actions), with the effective

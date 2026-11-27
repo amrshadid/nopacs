@@ -106,6 +106,7 @@ func (s *searcher) walk(elements []*attributes.DataElementValue, inherited []str
 		return err
 	}
 	encodings := attributes.TextEncodingsWithContext(s.quiet, elements, inherited)
+	mime := documentMIME(elements)
 	for _, e := range elements {
 		path := prefix + fmt.Sprintf("%08X", uint32(e.Tag))
 		if (pixelTags[e.Tag] && depth == 0) || s.p.written[e] {
@@ -120,9 +121,15 @@ func (s *searcher) walk(elements []*attributes.DataElementValue, inherited []str
 			continue
 		}
 		var err error
-		// A value of numbers only is not searched for the lists' terms
-		// (listsSkipped).
-		s.listsOff = listsSkipped(e)
+		// A binary value is not searched for the lists' terms
+		// (listsSkipped); an encapsulated document they cannot be
+		// searched in holds the file when the profile has lists, fail
+		// closed (listsUnsearchable).
+		s.listsOff = listsSkipped(e, mime)
+		if len(s.set.lists) > 0 && listsUnsearchable(e, mime) {
+			s.listFound = true
+			s.fs.add(Finding{Path: path, Kind: KindListUnsearchable})
+		}
 		switch {
 		case dataelem.IsTextVR(dataelem.VR(e.VR)):
 			if len(e.Value) > 0 {
@@ -138,7 +145,10 @@ func (s *searcher) walk(elements []*attributes.DataElementValue, inherited []str
 				err = s.texts(path, s.loose(s.value, encodings))
 			}
 		default:
-			err = s.stream(path, e.Position.ValueOffset, e.Position.ValueOffset+int64(e.Length))
+			off, end := e.Position.ValueOffset, e.Position.ValueOffset+int64(e.Length)
+			if err = s.stream(path, off, end); err == nil {
+				err = s.streamDecoded(path, off, end, encodings)
+			}
 		}
 		s.listsOff = false
 		if err != nil {
@@ -148,10 +158,11 @@ func (s *searcher) walk(elements []*attributes.DataElementValue, inherited []str
 	return nil
 }
 
-// looseMax is the longest value of unknown kind decoded under a character
-// set: the library's decoder is slow on long binary values (some 90 ms a
-// megabyte, against a few for the search), and a longer value is searched
-// as UTF-8 and in its raw bytes, in every received encoding, all the same.
+// looseMax is the longest value of unknown kind decoded whole under a
+// character set: the library's decoder is slow on long binary values (some
+// 90 ms a megabyte, against a few for the search) and holds the text
+// whole, and a longer value is searched as UTF-8, decoded a chunk at a
+// time (streamDecoded), and in its raw bytes, all the same.
 const looseMax = 256 << 10
 
 // loose returns the texts a value of unknown kind may be (PS3.5 6.2.2): as
@@ -231,6 +242,64 @@ func (s *searcher) stream(path string, off, end int64) error {
 		return err
 	}
 	s.read += int(at) + 1
+	return nil
+}
+
+// streamDecoded searches the value at [off, end) of the file, as stream
+// does, in the text it is under the data set's encodings and under the set
+// the file was received in (decodedPasses), decoded a chunk at a time
+// (decodeReader), for the needles' forms and the lists' terms, in one pass
+// a character set: the matcher with the longest pattern reads the windows,
+// which keep that pattern's length of overlap, and the others search each
+// window as it comes (scanStream's prepare).
+func (s *searcher) streamDecoded(path string, off, end int64, encodings []string) error {
+	type pass struct {
+		m     *textmatch.Matcher
+		found func(win []byte, pat, start, end int)
+	}
+	passes := []pass{{m: s.m, found: func(win []byte, pat, start, end int) { s.foundText(win, start, end, pat, path) }}}
+	if !s.listsOff {
+		for _, l := range s.set.lists {
+			passes = append(passes, pass{m: l.Matcher(), found: func(win []byte, pat, start, end int) {
+				if l.Stands(win, pat, start, end) {
+					s.foundListTerm(path, false)
+				}
+			}})
+		}
+	}
+	first := 0
+	for i, p := range passes {
+		if p.m.Longest() > passes[first].m.Longest() {
+			first = i
+		}
+	}
+	for _, enc := range decodedPasses(encodings, s.source) {
+		var others error
+		prepare := func(win []byte, _, from, to int, _ int64) {
+			for i, p := range passes {
+				if i == first || others != nil {
+					continue
+				}
+				_, others = p.m.ScanRange(s.ctx, win, from, to, &s.budget, func(pat, end int) {
+					p.found(win, pat, end-p.m.Len(pat), end)
+				})
+			}
+		}
+		// The reader gives the text in NFC and folded.
+		text := newDecodeReader(s.quiet, sectionOf(s.p.src, off, end), enc)
+		var at int64
+		var err error
+		s.buf, at, err = scanStream(s.ctx, passes[first].m, text, s.window(end-off), s.buf, &s.budget, prepare, func(win []byte, pat, start, end int, _ int64) {
+			passes[first].found(win, pat, start, end)
+		})
+		if err == nil {
+			err = others
+		}
+		if err != nil {
+			return s.refused(s.read+int(at), err)
+		}
+		s.read += int(at) + 1
+	}
 	return nil
 }
 

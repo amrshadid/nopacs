@@ -98,8 +98,10 @@
 // values in place (text values, and binary values of at most 1 KiB; the
 // image data and longer binary values stay in the file), about the header
 // the engine held. The text is searched one value at a time; a value of
-// unknown kind longer than the 256 KiB decoded under a character set is
-// read as a stream of UTF-8. The raw bytes are read a window of 1 MiB at a
+// unknown kind longer than the 256 KiB decoded whole is read as a stream
+// of UTF-8 and as a stream decoded under the character sets 32 KiB at a
+// time, the state of its ISO 2022 escapes carried from one piece to the
+// next (decodeReader). The raw bytes are read a window of 1 MiB at a
 // time, each window beginning with the end of the one before (the longest
 // raw form and a few bytes for its edges), so a form across the edge
 // between two windows is found whole in the second, and an ISO 2022 run is

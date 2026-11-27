@@ -105,6 +105,72 @@ func TestListTermInALongValueIsFound(t *testing.T) {
 	}
 }
 
+// TestPDFUnderListsPassesOnlyRemovedOrReplaced guards, through the engine
+// and the check, the rule a site that receives PDF reports writes: under
+// a profile with text lists, a file keeping an encapsulated PDF is held as
+// list_unsearchable at its path; with a rule giving Encapsulated Document
+// a dummy (two zero bytes) or removing it, the file passes.
+func TestPDFUnderListsPassesOnlyRemovedOrReplaced(t *testing.T) {
+	keys := engine.Keys{UID: bytes.Repeat([]byte{'u'}, 32), Date: bytes.Repeat([]byte{'d'}, 32), Hash: bytes.Repeat([]byte{'h'}, 32)}
+	pdf := []byte("%PDF-1.7\n1 0 obj << /Length 9 >> stream\nx\x9c\x03\x00\x00\x00\x00\x01 endstream\n")
+	if len(pdf)%2 == 1 {
+		pdf = append(pdf, '\n')
+	}
+	for _, c := range []struct {
+		name   string
+		action *v1.ProfileAction
+	}{
+		{"kept", &v1.ProfileAction{Kind: &v1.ProfileAction_Keep{Keep: &v1.KeepAction{}}}},
+		{"dummy", &v1.ProfileAction{Kind: &v1.ProfileAction_Dummy{Dummy: &v1.DummyAction{}}}},
+		{"removed", &v1.ProfileAction{Kind: &v1.ProfileAction_Remove{Remove: &v1.RemoveAction{}}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			doc := &v1.ProfileDocument{
+				TextLists: []*v1.TextList{{Name: "staff", Version: 1, Terms: []string{listTerm}}},
+				Rules: []*v1.ProfileRule{
+					{Name: "desc", Selector: &v1.ProfileSelector{Kind: &v1.ProfileSelector_Keyword{Keyword: "StudyDescription"}},
+						Action: &v1.ProfileAction{Kind: &v1.ProfileAction_Clean{Clean: &v1.CleanAction{Lists: []string{"staff"}}}}},
+					{Name: "drop-pdf", Selector: &v1.ProfileSelector{Kind: &v1.ProfileSelector_Keyword{Keyword: "EncapsulatedDocument"}},
+						Action: c.action, Reason: "a PDF cannot be searched for the lists' terms"},
+				}}
+			e, problems := profile.Expand(doc, profile.Shipped())
+			if problems != nil {
+				t.Fatal(problems)
+			}
+			en, err := engine.New(e, keys, engine.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := os.ReadFile(writeFile(t, el{0x00420012, "LO", "application/pdf"}, el{0x00420011, "OB", pdf})) //nolint:gosec // G304: the test's own temporary file.
+			if err != nil {
+				t.Fatal(err)
+			}
+			df, err := filereader.ReadDICOMFileWithOptions(filebase.NewFileReader(bytes.NewReader(raw)), filereader.ReadOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ds := df.GetDataset()
+			rec, err := en.Apply(context.Background(), ds, engine.Reception{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(writeDS(t, ds, filewriter.FileMetaInfo{})) //nolint:gosec // G304: the test's own temporary file.
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = New(Options{}).CheckWritten(context.Background(), bytes.NewReader(data), int64(len(data)), rec.Needles, rec.Written, nil)
+			var res *Residual
+			if c.name == "kept" {
+				if !errors.As(err, &res) || res.First.Kind != KindListUnsearchable || res.First.Path != "00420011" {
+					t.Errorf("a kept PDF under text lists: %v", err)
+				}
+			} else if err != nil {
+				t.Errorf("a PDF the rule's %s took out: %v", c.name, err)
+			}
+		})
+	}
+}
+
 // TestCleanedFilePassesAndKeptTermHolds guards the engine and the check
 // together: a file whose descriptions a list cleans passes the check after
 // with the record's needles; the same file with a term left in a value the
