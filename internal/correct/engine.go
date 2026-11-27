@@ -207,6 +207,10 @@ type Engine struct {
 	// usedTokens maps a keyed confirm token that made a delete to the
 	// store's token it stood for and the target it was for (remember).
 	usedTokens map[string]usedToken
+	// batchWaits are, by batch job, when its runner may try again after a
+	// failed delete and how long it waited last (batchBackoff): pacing,
+	// not state, so a restart starts each afresh.
+	batchWaits map[string]batchWait
 }
 
 // seams are the points a test changes the engine at.

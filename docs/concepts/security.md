@@ -104,7 +104,10 @@ A masked key also never chooses where archived data goes: a send job, attaching 
 filling a replica, adding or changing a storage or a sender, and a receiver made to
 forward (`forward_to` or a route's senders) are refused to it (`PERMISSION_DENIED`,
 "a masked key may not choose where archived data goes; a person does"), each refusal
-in the audit log. Where data goes is a person's choice.
+in the audit log. Where data goes is a person's choice. Nor does it delete in
+bulk: a batch delete, its preview and the resume of one are refused to it
+(`PERMISSION_DENIED`, "a masked key may not delete in bulk; a person does"); how
+much of the archive goes at once is a person's choice too.
 
 The flag is kept by every rotation and can never be removed (make a new key
 instead), a masked key can make and rotate only masked keys (a plain key's

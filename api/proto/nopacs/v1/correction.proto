@@ -6,6 +6,7 @@ syntax = "proto3";
 package nopacs.v1;
 
 import "google/protobuf/timestamp.proto";
+import "nopacs/v1/job.proto";
 
 // CorrectionService changes archived data on purpose, and keeps the record
 // of each change: delete a subject, a session, a scan or an instance;
@@ -275,6 +276,67 @@ service CorrectionService {
   // taking up what the server's last stop left).
   rpc Delete(DeleteRequest) returns (DeleteResponse) {
     option idempotency_level = IDEMPOTENT;
+  }
+
+  // DeleteBatch deletes many subjects, sessions or scans with one reason:
+  // with validate_only it answers each target's preview (its counts, the
+  // storages and replicas that hold it, the holds that cover it and what
+  // retention keeps) and one confirm token; with that token it makes a job
+  // of kind delete_batch (DeleteBatchJob) and answers it. The job turns
+  // each target, in the order given, into an ordinary delete with the
+  // request's reason, made in the name of the key that confirmed it, so
+  // holds, keep_at_least, undo, the grace period and the purge on every
+  // copy hold for each as for any Delete; JobService follows, pauses,
+  // resumes and cancels it. A target a hold covers, one a retention rule
+  // keeps (never overridden), one whose preview answers otherwise than when
+  // the job was made (data arrived, a hold placed or released, a job made),
+  // one gone, or one another correction holds, is recorded on the job with
+  // its outcome (ListDeleteBatchTargets) and skipped, never forced. A token
+  // matches only the same targets in the same order and the same reason,
+  // while a preview made at its time would answer the same, for at most an
+  // hour; once used it answers the job it made. One batch runs per tenant
+  // at a time.
+  //
+  // Role: admin on the tenant, never a masked key: a person decides how
+  // much of the archive goes at once.
+  // Audit: one entry in the tenant's log, with the job's id in details
+  // (none for validate_only), the targets' count, validate_only and the
+  // reason; each delete writes its own entry as the server, and the job's
+  // steps are its events.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant
+  // that does not exist, for a caller who may not list every tenant; a
+  // masked key, which never deletes in bulk), invalid (also a missing or
+  // too long reason; no target, or more than the tenant's
+  // correction.batch-max (at most 10000); a target with an instance_id, a
+  // label that does not pass the label rule, a level named without the one
+  // above it, a target named twice or inside another; a confirm token with
+  // validate_only, or none without it), not found (a target the tenant
+  // does not hold, named by its place in the list; a tenant that does not
+  // exist, for a caller who may list every tenant), precondition (the
+  // confirm token is not this server's preview of the same targets and
+  // reason, a target changed since, or it is more than an hour old; a
+  // batch of the tenant has not ended; a rebuild of the tenant is running;
+  // the tenant is moved or fenced, with the reason TENANT_MOVED or
+  // TENANT_FENCED), unavailable (the tenant's database does not answer, the
+  // server runs no corrections, or the tenant is not ready).
+  rpc DeleteBatch(DeleteBatchRequest) returns (DeleteBatchResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListDeleteBatchTargets answers the targets of a batch delete job, in
+  // the order given, each with what became of it and the delete made for
+  // it.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the job's id as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant
+  // that does not exist, for a caller who may not list every tenant),
+  // invalid (also a page token of another job), not found (the tenant has
+  // no batch delete job with that id; a tenant that does not exist, for a
+  // caller who may list every tenant), unavailable (the tenant's database
+  // does not answer, or the tenant is not ready).
+  rpc ListDeleteBatchTargets(ListDeleteBatchTargetsRequest) returns (ListDeleteBatchTargetsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
   }
 
   // Relabel gives a subject, a session or a scan a new label, moving its
@@ -850,7 +912,9 @@ message DeletePreview {
   // The token the delete must carry: opaque, at most 128 bytes, a digest of
   // the target, counts, storages, sent_to, jobs, storage_purges, holds,
   // sessions_under_minimum, keep_until, quarantined, receptions,
-  // held_after_purge and the
+  // held_after_purge, the catalog's rows it takes with each scan's manifest
+  // checksum (so sessions swapped by relabels, or an instance replaced or
+  // edited, never match), and the
   // time it was issued (purge_time is left out, since it moves with the
   // clock). It matches only while a preview made now would answer the same
   // for those, for at most one hour after its issue, and once: a Delete
@@ -1103,6 +1167,185 @@ message DeleteResponse {
   // The correction made, committed: its data hidden until purge_time.
   // Absent with validate_only.
   Correction correction = 2;
+}
+
+// DeleteBatchRequest names the targets of a batch delete and why.
+message DeleteBatchRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // What to delete, in order: 1 to the tenant's correction.batch-max (at
+  // most 10000) subjects, sessions or scans, each instance_id empty, none
+  // named twice (labels compared ignoring case) and none inside another.
+  // Required.
+  repeated CorrectionTarget targets = 2;
+
+  // Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+  // control characters, never a value read from a file. Required, also
+  // with validate_only. Each delete keeps it as its reason.
+  string reason = 3;
+
+  // Answer the preview only, deleting nothing and making no job.
+  bool validate_only = 4;
+
+  // The confirm token of a preview of the same targets and reason.
+  // Required unless validate_only; must be empty with it.
+  string confirm = 5;
+}
+
+// DeleteBatchItem is one target of a batch delete's preview, as its own
+// delete preview answers it now.
+message DeleteBatchItem {
+  // The target.
+  CorrectionTarget target = 1;
+
+  // What it covers.
+  CorrectionCounts counts = 2;
+
+  // The names of the tenant's storages that hold any of it, ordered by
+  // name.
+  repeated string storages = 3;
+
+  // The names of the replicas of those storages, which the purge reaches
+  // too, ordered by primary then name.
+  repeated string replicas = 4;
+
+  // The ids of the active holds that cover any of it, ordered by id: the
+  // job skips it.
+  repeated string holds = 5;
+
+  // The sessions of it a retention rule keeps at least until a time to
+  // come: the job skips it while any is, never overriding the rule.
+  int64 sessions_under_minimum = 6;
+
+  // The latest time any rule keeps any of it until. Absent when
+  // sessions_under_minimum is 0.
+  google.protobuf.Timestamp keep_until = 7;
+
+  // The senders any of it was sent to, ordered by name: their copies are
+  // out of the archive's reach.
+  repeated string sent_to = 8;
+}
+
+// DeleteBatchPreview is what a batch delete deletes, as the catalog holds
+// it now. It stays within 4 MiB at 10000 targets of short labels; a list of
+// long labels near the bound may not, and is sent in smaller batches.
+message DeleteBatchPreview {
+  // Every target, in the order given.
+  repeated DeleteBatchItem items = 1;
+
+  // What the targets cover together.
+  CorrectionCounts counts = 2;
+
+  // The targets a hold covers, which the job skips.
+  int64 targets_held = 3;
+
+  // The targets a retention rule keeps, which the job skips.
+  int64 targets_kept = 4;
+
+  // When a delete made now would be purged: now plus the tenant's
+  // delete.grace. Each delete's own purge_time runs from when the job
+  // makes it.
+  google.protobuf.Timestamp purge_time = 5;
+
+  // The token the batch must carry: opaque, at most 128 bytes, a digest of
+  // the reason, the targets in order, what each one's delete preview
+  // answers, and the time it was issued. It matches only while a preview
+  // made then would answer the same, for at most one hour after its issue;
+  // once used, it answers the job it made.
+  string confirm = 6;
+}
+
+// DeleteBatchResponse is the preview, or the job made.
+message DeleteBatchResponse {
+  // What the batch deletes, with validate_only, and the token to confirm
+  // it; without it, the counts alone (items empty).
+  DeleteBatchPreview preview = 1;
+
+  // The job of kind delete_batch made, queued, or, for a token already
+  // used, the job it made, as it stands. Absent with validate_only.
+  Job job = 2;
+}
+
+// DeleteBatchOutcome is what became of one target of a batch delete job.
+// An outcome added later is a new value; a client shows one it does not
+// know as skipped.
+enum DeleteBatchOutcome {
+  // Never answered by the server.
+  DELETE_BATCH_OUTCOME_UNSPECIFIED = 0;
+
+  // Not reached yet.
+  DELETE_BATCH_OUTCOME_PENDING = 1;
+
+  // Deleted by the correction named.
+  DELETE_BATCH_OUTCOME_DELETED = 2;
+
+  // Skipped: a hold covers it.
+  DELETE_BATCH_OUTCOME_SKIPPED_HELD = 3;
+
+  // Skipped: a retention rule keeps it at least until a time to come.
+  DELETE_BATCH_OUTCOME_SKIPPED_KEPT = 4;
+
+  // Skipped: its preview answered otherwise than when the job was made.
+  DELETE_BATCH_OUTCOME_SKIPPED_CHANGED = 5;
+
+  // Skipped: the tenant no longer holds it (deleted or relabeled since).
+  DELETE_BATCH_OUTCOME_SKIPPED_GONE = 6;
+
+  // Skipped: another correction not ended holds it.
+  DELETE_BATCH_OUTCOME_SKIPPED_OVERLAP = 7;
+
+  // Skipped: its delete was refused for another reason, which the
+  // server's log names.
+  DELETE_BATCH_OUTCOME_SKIPPED_REFUSED = 8;
+}
+
+// DeleteBatchTarget is one target of a batch delete job.
+message DeleteBatchTarget {
+  // Its place in the list, from 1.
+  int64 position = 1;
+
+  // The target, by the labels given.
+  CorrectionTarget target = 2;
+
+  // What became of it.
+  DeleteBatchOutcome outcome = 3;
+
+  // The id of the delete made for it (CorrectionService): for one deleted,
+  // the correction that deleted it, which UndoCorrection undoes as any
+  // delete; empty when none was made, and it may name an abandoned delete
+  // for a target skipped after it.
+  string correction_id = 4;
+
+  // The instances and bytes it held when the job was made.
+  int64 instances = 5;
+
+  // The bytes of those instances.
+  int64 bytes = 6;
+}
+
+// ListDeleteBatchTargetsRequest names the job.
+message ListDeleteBatchTargetsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The job's id. Required.
+  string job_id = 2;
+
+  // At most this many targets: 1 to 1000; 0 means 100.
+  int32 page_size = 3;
+
+  // The next_page_token of the page before, for the next.
+  string page_token = 4;
+}
+
+// ListDeleteBatchTargetsResponse is a page of the job's targets.
+message ListDeleteBatchTargetsResponse {
+  // The targets, in order.
+  repeated DeleteBatchTarget targets = 1;
+
+  // The token of the next page; empty for the last.
+  string next_page_token = 2;
 }
 
 // RelabelRequest names what to relabel, its new label, and why.

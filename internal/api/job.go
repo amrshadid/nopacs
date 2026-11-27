@@ -60,6 +60,16 @@ func (v *jobViews) message(ctx context.Context, j tenant.Job) *v1.Job {
 		}
 		return m
 	}
+	if j.Kind == tenant.JobDeleteBatch {
+		m := jobMessage(j, "")
+		if db, ok := v.p.(tenant.DeleteBatches); ok {
+			if bj, err := db.DeleteBatchJob(ctx, j.ID); err == nil {
+				m.Kind = &v1.Job_DeleteBatch{DeleteBatch: &v1.DeleteBatchJob{Reason: bj.Reason, Targets: bj.Targets}}
+				m.Paused = bj.Paused && !j.State.Ended()
+			}
+		}
+		return m
+	}
 	if j.Kind == tenant.JobReplicate {
 		return jobMessage(j, replicaHeld(ctx, v.p, j))
 	}
@@ -163,7 +173,8 @@ func (s jobService) GetJob(ctx context.Context, req *v1.GetJobRequest) (*v1.GetJ
 		return nil, c.failIn(d, st, err)
 	}
 	var tallies []tenant.JobTally
-	if out.Kind == tenant.JobDeid || out.Kind == tenant.JobScrub || out.Kind == tenant.JobRebuild || out.Kind == tenant.JobRepair {
+	if out.Kind == tenant.JobDeid || out.Kind == tenant.JobScrub || out.Kind == tenant.JobRebuild || out.Kind == tenant.JobRepair ||
+		out.Kind == tenant.JobDeleteBatch {
 		if tallies, err = p.JobTallies(ctx, out.ID); err != nil {
 			return nil, c.failIn(d, st, err)
 		}

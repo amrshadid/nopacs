@@ -71,6 +71,60 @@ downloads answer as if it did not exist, and jobs that meet it count it as
 deleted and go on. An instance delete hides that instance alone; at its purge a
 new manifest of its scan without it is written.
 
+### Many targets at once
+
+```
+nopacs correction delete-batch lab1 --file withdrawn.txt --reason "consent withdrawn" --preview
+nopacs correction delete-batch lab1 --file withdrawn.txt --reason "consent withdrawn"
+nopacs correction delete-batch lab1 --from-search "modality=SR receiver=old-gateway" --reason "test data sent by mistake"
+```
+
+A batch deletes many subjects, sessions or scans with one reason. `--file`
+names them one `<subject>[/<session>[/<scan>]]` per line (blank lines and lines
+starting with `#` ignored; `-` reads standard input); `--from-search` takes the
+filters of `nopacs catalog scans` as `key=value` pairs (`modality`,
+`description-prefix`, `receiver`, `archived-since`, `archived-until`) and makes
+each scan found a target. A batch names at most the tenant's
+`correction.batch-max` targets (10000, the most; an admin on the installation
+may set a tenant's lower), each once, none inside another, and never one
+instance.
+
+1. **The preview** shows every target with its instances and bytes, the holds
+   that cover it, the time a retention rule keeps it until, the replicas its
+   purge reaches and the senders it was sent to, and how many targets are held
+   or kept. It is answered under one token, bound to the targets in their order,
+   the reason, and what each target's own delete preview answered, for an hour.
+   Other targets, another reason, or a target changed since (data arrived, a
+   hold placed) refuse it (exit 5). What a target's preview answers includes
+   which rows of the catalog it takes and each scan's manifest checksum, so a
+   label that came to name other data of the same size (two sessions swapped
+   by relabels, an instance replaced or edited) counts as changed; a single
+   delete's token is bound the same way.
+2. **The job.** Confirmed (the tenant's name typed again, or `--yes`), the
+   batch is a job of kind `delete_batch`. It deletes each target in turn by an
+   ordinary delete with the batch's reason, made in the name of the key that
+   confirmed it, so each delete has its records, grace period, undo
+   (`nopacs correction undo` of that one delete), purge on every copy and audit
+   entry, as any delete.
+3. **What is skipped.** A target is never forced. When its turn comes it is
+   previewed again: one a hold covers is skipped as `held`, one a rule keeps as
+   `kept` (a batch never overrides retention), one whose preview answers
+   otherwise than when the job was made as `changed`, one gone as `gone`, one
+   another correction holds as `overlap`; any other refusal as `refused`, named
+   in the server's log.
+   `nopacs correction batch-targets lab1 <job>` lists each target with its
+   outcome and its delete.
+
+`nopacs job watch` follows the job; `nopacs job pause` stops it before its next
+target and `nopacs job resume` (admin) lets it go on; `nopacs job cancel` ends
+it, its targets not reached left as they are. The job ends done when every
+target was deleted, partial when any was skipped, and failed when the key that
+confirmed it may no longer delete (revoked, expired, suspended, no longer
+admin). Its state is the database's: after a restart it goes on from the
+target it stopped at, and a target whose delete was made just before the stop
+is recorded deleted by that delete, never deleted twice. One batch runs per
+tenant at a time. A masked key may neither ask for a batch nor resume one.
+
 ## The grace period, undo and the purge
 
 The bytes stay on the storage, unserved, for the tenant's `delete.grace`

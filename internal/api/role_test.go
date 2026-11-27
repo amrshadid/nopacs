@@ -140,6 +140,7 @@ var rolePhrases = map[string]roleShape{
 	"reader on the tenant.":   tenantReader,
 	"operator on the tenant.": tenantOperator,
 	"admin on the tenant.":    tenantAdmin,
+	"admin on the tenant, never a masked key: a person decides how much of the archive goes at once.":                                                                                   tenantAdmin,
 	"reader on the tenant; operator on the tenant to filter by Study Instance UID, since looking a study up by an identifier the caller already holds is a search for a person's data.": tenantReaderOrOperator,
 	"reader on the tenant; operator on the tenant to filter by a UID, since looking a file up by an identifier the caller already holds is a search for a person's data.":               tenantReaderOrOperator,
 	"reader on the tenant; operator on the tenant with include_header, since the header holds what the sender sent, identifying data included.":                                         tenantReaderOrOperator,
@@ -261,11 +262,19 @@ var writesValues = map[string]bool{
 	nopacsv1connect.CorrectionServiceEditProcedure: true,
 }
 
+// deletesInBulk names the methods whose every request deletes many targets
+// at once, or lets such a deletion go on, which a masked key is refused
+// (access.Requirement.DeletesInBulk). A method not here never does.
+var deletesInBulk = map[string]bool{
+	nopacsv1connect.CorrectionServiceDeleteBatchProcedure: true,
+	nopacsv1connect.JobServiceResumeJobProcedure:          true,
+}
+
 // norm returns r as marked to answer original values, to choose a
-// destination and to write values, so two requirements are compared by
-// kind, role and tenant alone; the marks are checked apart.
+// destination, to write values and to delete in bulk, so two requirements
+// are compared by kind, role and tenant alone; the marks are checked apart.
 func norm(r access.Requirement) access.Requirement {
-	return r.AnswersOriginals().ChoosesDestination().WritesValues()
+	return r.AnswersOriginals().ChoosesDestination().WritesValues().DeletesInBulk()
 }
 
 // withField returns msg with the top-level field named name set: a string
@@ -404,6 +413,9 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 			}
 			if has, want := r.WritesValues() == r, writesValues[proc]; has != want {
 				t.Errorf("%s: writes values %v, want %v (request %v)", proc, has, want, req)
+			}
+			if has, want := r.DeletesInBulk() == r, deletesInBulk[proc]; has != want {
+				t.Errorf("%s: deletes in bulk %v, want %v (request %v)", proc, has, want, req)
 			}
 			return norm(r)
 		}

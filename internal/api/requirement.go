@@ -469,6 +469,15 @@ var rules = map[string]rule{
 	nopacsv1connect.JobServiceCancelJobProcedure: byMessage(func(r *v1.CancelJobRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetId())}
 	}),
+	// A pause stops work, which an operator may ask as a cancel; a resume of
+	// a batch delete deletes again, so it needs what the batch needed:
+	// admin, and never a masked key.
+	nopacsv1connect.JobServicePauseJobProcedure: byMessage(func(r *v1.PauseJobRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetId())}
+	}),
+	nopacsv1connect.JobServiceResumeJobProcedure: byMessage(func(r *v1.ResumeJobRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).DeletesInBulk(), access.Request{Object: jobObject(r.GetId())}
+	}),
 	nopacsv1connect.JobServiceRetryJobProcedure: byMessage(func(r *v1.RetryJobRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetId())}
 	}),
@@ -566,6 +575,17 @@ var rules = map[string]rule{
 	// requirement: the handler writes it once it has passed its bounds.
 	nopacsv1connect.CorrectionServiceDeleteProcedure: byMessage(func(r *v1.DeleteRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: deleteDetails(r, nil)}
+	}),
+	// A batch delete deletes many targets at once, which a masked key may
+	// not (access.Requirement.DeletesInBulk); its preview is the same
+	// request, so it is refused the preview too. Its targets are counted,
+	// never listed: a list of ten thousand labels is no audit detail.
+	nopacsv1connect.CorrectionServiceDeleteBatchProcedure: byMessage(func(r *v1.DeleteBatchRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).DeletesInBulk(), access.Request{Details: deleteBatchDetails(r)}
+	}),
+	nopacsv1connect.CorrectionServiceListDeleteBatchTargetsProcedure: byMessage(func(r *v1.ListDeleteBatchTargetsRequest) (access.Requirement,
+		access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetJobId())}
 	}),
 	nopacsv1connect.CorrectionServiceRelabelProcedure: byMessage(func(r *v1.RelabelRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: relabelDetails(r)}

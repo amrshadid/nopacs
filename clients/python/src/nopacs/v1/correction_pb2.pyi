@@ -1,6 +1,7 @@
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from nopacs.v1 import job_pb2 as _job_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -50,6 +51,18 @@ class HeldValueKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     HELD_VALUE_KIND_SERIES: _ClassVar[HeldValueKind]
     HELD_VALUE_KIND_INSTANCE: _ClassVar[HeldValueKind]
 
+class DeleteBatchOutcome(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    DELETE_BATCH_OUTCOME_UNSPECIFIED: _ClassVar[DeleteBatchOutcome]
+    DELETE_BATCH_OUTCOME_PENDING: _ClassVar[DeleteBatchOutcome]
+    DELETE_BATCH_OUTCOME_DELETED: _ClassVar[DeleteBatchOutcome]
+    DELETE_BATCH_OUTCOME_SKIPPED_HELD: _ClassVar[DeleteBatchOutcome]
+    DELETE_BATCH_OUTCOME_SKIPPED_KEPT: _ClassVar[DeleteBatchOutcome]
+    DELETE_BATCH_OUTCOME_SKIPPED_CHANGED: _ClassVar[DeleteBatchOutcome]
+    DELETE_BATCH_OUTCOME_SKIPPED_GONE: _ClassVar[DeleteBatchOutcome]
+    DELETE_BATCH_OUTCOME_SKIPPED_OVERLAP: _ClassVar[DeleteBatchOutcome]
+    DELETE_BATCH_OUTCOME_SKIPPED_REFUSED: _ClassVar[DeleteBatchOutcome]
+
 class ScrubFindingKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     SCRUB_FINDING_KIND_UNSPECIFIED: _ClassVar[ScrubFindingKind]
@@ -91,6 +104,15 @@ HELD_VALUE_KIND_SUBJECT: HeldValueKind
 HELD_VALUE_KIND_STUDY: HeldValueKind
 HELD_VALUE_KIND_SERIES: HeldValueKind
 HELD_VALUE_KIND_INSTANCE: HeldValueKind
+DELETE_BATCH_OUTCOME_UNSPECIFIED: DeleteBatchOutcome
+DELETE_BATCH_OUTCOME_PENDING: DeleteBatchOutcome
+DELETE_BATCH_OUTCOME_DELETED: DeleteBatchOutcome
+DELETE_BATCH_OUTCOME_SKIPPED_HELD: DeleteBatchOutcome
+DELETE_BATCH_OUTCOME_SKIPPED_KEPT: DeleteBatchOutcome
+DELETE_BATCH_OUTCOME_SKIPPED_CHANGED: DeleteBatchOutcome
+DELETE_BATCH_OUTCOME_SKIPPED_GONE: DeleteBatchOutcome
+DELETE_BATCH_OUTCOME_SKIPPED_OVERLAP: DeleteBatchOutcome
+DELETE_BATCH_OUTCOME_SKIPPED_REFUSED: DeleteBatchOutcome
 SCRUB_FINDING_KIND_UNSPECIFIED: ScrubFindingKind
 SCRUB_FINDING_KIND_MISSING: ScrubFindingKind
 SCRUB_FINDING_KIND_ORPHAN: ScrubFindingKind
@@ -320,6 +342,100 @@ class DeleteResponse(_message.Message):
     preview: DeletePreview
     correction: Correction
     def __init__(self, preview: _Optional[_Union[DeletePreview, _Mapping]] = ..., correction: _Optional[_Union[Correction, _Mapping]] = ...) -> None: ...
+
+class DeleteBatchRequest(_message.Message):
+    __slots__ = ("tenant", "targets", "reason", "validate_only", "confirm")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    TARGETS_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
+    CONFIRM_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    targets: _containers.RepeatedCompositeFieldContainer[CorrectionTarget]
+    reason: str
+    validate_only: bool
+    confirm: str
+    def __init__(self, tenant: _Optional[str] = ..., targets: _Optional[_Iterable[_Union[CorrectionTarget, _Mapping]]] = ..., reason: _Optional[str] = ..., validate_only: _Optional[bool] = ..., confirm: _Optional[str] = ...) -> None: ...
+
+class DeleteBatchItem(_message.Message):
+    __slots__ = ("target", "counts", "storages", "replicas", "holds", "sessions_under_minimum", "keep_until", "sent_to")
+    TARGET_FIELD_NUMBER: _ClassVar[int]
+    COUNTS_FIELD_NUMBER: _ClassVar[int]
+    STORAGES_FIELD_NUMBER: _ClassVar[int]
+    REPLICAS_FIELD_NUMBER: _ClassVar[int]
+    HOLDS_FIELD_NUMBER: _ClassVar[int]
+    SESSIONS_UNDER_MINIMUM_FIELD_NUMBER: _ClassVar[int]
+    KEEP_UNTIL_FIELD_NUMBER: _ClassVar[int]
+    SENT_TO_FIELD_NUMBER: _ClassVar[int]
+    target: CorrectionTarget
+    counts: CorrectionCounts
+    storages: _containers.RepeatedScalarFieldContainer[str]
+    replicas: _containers.RepeatedScalarFieldContainer[str]
+    holds: _containers.RepeatedScalarFieldContainer[str]
+    sessions_under_minimum: int
+    keep_until: _timestamp_pb2.Timestamp
+    sent_to: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, target: _Optional[_Union[CorrectionTarget, _Mapping]] = ..., counts: _Optional[_Union[CorrectionCounts, _Mapping]] = ..., storages: _Optional[_Iterable[str]] = ..., replicas: _Optional[_Iterable[str]] = ..., holds: _Optional[_Iterable[str]] = ..., sessions_under_minimum: _Optional[int] = ..., keep_until: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., sent_to: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class DeleteBatchPreview(_message.Message):
+    __slots__ = ("items", "counts", "targets_held", "targets_kept", "purge_time", "confirm")
+    ITEMS_FIELD_NUMBER: _ClassVar[int]
+    COUNTS_FIELD_NUMBER: _ClassVar[int]
+    TARGETS_HELD_FIELD_NUMBER: _ClassVar[int]
+    TARGETS_KEPT_FIELD_NUMBER: _ClassVar[int]
+    PURGE_TIME_FIELD_NUMBER: _ClassVar[int]
+    CONFIRM_FIELD_NUMBER: _ClassVar[int]
+    items: _containers.RepeatedCompositeFieldContainer[DeleteBatchItem]
+    counts: CorrectionCounts
+    targets_held: int
+    targets_kept: int
+    purge_time: _timestamp_pb2.Timestamp
+    confirm: str
+    def __init__(self, items: _Optional[_Iterable[_Union[DeleteBatchItem, _Mapping]]] = ..., counts: _Optional[_Union[CorrectionCounts, _Mapping]] = ..., targets_held: _Optional[int] = ..., targets_kept: _Optional[int] = ..., purge_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirm: _Optional[str] = ...) -> None: ...
+
+class DeleteBatchResponse(_message.Message):
+    __slots__ = ("preview", "job")
+    PREVIEW_FIELD_NUMBER: _ClassVar[int]
+    JOB_FIELD_NUMBER: _ClassVar[int]
+    preview: DeleteBatchPreview
+    job: _job_pb2.Job
+    def __init__(self, preview: _Optional[_Union[DeleteBatchPreview, _Mapping]] = ..., job: _Optional[_Union[_job_pb2.Job, _Mapping]] = ...) -> None: ...
+
+class DeleteBatchTarget(_message.Message):
+    __slots__ = ("position", "target", "outcome", "correction_id", "instances", "bytes")
+    POSITION_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
+    OUTCOME_FIELD_NUMBER: _ClassVar[int]
+    CORRECTION_ID_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_FIELD_NUMBER: _ClassVar[int]
+    BYTES_FIELD_NUMBER: _ClassVar[int]
+    position: int
+    target: CorrectionTarget
+    outcome: DeleteBatchOutcome
+    correction_id: str
+    instances: int
+    bytes: int
+    def __init__(self, position: _Optional[int] = ..., target: _Optional[_Union[CorrectionTarget, _Mapping]] = ..., outcome: _Optional[_Union[DeleteBatchOutcome, str]] = ..., correction_id: _Optional[str] = ..., instances: _Optional[int] = ..., bytes: _Optional[int] = ...) -> None: ...
+
+class ListDeleteBatchTargetsRequest(_message.Message):
+    __slots__ = ("tenant", "job_id", "page_size", "page_token")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    job_id: str
+    page_size: int
+    page_token: str
+    def __init__(self, tenant: _Optional[str] = ..., job_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+
+class ListDeleteBatchTargetsResponse(_message.Message):
+    __slots__ = ("targets", "next_page_token")
+    TARGETS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    targets: _containers.RepeatedCompositeFieldContainer[DeleteBatchTarget]
+    next_page_token: str
+    def __init__(self, targets: _Optional[_Iterable[_Union[DeleteBatchTarget, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
 class RelabelRequest(_message.Message):
     __slots__ = ("tenant", "target", "to_label", "reason")

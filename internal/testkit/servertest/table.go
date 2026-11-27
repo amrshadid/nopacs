@@ -299,6 +299,8 @@ func Contract() Table {
 		nopacsv1connect.JobServiceGetJobProcedure:          onTenant(func() *nopacsv1.GetJobRequest { return &nopacsv1.GetJobRequest{} }, master.RoleReader),
 		nopacsv1connect.JobServiceListJobsProcedure:        onTenant(func() *nopacsv1.ListJobsRequest { return &nopacsv1.ListJobsRequest{} }, master.RoleReader),
 		nopacsv1connect.JobServiceCancelJobProcedure:       onTenant(func() *nopacsv1.CancelJobRequest { return &nopacsv1.CancelJobRequest{} }, master.RoleOperator),
+		nopacsv1connect.JobServicePauseJobProcedure:        onTenant(func() *nopacsv1.PauseJobRequest { return &nopacsv1.PauseJobRequest{} }, master.RoleOperator),
+		nopacsv1connect.JobServiceResumeJobProcedure:       onTenant(func() *nopacsv1.ResumeJobRequest { return &nopacsv1.ResumeJobRequest{} }, master.RoleAdmin),
 		nopacsv1connect.JobServiceRetryJobProcedure:        onTenant(func() *nopacsv1.RetryJobRequest { return &nopacsv1.RetryJobRequest{} }, master.RoleOperator),
 		nopacsv1connect.JobServiceListJobFailuresProcedure: onTenant(func() *nopacsv1.ListJobFailuresRequest { return &nopacsv1.ListJobFailuresRequest{} }, master.RoleReader),
 		nopacsv1connect.JobServiceListImportFilesProcedure: onTenant(func() *nopacsv1.ListImportFilesRequest { return &nopacsv1.ListImportFilesRequest{} }, master.RoleOperator),
@@ -326,7 +328,11 @@ func Contract() Table {
 		// CorrectionService: "admin on the tenant." for every change,
 		// "operator on the tenant." to read corrections, "reader on the
 		// tenant." for scrub findings and to resolve revisions.
-		nopacsv1connect.CorrectionServiceDeleteProcedure:            onTenant(func() *nopacsv1.DeleteRequest { return &nopacsv1.DeleteRequest{} }, master.RoleAdmin),
+		nopacsv1connect.CorrectionServiceDeleteProcedure:      onTenant(func() *nopacsv1.DeleteRequest { return &nopacsv1.DeleteRequest{} }, master.RoleAdmin),
+		nopacsv1connect.CorrectionServiceDeleteBatchProcedure: onTenant(func() *nopacsv1.DeleteBatchRequest { return &nopacsv1.DeleteBatchRequest{} }, master.RoleAdmin),
+		nopacsv1connect.CorrectionServiceListDeleteBatchTargetsProcedure: onTenant(func() *nopacsv1.ListDeleteBatchTargetsRequest {
+			return &nopacsv1.ListDeleteBatchTargetsRequest{}
+		}, master.RoleOperator),
 		nopacsv1connect.CorrectionServiceRelabelProcedure:           onTenant(func() *nopacsv1.RelabelRequest { return &nopacsv1.RelabelRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceReplaceProcedure:           onTenant(func() *nopacsv1.ReplaceRequest { return &nopacsv1.ReplaceRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceEditProcedure:              onTenant(func() *nopacsv1.EditRequest { return &nopacsv1.EditRequest{} }, master.RoleAdmin),
@@ -446,7 +452,8 @@ func tenantRole(name string, role master.Role, operator bool) access.Requirement
 var installationSet = map[string]bool{"receiver.ports": true, "incoming.limit": true, "sender.tenant-max-associations": true,
 	"receiver.allow-as-received": true, "deid.pixel-limit": true,
 	"import.allowed-roots": true, "import.max-units": true,
-	"retention.shorten-notice": true, "retention.max-per-pass": true}
+	"retention.shorten-notice": true, "retention.max-per-pass": true,
+	"correction.batch-max": true}
 
 // settingChange is the requirement of a change of the setting named name
 // on scope.

@@ -35,6 +35,10 @@ const (
 	JobServiceListJobsProcedure = "/nopacs.v1.JobService/ListJobs"
 	// JobServiceCancelJobProcedure is the procedure name of the JobService's CancelJob RPC.
 	JobServiceCancelJobProcedure = "/nopacs.v1.JobService/CancelJob"
+	// JobServicePauseJobProcedure is the procedure name of the JobService's PauseJob RPC.
+	JobServicePauseJobProcedure = "/nopacs.v1.JobService/PauseJob"
+	// JobServiceResumeJobProcedure is the procedure name of the JobService's ResumeJob RPC.
+	JobServiceResumeJobProcedure = "/nopacs.v1.JobService/ResumeJob"
 	// JobServiceRetryJobProcedure is the procedure name of the JobService's RetryJob RPC.
 	JobServiceRetryJobProcedure = "/nopacs.v1.JobService/RetryJob"
 	// JobServiceListJobFailuresProcedure is the procedure name of the JobService's ListJobFailures RPC.
@@ -74,6 +78,22 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_nopacs_v1_job_proto.Services().ByName("JobService").Methods().ByName("CancelJob"),
 			Procedure:        JobServiceCancelJobProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	jobServicePauseJobSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_job_proto.Services().ByName("JobService").Methods().ByName("PauseJob"),
+			Procedure:        JobServicePauseJobProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	jobServiceResumeJobSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_job_proto.Services().ByName("JobService").Methods().ByName("ResumeJob"),
+			Procedure:        JobServiceResumeJobProcedure,
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
@@ -224,6 +244,40 @@ type JobServiceClient interface {
 	// ErrorInfo reason TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database
 	// does not answer, or the tenant is not ready).
 	CancelJob(context.Context, *v1.CancelJobRequest) (*v1.CancelJobResponse, error)
+	// PauseJob pauses a queued or running job: it stays in its state, with
+	// Job.paused set, and starts no more work until ResumeJob; work already
+	// started finishes (for a batch delete, the delete of the target being
+	// met). Only a batch delete job (DeleteBatchJob) pauses in this version.
+	// A job already paused is answered as it stands. Stopping work is
+	// an operator's to ask, as a cancel is.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log, with the job's id as its object.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant that
+	// does not exist, for a caller who may not list every tenant), invalid,
+	// not found (the tenant has no job with that id; a tenant that does not
+	// exist, for a caller who may list every tenant), precondition (the job
+	// is of a kind that does not pause, or has ended; a tenant moved or
+	// fenced, with ErrorInfo reason TENANT_MOVED or TENANT_FENCED),
+	// unavailable (the tenant's database does not answer, or the tenant is
+	// not ready).
+	PauseJob(context.Context, *v1.PauseJobRequest) (*v1.PauseJobResponse, error)
+	// ResumeJob lets a paused job go on from where it stopped. A job not
+	// paused is answered as it stands. A batch delete resumed deletes again,
+	// so it needs what the batch needed.
+	//
+	// Role: admin on the tenant, never a masked key: a person decides how
+	// much of the archive goes at once.
+	// Audit: one entry in the tenant's log, with the job's id as its object.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant that
+	// does not exist, for a caller who may not list every tenant; a masked
+	// key, which never deletes in bulk), invalid, not found (the tenant has no
+	// job with that id; a tenant that does not exist, for a caller who may
+	// list every tenant), precondition (the job is of a kind that does not
+	// pause, or has ended; a tenant moved or fenced, with ErrorInfo reason
+	// TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database does
+	// not answer, or the tenant is not ready).
+	ResumeJob(context.Context, *v1.ResumeJobRequest) (*v1.ResumeJobResponse, error)
 	// RetryJob sends again what an ended job did not send: its refused
 	// instances and those it never sent, once their cause is mended (a peer
 	// that takes the SOP class now, say). The ended job stays as it is, with
@@ -436,6 +490,40 @@ type JobServiceHandler interface {
 	// ErrorInfo reason TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database
 	// does not answer, or the tenant is not ready).
 	CancelJob(context.Context, *v1.CancelJobRequest) (*v1.CancelJobResponse, error)
+	// PauseJob pauses a queued or running job: it stays in its state, with
+	// Job.paused set, and starts no more work until ResumeJob; work already
+	// started finishes (for a batch delete, the delete of the target being
+	// met). Only a batch delete job (DeleteBatchJob) pauses in this version.
+	// A job already paused is answered as it stands. Stopping work is
+	// an operator's to ask, as a cancel is.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log, with the job's id as its object.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant that
+	// does not exist, for a caller who may not list every tenant), invalid,
+	// not found (the tenant has no job with that id; a tenant that does not
+	// exist, for a caller who may list every tenant), precondition (the job
+	// is of a kind that does not pause, or has ended; a tenant moved or
+	// fenced, with ErrorInfo reason TENANT_MOVED or TENANT_FENCED),
+	// unavailable (the tenant's database does not answer, or the tenant is
+	// not ready).
+	PauseJob(context.Context, *v1.PauseJobRequest) (*v1.PauseJobResponse, error)
+	// ResumeJob lets a paused job go on from where it stopped. A job not
+	// paused is answered as it stands. A batch delete resumed deletes again,
+	// so it needs what the batch needed.
+	//
+	// Role: admin on the tenant, never a masked key: a person decides how
+	// much of the archive goes at once.
+	// Audit: one entry in the tenant's log, with the job's id as its object.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant that
+	// does not exist, for a caller who may not list every tenant; a masked
+	// key, which never deletes in bulk), invalid, not found (the tenant has no
+	// job with that id; a tenant that does not exist, for a caller who may
+	// list every tenant), precondition (the job is of a kind that does not
+	// pause, or has ended; a tenant moved or fenced, with ErrorInfo reason
+	// TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database does
+	// not answer, or the tenant is not ready).
+	ResumeJob(context.Context, *v1.ResumeJobRequest) (*v1.ResumeJobResponse, error)
 	// RetryJob sends again what an ended job did not send: its refused
 	// instances and those it never sent, once their cause is mended (a peer
 	// that takes the SOP class now, say). The ended job stays as it is, with
@@ -537,6 +625,8 @@ func RegisterJobServiceHandler(server *connect.Server, svc JobServiceHandler) {
 		connect.Method{Spec: jobServiceGetJobSpec(), Handler: adapter.getJob},
 		connect.Method{Spec: jobServiceListJobsSpec(), Handler: adapter.listJobs},
 		connect.Method{Spec: jobServiceCancelJobSpec(), Handler: adapter.cancelJob},
+		connect.Method{Spec: jobServicePauseJobSpec(), Handler: adapter.pauseJob},
+		connect.Method{Spec: jobServiceResumeJobSpec(), Handler: adapter.resumeJob},
 		connect.Method{Spec: jobServiceRetryJobSpec(), Handler: adapter.retryJob},
 		connect.Method{Spec: jobServiceListJobFailuresSpec(), Handler: adapter.listJobFailures},
 		connect.Method{Spec: jobServiceListImportFilesSpec(), Handler: adapter.listImportFiles},
@@ -561,6 +651,14 @@ func (UnimplementedJobServiceHandler) ListJobs(context.Context, *v1.ListJobsRequ
 
 func (UnimplementedJobServiceHandler) CancelJob(context.Context, *v1.CancelJobRequest) (*v1.CancelJobResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.JobService.CancelJob is not implemented")
+}
+
+func (UnimplementedJobServiceHandler) PauseJob(context.Context, *v1.PauseJobRequest) (*v1.PauseJobResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.JobService.PauseJob is not implemented")
+}
+
+func (UnimplementedJobServiceHandler) ResumeJob(context.Context, *v1.ResumeJobRequest) (*v1.ResumeJobResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.JobService.ResumeJob is not implemented")
 }
 
 func (UnimplementedJobServiceHandler) RetryJob(context.Context, *v1.RetryJobRequest) (*v1.RetryJobResponse, error) {
@@ -610,6 +708,22 @@ func (c *jobServiceClient) ListJobs(ctx context.Context, req *v1.ListJobsRequest
 func (c *jobServiceClient) CancelJob(ctx context.Context, req *v1.CancelJobRequest) (*v1.CancelJobResponse, error) {
 	var res v1.CancelJobResponse
 	if err := c.client.CallUnary(ctx, jobServiceCancelJobSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *jobServiceClient) PauseJob(ctx context.Context, req *v1.PauseJobRequest) (*v1.PauseJobResponse, error) {
+	var res v1.PauseJobResponse
+	if err := c.client.CallUnary(ctx, jobServicePauseJobSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *jobServiceClient) ResumeJob(ctx context.Context, req *v1.ResumeJobRequest) (*v1.ResumeJobResponse, error) {
+	var res v1.ResumeJobResponse
+	if err := c.client.CallUnary(ctx, jobServiceResumeJobSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -691,6 +805,30 @@ func (h jobServiceHandler) cancelJob(ctx context.Context, _ connect.Spec, stream
 		return err
 	}
 	res, err := h.svc.CancelJob(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h jobServiceHandler) pauseJob(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PauseJobRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PauseJob(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h jobServiceHandler) resumeJob(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResumeJobRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResumeJob(ctx, &req)
 	if err != nil {
 		return err
 	}

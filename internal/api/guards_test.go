@@ -189,6 +189,8 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		"GetJob":    func(c clients) outcome { return call(c.jobs.GetJob, &v1.GetJobRequest{Tenant: name, Id: "j1"}) },
 		"ListJobs":  func(c clients) outcome { return call(c.jobs.ListJobs, &v1.ListJobsRequest{Tenant: name}) },
 		"CancelJob": func(c clients) outcome { return call(c.jobs.CancelJob, &v1.CancelJobRequest{Tenant: name, Id: "j1"}) },
+		"PauseJob":  func(c clients) outcome { return call(c.jobs.PauseJob, &v1.PauseJobRequest{Tenant: name, Id: "j1"}) },
+		"ResumeJob": func(c clients) outcome { return call(c.jobs.ResumeJob, &v1.ResumeJobRequest{Tenant: name, Id: "j1"}) },
 		"RetryJob":  func(c clients) outcome { return call(c.jobs.RetryJob, &v1.RetryJobRequest{Tenant: name, Id: "j1"}) },
 		"ListImportFiles": func(c clients) outcome {
 			return call(c.jobs.ListImportFiles, &v1.ListImportFilesRequest{Tenant: name, Id: "j1"})
@@ -236,6 +238,12 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		},
 		"Delete": func(c clients) outcome {
 			return call(c.corrections.Delete, &v1.DeleteRequest{Tenant: name, Target: &v1.CorrectionTarget{SubjectLabel: "S1"}, Reason: "x", ValidateOnly: true})
+		},
+		"DeleteBatch": func(c clients) outcome {
+			return call(c.corrections.DeleteBatch, &v1.DeleteBatchRequest{Tenant: name, Targets: []*v1.CorrectionTarget{{SubjectLabel: "S1"}}, Reason: "x", ValidateOnly: true})
+		},
+		"ListDeleteBatchTargets": func(c clients) outcome {
+			return call(c.corrections.ListDeleteBatchTargets, &v1.ListDeleteBatchTargetsRequest{Tenant: name, JobId: "j1"})
 		},
 		"Relabel": func(c clients) outcome {
 			return call(c.corrections.Relabel, &v1.RelabelRequest{Tenant: name, Target: &v1.CorrectionTarget{SubjectLabel: "S1"}, ToLabel: "S2", Reason: "x"})

@@ -444,6 +444,7 @@ func TestGrammar(t *testing.T) {
 		"quarantine list": true, "quarantine show": true, "quarantine release": true, "quarantine reject": true,
 		"correction delete": true, "correction relabel": true, "correction replace": true, "correction edit": true, "correction list": true,
 		"correction show": true, "correction undo": true, "correction purge": true, "correction allow": true,
+		"correction delete-batch": true, "correction batch-targets": true, "job pause": true, "job resume": true,
 		"catalog subjects": true, "catalog sessions": true, "catalog scans": true, "scan show": true, "download": true,
 		"watch": true, "backup create": true,
 		"storage status": true,

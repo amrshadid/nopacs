@@ -559,6 +559,7 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	run(r.autoLoop)
 	ret := &tenantRetention{w: w, name: name, st: db, base: st, log: log}
 	run(ret.run)
+	run((&tenantBatches{w: w, name: name, st: db, base: st, log: log}).run)
 	run(w.holdRecords(id, name, db, open, sw.Gate(), log))
 	return nil
 }

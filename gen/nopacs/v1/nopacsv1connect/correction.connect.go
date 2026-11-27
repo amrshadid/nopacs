@@ -29,6 +29,12 @@ const (
 const (
 	// CorrectionServiceDeleteProcedure is the procedure name of the CorrectionService's Delete RPC.
 	CorrectionServiceDeleteProcedure = "/nopacs.v1.CorrectionService/Delete"
+	// CorrectionServiceDeleteBatchProcedure is the procedure name of the CorrectionService's
+	// DeleteBatch RPC.
+	CorrectionServiceDeleteBatchProcedure = "/nopacs.v1.CorrectionService/DeleteBatch"
+	// CorrectionServiceListDeleteBatchTargetsProcedure is the procedure name of the CorrectionService's
+	// ListDeleteBatchTargets RPC.
+	CorrectionServiceListDeleteBatchTargetsProcedure = "/nopacs.v1.CorrectionService/ListDeleteBatchTargets"
 	// CorrectionServiceRelabelProcedure is the procedure name of the CorrectionService's Relabel RPC.
 	CorrectionServiceRelabelProcedure = "/nopacs.v1.CorrectionService/Relabel"
 	// CorrectionServiceReplaceProcedure is the procedure name of the CorrectionService's Replace RPC.
@@ -65,6 +71,22 @@ var (
 			Schema:           v1.File_nopacs_v1_correction_proto.Services().ByName("CorrectionService").Methods().ByName("Delete"),
 			Procedure:        CorrectionServiceDeleteProcedure,
 			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	correctionServiceDeleteBatchSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_correction_proto.Services().ByName("CorrectionService").Methods().ByName("DeleteBatch"),
+			Procedure:        CorrectionServiceDeleteBatchProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	correctionServiceListDeleteBatchTargetsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_correction_proto.Services().ByName("CorrectionService").Methods().ByName("ListDeleteBatchTargets"),
+			Procedure:        CorrectionServiceListDeleteBatchTargetsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
 	correctionServiceRelabelSpec = sync.OnceValue(func() connect.Spec {
@@ -188,6 +210,61 @@ type CorrectionServiceClient interface {
 	// or the tenant is not ready; or the tenant's corrections are still
 	// taking up what the server's last stop left).
 	Delete(context.Context, *v1.DeleteRequest) (*v1.DeleteResponse, error)
+	// DeleteBatch deletes many subjects, sessions or scans with one reason:
+	// with validate_only it answers each target's preview (its counts, the
+	// storages and replicas that hold it, the holds that cover it and what
+	// retention keeps) and one confirm token; with that token it makes a job
+	// of kind delete_batch (DeleteBatchJob) and answers it. The job turns
+	// each target, in the order given, into an ordinary delete with the
+	// request's reason, made in the name of the key that confirmed it, so
+	// holds, keep_at_least, undo, the grace period and the purge on every
+	// copy hold for each as for any Delete; JobService follows, pauses,
+	// resumes and cancels it. A target a hold covers, one a retention rule
+	// keeps (never overridden), one whose preview answers otherwise than when
+	// the job was made (data arrived, a hold placed or released, a job made),
+	// one gone, or one another correction holds, is recorded on the job with
+	// its outcome (ListDeleteBatchTargets) and skipped, never forced. A token
+	// matches only the same targets in the same order and the same reason,
+	// while a preview made at its time would answer the same, for at most an
+	// hour; once used it answers the job it made. One batch runs per tenant
+	// at a time.
+	//
+	// Role: admin on the tenant, never a masked key: a person decides how
+	// much of the archive goes at once.
+	// Audit: one entry in the tenant's log, with the job's id in details
+	// (none for validate_only), the targets' count, validate_only and the
+	// reason; each delete writes its own entry as the server, and the job's
+	// steps are its events.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant; a
+	// masked key, which never deletes in bulk), invalid (also a missing or
+	// too long reason; no target, or more than the tenant's
+	// correction.batch-max (at most 10000); a target with an instance_id, a
+	// label that does not pass the label rule, a level named without the one
+	// above it, a target named twice or inside another; a confirm token with
+	// validate_only, or none without it), not found (a target the tenant
+	// does not hold, named by its place in the list; a tenant that does not
+	// exist, for a caller who may list every tenant), precondition (the
+	// confirm token is not this server's preview of the same targets and
+	// reason, a target changed since, or it is more than an hour old; a
+	// batch of the tenant has not ended; a rebuild of the tenant is running;
+	// the tenant is moved or fenced, with the reason TENANT_MOVED or
+	// TENANT_FENCED), unavailable (the tenant's database does not answer, the
+	// server runs no corrections, or the tenant is not ready).
+	DeleteBatch(context.Context, *v1.DeleteBatchRequest) (*v1.DeleteBatchResponse, error)
+	// ListDeleteBatchTargets answers the targets of a batch delete job, in
+	// the order given, each with what became of it and the delete made for
+	// it.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log, with the job's id as its object.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant),
+	// invalid (also a page token of another job), not found (the tenant has
+	// no batch delete job with that id; a tenant that does not exist, for a
+	// caller who may list every tenant), unavailable (the tenant's database
+	// does not answer, or the tenant is not ready).
+	ListDeleteBatchTargets(context.Context, *v1.ListDeleteBatchTargetsRequest) (*v1.ListDeleteBatchTargetsResponse, error)
 	// Relabel gives a subject, a session or a scan a new label, moving its
 	// stored objects to keys under that label. A Relabel with the same
 	// target and new label as a correction not abandoned answers that
@@ -473,6 +550,61 @@ type CorrectionServiceHandler interface {
 	// or the tenant is not ready; or the tenant's corrections are still
 	// taking up what the server's last stop left).
 	Delete(context.Context, *v1.DeleteRequest) (*v1.DeleteResponse, error)
+	// DeleteBatch deletes many subjects, sessions or scans with one reason:
+	// with validate_only it answers each target's preview (its counts, the
+	// storages and replicas that hold it, the holds that cover it and what
+	// retention keeps) and one confirm token; with that token it makes a job
+	// of kind delete_batch (DeleteBatchJob) and answers it. The job turns
+	// each target, in the order given, into an ordinary delete with the
+	// request's reason, made in the name of the key that confirmed it, so
+	// holds, keep_at_least, undo, the grace period and the purge on every
+	// copy hold for each as for any Delete; JobService follows, pauses,
+	// resumes and cancels it. A target a hold covers, one a retention rule
+	// keeps (never overridden), one whose preview answers otherwise than when
+	// the job was made (data arrived, a hold placed or released, a job made),
+	// one gone, or one another correction holds, is recorded on the job with
+	// its outcome (ListDeleteBatchTargets) and skipped, never forced. A token
+	// matches only the same targets in the same order and the same reason,
+	// while a preview made at its time would answer the same, for at most an
+	// hour; once used it answers the job it made. One batch runs per tenant
+	// at a time.
+	//
+	// Role: admin on the tenant, never a masked key: a person decides how
+	// much of the archive goes at once.
+	// Audit: one entry in the tenant's log, with the job's id in details
+	// (none for validate_only), the targets' count, validate_only and the
+	// reason; each delete writes its own entry as the server, and the job's
+	// steps are its events.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant; a
+	// masked key, which never deletes in bulk), invalid (also a missing or
+	// too long reason; no target, or more than the tenant's
+	// correction.batch-max (at most 10000); a target with an instance_id, a
+	// label that does not pass the label rule, a level named without the one
+	// above it, a target named twice or inside another; a confirm token with
+	// validate_only, or none without it), not found (a target the tenant
+	// does not hold, named by its place in the list; a tenant that does not
+	// exist, for a caller who may list every tenant), precondition (the
+	// confirm token is not this server's preview of the same targets and
+	// reason, a target changed since, or it is more than an hour old; a
+	// batch of the tenant has not ended; a rebuild of the tenant is running;
+	// the tenant is moved or fenced, with the reason TENANT_MOVED or
+	// TENANT_FENCED), unavailable (the tenant's database does not answer, the
+	// server runs no corrections, or the tenant is not ready).
+	DeleteBatch(context.Context, *v1.DeleteBatchRequest) (*v1.DeleteBatchResponse, error)
+	// ListDeleteBatchTargets answers the targets of a batch delete job, in
+	// the order given, each with what became of it and the delete made for
+	// it.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log, with the job's id as its object.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant),
+	// invalid (also a page token of another job), not found (the tenant has
+	// no batch delete job with that id; a tenant that does not exist, for a
+	// caller who may list every tenant), unavailable (the tenant's database
+	// does not answer, or the tenant is not ready).
+	ListDeleteBatchTargets(context.Context, *v1.ListDeleteBatchTargetsRequest) (*v1.ListDeleteBatchTargetsResponse, error)
 	// Relabel gives a subject, a session or a scan a new label, moving its
 	// stored objects to keys under that label. A Relabel with the same
 	// target and new label as a correction not abandoned answers that
@@ -719,6 +851,8 @@ func RegisterCorrectionServiceHandler(server *connect.Server, svc CorrectionServ
 	adapter := correctionServiceHandler{svc: svc}
 	server.Register(
 		connect.Method{Spec: correctionServiceDeleteSpec(), Handler: adapter.delete},
+		connect.Method{Spec: correctionServiceDeleteBatchSpec(), Handler: adapter.deleteBatch},
+		connect.Method{Spec: correctionServiceListDeleteBatchTargetsSpec(), Handler: adapter.listDeleteBatchTargets},
 		connect.Method{Spec: correctionServiceRelabelSpec(), Handler: adapter.relabel},
 		connect.Method{Spec: correctionServiceReplaceSpec(), Handler: adapter.replace},
 		connect.Method{Spec: correctionServiceEditSpec(), Handler: adapter.edit},
@@ -737,6 +871,14 @@ type UnimplementedCorrectionServiceHandler struct{}
 
 func (UnimplementedCorrectionServiceHandler) Delete(context.Context, *v1.DeleteRequest) (*v1.DeleteResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.CorrectionService.Delete is not implemented")
+}
+
+func (UnimplementedCorrectionServiceHandler) DeleteBatch(context.Context, *v1.DeleteBatchRequest) (*v1.DeleteBatchResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.CorrectionService.DeleteBatch is not implemented")
+}
+
+func (UnimplementedCorrectionServiceHandler) ListDeleteBatchTargets(context.Context, *v1.ListDeleteBatchTargetsRequest) (*v1.ListDeleteBatchTargetsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.CorrectionService.ListDeleteBatchTargets is not implemented")
 }
 
 func (UnimplementedCorrectionServiceHandler) Relabel(context.Context, *v1.RelabelRequest) (*v1.RelabelResponse, error) {
@@ -786,6 +928,22 @@ type correctionServiceClient struct {
 func (c *correctionServiceClient) Delete(ctx context.Context, req *v1.DeleteRequest) (*v1.DeleteResponse, error) {
 	var res v1.DeleteResponse
 	if err := c.client.CallUnary(ctx, correctionServiceDeleteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *correctionServiceClient) DeleteBatch(ctx context.Context, req *v1.DeleteBatchRequest) (*v1.DeleteBatchResponse, error) {
+	var res v1.DeleteBatchResponse
+	if err := c.client.CallUnary(ctx, correctionServiceDeleteBatchSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *correctionServiceClient) ListDeleteBatchTargets(ctx context.Context, req *v1.ListDeleteBatchTargetsRequest) (*v1.ListDeleteBatchTargetsResponse, error) {
+	var res v1.ListDeleteBatchTargetsResponse
+	if err := c.client.CallUnary(ctx, correctionServiceListDeleteBatchTargetsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -879,6 +1037,30 @@ func (h correctionServiceHandler) delete(ctx context.Context, _ connect.Spec, st
 		return err
 	}
 	res, err := h.svc.Delete(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h correctionServiceHandler) deleteBatch(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteBatchRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteBatch(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h correctionServiceHandler) listDeleteBatchTargets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDeleteBatchTargetsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDeleteBatchTargets(ctx, &req)
 	if err != nil {
 		return err
 	}

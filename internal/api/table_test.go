@@ -23,17 +23,19 @@ import (
 // fails for a method with no entry here, so a method added to the contract
 // fails until it is tested.
 var methodTests = map[string]func(t *testing.T){
-	nopacsv1connect.CorrectionServiceDeleteProcedure:            testDelete,
-	nopacsv1connect.CorrectionServiceRelabelProcedure:           testRelabel,
-	nopacsv1connect.CorrectionServiceReplaceProcedure:           testReplace,
-	nopacsv1connect.CorrectionServiceEditProcedure:              testEdit,
-	nopacsv1connect.CorrectionServiceListCorrectionsProcedure:   testListCorrections,
-	nopacsv1connect.CorrectionServiceGetCorrectionProcedure:     testGetCorrection,
-	nopacsv1connect.CorrectionServiceUndoCorrectionProcedure:    testUndoCorrection,
-	nopacsv1connect.CorrectionServicePurgeCorrectionProcedure:   testPurgeCorrection,
-	nopacsv1connect.CorrectionServiceAllowArrivalsProcedure:     testAllowArrivals,
-	nopacsv1connect.CorrectionServiceListScrubFindingsProcedure: testListScrubFindings,
-	nopacsv1connect.CorrectionServiceResolveInstancesProcedure:  testResolveInstances,
+	nopacsv1connect.CorrectionServiceDeleteProcedure:                 testDelete,
+	nopacsv1connect.CorrectionServiceDeleteBatchProcedure:            testDeleteBatch,
+	nopacsv1connect.CorrectionServiceListDeleteBatchTargetsProcedure: testListDeleteBatchTargets,
+	nopacsv1connect.CorrectionServiceRelabelProcedure:                testRelabel,
+	nopacsv1connect.CorrectionServiceReplaceProcedure:                testReplace,
+	nopacsv1connect.CorrectionServiceEditProcedure:                   testEdit,
+	nopacsv1connect.CorrectionServiceListCorrectionsProcedure:        testListCorrections,
+	nopacsv1connect.CorrectionServiceGetCorrectionProcedure:          testGetCorrection,
+	nopacsv1connect.CorrectionServiceUndoCorrectionProcedure:         testUndoCorrection,
+	nopacsv1connect.CorrectionServicePurgeCorrectionProcedure:        testPurgeCorrection,
+	nopacsv1connect.CorrectionServiceAllowArrivalsProcedure:          testAllowArrivals,
+	nopacsv1connect.CorrectionServiceListScrubFindingsProcedure:      testListScrubFindings,
+	nopacsv1connect.CorrectionServiceResolveInstancesProcedure:       testResolveInstances,
 
 	nopacsv1connect.AccessServiceCreateKeyProcedure:       testCreateKey,
 	nopacsv1connect.AccessServiceGetKeyProcedure:          testGetKey,
@@ -99,6 +101,8 @@ var methodTests = map[string]func(t *testing.T){
 	nopacsv1connect.JobServiceGetJobProcedure:                        testGetJob,
 	nopacsv1connect.JobServiceListJobsProcedure:                      testListJobs,
 	nopacsv1connect.JobServiceCancelJobProcedure:                     testCancelJob,
+	nopacsv1connect.JobServicePauseJobProcedure:                      testPauseJob,
+	nopacsv1connect.JobServiceResumeJobProcedure:                     testResumeJob,
 	nopacsv1connect.JobServiceRetryJobProcedure:                      testRetryJob,
 	nopacsv1connect.JobServiceListJobFailuresProcedure:               testListJobFailures,
 	nopacsv1connect.JobServiceListImportFilesProcedure:               testListImportFiles,
@@ -194,8 +198,8 @@ func contractMethods() map[string]protoreflect.MethodDescriptor {
 // here names a method the contract does not have.
 func TestEveryMethod(t *testing.T) {
 	methods := contractMethods()
-	if len(methods) != 115 {
-		t.Errorf("the contract has %d methods; this test was written for 115, so look at what changed", len(methods))
+	if len(methods) != 119 {
+		t.Errorf("the contract has %d methods; this test was written for 119, so look at what changed", len(methods))
 	}
 	var table api.Methods
 	for proc, md := range methods {

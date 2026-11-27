@@ -32,3 +32,29 @@ func TestDeleteGraceRules(t *testing.T) {
 		}
 	}
 }
+
+// TestBatchMaxRules guards correction.batch-max: a tenant may have its own
+// value, set by the installation's admin alone; its default 10000; its
+// bounds at each edge and one past them; and what it parses to.
+func TestBatchMaxRules(t *testing.T) {
+	d, ok := MustBuiltin().Lookup(CorrectionBatchMax)
+	if !ok {
+		t.Fatal("correction.batch-max is not built in")
+	}
+	if !d.TenantOverride || !d.TenantSetByInstallation || d.Default != "10000" {
+		t.Fatalf("correction.batch-max is set on a tenant by the installation alone, default 10000: %+v", d)
+	}
+	for _, v := range []string{"1", "500", "10000"} {
+		if err := d.Validate(v); err != nil {
+			t.Errorf("correction.batch-max %q: %v", v, err)
+		}
+	}
+	for _, v := range []string{"", "0", "10001", "-1", "010", "1e3", " 5"} {
+		if err := d.Validate(v); err == nil {
+			t.Errorf("correction.batch-max %q accepted", v)
+		}
+	}
+	if n, err := ParseBatchMax("250"); err != nil || n != 250 {
+		t.Errorf("ParseBatchMax(250) = %d, %v", n, err)
+	}
+}

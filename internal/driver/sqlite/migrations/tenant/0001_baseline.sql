@@ -882,7 +882,7 @@ CREATE TABLE senders (
 -- progress event, which is written at most once in a period.
 CREATE TABLE jobs (
     id                  TEXT    NOT NULL PRIMARY KEY,
-    kind                TEXT    NOT NULL CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose')),
+    kind                TEXT    NOT NULL CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch')),
     sender              TEXT    NOT NULL,
     subject_label       TEXT    NOT NULL,
     session_label       TEXT    NOT NULL,
@@ -2096,3 +2096,36 @@ CREATE TABLE dispose_sessions (
 ) STRICT, WITHOUT ROWID;
 
 CREATE UNIQUE INDEX dispose_sessions_by_study ON dispose_sessions (job_id, study_uid);
+
+
+-- A batch delete job's own part: the reason every delete carries, the
+-- confirm token of the preview it was made from, used once, and whether a
+-- person paused it.
+CREATE TABLE delete_batch_jobs (
+    job_id        TEXT    NOT NULL PRIMARY KEY,
+    reason        TEXT    NOT NULL,
+    confirm_token TEXT    NOT NULL,
+    paused        INTEGER NOT NULL CHECK (paused IN (0, 1))
+) STRICT;
+
+CREATE UNIQUE INDEX delete_batch_jobs_by_confirm ON delete_batch_jobs (confirm_token);
+
+-- The targets of a batch delete job, in the order given: each one's
+-- labels, the digest of its delete preview when the job was made, what it
+-- held then, what became of it ('' before it is reached) and the delete
+-- made for it ('' for none), which the delete's prepare writes in its own
+-- transaction, so a restart finds it and never makes a second.
+CREATE TABLE delete_batch_targets (
+    job_id        TEXT    NOT NULL,
+    ord           INTEGER NOT NULL CHECK (ord >= 1),
+    subject_label TEXT    NOT NULL,
+    session_label TEXT    NOT NULL,
+    scan_label    TEXT    NOT NULL,
+    fingerprint   TEXT    NOT NULL,
+    instances     INTEGER NOT NULL CHECK (instances >= 0),
+    bytes         INTEGER NOT NULL CHECK (bytes >= 0),
+    outcome       TEXT    NOT NULL CHECK (outcome IN ('', 'deleted', 'skipped|held', 'skipped|kept', 'skipped|changed',
+        'skipped|gone', 'skipped|overlap', 'skipped|refused')),
+    correction_id TEXT    NOT NULL,
+    PRIMARY KEY (job_id, ord)
+) STRICT, WITHOUT ROWID;

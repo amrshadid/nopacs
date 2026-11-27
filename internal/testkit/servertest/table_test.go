@@ -482,7 +482,7 @@ func checkRole(t *testing.T, proc, role string, md protoreflect.MethodDescriptor
 		expectTenant(t, proc, md, master.RoleReader, nil)
 	case "operator on the tenant.":
 		expectTenant(t, proc, md, master.RoleOperator, nil)
-	case "admin on the tenant.":
+	case "admin on the tenant.", "admin on the tenant, never a masked key: a person decides how much of the archive goes at once.":
 		expectTenant(t, proc, md, master.RoleAdmin, nil)
 	case "reader on the tenant; operator on the tenant to filter by Study Instance UID, since looking a study up by an identifier the caller already holds is a search for a person's data.":
 		expectTenant(t, proc, md, master.RoleReader, []string{"study_instance_uid"})

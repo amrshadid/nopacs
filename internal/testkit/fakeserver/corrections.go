@@ -23,7 +23,10 @@ type corrections struct {
 	byTenant map[string][]*v1.Correction
 	// findings are each tenant's scrub findings, as AddScrubFinding gave them.
 	findings map[string][]*v1.ScrubFinding
-	next     int
+	// batches are each batch job's targets, by tenant and job
+	// (delete_batch.go).
+	batches map[string][]*v1.DeleteBatchTarget
+	next    int
 }
 
 // correctionHandler is the fake's CorrectionService.

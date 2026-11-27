@@ -374,4 +374,5 @@ type PipelineParts interface {
 	Retention
 	Holds
 	Disposal
+	DeleteBatches
 }

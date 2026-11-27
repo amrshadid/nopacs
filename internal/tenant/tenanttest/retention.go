@@ -46,6 +46,9 @@ func runRetention(t *testing.T, open OpenEvents) {
 		{"DisposalEnds", testDisposalEnds},
 		{"DisposalAfterRelabel", testDisposalAfterRelabel},
 		{"DisposalStopsWhenEnded", testDisposalStopsWhenEnded},
+		{"BatchPreview", testBatchPreview},
+		{"BatchQueue", testBatchQueue},
+		{"BatchDeletes", testBatchDeletes},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

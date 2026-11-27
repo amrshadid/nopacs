@@ -1,6 +1,7 @@
 package tenant
 
 import (
+	"cmp"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -179,6 +180,17 @@ func (p CorrectionPrepare) Validate() error {
 	if p.Kind != record.KindEdit && len(p.Edits) > 0 {
 		return invalid("only an edit names edited instances")
 	}
+	if b := p.Batch; b != nil {
+		if p.Kind != record.KindDelete || p.Retention != nil || p.OverrideRetention || p.Target.Instance != "" {
+			return invalid("a batch makes a person's delete of a subject, a session or a scan, never over retention")
+		}
+		if err := master.ValidateID("job id", b.JobID); err != nil {
+			return err
+		}
+		if b.Ord < 1 || b.Ord > MaxDeleteBatchTargets {
+			return invalid("a batch's target is named by its place, 1 to " + strconv.Itoa(MaxDeleteBatchTargets))
+		}
+	}
 	return p.validateRetention()
 }
 
@@ -219,6 +231,14 @@ const MaxConfirmLength = 128
 // it acts on what they saw, and a preview made later that answers
 // otherwise does not match.
 func DeleteConfirm(p DeletePreview) string {
+	issued := strconv.FormatInt(p.Issued.UnixMicro(), 10)
+	return "c1." + issued + "." + deleteDigest(p, issued)
+}
+
+// deleteDigest returns the SHA-256, in hexadecimal, of everything a delete
+// preview answers, with issued as the time it was issued: DeleteConfirm's
+// digest, or with "" DeleteFingerprint, which leaves the time out.
+func deleteDigest(p DeletePreview, issued string) string {
 	var b strings.Builder
 	w := func(parts ...string) {
 		for _, s := range parts {
@@ -228,9 +248,8 @@ func DeleteConfirm(p DeletePreview) string {
 		}
 	}
 	n := func(v int64) string { return strconv.FormatInt(v, 10) }
-	issued := strconv.FormatInt(p.Issued.UnixMicro(), 10)
 	t, c := p.Target, p.Counts
-	w("nopacs-delete-preview-3", issued, t.Subject, t.Session, t.Scan, t.Instance,
+	w("nopacs-delete-preview-4", issued, t.Subject, t.Session, t.Scan, t.Instance,
 		n(c.Subjects), n(c.Sessions), n(c.Scans), n(c.Instances), n(c.Bytes), n(p.Quarantined), n(p.Receptions))
 	w(n(int64(len(p.Storages))))
 	w(p.Storages...)
@@ -260,8 +279,17 @@ func DeleteConfirm(p DeletePreview) string {
 			w(r.Primary, r.Replica)
 		}
 	}
+	// Which rows it takes, and what they hold: labels and counts alone
+	// match two sessions of one size swapped by relabels, or an instance
+	// replaced or edited in place.
+	scans := slices.Clone(p.Scans)
+	slices.SortFunc(scans, func(a, b ScanIdentity) int { return cmp.Compare(a.ID, b.ID) })
+	w(n(int64(len(scans))))
+	for _, s := range scans {
+		w(n(s.ID), s.Manifest.String())
+	}
 	sum := sha256.Sum256([]byte(b.String()))
-	return "c1." + issued + "." + hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:])
 }
 
 // KeyedConfirm returns the token a person is shown for a preview whose

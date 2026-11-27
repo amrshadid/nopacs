@@ -88,6 +88,7 @@ func TestBuiltin(t *testing.T) {
 		RetentionShortenNotice: {SetByInstallation, "30d", false},
 		RetentionMaxClockStep:  {InstallationOnly, "2d", false},
 		RetentionMaxPerPass:    {SetByInstallation, "1000", false},
+		CorrectionBatchMax:     {SetByInstallation, "10000", false},
 		QuarantineWarnAge:      {Ordinary, "30d", false},
 		QuarantineWarnBytes:    {Ordinary, "0", false},
 	}

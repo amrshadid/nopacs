@@ -34,10 +34,11 @@ the catalog again from the storages, to compare it with the one in use or to
 replace it ("job rebuild"). A
 job ends done (every instance sent), partial (some refused, the others sent),
 failed (some not sent because the attempts ran out) or canceled.
-Every command takes the tenant first. Creating, canceling and retrying, and
-listing an import's files and units, need the operator role on the tenant; the
+Every command takes the tenant first. Creating, canceling, pausing and
+retrying, and listing an import's files and units, need the operator role on
+the tenant; resuming a batch delete ("correction delete-batch") needs admin; the
 others need the reader role.`,
-		a.newJobCreate(), a.newJobImport(), a.newJobScrub(), a.newJobRebuild(), a.newJobGet(), a.newJobList(), a.newJobWatch(), a.newJobCancel(), a.newJobRetry(), a.newJobFailures(),
+		a.newJobCreate(), a.newJobImport(), a.newJobScrub(), a.newJobRebuild(), a.newJobGet(), a.newJobList(), a.newJobWatch(), a.newJobCancel(), a.newJobPause(), a.newJobResume(), a.newJobRetry(), a.newJobFailures(),
 		a.newJobFiles(), a.newJobUnits(), a.newJobFindings(), a.newJobFinding())
 }
 

@@ -268,6 +268,16 @@ class CorrectionServiceStub:
                 request_serializer=nopacs_dot_v1_dot_correction__pb2.DeleteRequest.SerializeToString,
                 response_deserializer=nopacs_dot_v1_dot_correction__pb2.DeleteResponse.FromString,
                 _registered_method=True)
+        self.DeleteBatch = channel.unary_unary(
+                '/nopacs.v1.CorrectionService/DeleteBatch',
+                request_serializer=nopacs_dot_v1_dot_correction__pb2.DeleteBatchRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_correction__pb2.DeleteBatchResponse.FromString,
+                _registered_method=True)
+        self.ListDeleteBatchTargets = channel.unary_unary(
+                '/nopacs.v1.CorrectionService/ListDeleteBatchTargets',
+                request_serializer=nopacs_dot_v1_dot_correction__pb2.ListDeleteBatchTargetsRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_correction__pb2.ListDeleteBatchTargetsResponse.FromString,
+                _registered_method=True)
         self.Relabel = channel.unary_unary(
                 '/nopacs.v1.CorrectionService/Relabel',
                 request_serializer=nopacs_dot_v1_dot_correction__pb2.RelabelRequest.SerializeToString,
@@ -594,6 +604,71 @@ class CorrectionServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DeleteBatch(self, request, context):
+        """DeleteBatch deletes many subjects, sessions or scans with one reason:
+        with validate_only it answers each target's preview (its counts, the
+        storages and replicas that hold it, the holds that cover it and what
+        retention keeps) and one confirm token; with that token it makes a job
+        of kind delete_batch (DeleteBatchJob) and answers it. The job turns
+        each target, in the order given, into an ordinary delete with the
+        request's reason, made in the name of the key that confirmed it, so
+        holds, keep_at_least, undo, the grace period and the purge on every
+        copy hold for each as for any Delete; JobService follows, pauses,
+        resumes and cancels it. A target a hold covers, one a retention rule
+        keeps (never overridden), one whose preview answers otherwise than when
+        the job was made (data arrived, a hold placed or released, a job made),
+        one gone, or one another correction holds, is recorded on the job with
+        its outcome (ListDeleteBatchTargets) and skipped, never forced. A token
+        matches only the same targets in the same order and the same reason,
+        while a preview made at its time would answer the same, for at most an
+        hour; once used it answers the job it made. One batch runs per tenant
+        at a time.
+
+        Role: admin on the tenant, never a masked key: a person decides how
+        much of the archive goes at once.
+        Audit: one entry in the tenant's log, with the job's id in details
+        (none for validate_only), the targets' count, validate_only and the
+        reason; each delete writes its own entry as the server, and the job's
+        steps are its events.
+        Errors: unauthenticated, permission denied (no grant; also a tenant
+        that does not exist, for a caller who may not list every tenant; a
+        masked key, which never deletes in bulk), invalid (also a missing or
+        too long reason; no target, or more than the tenant's
+        correction.batch-max (at most 10000); a target with an instance_id, a
+        label that does not pass the label rule, a level named without the one
+        above it, a target named twice or inside another; a confirm token with
+        validate_only, or none without it), not found (a target the tenant
+        does not hold, named by its place in the list; a tenant that does not
+        exist, for a caller who may list every tenant), precondition (the
+        confirm token is not this server's preview of the same targets and
+        reason, a target changed since, or it is more than an hour old; a
+        batch of the tenant has not ended; a rebuild of the tenant is running;
+        the tenant is moved or fenced, with the reason TENANT_MOVED or
+        TENANT_FENCED), unavailable (the tenant's database does not answer, the
+        server runs no corrections, or the tenant is not ready).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListDeleteBatchTargets(self, request, context):
+        """ListDeleteBatchTargets answers the targets of a batch delete job, in
+        the order given, each with what became of it and the delete made for
+        it.
+
+        Role: operator on the tenant.
+        Audit: one entry in the tenant's log, with the job's id as its object.
+        Errors: unauthenticated, permission denied (no grant; also a tenant
+        that does not exist, for a caller who may not list every tenant),
+        invalid (also a page token of another job), not found (the tenant has
+        no batch delete job with that id; a tenant that does not exist, for a
+        caller who may list every tenant), unavailable (the tenant's database
+        does not answer, or the tenant is not ready).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Relabel(self, request, context):
         """Relabel gives a subject, a session or a scan a new label, moving its
         stored objects to keys under that label. A Relabel with the same
@@ -889,6 +964,16 @@ def add_CorrectionServiceServicer_to_server(servicer, server):
                     servicer.Delete,
                     request_deserializer=nopacs_dot_v1_dot_correction__pb2.DeleteRequest.FromString,
                     response_serializer=nopacs_dot_v1_dot_correction__pb2.DeleteResponse.SerializeToString,
+            ),
+            'DeleteBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteBatch,
+                    request_deserializer=nopacs_dot_v1_dot_correction__pb2.DeleteBatchRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_correction__pb2.DeleteBatchResponse.SerializeToString,
+            ),
+            'ListDeleteBatchTargets': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListDeleteBatchTargets,
+                    request_deserializer=nopacs_dot_v1_dot_correction__pb2.ListDeleteBatchTargetsRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_correction__pb2.ListDeleteBatchTargetsResponse.SerializeToString,
             ),
             'Relabel': grpc.unary_unary_rpc_method_handler(
                     servicer.Relabel,
@@ -1197,6 +1282,60 @@ class CorrectionService:
             '/nopacs.v1.CorrectionService/Delete',
             nopacs_dot_v1_dot_correction__pb2.DeleteRequest.SerializeToString,
             nopacs_dot_v1_dot_correction__pb2.DeleteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.CorrectionService/DeleteBatch',
+            nopacs_dot_v1_dot_correction__pb2.DeleteBatchRequest.SerializeToString,
+            nopacs_dot_v1_dot_correction__pb2.DeleteBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListDeleteBatchTargets(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.CorrectionService/ListDeleteBatchTargets',
+            nopacs_dot_v1_dot_correction__pb2.ListDeleteBatchTargetsRequest.SerializeToString,
+            nopacs_dot_v1_dot_correction__pb2.ListDeleteBatchTargetsResponse.FromString,
             options,
             channel_credentials,
             insecure,

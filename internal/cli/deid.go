@@ -219,6 +219,9 @@ func jobKindText(j *v1.Job) (string, string) {
 	if rj := j.GetRebuild(); rj != nil {
 		return "rebuild " + rebuildMode(rj.GetMode()), "the catalog"
 	}
+	if b := j.GetDeleteBatch(); b != nil {
+		return "delete batch", strconv.FormatInt(b.GetTargets(), 10) + " targets"
+	}
 	return j.GetSend().GetSender(), output.JobTarget(j.GetSend())
 }
 

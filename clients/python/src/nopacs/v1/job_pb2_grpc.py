@@ -537,6 +537,16 @@ class JobServiceStub:
                 request_serializer=nopacs_dot_v1_dot_job__pb2.CancelJobRequest.SerializeToString,
                 response_deserializer=nopacs_dot_v1_dot_job__pb2.CancelJobResponse.FromString,
                 _registered_method=True)
+        self.PauseJob = channel.unary_unary(
+                '/nopacs.v1.JobService/PauseJob',
+                request_serializer=nopacs_dot_v1_dot_job__pb2.PauseJobRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_job__pb2.PauseJobResponse.FromString,
+                _registered_method=True)
+        self.ResumeJob = channel.unary_unary(
+                '/nopacs.v1.JobService/ResumeJob',
+                request_serializer=nopacs_dot_v1_dot_job__pb2.ResumeJobRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_job__pb2.ResumeJobResponse.FromString,
+                _registered_method=True)
         self.RetryJob = channel.unary_unary(
                 '/nopacs.v1.JobService/RetryJob',
                 request_serializer=nopacs_dot_v1_dot_job__pb2.RetryJobRequest.SerializeToString,
@@ -1176,6 +1186,50 @@ class JobServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PauseJob(self, request, context):
+        """PauseJob pauses a queued or running job: it stays in its state, with
+        Job.paused set, and starts no more work until ResumeJob; work already
+        started finishes (for a batch delete, the delete of the target being
+        met). Only a batch delete job (DeleteBatchJob) pauses in this version.
+        A job already paused is answered as it stands. Stopping work is
+        an operator's to ask, as a cancel is.
+
+        Role: operator on the tenant.
+        Audit: one entry in the tenant's log, with the job's id as its object.
+        Errors: unauthenticated, permission denied (no grant; also a tenant that
+        does not exist, for a caller who may not list every tenant), invalid,
+        not found (the tenant has no job with that id; a tenant that does not
+        exist, for a caller who may list every tenant), precondition (the job
+        is of a kind that does not pause, or has ended; a tenant moved or
+        fenced, with ErrorInfo reason TENANT_MOVED or TENANT_FENCED),
+        unavailable (the tenant's database does not answer, or the tenant is
+        not ready).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResumeJob(self, request, context):
+        """ResumeJob lets a paused job go on from where it stopped. A job not
+        paused is answered as it stands. A batch delete resumed deletes again,
+        so it needs what the batch needed.
+
+        Role: admin on the tenant, never a masked key: a person decides how
+        much of the archive goes at once.
+        Audit: one entry in the tenant's log, with the job's id as its object.
+        Errors: unauthenticated, permission denied (no grant; also a tenant that
+        does not exist, for a caller who may not list every tenant; a masked
+        key, which never deletes in bulk), invalid, not found (the tenant has no
+        job with that id; a tenant that does not exist, for a caller who may
+        list every tenant), precondition (the job is of a kind that does not
+        pause, or has ended; a tenant moved or fenced, with ErrorInfo reason
+        TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database does
+        not answer, or the tenant is not ready).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def RetryJob(self, request, context):
         """RetryJob sends again what an ended job did not send: its refused
         instances and those it never sent, once their cause is mended (a peer
@@ -1309,6 +1363,16 @@ def add_JobServiceServicer_to_server(servicer, server):
                     servicer.CancelJob,
                     request_deserializer=nopacs_dot_v1_dot_job__pb2.CancelJobRequest.FromString,
                     response_serializer=nopacs_dot_v1_dot_job__pb2.CancelJobResponse.SerializeToString,
+            ),
+            'PauseJob': grpc.unary_unary_rpc_method_handler(
+                    servicer.PauseJob,
+                    request_deserializer=nopacs_dot_v1_dot_job__pb2.PauseJobRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_job__pb2.PauseJobResponse.SerializeToString,
+            ),
+            'ResumeJob': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResumeJob,
+                    request_deserializer=nopacs_dot_v1_dot_job__pb2.ResumeJobRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_job__pb2.ResumeJobResponse.SerializeToString,
             ),
             'RetryJob': grpc.unary_unary_rpc_method_handler(
                     servicer.RetryJob,
@@ -1922,6 +1986,60 @@ class JobService:
             '/nopacs.v1.JobService/CancelJob',
             nopacs_dot_v1_dot_job__pb2.CancelJobRequest.SerializeToString,
             nopacs_dot_v1_dot_job__pb2.CancelJobResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PauseJob(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.JobService/PauseJob',
+            nopacs_dot_v1_dot_job__pb2.PauseJobRequest.SerializeToString,
+            nopacs_dot_v1_dot_job__pb2.PauseJobResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumeJob(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.JobService/ResumeJob',
+            nopacs_dot_v1_dot_job__pb2.ResumeJobRequest.SerializeToString,
+            nopacs_dot_v1_dot_job__pb2.ResumeJobResponse.FromString,
             options,
             channel_credentials,
             insecure,

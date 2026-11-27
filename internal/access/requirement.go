@@ -33,6 +33,21 @@ type Requirement struct {
 	// writes says the request writes values of its own into archived
 	// files, which a masked key is refused.
 	writes bool
+	// bulk says the request deletes many targets at once, which a masked
+	// key is refused.
+	bulk bool
+}
+
+// DeletesInBulk returns r for a request that deletes many targets of a
+// tenant at once, or lets such a deletion go on (a batch delete and its
+// resume). Check refuses it to a masked key, once the key's grant is found
+// to suffice, as Denied with MessageMaskedBulk, and records the refusal: a
+// masked key is held by a service outside the site, and how much of the
+// archive goes at once is a person's choice, never that service's. For any
+// other caller it is r.
+func (r Requirement) DeletesInBulk() Requirement {
+	r.bulk = true
+	return r
 }
 
 // WritesValues returns r for a request that writes values the caller

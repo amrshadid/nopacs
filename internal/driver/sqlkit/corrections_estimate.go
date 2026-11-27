@@ -32,6 +32,20 @@ func (k Sending) previewIn(ctx context.Context, tx SendingTx, target tenant.Corr
 		}
 	}
 	scope, arg := r.scanScope()
+	// The rows it takes and what they hold, which the token's digest names
+	// (tenant.DeletePreview.Scans).
+	// #nosec G202 -- the scope is a constant of resolveTarget; values are parameters.
+	if err := tx.Query(ctx, `SELECT s.id, s.manifest_sha256 FROM scans AS s WHERE s.id IN `+scope+` ORDER BY s.id`, []any{arg},
+		func(row Row) error {
+			var id tenant.ScanIdentity
+			var sum []byte
+			err := row.Scan(&id.ID, &sum)
+			id.Manifest = ToSHA256(sum)
+			p.Scans = append(p.Scans, id)
+			return err
+		}); err != nil {
+		return p, err
+	}
 	// The senders it was sent to: the send jobs' scans that answered any of
 	// it sent. One instance is in its scan, and the jobs count a scan's
 	// instances, not which: its scan's senders are those it may have

@@ -465,6 +465,13 @@ type DeletePreview struct {
 	// person's delete of them needs OverrideRetention.
 	SessionsUnderMinimum int64
 	KeepUntil            time.Time
+	// Scans are the catalog's id and manifest SHA-256 of every scan under
+	// the target, ordered by id: what names the rows the delete takes and
+	// their content, so a token (DeleteConfirm) or a batch's fingerprint
+	// (DeleteFingerprint) of one set of rows never matches another with the
+	// same labels and counts (sessions swapped by relabels, an instance
+	// replaced or edited). In the digest only; never answered.
+	Scans []ScanIdentity
 	// Issued is when the preview was made; Confirm its token.
 	Issued  time.Time
 	Confirm string
@@ -496,6 +503,12 @@ type CorrectionPrepare struct {
 	// Retention, for a delete a disposal makes (origin retention), is the
 	// rule and due time it was listed under; nil for a person's.
 	Retention *RetentionOrigin
+	// Batch, for a delete a batch delete job makes, is the job and the
+	// target's place in it: the prepare refuses the delete
+	// (ErrBatchStopped) when the job has ended or is paused, or when the
+	// target was met already, and records the delete on the target in its
+	// transaction (DeleteBatches). Nil for any other delete.
+	Batch *BatchOrigin
 	// OverrideRetention says a person's delete goes over a rule's
 	// keep-at-least, with its own OverrideReason. Who may ask it is
 	// checked before the store; the store records it and KeyID.

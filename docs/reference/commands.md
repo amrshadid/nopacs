@@ -257,6 +257,17 @@ Usage: `nopacs correction allow <tenant> <id> (--subject LABEL | --study UID | -
 | `--study` | string |  | the Study Instance UID to let arrive again |
 | `--subject` | string |  | the subject label to let arrive again |
 
+#### `nopacs correction batch-targets`
+
+List a batch delete job's targets and what became of each
+
+Usage: `nopacs correction batch-targets <tenant> <job> [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+
 #### `nopacs correction delete`
 
 Delete a subject, a session, a scan or one instance, after a preview
@@ -271,6 +282,20 @@ Usage: `nopacs correction delete <tenant> <subject>[/<session>[/<scan>]] [--inst
 | `--preview` | bool |  | show what the delete would remove, and delete nothing |
 | `--reason` | string |  | why, in your own words, kept with the correction (required) |
 | `--yes` | bool |  | do not ask for the target to be typed again |
+
+#### `nopacs correction delete-batch`
+
+Delete many subjects, sessions or scans with one reason, as a job
+
+Usage: `nopacs correction delete-batch <tenant> (--file LIST | --from-search QUERY) --reason TEXT [--preview] [--yes] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--file` | string |  | a file of targets, one <subject>[/<session>[/<scan>]] per line; - reads standard input |
+| `--from-search` | string |  | the scans the filters of "catalog scans" select, as key=value pairs, such as "modality=MR archived-until=2024-01-01" |
+| `--preview` | bool |  | show what the batch would delete, and delete nothing |
+| `--reason` | string |  | why, in your own words, kept with each delete (required) |
+| `--yes` | bool |  | do not ask for the tenant's name to be typed |
 
 #### `nopacs correction edit`
 
@@ -603,6 +628,12 @@ Usage: `nopacs job list <tenant> [--state STATE]... [--in-progress] [--sender NA
 | `--state` | stringArray |  | only the jobs in this state; repeat to include more states |
 | `--until` | string |  | only jobs made before this time, written like --since |
 
+#### `nopacs job pause`
+
+Pause a batch delete job until it is resumed
+
+Usage: `nopacs job pause <tenant> <id>`
+
 #### `nopacs job rebuild`
 
 Build the catalog again from the storages: compare it, or replace the one in use
@@ -616,6 +647,12 @@ Usage: `nopacs job rebuild <tenant> --mode compare|replace [--from-storage NAME]
 | `--scratch-schema` | string |  | Postgres: the empty schema to build the shadow in; leave out on SQLite |
 | `--wait` | bool |  | follow the job until it ends, as "job watch" does, with its exit codes |
 | `--yes` | bool |  | confirm a replace without being asked |
+
+#### `nopacs job resume`
+
+Let a paused batch delete job go on
+
+Usage: `nopacs job resume <tenant> <id>`
 
 #### `nopacs job retry`
 

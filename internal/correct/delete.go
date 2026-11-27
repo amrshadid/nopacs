@@ -27,6 +27,10 @@ type DeleteRequest struct {
 	// that the session is due and not held (tenant.CorrectionPrepare). Nil
 	// for a person's delete.
 	Retention *tenant.RetentionOrigin
+	// Batch, for a delete a batch delete job makes, is the job and the
+	// target's place in it (tenant.CorrectionPrepare.Batch). Nil for a
+	// person's delete.
+	Batch *tenant.BatchOrigin
 	// OverrideRetention goes over a retention rule's keep-at-least, for
 	// OverrideReason; who may ask it is the caller's to check.
 	OverrideRetention bool
@@ -124,7 +128,7 @@ func (e *Engine) Delete(ctx context.Context, r DeleteRequest) (tenant.Correction
 		return tenant.Correction{}, err
 	}
 	c, made, err := e.cfg.Store.PrepareCorrection(ctx, tenant.CorrectionPrepare{ID: id, Kind: record.KindDelete, Target: r.Target,
-		Reason: r.Reason, Confirm: confirm, KeyID: r.KeyID, Retention: r.Retention, OverrideRetention: r.OverrideRetention,
+		Reason: r.Reason, Confirm: confirm, KeyID: r.KeyID, Retention: r.Retention, Batch: r.Batch, OverrideRetention: r.OverrideRetention,
 		OverrideReason: r.OverrideReason, Now: now}, r.Audit, r.Guard)
 	if err == nil && e.cfg.ConfirmKey != nil {
 		e.remember(r.Confirm, confirm, r.Target)

@@ -613,6 +613,46 @@ service JobService {
     option idempotency_level = IDEMPOTENT;
   }
 
+  // PauseJob pauses a queued or running job: it stays in its state, with
+  // Job.paused set, and starts no more work until ResumeJob; work already
+  // started finishes (for a batch delete, the delete of the target being
+  // met). Only a batch delete job (DeleteBatchJob) pauses in this version.
+  // A job already paused is answered as it stands. Stopping work is
+  // an operator's to ask, as a cancel is.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the job's id as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no job with that id; a tenant that does not
+  // exist, for a caller who may list every tenant), precondition (the job
+  // is of a kind that does not pause, or has ended; a tenant moved or
+  // fenced, with ErrorInfo reason TENANT_MOVED or TENANT_FENCED),
+  // unavailable (the tenant's database does not answer, or the tenant is
+  // not ready).
+  rpc PauseJob(PauseJobRequest) returns (PauseJobResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ResumeJob lets a paused job go on from where it stopped. A job not
+  // paused is answered as it stands. A batch delete resumed deletes again,
+  // so it needs what the batch needed.
+  //
+  // Role: admin on the tenant, never a masked key: a person decides how
+  // much of the archive goes at once.
+  // Audit: one entry in the tenant's log, with the job's id as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant; a masked
+  // key, which never deletes in bulk), invalid, not found (the tenant has no
+  // job with that id; a tenant that does not exist, for a caller who may
+  // list every tenant), precondition (the job is of a kind that does not
+  // pause, or has ended; a tenant moved or fenced, with ErrorInfo reason
+  // TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database does
+  // not answer, or the tenant is not ready).
+  rpc ResumeJob(ResumeJobRequest) returns (ResumeJobResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
   // RetryJob sends again what an ended job did not send: its refused
   // instances and those it never sent, once their cause is mended (a peer
   // that takes the SOP class now, say). The ended job stays as it is, with
@@ -1037,6 +1077,26 @@ message DisposeJob {
   bool scheduled = 4;
 }
 
+// DeleteBatchJob is a job that deletes many subjects, sessions or scans,
+// one at a time in the order given, each by an ordinary delete with the
+// job's reason (CorrectionService.DeleteBatch, which makes it; never
+// CreateJob). Its counts read: scans, the targets; scans_done, those met;
+// instances and bytes sent, those of the targets deleted; refused, those
+// of the targets skipped. Its tallies count the targets by outcome
+// ("deleted", "skipped|held", "skipped|kept", "skipped|changed",
+// "skipped|gone", "skipped|overlap", "skipped|refused");
+// CorrectionService.ListDeleteBatchTargets names each. It ends done when
+// every target was deleted, partial when any was skipped, and failed,
+// with its reason, when the key that made it may no longer delete.
+message DeleteBatchJob {
+  // The reason each delete carries, the person's own words. Never a value
+  // read from a file.
+  string reason = 1;
+
+  // The targets it was made to delete.
+  int64 targets = 2;
+}
+
 // ImportJob is a job that hands the files of a directory under an import
 // receiver's root to that receiver (ImportReceiver).
 message ImportJob {
@@ -1352,6 +1412,9 @@ message Job {
 
     // A retention rule's due sessions deleted.
     DisposeJob dispose = 21;
+
+    // Many subjects, sessions or scans deleted with one reason.
+    DeleteBatchJob delete_batch = 22;
   }
 
   // Where it is.
@@ -1407,6 +1470,10 @@ message Job {
   // import's "superseded_revision").
   // Answered by GetJob alone; empty in every other answer.
   repeated JobTally tallies = 15;
+
+  // Whether a person paused it (PauseJob): it stays queued or running and
+  // starts no more work until ResumeJob. False for a job that ended.
+  bool paused = 23;
 }
 
 // JobFailureCode is why an instance of a job was refused, or that it was
@@ -1674,6 +1741,36 @@ message CancelJobRequest {
 // CancelJobResponse is the job canceled.
 message CancelJobResponse {
   // The job, canceled.
+  Job job = 1;
+}
+
+// PauseJobRequest names the job to pause.
+message PauseJobRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The job's id. Required; at most 64 bytes.
+  string id = 2;
+}
+
+// PauseJobResponse is the job paused.
+message PauseJobResponse {
+  // The job, paused.
+  Job job = 1;
+}
+
+// ResumeJobRequest names the job to resume.
+message ResumeJobRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The job's id. Required; at most 64 bytes.
+  string id = 2;
+}
+
+// ResumeJobResponse is the job resumed.
+message ResumeJobResponse {
+  // The job, no longer paused.
   Job job = 1;
 }
 

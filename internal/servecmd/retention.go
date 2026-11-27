@@ -373,36 +373,20 @@ func (d *disposerRefused) reason() string {
 // demoted since. The daily pass's jobs, made by no key, and the local
 // operator's need none: nil.
 func (r *tenantRetention) disposerGuard(ctx context.Context, dj tenant.DisposeJob) (tenant.Guard, error) {
-	keyID := dj.Job.CreatedByKeyID
-	if dj.Scheduled || keyID == "" {
+	if dj.Scheduled || dj.Job.CreatedByKeyID == "" {
 		return nil, nil
 	}
-	tenantID, err := r.w.tenantID(ctx, r.name)
-	if err != nil {
-		return nil, err
+	g, err := r.w.keyGuard(ctx, r.name, dj.Job.CreatedByKeyID)
+	if err != nil || g == nil {
+		return g, err
 	}
-	by := master.ActingKey(keyID, master.TenantScope(tenantID), master.RoleAdmin, r.w.now)
 	return func(ctx context.Context) error {
-		err := r.w.d.Master.CheckActor(ctx, by)
-		if ref, ok := master.RefusalOf(err); ok {
-			return &disposerRefused{why: ref.Reason, err: err}
+		err := g(ctx)
+		var refused *correct.KeyRefused
+		if errors.As(err, &refused) {
+			return &disposerRefused{why: refused.Why, err: refused.Err}
 		}
-		if err != nil {
-			return err
-		}
-		// A suspended key is refused by the access check, not by
-		// CheckActor: a restore suspends every key it brings back until
-		// the local operator reinstates them.
-		k, err := r.w.d.Master.Key(ctx, keyID)
-		switch {
-		case fault.KindOf(err) == fault.NotFound:
-			return &disposerRefused{why: master.RefusedUnknownKey, err: err}
-		case err != nil:
-			return err
-		case !k.Suspended.IsZero():
-			return &disposerRefused{why: "key suspended", err: fault.New(fault.Unauthenticated, "the acting key is suspended")}
-		}
-		return nil
+		return err
 	}, nil
 }
 

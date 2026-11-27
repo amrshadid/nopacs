@@ -180,6 +180,27 @@ scan, keeps it whole, and serves it through an API with keys.
   restore adopts an edit with what its publish owns, and a scrub expects what
   an edit keeps. A replace or an edit rolled back after a reception committed
   its scan keeps the digests of what the rollback wrote.
+- Batch delete (`CorrectionService.DeleteBatch`, `nopacs correction
+  delete-batch <tenant> (--file LIST | --from-search QUERY) --reason TEXT
+  [--preview]`): up to the tenant's `correction.batch-max` (10000) subjects,
+  sessions or scans with one reason. One preview lists every target with its
+  holds, retention minimums, replicas and senders under one token, bound to
+  the targets, their order, the reason and what each held. Confirmed, a job
+  of kind `delete_batch` deletes each target in turn by an ordinary delete
+  (records, grace, undo, purge on every copy), and skips, never forces, a
+  target held, kept by a rule, changed since the preview, gone, or held by
+  another correction, each with its reason (`ListDeleteBatchTargets`,
+  `nopacs correction batch-targets`). It is followed, paused, resumed and
+  canceled like other jobs (`JobService.PauseJob` and `ResumeJob`,
+  `Job.paused`; `nopacs job pause|resume`); a restart goes on where it
+  stopped and never deletes a target twice, two runners of one job never
+  record a deleted target as skipped, and a storage that keeps failing is
+  tried again after a wait that doubles from 5 seconds to 10 minutes. One
+  batch runs per tenant at a time, and a masked key is refused. A delete's
+  confirm token, and each batch target's check, also name the catalog's rows
+  the delete takes and each scan's manifest checksum, so sessions of the
+  same size swapped by relabels, or an instance replaced or edited, never
+  pass as the data a person previewed.
 - Scrub jobs read every stored object back against its checksum. Rebuild
   jobs make a tenant's catalog again from its storages into a shadow
   catalog, reading each correction record as the tenant's database says it

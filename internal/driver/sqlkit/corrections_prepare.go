@@ -400,6 +400,13 @@ func (k Sending) prepareDelete(ctx context.Context, tx SendingTx, p tenant.Corre
 			return err
 		}
 	}
+	// A batch's delete likewise: its job canceled or paused, or its target
+	// met already, refuses it whatever else would.
+	if p.Batch != nil {
+		if err := k.checkBatchTarget(ctx, tx, p); err != nil {
+			return err
+		}
+	}
 	if err := checkOverlap(ctx, tx, p.Target.Path(), p.ID); err != nil {
 		return err
 	}
@@ -425,6 +432,11 @@ func (k Sending) prepareDelete(ctx context.Context, tx SendingTx, p tenant.Corre
 	}
 	if err := k.markRetention(ctx, tx, p); err != nil {
 		return err
+	}
+	if p.Batch != nil {
+		if err := recordBatchDelete(ctx, tx, p); err != nil {
+			return err
+		}
 	}
 	return writeDeletedTargets(ctx, tx, p.ID, p.Target, r)
 }

@@ -75,6 +75,10 @@ func jobMessage(j tenant.Job, held string) *v1.Job {
 		// Its rule and reason are the dispose job's own rows
 		// (disposeJobMessage), which a view reads.
 		m.Kind = &v1.Job_Dispose{Dispose: &v1.DisposeJob{}}
+	case tenant.JobDeleteBatch:
+		// Its reason and whether it is paused are the batch job's own rows,
+		// which a view reads.
+		m.Kind = &v1.Job_DeleteBatch{DeleteBatch: &v1.DeleteBatchJob{}}
 	}
 	return m
 }

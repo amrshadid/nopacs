@@ -95,6 +95,8 @@ func jobRow(j *v1.Job, when string) row {
 		by, what = "repair", "storage "+k.Repair.GetStorage()
 	case *v1.Job_Dispose:
 		by, what = "dispose", "rule "+k.Dispose.GetRule()
+	case *v1.Job_DeleteBatch:
+		by, what = "delete batch", itoa(k.DeleteBatch.GetTargets())+" targets"
 	}
 	return row{cells: []string{j.GetId(), by, what, output.JobState(j.GetState()),
 		output.JobBar(cn, 22) + " " + itoa(int64(output.JobPercent(cn))) + "%", itoa(cn.GetInstancesSent() + cn.GetInstancesWarned()), itoa(cn.GetInstancesRefused()), when}, ref: j}

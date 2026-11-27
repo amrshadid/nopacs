@@ -1024,7 +1024,7 @@ CREATE TABLE jobs (
     profile_version     integer     NOT NULL DEFAULT 0,
     CONSTRAINT jobs_pkey PRIMARY KEY (id),
     CONSTRAINT jobs_key UNIQUE (unique_key),
-    CONSTRAINT jobs_kind_check CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose')),
+    CONSTRAINT jobs_kind_check CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch')),
     CONSTRAINT jobs_state_check CHECK (state IN ('queued', 'running', 'done', 'partial', 'failed', 'canceled')),
     CONSTRAINT jobs_scans_check CHECK (scans >= 0 AND scans_done >= 0 AND scans_done <= scans),
     CONSTRAINT jobs_counts_check CHECK (sent >= 0 AND warned >= 0 AND refused >= 0 AND sent + warned + refused <= instances),
@@ -2294,3 +2294,39 @@ CREATE TABLE dispose_sessions (
 );
 
 CREATE UNIQUE INDEX dispose_sessions_by_study ON dispose_sessions (job_id, study_uid);
+
+
+-- A batch delete job's own part: the reason every delete carries, the
+-- confirm token of the preview it was made from, used once, and whether a
+-- person paused it.
+CREATE TABLE delete_batch_jobs (
+    job_id        text    COLLATE "C" NOT NULL,
+    reason        text    NOT NULL,
+    confirm_token text    COLLATE "C" NOT NULL,
+    paused        boolean NOT NULL,
+    CONSTRAINT delete_batch_jobs_pkey PRIMARY KEY (job_id)
+);
+
+CREATE UNIQUE INDEX delete_batch_jobs_by_confirm ON delete_batch_jobs (confirm_token);
+
+-- The targets of a batch delete job, in the order given: each one's
+-- labels, the digest of its delete preview when the job was made, what it
+-- held then, what became of it ('' before it is reached) and the delete
+-- made for it ('' for none), which the delete's prepare writes in its own
+-- transaction, so a restart finds it and never makes a second.
+CREATE TABLE delete_batch_targets (
+    job_id        text   COLLATE "C" NOT NULL,
+    ord           bigint NOT NULL,
+    subject_label text   COLLATE "C" NOT NULL,
+    session_label text   COLLATE "C" NOT NULL,
+    scan_label    text   COLLATE "C" NOT NULL,
+    fingerprint   text   COLLATE "C" NOT NULL,
+    instances     bigint NOT NULL,
+    bytes         bigint NOT NULL,
+    outcome       text   COLLATE "C" NOT NULL,
+    correction_id text   COLLATE "C" NOT NULL,
+    CONSTRAINT delete_batch_targets_pkey PRIMARY KEY (job_id, ord),
+    CONSTRAINT delete_batch_targets_counts_check CHECK (ord >= 1 AND instances >= 0 AND bytes >= 0),
+    CONSTRAINT delete_batch_targets_outcome_check CHECK (outcome IN ('', 'deleted', 'skipped|held', 'skipped|kept',
+        'skipped|changed', 'skipped|gone', 'skipped|overlap', 'skipped|refused'))
+);

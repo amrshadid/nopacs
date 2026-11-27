@@ -46,7 +46,7 @@ Every command takes the tenant first. Deleting, relabeling, replacing, editing,
 undoing, purging and allowing need the admin role on the tenant; listing and
 showing need operator. Each reason is 1 to 1024 bytes, in your own words, never
 a value read from a file.`,
-		a.newCorrectionDelete(), a.newCorrectionRelabel(), a.newCorrectionReplace(), a.newCorrectionEdit(), a.newCorrectionList(),
+		a.newCorrectionDelete(), a.newCorrectionDeleteBatch(), a.newCorrectionBatchTargets(), a.newCorrectionRelabel(), a.newCorrectionReplace(), a.newCorrectionEdit(), a.newCorrectionList(),
 		a.newCorrectionShow(), a.newCorrectionUndo(), a.newCorrectionPurge(), a.newCorrectionAllow())
 }
 

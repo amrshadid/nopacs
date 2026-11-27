@@ -197,8 +197,9 @@ func HoldTarget(t *v1.HoldTarget) string {
 	return strings.Join(parts, "/")
 }
 
-// ReplicationJobPairs lists what a replicate, repair or dispose job does as
-// labeled values, and nothing for a job of another kind. Text the server sent
+// ReplicationJobPairs lists what a replicate, repair, dispose or batch
+// delete job does as labeled values, and nothing for a job of another kind.
+// Text the server sent
 // (a storage name, a reason) is cleaned.
 func ReplicationJobPairs(j *v1.Job) []Pair {
 	switch k := j.GetKind().(type) {
@@ -244,6 +245,17 @@ func ReplicationJobPairs(j *v1.Job) []Pair {
 			{Label: "Sessions", Value: strconv.FormatInt(d.GetSessions(), 10)},
 			{Label: "Disposal reason", Value: Clean(strings.TrimSpace(d.GetReason()))},
 			{Label: "Origin", Value: how},
+		}
+	case *v1.Job_DeleteBatch:
+		b := k.DeleteBatch
+		paused := "no"
+		if j.GetPaused() {
+			paused = "yes (job resume goes on)"
+		}
+		return []Pair{
+			{Label: "Deletes", Value: strconv.FormatInt(b.GetTargets(), 10) + " targets, one at a time"},
+			{Label: "Delete reason", Value: Clean(strings.TrimSpace(b.GetReason()))},
+			{Label: "Paused", Value: paused},
 		}
 	}
 	return nil
