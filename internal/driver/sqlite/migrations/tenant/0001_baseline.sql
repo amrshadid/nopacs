@@ -1319,7 +1319,7 @@ CREATE TABLE rebuild_differences (
 -- delete's publish ended can still land: the purge removes nothing before it.
 CREATE TABLE corrections (
     id                 TEXT    NOT NULL PRIMARY KEY CHECK (length(id) = 26),
-    kind               TEXT    NOT NULL CHECK (kind IN ('delete', 'relabel', 'replace')),
+    kind               TEXT    NOT NULL CHECK (kind IN ('delete', 'relabel', 'replace', 'edit')),
     level              TEXT    NOT NULL CHECK (level IN ('subject', 'session', 'scan', 'instance')),
     state              TEXT    NOT NULL CHECK (state IN ('prepared', 'committed', 'purging', 'purged', 'undone', 'abandoned')),
     records_state      TEXT    NOT NULL,
@@ -1529,6 +1529,43 @@ CREATE TABLE instance_revisions (
 ) STRICT, WITHOUT ROWID;
 
 CREATE INDEX instance_revisions_by_correction ON instance_revisions (correction_id);
+
+-- An edit's instances: each one's revision and archived checksum when the
+-- edit read it, its line of the scan's metadata then (written back by a
+-- stop before the publish and by an undo, and cleared once the edit ends),
+-- and the new revision it wrote (new_sha256 set by the publish). The new
+-- revision is above every revision the instance was ever given (an undone
+-- edit's among them), so no two corrections name one key. new_line is the
+-- new revision's line from the publish until the edit ends, which an undo
+-- that may not be published writes back.
+CREATE TABLE correction_edits (
+    correction_id    TEXT    NOT NULL,
+    sop_instance_uid TEXT    NOT NULL,
+    series_uid       TEXT    NOT NULL,
+    old_revision     INTEGER NOT NULL CHECK (old_revision >= 1),
+    new_revision     INTEGER NOT NULL CHECK (new_revision > old_revision),
+    old_sha256       BLOB    NOT NULL CHECK (length(old_sha256) = 32),
+    new_sha256       BLOB CHECK (new_sha256 IS NULL OR length(new_sha256) = 32),
+    old_key          TEXT    NOT NULL,
+    old_size         INTEGER NOT NULL CHECK (old_size >= 0),
+    new_size         INTEGER NOT NULL CHECK (new_size >= 0),
+    restore_line     BLOB,
+    new_line         BLOB,
+    PRIMARY KEY (correction_id, sop_instance_uid)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX correction_edits_by_instance ON correction_edits (sop_instance_uid);
+
+-- The catalog values of each scan an edit touches as they were before it,
+-- which its undo gives back.
+CREATE TABLE correction_edit_scans (
+    correction_id      TEXT    NOT NULL,
+    series_uid         TEXT    NOT NULL,
+    modality           TEXT    NOT NULL,
+    series_description TEXT    NOT NULL,
+    series_number      INTEGER,
+    PRIMARY KEY (correction_id, series_uid)
+) STRICT, WITHOUT ROWID;
 
 -- A relabel's labels, before and after, at its level.
 CREATE TABLE relabels (

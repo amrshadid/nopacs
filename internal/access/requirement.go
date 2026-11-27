@@ -30,6 +30,20 @@ type Requirement struct {
 	// destination says the request chooses where archived data goes,
 	// which a masked key is refused.
 	destination bool
+	// writes says the request writes values of its own into archived
+	// files, which a masked key is refused.
+	writes bool
+}
+
+// WritesValues returns r for a request that writes values the caller
+// chooses into archived files (an edit of header values). Check refuses it
+// to a masked key, once the key's grant is found to suffice, as Denied
+// with MessageMaskedWrite, and records the refusal: the service that holds
+// such a key is outside the site, and what the archive's files say is a
+// person's choice, never that service's. For any other caller it is r.
+func (r Requirement) WritesValues() Requirement {
+	r.writes = true
+	return r
 }
 
 // ChoosesDestination returns r for a request that decides where the

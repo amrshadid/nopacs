@@ -63,6 +63,7 @@ func newTestEngines(t testing.TB, e *env) *correct.Engines {
 			cfg := correct.Config{
 				TenantID:   tr.ID,
 				Keys:       e.keys,
+				Judge:      passEdits{},
 				Grace:      values.OnTenant(cs.(settingvalue.Source)).DeleteGrace,
 				ConfirmKey: key,
 				OpenStorage: func(ctx context.Context, storage string) (blob.Store, error) {
@@ -107,6 +108,13 @@ func newTestEngines(t testing.TB, e *env) *correct.Engines {
 	})
 	return es
 }
+
+// passEdits passes every new revision an edit writes: the API's tests are
+// of the contract, and the engine's own tests judge edits by a profile.
+type passEdits struct{}
+
+// JudgeEdit passes the file.
+func (passEdits) JudgeEdit(context.Context, correct.EditedFile) error { return nil }
 
 // testReplaceSources makes a replace's file through lab1's running
 // pipeline, once a test runs one (env.pipe).

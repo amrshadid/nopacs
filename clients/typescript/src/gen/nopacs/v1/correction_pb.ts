@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/correction.proto.
  */
 export const file_nopacs_v1_correction: GenFile = /*@__PURE__*/
-  fileDesc("Chpub3BhY3MvdjEvY29ycmVjdGlvbi5wcm90bxIJbm9wYWNzLnYxImkKEENvcnJlY3Rpb25UYXJnZXQSFQoNc3ViamVjdF9sYWJlbBgBIAEoCRIVCg1zZXNzaW9uX2xhYmVsGAIgASgJEhIKCnNjYW5fbGFiZWwYAyABKAkSEwoLaW5zdGFuY2VfaWQYBCABKAkihAIKElN0b3JhZ2VEaXNwb3NpdGlvbhIPCgdzdG9yYWdlGAEgASgJEhcKD29iamVjdHNfcmVtb3ZlZBgCIAEoAxIWCg5vYmplY3RzX2hpZGRlbhgDIAEoAxIYChBvYmplY3RzX3JldGFpbmVkGAQgASgDEhcKD29iamVjdHNfdW5rbm93bhgFIAEoAxIYChB2ZXJzaW9uc19yZW1vdmVkGAYgASgDEjAKDHJldGFpbl91bnRpbBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKcmVwbGljYV9vZhgIIAEoCRIZChFzd2l0Y2hfZ2VuZXJhdGlvbhgJIAEoAyJwCgxTdG9yYWdlUHVyZ2USDwoHc3RvcmFnZRgBIAEoCRIuCghleHBlY3RlZBgCIAEoDjIcLm5vcGFjcy52MS5PYmplY3REaXNwb3NpdGlvbhILCgN3aHkYAyABKAkSEgoKcmVwbGljYV9vZhgEIAEoCSL4AQoQQ29ycmVjdGlvbkNvdW50cxIQCghzdWJqZWN0cxgBIAEoAxIQCghzZXNzaW9ucxgCIAEoAxINCgVzY2FucxgDIAEoAxIRCglpbnN0YW5jZXMYBCABKAMSDQoFYnl0ZXMYBSABKAMSFwoPb2JqZWN0c19yZW1vdmVkGAYgASgDEhUKDWJ5dGVzX3JlbW92ZWQYByABKAMSFgoOb2JqZWN0c19jb3BpZWQYCCABKAMSGgoSb2JqZWN0c19zdXBlcnNlZGVkGAkgASgDEhQKDG9iamVjdHNfa2VwdBgKIAEoAxIVCg1vYmplY3RzX293bmVkGAsgASgDIkIKCUhlbGRWYWx1ZRImCgRraW5kGAEgASgOMhgubm9wYWNzLnYxLkhlbGRWYWx1ZUtpbmQSDQoFdmFsdWUYAiABKAkiYQoIUGVlckNvcHkSDgoGc2VuZGVyGAEgASgJEhEKCWluc3RhbmNlcxgCIAEoAxIyCg5sYXN0X3NlbmRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAixAMKDURlbGV0ZVByZXZpZXcSKwoGY291bnRzGAEgASgLMhsubm9wYWNzLnYxLkNvcnJlY3Rpb25Db3VudHMSEAoIc3RvcmFnZXMYAiADKAkSJAoHc2VudF90bxgDIAMoCzITLm5vcGFjcy52MS5QZWVyQ29weRIMCgRqb2JzGAQgAygJEhcKD2pvYnNfbm90X2xpc3RlZBgFIAEoAxIPCgdjb25maXJtGAYgASgJEi4KCnB1cmdlX3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KDnN0b3JhZ2VfcHVyZ2VzGAggAygLMhcubm9wYWNzLnYxLlN0b3JhZ2VQdXJnZRINCgVob2xkcxgJIAMoCRIeChZzZXNzaW9uc191bmRlcl9taW5pbXVtGAogASgDEi4KCmtlZXBfdW50aWwYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC3F1YXJhbnRpbmVkGAwgASgDEhIKCnJlY2VwdGlvbnMYDSABKAMSGAoQaGVsZF9hZnRlcl9wdXJnZRgOIAMoCRITCgt0ZW5hbnRfam9icxgPIAEoAyLyBwoKQ29ycmVjdGlvbhIKCgJpZBgBIAEoCRInCgRraW5kGAIgASgOMhkubm9wYWNzLnYxLkNvcnJlY3Rpb25LaW5kEikKBXN0YXRlGAMgASgOMhoubm9wYWNzLnYxLkNvcnJlY3Rpb25TdGF0ZRIrCgZ0YXJnZXQYBCABKAsyGy5ub3BhY3MudjEuQ29ycmVjdGlvblRhcmdldBIQCgh0b19sYWJlbBgFIAEoCRIYChBxdWFyYW50aW5lZF9maWxlGAYgASgJEg4KBnJlYXNvbhgHIAEoCRIZChFjcmVhdGVkX2J5X2tleV9pZBgIIAEoCRIvCgtjcmVhdGVfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcHVyZ2VfdGltZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNvdW50cxgMIAEoCzIbLm5vcGFjcy52MS5Db3JyZWN0aW9uQ291bnRzEiQKB3NlbnRfdG8YDSADKAsyEy5ub3BhY3MudjEuUGVlckNvcHkSFAoMc3RhdGVfcmVhc29uGA4gASgJEhIKCm9sZF9zaGEyNTYYDyABKAkSEgoKbmV3X3NoYTI1NhgQIAEoCRIYChBhcnJpdmFsc19hbGxvd2VkGBEgASgIEhMKC3VuZG9fcmVhc29uGBIgASgJEhQKDG9sZF9yZXZpc2lvbhgTIAEoBRIUCgxuZXdfcmV2aXNpb24YFCABKAUSLwoLY29tbWl0X3RpbWUYFSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKDGRpc3Bvc2l0aW9ucxgWIAMoCzIdLm5vcGFjcy52MS5TdG9yYWdlRGlzcG9zaXRpb24SEgoKdW5yZXNvbHZlZBgXIAEoCBIrCgZvcmlnaW4YGCABKA4yGy5ub3BhY3MudjEuQ29ycmVjdGlvbk9yaWdpbhIWCg5yZXRlbnRpb25fcnVsZRgZIAEoCRI2ChJyZXRlbnRpb25fZHVlX3RpbWUYGiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhoKEm92ZXJyaWRlX3JldGVudGlvbhgbIAEoCBIXCg9vdmVycmlkZV9yZWFzb24YHCABKAkSCwoDam9iGB0gASgJEhgKEGNvcGllc19hYmFuZG9uZWQYHiADKAkSIwoFaG9sZHMYHyADKAsyFC5ub3BhY3MudjEuSGVsZFZhbHVlEg0KBXN3ZXB0GCAgASgIIrkBCg1EZWxldGVSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIrCgZ0YXJnZXQYAiABKAsyGy5ub3BhY3MudjEuQ29ycmVjdGlvblRhcmdldBIOCgZyZWFzb24YAyABKAkSFQoNdmFsaWRhdGVfb25seRgEIAEoCBIPCgdjb25maXJtGAUgASgJEhoKEm92ZXJyaWRlX3JldGVudGlvbhgGIAEoCBIXCg9vdmVycmlkZV9yZWFzb24YByABKAkiZgoORGVsZXRlUmVzcG9uc2USKQoHcHJldmlldxgBIAEoCzIYLm5vcGFjcy52MS5EZWxldGVQcmV2aWV3EikKCmNvcnJlY3Rpb24YAiABKAsyFS5ub3BhY3MudjEuQ29ycmVjdGlvbiJvCg5SZWxhYmVsUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSKwoGdGFyZ2V0GAIgASgLMhsubm9wYWNzLnYxLkNvcnJlY3Rpb25UYXJnZXQSEAoIdG9fbGFiZWwYAyABKAkSDgoGcmVhc29uGAQgASgJIjwKD1JlbGFiZWxSZXNwb25zZRIpCgpjb3JyZWN0aW9uGAEgASgLMhUubm9wYWNzLnYxLkNvcnJlY3Rpb24iSgoOUmVwbGFjZVJlcXVlc3QSDgoGdGVuYW50GAEgASgJEhgKEHF1YXJhbnRpbmVkX2ZpbGUYAiABKAkSDgoGcmVhc29uGAMgASgJIjwKD1JlcGxhY2VSZXNwb25zZRIpCgpjb3JyZWN0aW9uGAEgASgLMhUubm9wYWNzLnYxLkNvcnJlY3Rpb24i0wEKFkxpc3RDb3JyZWN0aW9uc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEigKBWtpbmRzGAIgAygOMhkubm9wYWNzLnYxLkNvcnJlY3Rpb25LaW5kEioKBnN0YXRlcxgDIAMoDjIaLm5vcGFjcy52MS5Db3JyZWN0aW9uU3RhdGUSEQoJcGFnZV9zaXplGAQgASgFEhIKCnBhZ2VfdG9rZW4YBSABKAkSLAoHb3JpZ2lucxgGIAMoDjIbLm5vcGFjcy52MS5Db3JyZWN0aW9uT3JpZ2luIl4KF0xpc3RDb3JyZWN0aW9uc1Jlc3BvbnNlEioKC2NvcnJlY3Rpb25zGAEgAygLMhUubm9wYWNzLnYxLkNvcnJlY3Rpb24SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjIKFEdldENvcnJlY3Rpb25SZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIKCgJpZBgCIAEoCSJCChVHZXRDb3JyZWN0aW9uUmVzcG9uc2USKQoKY29ycmVjdGlvbhgBIAEoCzIVLm5vcGFjcy52MS5Db3JyZWN0aW9uIkMKFVVuZG9Db3JyZWN0aW9uUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSCgoCaWQYAiABKAkSDgoGcmVhc29uGAMgASgJIkMKFlVuZG9Db3JyZWN0aW9uUmVzcG9uc2USKQoKY29ycmVjdGlvbhgBIAEoCzIVLm5vcGFjcy52MS5Db3JyZWN0aW9uIjQKFlB1cmdlQ29ycmVjdGlvblJlcXVlc3QSDgoGdGVuYW50GAEgASgJEgoKAmlkGAIgASgJIkQKF1B1cmdlQ29ycmVjdGlvblJlc3BvbnNlEikKCmNvcnJlY3Rpb24YASABKAsyFS5ub3BhY3MudjEuQ29ycmVjdGlvbiJnChRBbGxvd0Fycml2YWxzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSCgoCaWQYAiABKAkSDgoGcmVhc29uGAMgASgJEiMKBXZhbHVlGAQgASgLMhQubm9wYWNzLnYxLkhlbGRWYWx1ZSJCChVBbGxvd0Fycml2YWxzUmVzcG9uc2USKQoKY29ycmVjdGlvbhgBIAEoCzIVLm5vcGFjcy52MS5Db3JyZWN0aW9uIpMECgxTY3J1YkZpbmRpbmcSCgoCaWQYASABKAkSKQoEa2luZBgCIAEoDjIbLm5vcGFjcy52MS5TY3J1YkZpbmRpbmdLaW5kEg8KB3N0b3JhZ2UYAyABKAkSCwoDa2V5GAQgASgJEhUKDXN1YmplY3RfbGFiZWwYBSABKAkSFQoNc2Vzc2lvbl9sYWJlbBgGIAEoCRISCgpzY2FuX2xhYmVsGAcgASgJEhMKC2luc3RhbmNlX2lkGAggASgJEhoKDWV4cGVjdGVkX3NpemUYCSABKANIAIgBARIXCgpmb3VuZF9zaXplGAogASgDSAGIAQESFwoPZXhwZWN0ZWRfc2hhMjU2GAsgASgJEhQKDGZvdW5kX3NoYTI1NhgMIAEoCRILCgNqb2IYDSABKAkSLQoJZmluZF90aW1lGA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpjbGVhcl90aW1lGA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgljbGVhcl9qb2IYECABKAkSEAoIcmV2aXNpb24YESABKAUSEgoKcmVwbGljYV9vZhgSIAEoCRISCgpyZXBhaXJfam9iGBMgASgJEhkKEXN3aXRjaF9nZW5lcmF0aW9uGBQgASgDQhAKDl9leHBlY3RlZF9zaXplQg0KC19mb3VuZF9zaXplIqcBChhMaXN0U2NydWJGaW5kaW5nc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEioKBWtpbmRzGAIgAygOMhsubm9wYWNzLnYxLlNjcnViRmluZGluZ0tpbmQSDwoHc3RvcmFnZRgDIAEoCRIXCg9pbmNsdWRlX2NsZWFyZWQYBCABKAgSEQoJcGFnZV9zaXplGAUgASgFEhIKCnBhZ2VfdG9rZW4YBiABKAkiXwoZTGlzdFNjcnViRmluZGluZ3NSZXNwb25zZRIpCghmaW5kaW5ncxgBIAMoCzIXLm5vcGFjcy52MS5TY3J1YkZpbmRpbmcSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjQKC0luc3RhbmNlUmVmEhMKC2luc3RhbmNlX2lkGAEgASgJEhAKCHJldmlzaW9uGAIgASgFIoMCChBSZXNvbHZlZEluc3RhbmNlEiYKBm1lbWJlchgBIAEoCzIWLm5vcGFjcy52MS5JbnN0YW5jZVJlZhIzCgtkaXNwb3NpdGlvbhgCIAEoDjIeLm5vcGFjcy52MS5JbnN0YW5jZURpc3Bvc2l0aW9uEhgKEGN1cnJlbnRfcmV2aXNpb24YAyABKAUSDgoGc2hhMjU2GAQgASgJEhIKCmNvcnJlY3Rpb24YBSABKAkSEgoKYnl0ZXNfa2VwdBgGIAEoCBIVCg1zdWJqZWN0X2xhYmVsGAcgASgJEhUKDXNlc3Npb25fbGFiZWwYCCABKAkSEgoKc2Nhbl9sYWJlbBgJIAEoCSJSChdSZXNvbHZlSW5zdGFuY2VzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSJwoHbWVtYmVycxgCIAMoCzIWLm5vcGFjcy52MS5JbnN0YW5jZVJlZiJKChhSZXNvbHZlSW5zdGFuY2VzUmVzcG9uc2USLgoJaW5zdGFuY2VzGAEgAygLMhsubm9wYWNzLnYxLlJlc29sdmVkSW5zdGFuY2UqhwEKDkNvcnJlY3Rpb25LaW5kEh8KG0NPUlJFQ1RJT05fS0lORF9VTlNQRUNJRklFRBAAEhoKFkNPUlJFQ1RJT05fS0lORF9ERUxFVEUQARIbChdDT1JSRUNUSU9OX0tJTkRfUkVMQUJFTBACEhsKF0NPUlJFQ1RJT05fS0lORF9SRVBMQUNFEAMqdAoQQ29ycmVjdGlvbk9yaWdpbhIhCh1DT1JSRUNUSU9OX09SSUdJTl9VTlNQRUNJRklFRBAAEhwKGENPUlJFQ1RJT05fT1JJR0lOX1BFUlNPThABEh8KG0NPUlJFQ1RJT05fT1JJR0lOX1JFVEVOVElPThACKuoBCg9Db3JyZWN0aW9uU3RhdGUSIAocQ09SUkVDVElPTl9TVEFURV9VTlNQRUNJRklFRBAAEh0KGUNPUlJFQ1RJT05fU1RBVEVfUFJFUEFSRUQQARIeChpDT1JSRUNUSU9OX1NUQVRFX0NPTU1JVFRFRBACEhwKGENPUlJFQ1RJT05fU1RBVEVfUFVSR0lORxADEhsKF0NPUlJFQ1RJT05fU1RBVEVfUFVSR0VEEAQSGwoXQ09SUkVDVElPTl9TVEFURV9VTkRPTkUQBRIeChpDT1JSRUNUSU9OX1NUQVRFX0FCQU5ET05FRBAGKrcBChFPYmplY3REaXNwb3NpdGlvbhIiCh5PQkpFQ1RfRElTUE9TSVRJT05fVU5TUEVDSUZJRUQQABIeChpPQkpFQ1RfRElTUE9TSVRJT05fUkVNT1ZFRBABEh0KGU9CSkVDVF9ESVNQT1NJVElPTl9ISURERU4QAhIfChtPQkpFQ1RfRElTUE9TSVRJT05fUkVUQUlORUQQAxIeChpPQkpFQ1RfRElTUE9TSVRJT05fVU5LTk9XThAEKqIBCg1IZWxkVmFsdWVLaW5kEh8KG0hFTERfVkFMVUVfS0lORF9VTlNQRUNJRklFRBAAEhsKF0hFTERfVkFMVUVfS0lORF9TVUJKRUNUEAESGQoVSEVMRF9WQUxVRV9LSU5EX1NUVURZEAISGgoWSEVMRF9WQUxVRV9LSU5EX1NFUklFUxADEhwKGEhFTERfVkFMVUVfS0lORF9JTlNUQU5DRRAEKuIBChBTY3J1YkZpbmRpbmdLaW5kEiIKHlNDUlVCX0ZJTkRJTkdfS0lORF9VTlNQRUNJRklFRBAAEh4KGlNDUlVCX0ZJTkRJTkdfS0lORF9NSVNTSU5HEAESHQoZU0NSVUJfRklORElOR19LSU5EX09SUEhBThACEh4KGlNDUlVCX0ZJTkRJTkdfS0lORF9EQU1BR0VEEAMSIgoeU0NSVUJfRklORElOR19LSU5EX0RJU0FHUkVFSU5HEAQSJwojU0NSVUJfRklORElOR19LSU5EX01BTklGRVNUX0RBTUFHRUQQBSrGAQoTSW5zdGFuY2VEaXNwb3NpdGlvbhIkCiBJTlNUQU5DRV9ESVNQT1NJVElPTl9VTlNQRUNJRklFRBAAEiAKHElOU1RBTkNFX0RJU1BPU0lUSU9OX0NVUlJFTlQQARIjCh9JTlNUQU5DRV9ESVNQT1NJVElPTl9TVVBFUlNFREVEEAISIAocSU5TVEFOQ0VfRElTUE9TSVRJT05fREVMRVRFRBADEiAKHElOU1RBTkNFX0RJU1BPU0lUSU9OX1VOS05PV04QBDL4BgoRQ29ycmVjdGlvblNlcnZpY2USQgoGRGVsZXRlEhgubm9wYWNzLnYxLkRlbGV0ZVJlcXVlc3QaGS5ub3BhY3MudjEuRGVsZXRlUmVzcG9uc2UiA5ACAhJFCgdSZWxhYmVsEhkubm9wYWNzLnYxLlJlbGFiZWxSZXF1ZXN0Ghoubm9wYWNzLnYxLlJlbGFiZWxSZXNwb25zZSIDkAICEkUKB1JlcGxhY2USGS5ub3BhY3MudjEuUmVwbGFjZVJlcXVlc3QaGi5ub3BhY3MudjEuUmVwbGFjZVJlc3BvbnNlIgOQAgISXQoPTGlzdENvcnJlY3Rpb25zEiEubm9wYWNzLnYxLkxpc3RDb3JyZWN0aW9uc1JlcXVlc3QaIi5ub3BhY3MudjEuTGlzdENvcnJlY3Rpb25zUmVzcG9uc2UiA5ACARJXCg1HZXRDb3JyZWN0aW9uEh8ubm9wYWNzLnYxLkdldENvcnJlY3Rpb25SZXF1ZXN0GiAubm9wYWNzLnYxLkdldENvcnJlY3Rpb25SZXNwb25zZSIDkAIBEloKDlVuZG9Db3JyZWN0aW9uEiAubm9wYWNzLnYxLlVuZG9Db3JyZWN0aW9uUmVxdWVzdBohLm5vcGFjcy52MS5VbmRvQ29ycmVjdGlvblJlc3BvbnNlIgOQAgISXQoPUHVyZ2VDb3JyZWN0aW9uEiEubm9wYWNzLnYxLlB1cmdlQ29ycmVjdGlvblJlcXVlc3QaIi5ub3BhY3MudjEuUHVyZ2VDb3JyZWN0aW9uUmVzcG9uc2UiA5ACAhJXCg1BbGxvd0Fycml2YWxzEh8ubm9wYWNzLnYxLkFsbG93QXJyaXZhbHNSZXF1ZXN0GiAubm9wYWNzLnYxLkFsbG93QXJyaXZhbHNSZXNwb25zZSIDkAICEmMKEUxpc3RTY3J1YkZpbmRpbmdzEiMubm9wYWNzLnYxLkxpc3RTY3J1YkZpbmRpbmdzUmVxdWVzdBokLm5vcGFjcy52MS5MaXN0U2NydWJGaW5kaW5nc1Jlc3BvbnNlIgOQAgESYAoQUmVzb2x2ZUluc3RhbmNlcxIiLm5vcGFjcy52MS5SZXNvbHZlSW5zdGFuY2VzUmVxdWVzdBojLm5vcGFjcy52MS5SZXNvbHZlSW5zdGFuY2VzUmVzcG9uc2UiA5ACAWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("Chpub3BhY3MvdjEvY29ycmVjdGlvbi5wcm90bxIJbm9wYWNzLnYxImkKEENvcnJlY3Rpb25UYXJnZXQSFQoNc3ViamVjdF9sYWJlbBgBIAEoCRIVCg1zZXNzaW9uX2xhYmVsGAIgASgJEhIKCnNjYW5fbGFiZWwYAyABKAkSEwoLaW5zdGFuY2VfaWQYBCABKAkihAIKElN0b3JhZ2VEaXNwb3NpdGlvbhIPCgdzdG9yYWdlGAEgASgJEhcKD29iamVjdHNfcmVtb3ZlZBgCIAEoAxIWCg5vYmplY3RzX2hpZGRlbhgDIAEoAxIYChBvYmplY3RzX3JldGFpbmVkGAQgASgDEhcKD29iamVjdHNfdW5rbm93bhgFIAEoAxIYChB2ZXJzaW9uc19yZW1vdmVkGAYgASgDEjAKDHJldGFpbl91bnRpbBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKcmVwbGljYV9vZhgIIAEoCRIZChFzd2l0Y2hfZ2VuZXJhdGlvbhgJIAEoAyJwCgxTdG9yYWdlUHVyZ2USDwoHc3RvcmFnZRgBIAEoCRIuCghleHBlY3RlZBgCIAEoDjIcLm5vcGFjcy52MS5PYmplY3REaXNwb3NpdGlvbhILCgN3aHkYAyABKAkSEgoKcmVwbGljYV9vZhgEIAEoCSL4AQoQQ29ycmVjdGlvbkNvdW50cxIQCghzdWJqZWN0cxgBIAEoAxIQCghzZXNzaW9ucxgCIAEoAxINCgVzY2FucxgDIAEoAxIRCglpbnN0YW5jZXMYBCABKAMSDQoFYnl0ZXMYBSABKAMSFwoPb2JqZWN0c19yZW1vdmVkGAYgASgDEhUKDWJ5dGVzX3JlbW92ZWQYByABKAMSFgoOb2JqZWN0c19jb3BpZWQYCCABKAMSGgoSb2JqZWN0c19zdXBlcnNlZGVkGAkgASgDEhQKDG9iamVjdHNfa2VwdBgKIAEoAxIVCg1vYmplY3RzX293bmVkGAsgASgDIkIKCUhlbGRWYWx1ZRImCgRraW5kGAEgASgOMhgubm9wYWNzLnYxLkhlbGRWYWx1ZUtpbmQSDQoFdmFsdWUYAiABKAkiYQoIUGVlckNvcHkSDgoGc2VuZGVyGAEgASgJEhEKCWluc3RhbmNlcxgCIAEoAxIyCg5sYXN0X3NlbmRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAixAMKDURlbGV0ZVByZXZpZXcSKwoGY291bnRzGAEgASgLMhsubm9wYWNzLnYxLkNvcnJlY3Rpb25Db3VudHMSEAoIc3RvcmFnZXMYAiADKAkSJAoHc2VudF90bxgDIAMoCzITLm5vcGFjcy52MS5QZWVyQ29weRIMCgRqb2JzGAQgAygJEhcKD2pvYnNfbm90X2xpc3RlZBgFIAEoAxIPCgdjb25maXJtGAYgASgJEi4KCnB1cmdlX3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KDnN0b3JhZ2VfcHVyZ2VzGAggAygLMhcubm9wYWNzLnYxLlN0b3JhZ2VQdXJnZRINCgVob2xkcxgJIAMoCRIeChZzZXNzaW9uc191bmRlcl9taW5pbXVtGAogASgDEi4KCmtlZXBfdW50aWwYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC3F1YXJhbnRpbmVkGAwgASgDEhIKCnJlY2VwdGlvbnMYDSABKAMSGAoQaGVsZF9hZnRlcl9wdXJnZRgOIAMoCRITCgt0ZW5hbnRfam9icxgPIAEoAyLyBwoKQ29ycmVjdGlvbhIKCgJpZBgBIAEoCRInCgRraW5kGAIgASgOMhkubm9wYWNzLnYxLkNvcnJlY3Rpb25LaW5kEikKBXN0YXRlGAMgASgOMhoubm9wYWNzLnYxLkNvcnJlY3Rpb25TdGF0ZRIrCgZ0YXJnZXQYBCABKAsyGy5ub3BhY3MudjEuQ29ycmVjdGlvblRhcmdldBIQCgh0b19sYWJlbBgFIAEoCRIYChBxdWFyYW50aW5lZF9maWxlGAYgASgJEg4KBnJlYXNvbhgHIAEoCRIZChFjcmVhdGVkX2J5X2tleV9pZBgIIAEoCRIvCgtjcmVhdGVfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcHVyZ2VfdGltZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNvdW50cxgMIAEoCzIbLm5vcGFjcy52MS5Db3JyZWN0aW9uQ291bnRzEiQKB3NlbnRfdG8YDSADKAsyEy5ub3BhY3MudjEuUGVlckNvcHkSFAoMc3RhdGVfcmVhc29uGA4gASgJEhIKCm9sZF9zaGEyNTYYDyABKAkSEgoKbmV3X3NoYTI1NhgQIAEoCRIYChBhcnJpdmFsc19hbGxvd2VkGBEgASgIEhMKC3VuZG9fcmVhc29uGBIgASgJEhQKDG9sZF9yZXZpc2lvbhgTIAEoBRIUCgxuZXdfcmV2aXNpb24YFCABKAUSLwoLY29tbWl0X3RpbWUYFSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKDGRpc3Bvc2l0aW9ucxgWIAMoCzIdLm5vcGFjcy52MS5TdG9yYWdlRGlzcG9zaXRpb24SEgoKdW5yZXNvbHZlZBgXIAEoCBIrCgZvcmlnaW4YGCABKA4yGy5ub3BhY3MudjEuQ29ycmVjdGlvbk9yaWdpbhIWCg5yZXRlbnRpb25fcnVsZRgZIAEoCRI2ChJyZXRlbnRpb25fZHVlX3RpbWUYGiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhoKEm92ZXJyaWRlX3JldGVudGlvbhgbIAEoCBIXCg9vdmVycmlkZV9yZWFzb24YHCABKAkSCwoDam9iGB0gASgJEhgKEGNvcGllc19hYmFuZG9uZWQYHiADKAkSIwoFaG9sZHMYHyADKAsyFC5ub3BhY3MudjEuSGVsZFZhbHVlEg0KBXN3ZXB0GCAgASgIIrkBCg1EZWxldGVSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIrCgZ0YXJnZXQYAiABKAsyGy5ub3BhY3MudjEuQ29ycmVjdGlvblRhcmdldBIOCgZyZWFzb24YAyABKAkSFQoNdmFsaWRhdGVfb25seRgEIAEoCBIPCgdjb25maXJtGAUgASgJEhoKEm92ZXJyaWRlX3JldGVudGlvbhgGIAEoCBIXCg9vdmVycmlkZV9yZWFzb24YByABKAkiZgoORGVsZXRlUmVzcG9uc2USKQoHcHJldmlldxgBIAEoCzIYLm5vcGFjcy52MS5EZWxldGVQcmV2aWV3EikKCmNvcnJlY3Rpb24YAiABKAsyFS5ub3BhY3MudjEuQ29ycmVjdGlvbiJvCg5SZWxhYmVsUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSKwoGdGFyZ2V0GAIgASgLMhsubm9wYWNzLnYxLkNvcnJlY3Rpb25UYXJnZXQSEAoIdG9fbGFiZWwYAyABKAkSDgoGcmVhc29uGAQgASgJIjwKD1JlbGFiZWxSZXNwb25zZRIpCgpjb3JyZWN0aW9uGAEgASgLMhUubm9wYWNzLnYxLkNvcnJlY3Rpb24iSgoOUmVwbGFjZVJlcXVlc3QSDgoGdGVuYW50GAEgASgJEhgKEHF1YXJhbnRpbmVkX2ZpbGUYAiABKAkSDgoGcmVhc29uGAMgASgJIjwKD1JlcGxhY2VSZXNwb25zZRIpCgpjb3JyZWN0aW9uGAEgASgLMhUubm9wYWNzLnYxLkNvcnJlY3Rpb24iPgoKRWRpdENoYW5nZRIRCglhdHRyaWJ1dGUYASABKAkSDQoFdmFsdWUYAiABKAkSDgoGcmVtb3ZlGAMgASgIIr8BCgtFZGl0UmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSKwoGdGFyZ2V0GAIgASgLMhsubm9wYWNzLnYxLkNvcnJlY3Rpb25UYXJnZXQSJgoHY2hhbmdlcxgDIAMoCzIVLm5vcGFjcy52MS5FZGl0Q2hhbmdlEg4KBnJlYXNvbhgEIAEoCRIVCg12YWxpZGF0ZV9vbmx5GAUgASgIEg8KB2NvbmZpcm0YBiABKAkSEwoLc2hvd192YWx1ZXMYByABKAgifwoURWRpdFByZXZpZXdBdHRyaWJ1dGUSEQoJYXR0cmlidXRlGAEgASgJEg8KB3ByZXNlbnQYAiABKAgSDQoFa25vd24YAyABKAgSEQoJb2xkX3ZhbHVlGAQgASgJEhEKCW5ld192YWx1ZRgFIAEoCRIOCgZyZW1vdmUYBiABKAgiswEKE0VkaXRQcmV2aWV3SW5zdGFuY2USFQoNc3ViamVjdF9sYWJlbBgBIAEoCRIVCg1zZXNzaW9uX2xhYmVsGAIgASgJEhIKCnNjYW5fbGFiZWwYAyABKAkSEwoLaW5zdGFuY2VfaWQYBCABKAkSEAoIcmV2aXNpb24YBSABKAUSMwoKYXR0cmlidXRlcxgGIAMoCzIfLm5vcGFjcy52MS5FZGl0UHJldmlld0F0dHJpYnV0ZSKTAQoLRWRpdFByZXZpZXcSMQoJaW5zdGFuY2VzGAEgAygLMh4ubm9wYWNzLnYxLkVkaXRQcmV2aWV3SW5zdGFuY2USEAoIc3RvcmFnZXMYAiADKAkSLgoKaXNzdWVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHY29uZmlybRgEIAEoCSJiCgxFZGl0UmVzcG9uc2USJwoHcHJldmlldxgBIAEoCzIWLm5vcGFjcy52MS5FZGl0UHJldmlldxIpCgpjb3JyZWN0aW9uGAIgASgLMhUubm9wYWNzLnYxLkNvcnJlY3Rpb24i0wEKFkxpc3RDb3JyZWN0aW9uc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEigKBWtpbmRzGAIgAygOMhkubm9wYWNzLnYxLkNvcnJlY3Rpb25LaW5kEioKBnN0YXRlcxgDIAMoDjIaLm5vcGFjcy52MS5Db3JyZWN0aW9uU3RhdGUSEQoJcGFnZV9zaXplGAQgASgFEhIKCnBhZ2VfdG9rZW4YBSABKAkSLAoHb3JpZ2lucxgGIAMoDjIbLm5vcGFjcy52MS5Db3JyZWN0aW9uT3JpZ2luIl4KF0xpc3RDb3JyZWN0aW9uc1Jlc3BvbnNlEioKC2NvcnJlY3Rpb25zGAEgAygLMhUubm9wYWNzLnYxLkNvcnJlY3Rpb24SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjIKFEdldENvcnJlY3Rpb25SZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIKCgJpZBgCIAEoCSJCChVHZXRDb3JyZWN0aW9uUmVzcG9uc2USKQoKY29ycmVjdGlvbhgBIAEoCzIVLm5vcGFjcy52MS5Db3JyZWN0aW9uIkMKFVVuZG9Db3JyZWN0aW9uUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSCgoCaWQYAiABKAkSDgoGcmVhc29uGAMgASgJIkMKFlVuZG9Db3JyZWN0aW9uUmVzcG9uc2USKQoKY29ycmVjdGlvbhgBIAEoCzIVLm5vcGFjcy52MS5Db3JyZWN0aW9uIjQKFlB1cmdlQ29ycmVjdGlvblJlcXVlc3QSDgoGdGVuYW50GAEgASgJEgoKAmlkGAIgASgJIkQKF1B1cmdlQ29ycmVjdGlvblJlc3BvbnNlEikKCmNvcnJlY3Rpb24YASABKAsyFS5ub3BhY3MudjEuQ29ycmVjdGlvbiJnChRBbGxvd0Fycml2YWxzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSCgoCaWQYAiABKAkSDgoGcmVhc29uGAMgASgJEiMKBXZhbHVlGAQgASgLMhQubm9wYWNzLnYxLkhlbGRWYWx1ZSJCChVBbGxvd0Fycml2YWxzUmVzcG9uc2USKQoKY29ycmVjdGlvbhgBIAEoCzIVLm5vcGFjcy52MS5Db3JyZWN0aW9uIpMECgxTY3J1YkZpbmRpbmcSCgoCaWQYASABKAkSKQoEa2luZBgCIAEoDjIbLm5vcGFjcy52MS5TY3J1YkZpbmRpbmdLaW5kEg8KB3N0b3JhZ2UYAyABKAkSCwoDa2V5GAQgASgJEhUKDXN1YmplY3RfbGFiZWwYBSABKAkSFQoNc2Vzc2lvbl9sYWJlbBgGIAEoCRISCgpzY2FuX2xhYmVsGAcgASgJEhMKC2luc3RhbmNlX2lkGAggASgJEhoKDWV4cGVjdGVkX3NpemUYCSABKANIAIgBARIXCgpmb3VuZF9zaXplGAogASgDSAGIAQESFwoPZXhwZWN0ZWRfc2hhMjU2GAsgASgJEhQKDGZvdW5kX3NoYTI1NhgMIAEoCRILCgNqb2IYDSABKAkSLQoJZmluZF90aW1lGA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpjbGVhcl90aW1lGA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgljbGVhcl9qb2IYECABKAkSEAoIcmV2aXNpb24YESABKAUSEgoKcmVwbGljYV9vZhgSIAEoCRISCgpyZXBhaXJfam9iGBMgASgJEhkKEXN3aXRjaF9nZW5lcmF0aW9uGBQgASgDQhAKDl9leHBlY3RlZF9zaXplQg0KC19mb3VuZF9zaXplIqcBChhMaXN0U2NydWJGaW5kaW5nc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEioKBWtpbmRzGAIgAygOMhsubm9wYWNzLnYxLlNjcnViRmluZGluZ0tpbmQSDwoHc3RvcmFnZRgDIAEoCRIXCg9pbmNsdWRlX2NsZWFyZWQYBCABKAgSEQoJcGFnZV9zaXplGAUgASgFEhIKCnBhZ2VfdG9rZW4YBiABKAkiXwoZTGlzdFNjcnViRmluZGluZ3NSZXNwb25zZRIpCghmaW5kaW5ncxgBIAMoCzIXLm5vcGFjcy52MS5TY3J1YkZpbmRpbmcSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjQKC0luc3RhbmNlUmVmEhMKC2luc3RhbmNlX2lkGAEgASgJEhAKCHJldmlzaW9uGAIgASgFIoMCChBSZXNvbHZlZEluc3RhbmNlEiYKBm1lbWJlchgBIAEoCzIWLm5vcGFjcy52MS5JbnN0YW5jZVJlZhIzCgtkaXNwb3NpdGlvbhgCIAEoDjIeLm5vcGFjcy52MS5JbnN0YW5jZURpc3Bvc2l0aW9uEhgKEGN1cnJlbnRfcmV2aXNpb24YAyABKAUSDgoGc2hhMjU2GAQgASgJEhIKCmNvcnJlY3Rpb24YBSABKAkSEgoKYnl0ZXNfa2VwdBgGIAEoCBIVCg1zdWJqZWN0X2xhYmVsGAcgASgJEhUKDXNlc3Npb25fbGFiZWwYCCABKAkSEgoKc2Nhbl9sYWJlbBgJIAEoCSJSChdSZXNvbHZlSW5zdGFuY2VzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSJwoHbWVtYmVycxgCIAMoCzIWLm5vcGFjcy52MS5JbnN0YW5jZVJlZiJKChhSZXNvbHZlSW5zdGFuY2VzUmVzcG9uc2USLgoJaW5zdGFuY2VzGAEgAygLMhsubm9wYWNzLnYxLlJlc29sdmVkSW5zdGFuY2UqoQEKDkNvcnJlY3Rpb25LaW5kEh8KG0NPUlJFQ1RJT05fS0lORF9VTlNQRUNJRklFRBAAEhoKFkNPUlJFQ1RJT05fS0lORF9ERUxFVEUQARIbChdDT1JSRUNUSU9OX0tJTkRfUkVMQUJFTBACEhsKF0NPUlJFQ1RJT05fS0lORF9SRVBMQUNFEAMSGAoUQ09SUkVDVElPTl9LSU5EX0VESVQQBCp0ChBDb3JyZWN0aW9uT3JpZ2luEiEKHUNPUlJFQ1RJT05fT1JJR0lOX1VOU1BFQ0lGSUVEEAASHAoYQ09SUkVDVElPTl9PUklHSU5fUEVSU09OEAESHwobQ09SUkVDVElPTl9PUklHSU5fUkVURU5USU9OEAIq6gEKD0NvcnJlY3Rpb25TdGF0ZRIgChxDT1JSRUNUSU9OX1NUQVRFX1VOU1BFQ0lGSUVEEAASHQoZQ09SUkVDVElPTl9TVEFURV9QUkVQQVJFRBABEh4KGkNPUlJFQ1RJT05fU1RBVEVfQ09NTUlUVEVEEAISHAoYQ09SUkVDVElPTl9TVEFURV9QVVJHSU5HEAMSGwoXQ09SUkVDVElPTl9TVEFURV9QVVJHRUQQBBIbChdDT1JSRUNUSU9OX1NUQVRFX1VORE9ORRAFEh4KGkNPUlJFQ1RJT05fU1RBVEVfQUJBTkRPTkVEEAYqtwEKEU9iamVjdERpc3Bvc2l0aW9uEiIKHk9CSkVDVF9ESVNQT1NJVElPTl9VTlNQRUNJRklFRBAAEh4KGk9CSkVDVF9ESVNQT1NJVElPTl9SRU1PVkVEEAESHQoZT0JKRUNUX0RJU1BPU0lUSU9OX0hJRERFThACEh8KG09CSkVDVF9ESVNQT1NJVElPTl9SRVRBSU5FRBADEh4KGk9CSkVDVF9ESVNQT1NJVElPTl9VTktOT1dOEAQqogEKDUhlbGRWYWx1ZUtpbmQSHwobSEVMRF9WQUxVRV9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXSEVMRF9WQUxVRV9LSU5EX1NVQkpFQ1QQARIZChVIRUxEX1ZBTFVFX0tJTkRfU1RVRFkQAhIaChZIRUxEX1ZBTFVFX0tJTkRfU0VSSUVTEAMSHAoYSEVMRF9WQUxVRV9LSU5EX0lOU1RBTkNFEAQq4gEKEFNjcnViRmluZGluZ0tpbmQSIgoeU0NSVUJfRklORElOR19LSU5EX1VOU1BFQ0lGSUVEEAASHgoaU0NSVUJfRklORElOR19LSU5EX01JU1NJTkcQARIdChlTQ1JVQl9GSU5ESU5HX0tJTkRfT1JQSEFOEAISHgoaU0NSVUJfRklORElOR19LSU5EX0RBTUFHRUQQAxIiCh5TQ1JVQl9GSU5ESU5HX0tJTkRfRElTQUdSRUVJTkcQBBInCiNTQ1JVQl9GSU5ESU5HX0tJTkRfTUFOSUZFU1RfREFNQUdFRBAFKsYBChNJbnN0YW5jZURpc3Bvc2l0aW9uEiQKIElOU1RBTkNFX0RJU1BPU0lUSU9OX1VOU1BFQ0lGSUVEEAASIAocSU5TVEFOQ0VfRElTUE9TSVRJT05fQ1VSUkVOVBABEiMKH0lOU1RBTkNFX0RJU1BPU0lUSU9OX1NVUEVSU0VERUQQAhIgChxJTlNUQU5DRV9ESVNQT1NJVElPTl9ERUxFVEVEEAMSIAocSU5TVEFOQ0VfRElTUE9TSVRJT05fVU5LTk9XThAEMrYHChFDb3JyZWN0aW9uU2VydmljZRJCCgZEZWxldGUSGC5ub3BhY3MudjEuRGVsZXRlUmVxdWVzdBoZLm5vcGFjcy52MS5EZWxldGVSZXNwb25zZSIDkAICEkUKB1JlbGFiZWwSGS5ub3BhY3MudjEuUmVsYWJlbFJlcXVlc3QaGi5ub3BhY3MudjEuUmVsYWJlbFJlc3BvbnNlIgOQAgISRQoHUmVwbGFjZRIZLm5vcGFjcy52MS5SZXBsYWNlUmVxdWVzdBoaLm5vcGFjcy52MS5SZXBsYWNlUmVzcG9uc2UiA5ACAhI8CgRFZGl0EhYubm9wYWNzLnYxLkVkaXRSZXF1ZXN0Ghcubm9wYWNzLnYxLkVkaXRSZXNwb25zZSIDkAICEl0KD0xpc3RDb3JyZWN0aW9ucxIhLm5vcGFjcy52MS5MaXN0Q29ycmVjdGlvbnNSZXF1ZXN0GiIubm9wYWNzLnYxLkxpc3RDb3JyZWN0aW9uc1Jlc3BvbnNlIgOQAgESVwoNR2V0Q29ycmVjdGlvbhIfLm5vcGFjcy52MS5HZXRDb3JyZWN0aW9uUmVxdWVzdBogLm5vcGFjcy52MS5HZXRDb3JyZWN0aW9uUmVzcG9uc2UiA5ACARJaCg5VbmRvQ29ycmVjdGlvbhIgLm5vcGFjcy52MS5VbmRvQ29ycmVjdGlvblJlcXVlc3QaIS5ub3BhY3MudjEuVW5kb0NvcnJlY3Rpb25SZXNwb25zZSIDkAICEl0KD1B1cmdlQ29ycmVjdGlvbhIhLm5vcGFjcy52MS5QdXJnZUNvcnJlY3Rpb25SZXF1ZXN0GiIubm9wYWNzLnYxLlB1cmdlQ29ycmVjdGlvblJlc3BvbnNlIgOQAgISVwoNQWxsb3dBcnJpdmFscxIfLm5vcGFjcy52MS5BbGxvd0Fycml2YWxzUmVxdWVzdBogLm5vcGFjcy52MS5BbGxvd0Fycml2YWxzUmVzcG9uc2UiA5ACAhJjChFMaXN0U2NydWJGaW5kaW5ncxIjLm5vcGFjcy52MS5MaXN0U2NydWJGaW5kaW5nc1JlcXVlc3QaJC5ub3BhY3MudjEuTGlzdFNjcnViRmluZGluZ3NSZXNwb25zZSIDkAIBEmAKEFJlc29sdmVJbnN0YW5jZXMSIi5ub3BhY3MudjEuUmVzb2x2ZUluc3RhbmNlc1JlcXVlc3QaIy5ub3BhY3MudjEuUmVzb2x2ZUluc3RhbmNlc1Jlc3BvbnNlIgOQAgFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * CorrectionTarget names what a correction acts on: a subject, a session of
@@ -1048,6 +1048,299 @@ export const ReplaceResponseSchema: GenMessage<ReplaceResponse> = /*@__PURE__*/
   messageDesc(file_nopacs_v1_correction, 13);
 
 /**
+ * EditChange is one attribute an edit sets, changes or removes.
+ *
+ * @generated from message nopacs.v1.EditChange
+ */
+export type EditChange = Message<"nopacs.v1.EditChange"> & {
+  /**
+   * The attribute, by its keyword ("SeriesDescription") or its tag as
+   * "gggg,eeee". Required.
+   *
+   * @generated from field: string attribute = 1;
+   */
+  attribute: string;
+
+  /**
+   * The value it is given, its values separated by a backslash as DICOM
+   * writes them (PS3.5 6.4); empty gives it an empty value. An attribute
+   * the instance lacks is added. Empty with remove.
+   *
+   * @generated from field: string value = 2;
+   */
+  value: string;
+
+  /**
+   * Remove the attribute instead.
+   *
+   * @generated from field: bool remove = 3;
+   */
+  remove: boolean;
+};
+
+/**
+ * Describes the message nopacs.v1.EditChange.
+ * Use `create(EditChangeSchema)` to create a new message.
+ */
+export const EditChangeSchema: GenMessage<EditChange> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_correction, 14);
+
+/**
+ * EditRequest names what to edit, how and why, and, unless only a preview
+ * is asked for, the confirm token of the preview.
+ *
+ * @generated from message nopacs.v1.EditRequest
+ */
+export type EditRequest = Message<"nopacs.v1.EditRequest"> & {
+  /**
+   * The tenant, by name. Required.
+   *
+   * @generated from field: string tenant = 1;
+   */
+  tenant: string;
+
+  /**
+   * The subject, session, scan or instance whose every instance is edited.
+   * Required.
+   *
+   * @generated from field: nopacs.v1.CorrectionTarget target = 2;
+   */
+  target?: CorrectionTarget | undefined;
+
+  /**
+   * What to change: 1 to 64, each attribute once. Required.
+   *
+   * @generated from field: repeated nopacs.v1.EditChange changes = 3;
+   */
+  changes: EditChange[];
+
+  /**
+   * Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+   * control characters, never a value read from a file. Required, also
+   * with validate_only.
+   *
+   * @generated from field: string reason = 4;
+   */
+  reason: string;
+
+  /**
+   * Answer the preview only, changing nothing.
+   *
+   * @generated from field: bool validate_only = 5;
+   */
+  validateOnly: boolean;
+
+  /**
+   * The confirm token of a preview of the same edit. Required unless
+   * validate_only; empty with it.
+   *
+   * @generated from field: string confirm = 6;
+   */
+  confirm: string;
+
+  /**
+   * Answer each attribute's value now in the preview, as the archive holds
+   * it. Recorded in the audit entry. Only with validate_only.
+   *
+   * @generated from field: bool show_values = 7;
+   */
+  showValues: boolean;
+};
+
+/**
+ * Describes the message nopacs.v1.EditRequest.
+ * Use `create(EditRequestSchema)` to create a new message.
+ */
+export const EditRequestSchema: GenMessage<EditRequest> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_correction, 15);
+
+/**
+ * EditPreviewAttribute is what one change does to one instance.
+ *
+ * @generated from message nopacs.v1.EditPreviewAttribute
+ */
+export type EditPreviewAttribute = Message<"nopacs.v1.EditPreviewAttribute"> & {
+  /**
+   * The attribute, as "gggg,eeee".
+   *
+   * @generated from field: string attribute = 1;
+   */
+  attribute: string;
+
+  /**
+   * The instance holds the attribute now.
+   *
+   * @generated from field: bool present = 2;
+   */
+  present: boolean;
+
+  /**
+   * False when the instance's metadata omits its data set, so present is
+   * not known.
+   *
+   * @generated from field: bool known = 3;
+   */
+  known: boolean;
+
+  /**
+   * Its value now, only with show_values.
+   *
+   * @generated from field: string old_value = 4;
+   */
+  oldValue: string;
+
+  /**
+   * The value the change gives it.
+   *
+   * @generated from field: string new_value = 5;
+   */
+  newValue: string;
+
+  /**
+   * The change removes it.
+   *
+   * @generated from field: bool remove = 6;
+   */
+  remove: boolean;
+};
+
+/**
+ * Describes the message nopacs.v1.EditPreviewAttribute.
+ * Use `create(EditPreviewAttributeSchema)` to create a new message.
+ */
+export const EditPreviewAttributeSchema: GenMessage<EditPreviewAttribute> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_correction, 16);
+
+/**
+ * EditPreviewInstance is one instance an edit changes.
+ *
+ * @generated from message nopacs.v1.EditPreviewInstance
+ */
+export type EditPreviewInstance = Message<"nopacs.v1.EditPreviewInstance"> & {
+  /**
+   * Its subject's label.
+   *
+   * @generated from field: string subject_label = 1;
+   */
+  subjectLabel: string;
+
+  /**
+   * Its session's label.
+   *
+   * @generated from field: string session_label = 2;
+   */
+  sessionLabel: string;
+
+  /**
+   * Its scan's label.
+   *
+   * @generated from field: string scan_label = 3;
+   */
+  scanLabel: string;
+
+  /**
+   * Its id, as DataService names it.
+   *
+   * @generated from field: string instance_id = 4;
+   */
+  instanceId: string;
+
+  /**
+   * Its revision now; the edit gives it a later one.
+   *
+   * @generated from field: int32 revision = 5;
+   */
+  revision: number;
+
+  /**
+   * What each change does to it, in the changes' order.
+   *
+   * @generated from field: repeated nopacs.v1.EditPreviewAttribute attributes = 6;
+   */
+  attributes: EditPreviewAttribute[];
+};
+
+/**
+ * Describes the message nopacs.v1.EditPreviewInstance.
+ * Use `create(EditPreviewInstanceSchema)` to create a new message.
+ */
+export const EditPreviewInstanceSchema: GenMessage<EditPreviewInstance> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_correction, 17);
+
+/**
+ * EditPreview is what an edit would change.
+ *
+ * @generated from message nopacs.v1.EditPreview
+ */
+export type EditPreview = Message<"nopacs.v1.EditPreview"> & {
+  /**
+   * Every instance, in order of storage, scan and SOP Instance UID.
+   *
+   * @generated from field: repeated nopacs.v1.EditPreviewInstance instances = 1;
+   */
+  instances: EditPreviewInstance[];
+
+  /**
+   * The storages that hold them, by name.
+   *
+   * @generated from field: repeated string storages = 2;
+   */
+  storages: string[];
+
+  /**
+   * When it was made.
+   *
+   * @generated from field: google.protobuf.Timestamp issue_time = 3;
+   */
+  issueTime?: Timestamp | undefined;
+
+  /**
+   * The token an Edit of the same changes carries: it holds an hour, and
+   * only while the target is unchanged.
+   *
+   * @generated from field: string confirm = 4;
+   */
+  confirm: string;
+};
+
+/**
+ * Describes the message nopacs.v1.EditPreview.
+ * Use `create(EditPreviewSchema)` to create a new message.
+ */
+export const EditPreviewSchema: GenMessage<EditPreview> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_correction, 18);
+
+/**
+ * EditResponse is the preview, or the edit made.
+ *
+ * @generated from message nopacs.v1.EditResponse
+ */
+export type EditResponse = Message<"nopacs.v1.EditResponse"> & {
+  /**
+   * With validate_only, what it would change and its token.
+   *
+   * @generated from field: nopacs.v1.EditPreview preview = 1;
+   */
+  preview?: EditPreview | undefined;
+
+  /**
+   * The correction made: committed (every instance at its new revision,
+   * the old ones kept until purge_time), or abandoned with its
+   * state_reason (nothing changed). Absent with validate_only.
+   *
+   * @generated from field: nopacs.v1.Correction correction = 2;
+   */
+  correction?: Correction | undefined;
+};
+
+/**
+ * Describes the message nopacs.v1.EditResponse.
+ * Use `create(EditResponseSchema)` to create a new message.
+ */
+export const EditResponseSchema: GenMessage<EditResponse> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_correction, 19);
+
+/**
  * ListCorrectionsRequest asks for a page of a tenant's corrections. Every
  * filter given must hold for a correction to be listed.
  *
@@ -1108,7 +1401,7 @@ export type ListCorrectionsRequest = Message<"nopacs.v1.ListCorrectionsRequest">
  * Use `create(ListCorrectionsRequestSchema)` to create a new message.
  */
 export const ListCorrectionsRequestSchema: GenMessage<ListCorrectionsRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 14);
+  messageDesc(file_nopacs_v1_correction, 20);
 
 /**
  * ListCorrectionsResponse is a page of corrections.
@@ -1136,7 +1429,7 @@ export type ListCorrectionsResponse = Message<"nopacs.v1.ListCorrectionsResponse
  * Use `create(ListCorrectionsResponseSchema)` to create a new message.
  */
 export const ListCorrectionsResponseSchema: GenMessage<ListCorrectionsResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 15);
+  messageDesc(file_nopacs_v1_correction, 21);
 
 /**
  * GetCorrectionRequest names a correction.
@@ -1164,7 +1457,7 @@ export type GetCorrectionRequest = Message<"nopacs.v1.GetCorrectionRequest"> & {
  * Use `create(GetCorrectionRequestSchema)` to create a new message.
  */
 export const GetCorrectionRequestSchema: GenMessage<GetCorrectionRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 16);
+  messageDesc(file_nopacs_v1_correction, 22);
 
 /**
  * GetCorrectionResponse is the correction named.
@@ -1185,7 +1478,7 @@ export type GetCorrectionResponse = Message<"nopacs.v1.GetCorrectionResponse"> &
  * Use `create(GetCorrectionResponseSchema)` to create a new message.
  */
 export const GetCorrectionResponseSchema: GenMessage<GetCorrectionResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 17);
+  messageDesc(file_nopacs_v1_correction, 23);
 
 /**
  * UndoCorrectionRequest names the delete to undo, and why.
@@ -1221,7 +1514,7 @@ export type UndoCorrectionRequest = Message<"nopacs.v1.UndoCorrectionRequest"> &
  * Use `create(UndoCorrectionRequestSchema)` to create a new message.
  */
 export const UndoCorrectionRequestSchema: GenMessage<UndoCorrectionRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 18);
+  messageDesc(file_nopacs_v1_correction, 24);
 
 /**
  * UndoCorrectionResponse is the delete undone.
@@ -1242,7 +1535,7 @@ export type UndoCorrectionResponse = Message<"nopacs.v1.UndoCorrectionResponse">
  * Use `create(UndoCorrectionResponseSchema)` to create a new message.
  */
 export const UndoCorrectionResponseSchema: GenMessage<UndoCorrectionResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 19);
+  messageDesc(file_nopacs_v1_correction, 25);
 
 /**
  * PurgeCorrectionRequest names the delete to purge now.
@@ -1270,7 +1563,7 @@ export type PurgeCorrectionRequest = Message<"nopacs.v1.PurgeCorrectionRequest">
  * Use `create(PurgeCorrectionRequestSchema)` to create a new message.
  */
 export const PurgeCorrectionRequestSchema: GenMessage<PurgeCorrectionRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 20);
+  messageDesc(file_nopacs_v1_correction, 26);
 
 /**
  * PurgeCorrectionResponse is the purge started.
@@ -1291,7 +1584,7 @@ export type PurgeCorrectionResponse = Message<"nopacs.v1.PurgeCorrectionResponse
  * Use `create(PurgeCorrectionResponseSchema)` to create a new message.
  */
 export const PurgeCorrectionResponseSchema: GenMessage<PurgeCorrectionResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 21);
+  messageDesc(file_nopacs_v1_correction, 27);
 
 /**
  * AllowArrivalsRequest names the delete whose target may arrive again, and
@@ -1338,7 +1631,7 @@ export type AllowArrivalsRequest = Message<"nopacs.v1.AllowArrivalsRequest"> & {
  * Use `create(AllowArrivalsRequestSchema)` to create a new message.
  */
 export const AllowArrivalsRequestSchema: GenMessage<AllowArrivalsRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 22);
+  messageDesc(file_nopacs_v1_correction, 28);
 
 /**
  * AllowArrivalsResponse is the delete whose target may arrive again.
@@ -1360,7 +1653,7 @@ export type AllowArrivalsResponse = Message<"nopacs.v1.AllowArrivalsResponse"> &
  * Use `create(AllowArrivalsResponseSchema)` to create a new message.
  */
 export const AllowArrivalsResponseSchema: GenMessage<AllowArrivalsResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 23);
+  messageDesc(file_nopacs_v1_correction, 29);
 
 /**
  * ScrubFinding is one difference a scrub found and believed, after reading
@@ -1536,7 +1829,7 @@ export type ScrubFinding = Message<"nopacs.v1.ScrubFinding"> & {
  * Use `create(ScrubFindingSchema)` to create a new message.
  */
 export const ScrubFindingSchema: GenMessage<ScrubFinding> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 24);
+  messageDesc(file_nopacs_v1_correction, 30);
 
 /**
  * ListScrubFindingsRequest asks for a page of a tenant's scrub findings.
@@ -1598,7 +1891,7 @@ export type ListScrubFindingsRequest = Message<"nopacs.v1.ListScrubFindingsReque
  * Use `create(ListScrubFindingsRequestSchema)` to create a new message.
  */
 export const ListScrubFindingsRequestSchema: GenMessage<ListScrubFindingsRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 25);
+  messageDesc(file_nopacs_v1_correction, 31);
 
 /**
  * ListScrubFindingsResponse is a page of scrub findings.
@@ -1626,7 +1919,7 @@ export type ListScrubFindingsResponse = Message<"nopacs.v1.ListScrubFindingsResp
  * Use `create(ListScrubFindingsResponseSchema)` to create a new message.
  */
 export const ListScrubFindingsResponseSchema: GenMessage<ListScrubFindingsResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 26);
+  messageDesc(file_nopacs_v1_correction, 32);
 
 /**
  * InstanceRef names exact archived bytes: an instance and one of its
@@ -1655,7 +1948,7 @@ export type InstanceRef = Message<"nopacs.v1.InstanceRef"> & {
  * Use `create(InstanceRefSchema)` to create a new message.
  */
 export const InstanceRefSchema: GenMessage<InstanceRef> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 27);
+  messageDesc(file_nopacs_v1_correction, 33);
 
 /**
  * ResolvedInstance is what became of one pair asked for.
@@ -1737,7 +2030,7 @@ export type ResolvedInstance = Message<"nopacs.v1.ResolvedInstance"> & {
  * Use `create(ResolvedInstanceSchema)` to create a new message.
  */
 export const ResolvedInstanceSchema: GenMessage<ResolvedInstance> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 28);
+  messageDesc(file_nopacs_v1_correction, 34);
 
 /**
  * ResolveInstancesRequest asks what became of exact archived bytes.
@@ -1765,7 +2058,7 @@ export type ResolveInstancesRequest = Message<"nopacs.v1.ResolveInstancesRequest
  * Use `create(ResolveInstancesRequestSchema)` to create a new message.
  */
 export const ResolveInstancesRequestSchema: GenMessage<ResolveInstancesRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 29);
+  messageDesc(file_nopacs_v1_correction, 35);
 
 /**
  * ResolveInstancesResponse answers each pair asked for.
@@ -1786,7 +2079,7 @@ export type ResolveInstancesResponse = Message<"nopacs.v1.ResolveInstancesRespon
  * Use `create(ResolveInstancesResponseSchema)` to create a new message.
  */
 export const ResolveInstancesResponseSchema: GenMessage<ResolveInstancesResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_correction, 30);
+  messageDesc(file_nopacs_v1_correction, 36);
 
 /**
  * CorrectionKind is what a correction does. A kind added later is a new
@@ -1822,6 +2115,14 @@ export enum CorrectionKind {
    * @generated from enum value: CORRECTION_KIND_REPLACE = 3;
    */
   REPLACE = 3,
+
+  /**
+   * Named attributes of every instance of a subject, session, scan or
+   * instance set, changed or removed, each instance given a later revision.
+   *
+   * @generated from enum value: CORRECTION_KIND_EDIT = 4;
+   */
+  EDIT = 4,
 }
 
 /**
@@ -2516,6 +2817,60 @@ export const CorrectionService: GenService<{
     output: typeof ReplaceResponseSchema;
   },
   /**
+   * Edit sets, changes or removes named attributes of every instance of a
+   * subject, session, scan or instance, each instance given a later
+   * revision through the path a replace takes; the revisions it supersedes
+   * are kept until its purge, and UndoCorrection takes it back until then.
+   * Each new revision is judged by the tenant's profile and its check after
+   * before it is written. With validate_only it answers the preview: every
+   * instance and attribute, the value now only with show_values, and the
+   * token to confirm it. It is answered in one of three ways, as a replace
+   * is: the correction committed; an error, with nothing recorded; or the
+   * correction abandoned with its state_reason (the check after refused a
+   * new revision, a file's character set would not be kept, a revision
+   * could not be put or read back whole, the target changed before the
+   * publish), anything it wrote removed.
+   *
+   * Role: admin on the tenant.
+   * Audit: one entry in the tenant's log, with the new correction's id as
+   * its object (none for validate_only), and the target's path of labels,
+   * the attributes' tags (never a value), the instance count of a preview,
+   * validate_only and the reason in details; show_values is recorded.
+   * Errors: unauthenticated, permission denied (no grant; also a tenant that
+   * does not exist, for a caller who may not list every tenant; a masked
+   * key, which never writes values into archived files), invalid (also a
+   * missing or too long reason; no change or more than 64; an attribute
+   * named twice, or not by a keyword or as gggg,eeee; a Study, Series or
+   * SOP Instance UID, the SOP Class UID, the Specific Character Set, the
+   * Study Date, Pixel Data or an attribute that lays out its bytes, overlay
+   * data, a private attribute, a group length or the file meta information;
+   * Patient Identity Removed, De-identification Method or Longitudinal
+   * Temporal Information Modified; in an edit of one instance, Series
+   * Description, Modality or Series Number, which the catalog keeps for the
+   * whole scan;
+   * an attribute of a binary VR; a value that does not fit its VR or is not
+   * printable ASCII; a removal with a value; a confirm token with
+   * validate_only, or none without it; show_values without validate_only),
+   * not found (the tenant holds no such subject, session, scan or instance;
+   * a tenant that does not exist, for a caller who may list every tenant),
+   * precondition (the confirm token is not this server's preview of the
+   * same edit, the target changed since, or it is more than an hour old;
+   * more than 2000 instances; a hold covers the target, with the reason
+   * HELD; a correction on it is prepared or not yet purged, or an undone
+   * edit's revisions are not yet removed; a reception of it is in progress;
+   * a rebuild of the tenant is running; the tenant is moved or fenced, with
+   * the reason TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's
+   * database or a storage does not answer before anything is written; the
+   * server judges no edits; the tenant is not ready).
+   *
+   * @generated from rpc nopacs.v1.CorrectionService.Edit
+   */
+  edit: {
+    methodKind: "unary";
+    input: typeof EditRequestSchema;
+    output: typeof EditResponseSchema;
+  },
+  /**
    * ListCorrections answers a tenant's corrections, newest first, filtered
    * by kind and state.
    *
@@ -2560,8 +2915,14 @@ export const CorrectionService: GenService<{
    * also how an admin settles an unresolved delete a rebuild or a restore
    * applied fail-closed, and how a prepared relabel is stopped: it is
    * abandoned and its copies removed, nothing having changed for any
-   * reader. A correction already undone, or a relabel already abandoned,
-   * is answered as it stands, so a repeated call changes nothing more.
+   * reader. A committed edit is undone the same way before its purge: each
+   * instance back at the revision it superseded, the scans' values as they
+   * were, its new revisions removed from every copy; while it is being
+   * undone it is never purged, and an undo that may no longer be published
+   * (a hold placed over it meanwhile) is taken back, the edit committed as
+   * it was, to be asked for again. A correction already
+   * undone, or a relabel already abandoned, is answered as it stands, so a
+   * repeated call changes nothing more.
    *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the correction's id as its
@@ -2571,8 +2932,10 @@ export const CorrectionService: GenService<{
    * (also a missing or too long reason), not found (the tenant has no
    * correction with that id; a tenant that does not exist, for a caller
    * who may list every tenant), precondition (the correction is neither a
-   * committed delete nor a prepared relabel; a rebuild of the tenant is
-   * running; the tenant is moved or fenced), unavailable (the tenant's
+   * committed delete or edit nor a prepared relabel; an edit taken from its
+   * records by a restore, which keeps nothing to write back; a hold covers
+   * an edit's revisions; a rebuild of the tenant is running; the tenant is
+   * moved or fenced), unavailable (the tenant's
    * database or a storage holding its record does not answer, or the
    * tenant is not ready).
    *
@@ -2585,8 +2948,9 @@ export const CorrectionService: GenService<{
   },
   /**
    * PurgeCorrection starts the purge of a committed correction now, before
-   * its grace period ends: a delete's hidden data, or the objects a relabel
-   * or a replace superseded (the old tree, the old revision). It also
+   * its grace period ends: a delete's hidden data, or the objects a
+   * relabel, a replace or an edit superseded (the old tree, the old
+   * revisions). It also
    * confirms an unresolved delete. The purge runs in the background; the
    * correction says how far it got. A purge of data a hold covers starts
    * and waits, purging, with the state reason "held", removing nothing
@@ -2601,7 +2965,8 @@ export const CorrectionService: GenService<{
    * does not exist, for a caller who may not list every tenant), invalid,
    * not found (the tenant has no correction with that id; a tenant that
    * does not exist, for a caller who may list every tenant), precondition
-   * (the correction is prepared, undone or abandoned; a rebuild of the
+   * (the correction is prepared, undone or abandoned, or an edit being
+   * undone; a rebuild of the
    * tenant is running; the tenant is moved or fenced), unavailable (the
    * tenant's database does not answer, or the tenant is not ready).
    *

@@ -80,6 +80,11 @@ func (k Sending) correctionIn(ctx context.Context, tx SendingTx, id, lock string
 	if err := k.fillCorrection(ctx, tx, &out); err != nil {
 		return out, err
 	}
+	if out.Kind == corr.KindEdit {
+		if out.Edits, err = correctionEditsIn(ctx, tx, id); err != nil {
+			return out, err
+		}
+	}
 	out.Holds = nil
 	return out, tx.Query(ctx, `SELECT kind, value FROM deleted_targets WHERE correction_id = ? ORDER BY kind, value`, []any{id},
 		func(r Row) error {
@@ -313,7 +318,8 @@ func (k Sending) PendingCorrections(ctx context.Context, after string, limit int
 	}
 	return k.readCorrections(ctx, `SELECT `+correctionSelect+` FROM corrections WHERE id > ?
 		AND (state IN ('prepared', 'committed', 'purging') OR records_state <> state
-			OR (kind = 'relabel' AND state = 'abandoned' AND swept = ?)) ORDER BY id LIMIT ?`, after, k.D.Bool(false), limit)
+			OR (kind = 'relabel' AND state = 'abandoned' AND swept = ?) OR (kind = 'edit' AND state = 'undone' AND swept = ?))
+		ORDER BY id LIMIT ?`, after, k.D.Bool(false), k.D.Bool(false), limit)
 }
 
 // DueCorrections implements tenant.Corrections.
@@ -325,9 +331,11 @@ func (k Sending) DueCorrections(ctx context.Context, now time.Time, limit int) (
 		return nil, fault.New(fault.Invalid, "a limit is 1 to 1000")
 	}
 	// The purging ones come after: a purge that failed or stopped goes on
-	// at the next pass, not only at the next start.
+	// at the next pass, not only at the next start. An edit being undone is
+	// not due: its undo is finished first (StartPurge refuses it).
 	due, err := k.readCorrections(ctx, `SELECT `+correctionSelect+` FROM corrections WHERE state = 'committed' AND unresolved = ?
-		AND purge_after <= ? ORDER BY purge_after, id LIMIT ?`, k.D.Bool(false), k.D.Time(now), limit)
+		AND purge_after <= ? AND NOT (kind = 'edit' AND state_reason = ?) ORDER BY purge_after, id LIMIT ?`, k.D.Bool(false), k.D.Time(now),
+		tenant.StateReasonUndoing, limit)
 	if err != nil || len(due) >= limit {
 		return due, err
 	}
@@ -382,13 +390,17 @@ func overlaps(a, b label.Path) bool {
 }
 
 // checkOverlap refuses a correction while another not ended covers any of
-// the scans of path, under its old labels or a relabel's new ones.
+// the scans of path, under its old labels or a relabel's new ones. An
+// undone edit whose new revisions are not yet removed from every copy
+// (swept) has not ended either: its sweep still removes objects under the
+// scans' labels. (A SQLite integer and a Postgres boolean both read as a
+// truth value under NOT.)
 func checkOverlap(ctx context.Context, tx SendingTx, path label.Path, except string) error {
 	busy := false
 	folded := label.Fold(path.Subject)
 	err := tx.Query(ctx, `SELECT cs.subject_label, cs.session_label, cs.scan_label, cs.new_subject, cs.new_session, cs.new_scan
 		FROM correction_scans AS cs JOIN corrections AS c ON c.id = cs.correction_id
-		WHERE c.state IN ('prepared', 'committed', 'purging') AND c.id <> ?
+		WHERE (c.state IN ('prepared', 'committed', 'purging') OR c.kind = 'edit' AND c.state = 'undone' AND NOT c.swept) AND c.id <> ?
 		AND (lower(cs.subject_label) = ? OR lower(cs.new_subject) = ?)`,
 		[]any{except, folded, folded}, func(r Row) error {
 			var old, nw label.Path

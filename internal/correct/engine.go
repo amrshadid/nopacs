@@ -88,6 +88,10 @@ type Config struct {
 	// moved, so a rebuild or restore read soon after finds each hold on the
 	// labels the catalog has.
 	Published func(ctx context.Context, c tenant.Correction)
+	// Judge judges each new revision an edit would write, before it is
+	// written (ProfileJudge): the check after an edit. Nil refuses every
+	// edit: one is never archived unjudged.
+	Judge EditJudge
 }
 
 // WritePause is the gate a write to a tenant's storage asks before it lands
@@ -386,6 +390,8 @@ func recordOf(c tenant.Correction, scans []tenant.CorrectionScan, storage string
 	case record.KindReplace:
 		r.Replace = &record.Replacement{SOPInstanceUID: c.Target.Instance, OldRevision: c.OldRevision, NewRevision: c.NewRevision,
 			OldSHA256: hex.EncodeToString(c.OldSHA256[:]), NewSHA256: hex.EncodeToString(c.NewSHA256[:])}
+	case record.KindEdit:
+		r.Level, r.Edits = c.Level, editRecords(c.Edits, scans)
 	}
 	if c.State == record.StatePurging || c.State == record.StatePurged {
 		r.Purge = &record.Purge{}
@@ -439,6 +445,15 @@ func (e *Engine) writeRecords(ctx context.Context, c tenant.Correction) error {
 // storage's write gate (gated): a record put on a place a switch swapped
 // away would be on the old store only.
 func (e *Engine) putRecord(ctx context.Context, c tenant.Correction, scans []tenant.CorrectionScan, storage string) error {
+	if c.Kind == record.KindEdit && len(c.Edits) == 0 {
+		// A correction read with a list carries no edits; its record names
+		// them.
+		edits, err := e.editsOf(ctx, c)
+		if err != nil {
+			return err
+		}
+		c.Edits = edits
+	}
 	b, err := record.EncodeCorrection(recordOf(c, scans, storage), e.cfg.TenantID, e.cfg.Keys)
 	if err != nil {
 		return fault.Wrap(fault.Internal, err, "a correction record cannot be made")

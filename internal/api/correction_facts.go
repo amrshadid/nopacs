@@ -1,10 +1,12 @@
 package api
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
+	"github.com/amrshadid/nopacs/internal/correct"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -29,7 +31,39 @@ const (
 	// detailValueKind is the kind of the value AllowArrivals lets arrive
 	// again; never the value, which may be a UID.
 	detailValueKind = "value_kind"
+	// detailAttributes are the tags of the attributes an edit names, as
+	// gggg,eeee; never a value.
+	detailAttributes = "attributes"
+	// detailChanges is how many changes an edit names.
+	detailChanges = "changes"
 )
+
+// editDetails returns an edit's audit details: its target, whether it is a
+// preview, how many changes it names and their tags (an attribute that
+// names no tag recorded as "?"), and show_values when asked. No value is
+// recorded: a value an edit gives can be anything a person types.
+func editDetails(r *v1.EditRequest) map[string]string {
+	tags := make([]string, 0, min(len(r.GetChanges()), correct.MaxEditChanges+1))
+	for i, ch := range r.GetChanges() {
+		if i > correct.MaxEditChanges {
+			break
+		}
+		t, err := correct.ParseEditTag(ch.GetAttribute())
+		if err != nil {
+			tags = append(tags, "?")
+			continue
+		}
+		tags = append(tags, tagWord(t))
+	}
+	d := map[string]string{detailTarget: targetDetail(r.GetTarget()), detailValidateOnly: strconv.FormatBool(r.GetValidateOnly()),
+		detailChanges: strconv.Itoa(len(r.GetChanges())), detailAttributes: clip(strings.Join(tags, " "), 250)}
+	return showValuesDetails(r.GetShowValues(), d)
+}
+
+// tagWord writes a tag as gggg,eeee, as the contract names an attribute.
+func tagWord(t uint32) string {
+	return fmt.Sprintf("%04X,%04X", t>>16, t&0xffff)
+}
 
 // targetDetail returns a correction's target as its entry records it: its
 // path of labels, with an instance recorded only as present, since its id

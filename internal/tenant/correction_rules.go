@@ -160,8 +160,24 @@ func (p CorrectionPrepare) Validate() error {
 		if p.Target != (CorrectionTarget{}) || p.ToLabel != "" || p.Confirm != "" {
 			return invalid("a replace names its quarantined file only")
 		}
+	case record.KindEdit:
+		if err := p.Target.Validate(); err != nil {
+			return err
+		}
+		if p.ToLabel != "" || p.Quarantine != "" || p.RestoreLine != nil || !p.NewSHA256.IsZero() {
+			return invalid("an edit names no new label, quarantined file or new bytes of its own")
+		}
+		if p.Confirm == "" || len(p.Confirm) > MaxConfirmLength {
+			return invalid("an edit carries the confirm token of its preview")
+		}
+		if err := validateEdits(p.Edits); err != nil {
+			return err
+		}
 	default:
-		return invalid("a correction is a delete, a relabel or a replace")
+		return invalid("a correction is a delete, a relabel, a replace or an edit")
+	}
+	if p.Kind != record.KindEdit && len(p.Edits) > 0 {
+		return invalid("only an edit names edited instances")
 	}
 	return p.validateRetention()
 }
@@ -303,8 +319,8 @@ func ValidateCorrectionFilter(f CorrectionFilter) error {
 		return invalid("a filter names at most 16 kinds and 16 states")
 	}
 	for _, k := range f.Kinds {
-		if k != record.KindDelete && k != record.KindRelabel && k != record.KindReplace {
-			return invalid("a correction's kind is delete, relabel or replace")
+		if !knownKind(k) {
+			return invalid("a correction's kind is delete, relabel, replace or edit")
 		}
 	}
 	for _, s := range f.States {
@@ -313,6 +329,15 @@ func ValidateCorrectionFilter(f CorrectionFilter) error {
 		}
 	}
 	return nil
+}
+
+// knownKind reports whether k is one of the kinds of correction.
+func knownKind(k record.Kind) bool {
+	switch k {
+	case record.KindDelete, record.KindRelabel, record.KindReplace, record.KindEdit:
+		return true
+	}
+	return false
 }
 
 // ValidateStateReason returns an Invalid error unless why can be a state
@@ -439,8 +464,8 @@ func (p *CatalogChanged) validate() error {
 	if err := ValidateCorrectionID(p.Correction); err != nil {
 		return err
 	}
-	if p.Kind != record.KindDelete && p.Kind != record.KindRelabel && p.Kind != record.KindReplace {
-		return invalid("a correction's kind is delete, relabel or replace")
+	if !knownKind(p.Kind) {
+		return invalid("a correction's kind is delete, relabel, replace or edit")
 	}
 	if !p.State.Valid() {
 		return invalid("a correction's state is one of the six")

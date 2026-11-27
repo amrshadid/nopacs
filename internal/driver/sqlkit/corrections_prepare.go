@@ -39,12 +39,13 @@ type targetRows struct {
 }
 
 // targetInstance is one instance a delete or replace names: key is its
-// object's key, raw the key the catalog holds ("" for the layout's).
+// object's key, raw the key the catalog holds ("" for the layout's); next
+// is, for a replace, the revision it gives it (nextRevision).
 type targetInstance struct {
 	uid, key, raw, receptionID string
 	scanID, size               int64
 	archived, received         tenant.SHA256
-	revision                   int
+	revision, next             int
 }
 
 // scanScope returns the statement fragment that selects r's scans' ids,
@@ -214,8 +215,10 @@ func existingCorrection(ctx context.Context, tx SendingTx, p tenant.CorrectionPr
 	var id string
 	var err error
 	switch p.Kind {
-	case corr.KindDelete:
-		_, err = tx.QueryRow(ctx, `SELECT id FROM corrections WHERE confirm_token = ?`, []any{p.Confirm}, &id)
+	case corr.KindDelete, corr.KindEdit:
+		// A token is of one kind's preview: one of the other kind never
+		// answers this request.
+		_, err = tx.QueryRow(ctx, `SELECT id FROM corrections WHERE confirm_token = ? AND kind = ?`, []any{p.Confirm, string(p.Kind)}, &id)
 	case corr.KindReplace:
 		_, err = tx.QueryRow(ctx, `SELECT id FROM corrections WHERE quarantine_id = ? AND kind = 'replace' AND state <> 'abandoned'
 			ORDER BY id DESC LIMIT 1`, []any{p.Quarantine}, &id)
@@ -284,6 +287,8 @@ func (k Sending) PrepareCorrection(ctx context.Context, p tenant.CorrectionPrepa
 			err = k.prepareDelete(ctx, tx, p)
 		case corr.KindRelabel:
 			err = k.prepareRelabel(ctx, tx, p)
+		case corr.KindEdit:
+			err = k.prepareEdit(ctx, tx, p)
 		default:
 			err = k.prepareReplace(ctx, tx, &p)
 		}
@@ -334,7 +339,7 @@ func (k Sending) insertCorrection(ctx context.Context, tx SendingTx, p tenant.Co
 		key, size = in.key, in.size
 		oldSum = in.archived[:]
 		if p.Kind == corr.KindReplace {
-			oldRev, newRev = in.revision, in.revision+1
+			oldRev, newRev = in.revision, in.next
 			newSum = p.NewSHA256[:]
 		}
 	}
@@ -362,15 +367,18 @@ func (k Sending) insertCorrection(ctx context.Context, tx SendingTx, p tenant.Co
 	return nil
 }
 
-// superseded counts the objects a relabel or replace keeps until its
+// superseded counts the objects a relabel, replace or edit keeps until its
 // purge: a relabel's whole old tree (each instance and each scan's two
-// files), a replace's old revision.
+// files), a replace's old revision, an edit's old revision of each of its
+// instances.
 func superseded(kind corr.Kind, r targetRows, c tenant.CorrectionCounts) int64 {
 	switch kind {
 	case corr.KindRelabel:
 		return c.Instances + 2*int64(len(r.scans))
 	case corr.KindReplace:
 		return 1
+	case corr.KindEdit:
+		return c.Instances
 	}
 	return 0
 }
@@ -622,6 +630,9 @@ func (k Sending) prepareReplace(ctx context.Context, tx SendingTx, p *tenant.Cor
 	}
 	if r.instance.revision >= layout.MaxRevision {
 		return tenant.Precondition("the instance has reached its last revision")
+	}
+	if r.instance.next, err = nextRevision(ctx, tx, uid, r.instance.revision); err != nil {
+		return err
 	}
 	c := tenant.CorrectionCounts{Scans: 1, Instances: 1, Bytes: p.NewSize}
 	r.scans = r.scans[:1]

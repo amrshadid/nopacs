@@ -199,7 +199,7 @@ func APIServices(d Deps) (Built, error) {
 	}
 	// Every tenant's corrections engine, and the pass that takes up what a
 	// stop left and purges what is due.
-	engines, err := newCorrections(d, reg, sup, scanLocks, cleanups, work)
+	engines, err := newCorrections(d, reg, sup, scanLocks, cleanups, work, deidMemory)
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)

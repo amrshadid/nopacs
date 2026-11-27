@@ -51,6 +51,13 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 			c.ID); err != nil {
 			return err
 		}
+		// An edit's lines as they were are written back only before its
+		// purge: an undo is refused once it began.
+		if c.Kind == corr.KindEdit {
+			if _, err := tx.Exec(ctx, `UPDATE correction_edits SET restore_line = NULL, new_line = NULL WHERE correction_id = ?`, c.ID); err != nil {
+				return err
+			}
+		}
 		// What it did not settle (a target a stop left between its purge
 		// and its record) was asked of its storage; it owns nothing more.
 		if _, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = 'purged' WHERE correction_id = ? AND outcome = ''`,

@@ -51,6 +51,16 @@ type Restoring interface {
 	// Anything else changes nothing.
 	OwnAdoptedReplace(ctx context.Context, rec record.Correction, storage string,
 		sizeOf func(ctx context.Context, key string) (int64, error), now time.Time) error
+	// OwnAdoptedEdit gives an edit AdoptCorrection made committed from its
+	// records what its publish writes outside the catalog, for each of its
+	// instances whose scan is on storage (one record of an edit on each
+	// storage it touches): the superseded revision it owns (its size from
+	// sizeOf, the storage's; one gone from the storage owns nothing), which
+	// its purge removes, and the revision in the instance's history. An
+	// instance owned already, or anything else, changes nothing. Such an
+	// edit keeps no line of its old revisions, so it is not undone.
+	OwnAdoptedEdit(ctx context.Context, rec record.Correction, storage string,
+		sizeOf func(ctx context.Context, key string) (int64, error), now time.Time) error
 	// HoldCommittedDeletes marks unresolved every delete committed that is
 	// not (StateReasonRestoreHeld), so none is purged until an admin
 	// confirms it, and answers how many it marked.

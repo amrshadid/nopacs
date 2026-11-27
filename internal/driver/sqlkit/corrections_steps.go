@@ -133,6 +133,8 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 			err = k.switchLabels(ctx, tx, *c, cc.Manifests, cc.Snapshots)
 		case corr.KindReplace:
 			err = k.publishReplace(ctx, tx, *c, cc)
+		case corr.KindEdit:
+			err = k.publishEdit(ctx, tx, *c, cc)
 		}
 		if err != nil {
 			return err
@@ -527,6 +529,13 @@ func (k Sending) StartPurge(ctx context.Context, id string, now time.Time, audit
 				return err
 			}
 		case corr.StateCommitted:
+			// An edit being undone may have written its scans' manifests and
+			// metadata to name the revisions it superseded already: a purge
+			// would remove what they name. Its undo is finished first, by an
+			// admin's purge as by the server's.
+			if c.Kind == corr.KindEdit && c.StateReason == tenant.StateReasonUndoing {
+				return tenant.Precondition("the edit is being undone; its undo is finished before any purge")
+			}
 			if audit == nil && (c.Unresolved || c.PurgeAfter.After(now)) {
 				return tenant.Precondition("the correction's grace period has not ended")
 			}

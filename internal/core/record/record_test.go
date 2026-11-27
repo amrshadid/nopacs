@@ -177,7 +177,7 @@ func TestCorrectionRefuses(t *testing.T) {
 		"relabel with level": rel(func(c *Correction) { c.Level = LevelScan }),
 		"replace level":      repl(func(c *Correction) { c.Level = LevelInstance }),
 		"replace missing":    mut(func(c *Correction) { c.Kind = KindReplace }),
-		"replace skip":       repl(func(c *Correction) { c.Replace.NewRevision = 3 }),
+		"replace same":       repl(func(c *Correction) { c.Replace.NewRevision = 1 }),
 		"replace rev 0":      repl(func(c *Correction) { c.Replace.OldRevision, c.Replace.NewRevision = 0, 1 }),
 		"replace rev max":    repl(func(c *Correction) { c.Replace.OldRevision, c.Replace.NewRevision = 1000000, 1000001 }),
 		"replace sum":        repl(func(c *Correction) { c.Replace.OldSHA256 = "zz" }),

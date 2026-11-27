@@ -65,6 +65,9 @@ type rig struct {
 	seq     atomic.Int64
 	// keys authenticate the correction records the engines write.
 	keys *secret.Keys
+	// scanLocks are the scans' locks the pipeline and every engine take,
+	// as the server's share one tenant's.
+	scanLocks receive.ScanLocks
 }
 
 // rigTenantID is the rig's tenant's id, which its records are written for.
@@ -134,7 +137,7 @@ func (r *rig) engine() *Engine {
 func (r *rig) engineWith(change func(*Config)) *Engine {
 	r.t.Helper()
 	cfg := Config{Tenant: "lab", TenantID: rigTenantID, Keys: r.keys, Store: r.p, OpenStorage: func(context.Context, string) (blob.Store, error) { return r.storage, nil },
-		Grace: func(context.Context) (time.Duration, error) { return 24 * time.Hour, nil }}
+		Grace: func(context.Context) (time.Duration, error) { return 24 * time.Hour, nil }, LockScan: r.scanLocks.Lock}
 	if change != nil {
 		change(&cfg)
 	}
@@ -212,7 +215,7 @@ func (r *rig) pipeline() *receive.Pipeline {
 	p, err := receive.New(receive.Config{Tenant: "lab", Store: r.p, Hasher: hasher, Clock: r.clock,
 		OpenStorage:  func(context.Context, string) (blob.Store, error) { return r.storage, nil },
 		IncomingRoot: filepath.Join(r.dataDir, "incoming"), Workers: 2, Lease: 30 * time.Second, PollInterval: time.Second,
-		BatchInterval: time.Second, RetryInterval: 5 * time.Second})
+		BatchInterval: time.Second, RetryInterval: 5 * time.Second, ScanLocks: &r.scanLocks})
 	if err != nil {
 		r.t.Fatal(err)
 	}

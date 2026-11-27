@@ -39,6 +39,9 @@ const (
 	CorrectionKind_CORRECTION_KIND_RELABEL CorrectionKind = 2
 	// An archived instance replaced by its corrected file.
 	CorrectionKind_CORRECTION_KIND_REPLACE CorrectionKind = 3
+	// Named attributes of every instance of a subject, session, scan or
+	// instance set, changed or removed, each instance given a later revision.
+	CorrectionKind_CORRECTION_KIND_EDIT CorrectionKind = 4
 )
 
 // Enum value maps for CorrectionKind.
@@ -48,12 +51,14 @@ var (
 		1: "CORRECTION_KIND_DELETE",
 		2: "CORRECTION_KIND_RELABEL",
 		3: "CORRECTION_KIND_REPLACE",
+		4: "CORRECTION_KIND_EDIT",
 	}
 	CorrectionKind_value = map[string]int32{
 		"CORRECTION_KIND_UNSPECIFIED": 0,
 		"CORRECTION_KIND_DELETE":      1,
 		"CORRECTION_KIND_RELABEL":     2,
 		"CORRECTION_KIND_REPLACE":     3,
+		"CORRECTION_KIND_EDIT":        4,
 	}
 )
 
@@ -2041,6 +2046,493 @@ func (x *ReplaceResponse) GetCorrection() *Correction {
 	return nil
 }
 
+// EditChange is one attribute an edit sets, changes or removes.
+type EditChange struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The attribute, by its keyword ("SeriesDescription") or its tag as
+	// "gggg,eeee". Required.
+	Attribute string `protobuf:"bytes,1,opt,name=attribute,proto3" json:"attribute,omitempty"`
+	// The value it is given, its values separated by a backslash as DICOM
+	// writes them (PS3.5 6.4); empty gives it an empty value. An attribute
+	// the instance lacks is added. Empty with remove.
+	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	// Remove the attribute instead.
+	Remove        bool `protobuf:"varint,3,opt,name=remove,proto3" json:"remove,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditChange) Reset() {
+	*x = EditChange{}
+	mi := &file_nopacs_v1_correction_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditChange) ProtoMessage() {}
+
+func (x *EditChange) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_correction_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditChange.ProtoReflect.Descriptor instead.
+func (*EditChange) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *EditChange) GetAttribute() string {
+	if x != nil {
+		return x.Attribute
+	}
+	return ""
+}
+
+func (x *EditChange) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *EditChange) GetRemove() bool {
+	if x != nil {
+		return x.Remove
+	}
+	return false
+}
+
+// EditRequest names what to edit, how and why, and, unless only a preview
+// is asked for, the confirm token of the preview.
+type EditRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tenant, by name. Required.
+	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// The subject, session, scan or instance whose every instance is edited.
+	// Required.
+	Target *CorrectionTarget `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	// What to change: 1 to 64, each attribute once. Required.
+	Changes []*EditChange `protobuf:"bytes,3,rep,name=changes,proto3" json:"changes,omitempty"`
+	// Why, in the person's own words: 1 to 1024 bytes of UTF-8 with no
+	// control characters, never a value read from a file. Required, also
+	// with validate_only.
+	Reason string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Answer the preview only, changing nothing.
+	ValidateOnly bool `protobuf:"varint,5,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
+	// The confirm token of a preview of the same edit. Required unless
+	// validate_only; empty with it.
+	Confirm string `protobuf:"bytes,6,opt,name=confirm,proto3" json:"confirm,omitempty"`
+	// Answer each attribute's value now in the preview, as the archive holds
+	// it. Recorded in the audit entry. Only with validate_only.
+	ShowValues    bool `protobuf:"varint,7,opt,name=show_values,json=showValues,proto3" json:"show_values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditRequest) Reset() {
+	*x = EditRequest{}
+	mi := &file_nopacs_v1_correction_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditRequest) ProtoMessage() {}
+
+func (x *EditRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_correction_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditRequest.ProtoReflect.Descriptor instead.
+func (*EditRequest) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *EditRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+func (x *EditRequest) GetTarget() *CorrectionTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *EditRequest) GetChanges() []*EditChange {
+	if x != nil {
+		return x.Changes
+	}
+	return nil
+}
+
+func (x *EditRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *EditRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+func (x *EditRequest) GetConfirm() string {
+	if x != nil {
+		return x.Confirm
+	}
+	return ""
+}
+
+func (x *EditRequest) GetShowValues() bool {
+	if x != nil {
+		return x.ShowValues
+	}
+	return false
+}
+
+// EditPreviewAttribute is what one change does to one instance.
+type EditPreviewAttribute struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The attribute, as "gggg,eeee".
+	Attribute string `protobuf:"bytes,1,opt,name=attribute,proto3" json:"attribute,omitempty"`
+	// The instance holds the attribute now.
+	Present bool `protobuf:"varint,2,opt,name=present,proto3" json:"present,omitempty"`
+	// False when the instance's metadata omits its data set, so present is
+	// not known.
+	Known bool `protobuf:"varint,3,opt,name=known,proto3" json:"known,omitempty"`
+	// Its value now, only with show_values.
+	OldValue string `protobuf:"bytes,4,opt,name=old_value,json=oldValue,proto3" json:"old_value,omitempty"`
+	// The value the change gives it.
+	NewValue string `protobuf:"bytes,5,opt,name=new_value,json=newValue,proto3" json:"new_value,omitempty"`
+	// The change removes it.
+	Remove        bool `protobuf:"varint,6,opt,name=remove,proto3" json:"remove,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditPreviewAttribute) Reset() {
+	*x = EditPreviewAttribute{}
+	mi := &file_nopacs_v1_correction_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditPreviewAttribute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditPreviewAttribute) ProtoMessage() {}
+
+func (x *EditPreviewAttribute) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_correction_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditPreviewAttribute.ProtoReflect.Descriptor instead.
+func (*EditPreviewAttribute) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *EditPreviewAttribute) GetAttribute() string {
+	if x != nil {
+		return x.Attribute
+	}
+	return ""
+}
+
+func (x *EditPreviewAttribute) GetPresent() bool {
+	if x != nil {
+		return x.Present
+	}
+	return false
+}
+
+func (x *EditPreviewAttribute) GetKnown() bool {
+	if x != nil {
+		return x.Known
+	}
+	return false
+}
+
+func (x *EditPreviewAttribute) GetOldValue() string {
+	if x != nil {
+		return x.OldValue
+	}
+	return ""
+}
+
+func (x *EditPreviewAttribute) GetNewValue() string {
+	if x != nil {
+		return x.NewValue
+	}
+	return ""
+}
+
+func (x *EditPreviewAttribute) GetRemove() bool {
+	if x != nil {
+		return x.Remove
+	}
+	return false
+}
+
+// EditPreviewInstance is one instance an edit changes.
+type EditPreviewInstance struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Its subject's label.
+	SubjectLabel string `protobuf:"bytes,1,opt,name=subject_label,json=subjectLabel,proto3" json:"subject_label,omitempty"`
+	// Its session's label.
+	SessionLabel string `protobuf:"bytes,2,opt,name=session_label,json=sessionLabel,proto3" json:"session_label,omitempty"`
+	// Its scan's label.
+	ScanLabel string `protobuf:"bytes,3,opt,name=scan_label,json=scanLabel,proto3" json:"scan_label,omitempty"`
+	// Its id, as DataService names it.
+	InstanceId string `protobuf:"bytes,4,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	// Its revision now; the edit gives it a later one.
+	Revision int32 `protobuf:"varint,5,opt,name=revision,proto3" json:"revision,omitempty"`
+	// What each change does to it, in the changes' order.
+	Attributes    []*EditPreviewAttribute `protobuf:"bytes,6,rep,name=attributes,proto3" json:"attributes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditPreviewInstance) Reset() {
+	*x = EditPreviewInstance{}
+	mi := &file_nopacs_v1_correction_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditPreviewInstance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditPreviewInstance) ProtoMessage() {}
+
+func (x *EditPreviewInstance) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_correction_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditPreviewInstance.ProtoReflect.Descriptor instead.
+func (*EditPreviewInstance) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *EditPreviewInstance) GetSubjectLabel() string {
+	if x != nil {
+		return x.SubjectLabel
+	}
+	return ""
+}
+
+func (x *EditPreviewInstance) GetSessionLabel() string {
+	if x != nil {
+		return x.SessionLabel
+	}
+	return ""
+}
+
+func (x *EditPreviewInstance) GetScanLabel() string {
+	if x != nil {
+		return x.ScanLabel
+	}
+	return ""
+}
+
+func (x *EditPreviewInstance) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *EditPreviewInstance) GetRevision() int32 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *EditPreviewInstance) GetAttributes() []*EditPreviewAttribute {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+// EditPreview is what an edit would change.
+type EditPreview struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Every instance, in order of storage, scan and SOP Instance UID.
+	Instances []*EditPreviewInstance `protobuf:"bytes,1,rep,name=instances,proto3" json:"instances,omitempty"`
+	// The storages that hold them, by name.
+	Storages []string `protobuf:"bytes,2,rep,name=storages,proto3" json:"storages,omitempty"`
+	// When it was made.
+	IssueTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=issue_time,json=issueTime,proto3" json:"issue_time,omitempty"`
+	// The token an Edit of the same changes carries: it holds an hour, and
+	// only while the target is unchanged.
+	Confirm       string `protobuf:"bytes,4,opt,name=confirm,proto3" json:"confirm,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditPreview) Reset() {
+	*x = EditPreview{}
+	mi := &file_nopacs_v1_correction_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditPreview) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditPreview) ProtoMessage() {}
+
+func (x *EditPreview) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_correction_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditPreview.ProtoReflect.Descriptor instead.
+func (*EditPreview) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *EditPreview) GetInstances() []*EditPreviewInstance {
+	if x != nil {
+		return x.Instances
+	}
+	return nil
+}
+
+func (x *EditPreview) GetStorages() []string {
+	if x != nil {
+		return x.Storages
+	}
+	return nil
+}
+
+func (x *EditPreview) GetIssueTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IssueTime
+	}
+	return nil
+}
+
+func (x *EditPreview) GetConfirm() string {
+	if x != nil {
+		return x.Confirm
+	}
+	return ""
+}
+
+// EditResponse is the preview, or the edit made.
+type EditResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// With validate_only, what it would change and its token.
+	Preview *EditPreview `protobuf:"bytes,1,opt,name=preview,proto3" json:"preview,omitempty"`
+	// The correction made: committed (every instance at its new revision,
+	// the old ones kept until purge_time), or abandoned with its
+	// state_reason (nothing changed). Absent with validate_only.
+	Correction    *Correction `protobuf:"bytes,2,opt,name=correction,proto3" json:"correction,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditResponse) Reset() {
+	*x = EditResponse{}
+	mi := &file_nopacs_v1_correction_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditResponse) ProtoMessage() {}
+
+func (x *EditResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_correction_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditResponse.ProtoReflect.Descriptor instead.
+func (*EditResponse) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *EditResponse) GetPreview() *EditPreview {
+	if x != nil {
+		return x.Preview
+	}
+	return nil
+}
+
+func (x *EditResponse) GetCorrection() *Correction {
+	if x != nil {
+		return x.Correction
+	}
+	return nil
+}
+
 // ListCorrectionsRequest asks for a page of a tenant's corrections. Every
 // filter given must hold for a correction to be listed.
 type ListCorrectionsRequest struct {
@@ -2069,7 +2561,7 @@ type ListCorrectionsRequest struct {
 
 func (x *ListCorrectionsRequest) Reset() {
 	*x = ListCorrectionsRequest{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[14]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2081,7 +2573,7 @@ func (x *ListCorrectionsRequest) String() string {
 func (*ListCorrectionsRequest) ProtoMessage() {}
 
 func (x *ListCorrectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[14]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2094,7 +2586,7 @@ func (x *ListCorrectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCorrectionsRequest.ProtoReflect.Descriptor instead.
 func (*ListCorrectionsRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{14}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListCorrectionsRequest) GetTenant() string {
@@ -2152,7 +2644,7 @@ type ListCorrectionsResponse struct {
 
 func (x *ListCorrectionsResponse) Reset() {
 	*x = ListCorrectionsResponse{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[15]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2164,7 +2656,7 @@ func (x *ListCorrectionsResponse) String() string {
 func (*ListCorrectionsResponse) ProtoMessage() {}
 
 func (x *ListCorrectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[15]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2177,7 +2669,7 @@ func (x *ListCorrectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCorrectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListCorrectionsResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{15}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListCorrectionsResponse) GetCorrections() []*Correction {
@@ -2207,7 +2699,7 @@ type GetCorrectionRequest struct {
 
 func (x *GetCorrectionRequest) Reset() {
 	*x = GetCorrectionRequest{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[16]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2219,7 +2711,7 @@ func (x *GetCorrectionRequest) String() string {
 func (*GetCorrectionRequest) ProtoMessage() {}
 
 func (x *GetCorrectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[16]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2232,7 +2724,7 @@ func (x *GetCorrectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCorrectionRequest.ProtoReflect.Descriptor instead.
 func (*GetCorrectionRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{16}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetCorrectionRequest) GetTenant() string {
@@ -2260,7 +2752,7 @@ type GetCorrectionResponse struct {
 
 func (x *GetCorrectionResponse) Reset() {
 	*x = GetCorrectionResponse{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[17]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2272,7 +2764,7 @@ func (x *GetCorrectionResponse) String() string {
 func (*GetCorrectionResponse) ProtoMessage() {}
 
 func (x *GetCorrectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[17]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2285,7 +2777,7 @@ func (x *GetCorrectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCorrectionResponse.ProtoReflect.Descriptor instead.
 func (*GetCorrectionResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{17}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetCorrectionResponse) GetCorrection() *Correction {
@@ -2311,7 +2803,7 @@ type UndoCorrectionRequest struct {
 
 func (x *UndoCorrectionRequest) Reset() {
 	*x = UndoCorrectionRequest{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[18]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2323,7 +2815,7 @@ func (x *UndoCorrectionRequest) String() string {
 func (*UndoCorrectionRequest) ProtoMessage() {}
 
 func (x *UndoCorrectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[18]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2336,7 +2828,7 @@ func (x *UndoCorrectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UndoCorrectionRequest.ProtoReflect.Descriptor instead.
 func (*UndoCorrectionRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{18}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *UndoCorrectionRequest) GetTenant() string {
@@ -2371,7 +2863,7 @@ type UndoCorrectionResponse struct {
 
 func (x *UndoCorrectionResponse) Reset() {
 	*x = UndoCorrectionResponse{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[19]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2383,7 +2875,7 @@ func (x *UndoCorrectionResponse) String() string {
 func (*UndoCorrectionResponse) ProtoMessage() {}
 
 func (x *UndoCorrectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[19]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2396,7 +2888,7 @@ func (x *UndoCorrectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UndoCorrectionResponse.ProtoReflect.Descriptor instead.
 func (*UndoCorrectionResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{19}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *UndoCorrectionResponse) GetCorrection() *Correction {
@@ -2419,7 +2911,7 @@ type PurgeCorrectionRequest struct {
 
 func (x *PurgeCorrectionRequest) Reset() {
 	*x = PurgeCorrectionRequest{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[20]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2431,7 +2923,7 @@ func (x *PurgeCorrectionRequest) String() string {
 func (*PurgeCorrectionRequest) ProtoMessage() {}
 
 func (x *PurgeCorrectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[20]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2444,7 +2936,7 @@ func (x *PurgeCorrectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeCorrectionRequest.ProtoReflect.Descriptor instead.
 func (*PurgeCorrectionRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{20}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *PurgeCorrectionRequest) GetTenant() string {
@@ -2472,7 +2964,7 @@ type PurgeCorrectionResponse struct {
 
 func (x *PurgeCorrectionResponse) Reset() {
 	*x = PurgeCorrectionResponse{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[21]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2484,7 +2976,7 @@ func (x *PurgeCorrectionResponse) String() string {
 func (*PurgeCorrectionResponse) ProtoMessage() {}
 
 func (x *PurgeCorrectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[21]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2497,7 +2989,7 @@ func (x *PurgeCorrectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeCorrectionResponse.ProtoReflect.Descriptor instead.
 func (*PurgeCorrectionResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{21}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *PurgeCorrectionResponse) GetCorrection() *Correction {
@@ -2529,7 +3021,7 @@ type AllowArrivalsRequest struct {
 
 func (x *AllowArrivalsRequest) Reset() {
 	*x = AllowArrivalsRequest{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[22]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2541,7 +3033,7 @@ func (x *AllowArrivalsRequest) String() string {
 func (*AllowArrivalsRequest) ProtoMessage() {}
 
 func (x *AllowArrivalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[22]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2554,7 +3046,7 @@ func (x *AllowArrivalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AllowArrivalsRequest.ProtoReflect.Descriptor instead.
 func (*AllowArrivalsRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{22}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AllowArrivalsRequest) GetTenant() string {
@@ -2597,7 +3089,7 @@ type AllowArrivalsResponse struct {
 
 func (x *AllowArrivalsResponse) Reset() {
 	*x = AllowArrivalsResponse{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[23]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2609,7 +3101,7 @@ func (x *AllowArrivalsResponse) String() string {
 func (*AllowArrivalsResponse) ProtoMessage() {}
 
 func (x *AllowArrivalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[23]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2622,7 +3114,7 @@ func (x *AllowArrivalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AllowArrivalsResponse.ProtoReflect.Descriptor instead.
 func (*AllowArrivalsResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{23}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *AllowArrivalsResponse) GetCorrection() *Correction {
@@ -2703,7 +3195,7 @@ type ScrubFinding struct {
 
 func (x *ScrubFinding) Reset() {
 	*x = ScrubFinding{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[24]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2715,7 +3207,7 @@ func (x *ScrubFinding) String() string {
 func (*ScrubFinding) ProtoMessage() {}
 
 func (x *ScrubFinding) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[24]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2728,7 +3220,7 @@ func (x *ScrubFinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScrubFinding.ProtoReflect.Descriptor instead.
 func (*ScrubFinding) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{24}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ScrubFinding) GetId() string {
@@ -2898,7 +3390,7 @@ type ListScrubFindingsRequest struct {
 
 func (x *ListScrubFindingsRequest) Reset() {
 	*x = ListScrubFindingsRequest{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[25]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2910,7 +3402,7 @@ func (x *ListScrubFindingsRequest) String() string {
 func (*ListScrubFindingsRequest) ProtoMessage() {}
 
 func (x *ListScrubFindingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[25]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2923,7 +3415,7 @@ func (x *ListScrubFindingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListScrubFindingsRequest.ProtoReflect.Descriptor instead.
 func (*ListScrubFindingsRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{25}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListScrubFindingsRequest) GetTenant() string {
@@ -2981,7 +3473,7 @@ type ListScrubFindingsResponse struct {
 
 func (x *ListScrubFindingsResponse) Reset() {
 	*x = ListScrubFindingsResponse{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[26]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2993,7 +3485,7 @@ func (x *ListScrubFindingsResponse) String() string {
 func (*ListScrubFindingsResponse) ProtoMessage() {}
 
 func (x *ListScrubFindingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[26]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3006,7 +3498,7 @@ func (x *ListScrubFindingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListScrubFindingsResponse.ProtoReflect.Descriptor instead.
 func (*ListScrubFindingsResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{26}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListScrubFindingsResponse) GetFindings() []*ScrubFinding {
@@ -3037,7 +3529,7 @@ type InstanceRef struct {
 
 func (x *InstanceRef) Reset() {
 	*x = InstanceRef{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[27]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3049,7 +3541,7 @@ func (x *InstanceRef) String() string {
 func (*InstanceRef) ProtoMessage() {}
 
 func (x *InstanceRef) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[27]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3062,7 +3554,7 @@ func (x *InstanceRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstanceRef.ProtoReflect.Descriptor instead.
 func (*InstanceRef) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{27}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *InstanceRef) GetInstanceId() string {
@@ -3111,7 +3603,7 @@ type ResolvedInstance struct {
 
 func (x *ResolvedInstance) Reset() {
 	*x = ResolvedInstance{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[28]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3123,7 +3615,7 @@ func (x *ResolvedInstance) String() string {
 func (*ResolvedInstance) ProtoMessage() {}
 
 func (x *ResolvedInstance) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[28]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3136,7 +3628,7 @@ func (x *ResolvedInstance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolvedInstance.ProtoReflect.Descriptor instead.
 func (*ResolvedInstance) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{28}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ResolvedInstance) GetMember() *InstanceRef {
@@ -3215,7 +3707,7 @@ type ResolveInstancesRequest struct {
 
 func (x *ResolveInstancesRequest) Reset() {
 	*x = ResolveInstancesRequest{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[29]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3227,7 +3719,7 @@ func (x *ResolveInstancesRequest) String() string {
 func (*ResolveInstancesRequest) ProtoMessage() {}
 
 func (x *ResolveInstancesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[29]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3240,7 +3732,7 @@ func (x *ResolveInstancesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveInstancesRequest.ProtoReflect.Descriptor instead.
 func (*ResolveInstancesRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{29}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ResolveInstancesRequest) GetTenant() string {
@@ -3268,7 +3760,7 @@ type ResolveInstancesResponse struct {
 
 func (x *ResolveInstancesResponse) Reset() {
 	*x = ResolveInstancesResponse{}
-	mi := &file_nopacs_v1_correction_proto_msgTypes[30]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3280,7 +3772,7 @@ func (x *ResolveInstancesResponse) String() string {
 func (*ResolveInstancesResponse) ProtoMessage() {}
 
 func (x *ResolveInstancesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_correction_proto_msgTypes[30]
+	mi := &file_nopacs_v1_correction_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3293,7 +3785,7 @@ func (x *ResolveInstancesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveInstancesResponse.ProtoReflect.Descriptor instead.
 func (*ResolveInstancesResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{30}
+	return file_nopacs_v1_correction_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ResolveInstancesResponse) GetInstances() []*ResolvedInstance {
@@ -3447,6 +3939,49 @@ const file_nopacs_v1_correction_proto_rawDesc = "" +
 	"\x0fReplaceResponse\x125\n" +
 	"\n" +
 	"correction\x18\x01 \x01(\v2\x15.nopacs.v1.CorrectionR\n" +
+	"correction\"X\n" +
+	"\n" +
+	"EditChange\x12\x1c\n" +
+	"\tattribute\x18\x01 \x01(\tR\tattribute\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12\x16\n" +
+	"\x06remove\x18\x03 \x01(\bR\x06remove\"\x83\x02\n" +
+	"\vEditRequest\x12\x16\n" +
+	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x123\n" +
+	"\x06target\x18\x02 \x01(\v2\x1b.nopacs.v1.CorrectionTargetR\x06target\x12/\n" +
+	"\achanges\x18\x03 \x03(\v2\x15.nopacs.v1.EditChangeR\achanges\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12#\n" +
+	"\rvalidate_only\x18\x05 \x01(\bR\fvalidateOnly\x12\x18\n" +
+	"\aconfirm\x18\x06 \x01(\tR\aconfirm\x12\x1f\n" +
+	"\vshow_values\x18\a \x01(\bR\n" +
+	"showValues\"\xb6\x01\n" +
+	"\x14EditPreviewAttribute\x12\x1c\n" +
+	"\tattribute\x18\x01 \x01(\tR\tattribute\x12\x18\n" +
+	"\apresent\x18\x02 \x01(\bR\apresent\x12\x14\n" +
+	"\x05known\x18\x03 \x01(\bR\x05known\x12\x1b\n" +
+	"\told_value\x18\x04 \x01(\tR\boldValue\x12\x1b\n" +
+	"\tnew_value\x18\x05 \x01(\tR\bnewValue\x12\x16\n" +
+	"\x06remove\x18\x06 \x01(\bR\x06remove\"\xfc\x01\n" +
+	"\x13EditPreviewInstance\x12#\n" +
+	"\rsubject_label\x18\x01 \x01(\tR\fsubjectLabel\x12#\n" +
+	"\rsession_label\x18\x02 \x01(\tR\fsessionLabel\x12\x1d\n" +
+	"\n" +
+	"scan_label\x18\x03 \x01(\tR\tscanLabel\x12\x1f\n" +
+	"\vinstance_id\x18\x04 \x01(\tR\n" +
+	"instanceId\x12\x1a\n" +
+	"\brevision\x18\x05 \x01(\x05R\brevision\x12?\n" +
+	"\n" +
+	"attributes\x18\x06 \x03(\v2\x1f.nopacs.v1.EditPreviewAttributeR\n" +
+	"attributes\"\xbc\x01\n" +
+	"\vEditPreview\x12<\n" +
+	"\tinstances\x18\x01 \x03(\v2\x1e.nopacs.v1.EditPreviewInstanceR\tinstances\x12\x1a\n" +
+	"\bstorages\x18\x02 \x03(\tR\bstorages\x129\n" +
+	"\n" +
+	"issue_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tissueTime\x12\x18\n" +
+	"\aconfirm\x18\x04 \x01(\tR\aconfirm\"w\n" +
+	"\fEditResponse\x120\n" +
+	"\apreview\x18\x01 \x01(\v2\x16.nopacs.v1.EditPreviewR\apreview\x125\n" +
+	"\n" +
+	"correction\x18\x02 \x01(\v2\x15.nopacs.v1.CorrectionR\n" +
 	"correction\"\x88\x02\n" +
 	"\x16ListCorrectionsRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12/\n" +
@@ -3553,12 +4088,13 @@ const file_nopacs_v1_correction_proto_rawDesc = "" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x120\n" +
 	"\amembers\x18\x02 \x03(\v2\x16.nopacs.v1.InstanceRefR\amembers\"U\n" +
 	"\x18ResolveInstancesResponse\x129\n" +
-	"\tinstances\x18\x01 \x03(\v2\x1b.nopacs.v1.ResolvedInstanceR\tinstances*\x87\x01\n" +
+	"\tinstances\x18\x01 \x03(\v2\x1b.nopacs.v1.ResolvedInstanceR\tinstances*\xa1\x01\n" +
 	"\x0eCorrectionKind\x12\x1f\n" +
 	"\x1bCORRECTION_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16CORRECTION_KIND_DELETE\x10\x01\x12\x1b\n" +
 	"\x17CORRECTION_KIND_RELABEL\x10\x02\x12\x1b\n" +
-	"\x17CORRECTION_KIND_REPLACE\x10\x03*t\n" +
+	"\x17CORRECTION_KIND_REPLACE\x10\x03\x12\x18\n" +
+	"\x14CORRECTION_KIND_EDIT\x10\x04*t\n" +
 	"\x10CorrectionOrigin\x12!\n" +
 	"\x1dCORRECTION_ORIGIN_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CORRECTION_ORIGIN_PERSON\x10\x01\x12\x1f\n" +
@@ -3595,11 +4131,12 @@ const file_nopacs_v1_correction_proto_rawDesc = "" +
 	"\x1cINSTANCE_DISPOSITION_CURRENT\x10\x01\x12#\n" +
 	"\x1fINSTANCE_DISPOSITION_SUPERSEDED\x10\x02\x12 \n" +
 	"\x1cINSTANCE_DISPOSITION_DELETED\x10\x03\x12 \n" +
-	"\x1cINSTANCE_DISPOSITION_UNKNOWN\x10\x042\xf8\x06\n" +
+	"\x1cINSTANCE_DISPOSITION_UNKNOWN\x10\x042\xb6\a\n" +
 	"\x11CorrectionService\x12B\n" +
 	"\x06Delete\x12\x18.nopacs.v1.DeleteRequest\x1a\x19.nopacs.v1.DeleteResponse\"\x03\x90\x02\x02\x12E\n" +
 	"\aRelabel\x12\x19.nopacs.v1.RelabelRequest\x1a\x1a.nopacs.v1.RelabelResponse\"\x03\x90\x02\x02\x12E\n" +
-	"\aReplace\x12\x19.nopacs.v1.ReplaceRequest\x1a\x1a.nopacs.v1.ReplaceResponse\"\x03\x90\x02\x02\x12]\n" +
+	"\aReplace\x12\x19.nopacs.v1.ReplaceRequest\x1a\x1a.nopacs.v1.ReplaceResponse\"\x03\x90\x02\x02\x12<\n" +
+	"\x04Edit\x12\x16.nopacs.v1.EditRequest\x1a\x17.nopacs.v1.EditResponse\"\x03\x90\x02\x02\x12]\n" +
 	"\x0fListCorrections\x12!.nopacs.v1.ListCorrectionsRequest\x1a\".nopacs.v1.ListCorrectionsResponse\"\x03\x90\x02\x01\x12W\n" +
 	"\rGetCorrection\x12\x1f.nopacs.v1.GetCorrectionRequest\x1a .nopacs.v1.GetCorrectionResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\x0eUndoCorrection\x12 .nopacs.v1.UndoCorrectionRequest\x1a!.nopacs.v1.UndoCorrectionResponse\"\x03\x90\x02\x02\x12]\n" +
@@ -3623,7 +4160,7 @@ func file_nopacs_v1_correction_proto_rawDescGZIP() []byte {
 }
 
 var file_nopacs_v1_correction_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_nopacs_v1_correction_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_nopacs_v1_correction_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_nopacs_v1_correction_proto_goTypes = []any{
 	(CorrectionKind)(0),               // 0: nopacs.v1.CorrectionKind
 	(CorrectionOrigin)(0),             // 1: nopacs.v1.CorrectionOrigin
@@ -3646,47 +4183,53 @@ var file_nopacs_v1_correction_proto_goTypes = []any{
 	(*RelabelResponse)(nil),           // 18: nopacs.v1.RelabelResponse
 	(*ReplaceRequest)(nil),            // 19: nopacs.v1.ReplaceRequest
 	(*ReplaceResponse)(nil),           // 20: nopacs.v1.ReplaceResponse
-	(*ListCorrectionsRequest)(nil),    // 21: nopacs.v1.ListCorrectionsRequest
-	(*ListCorrectionsResponse)(nil),   // 22: nopacs.v1.ListCorrectionsResponse
-	(*GetCorrectionRequest)(nil),      // 23: nopacs.v1.GetCorrectionRequest
-	(*GetCorrectionResponse)(nil),     // 24: nopacs.v1.GetCorrectionResponse
-	(*UndoCorrectionRequest)(nil),     // 25: nopacs.v1.UndoCorrectionRequest
-	(*UndoCorrectionResponse)(nil),    // 26: nopacs.v1.UndoCorrectionResponse
-	(*PurgeCorrectionRequest)(nil),    // 27: nopacs.v1.PurgeCorrectionRequest
-	(*PurgeCorrectionResponse)(nil),   // 28: nopacs.v1.PurgeCorrectionResponse
-	(*AllowArrivalsRequest)(nil),      // 29: nopacs.v1.AllowArrivalsRequest
-	(*AllowArrivalsResponse)(nil),     // 30: nopacs.v1.AllowArrivalsResponse
-	(*ScrubFinding)(nil),              // 31: nopacs.v1.ScrubFinding
-	(*ListScrubFindingsRequest)(nil),  // 32: nopacs.v1.ListScrubFindingsRequest
-	(*ListScrubFindingsResponse)(nil), // 33: nopacs.v1.ListScrubFindingsResponse
-	(*InstanceRef)(nil),               // 34: nopacs.v1.InstanceRef
-	(*ResolvedInstance)(nil),          // 35: nopacs.v1.ResolvedInstance
-	(*ResolveInstancesRequest)(nil),   // 36: nopacs.v1.ResolveInstancesRequest
-	(*ResolveInstancesResponse)(nil),  // 37: nopacs.v1.ResolveInstancesResponse
-	(*timestamppb.Timestamp)(nil),     // 38: google.protobuf.Timestamp
+	(*EditChange)(nil),                // 21: nopacs.v1.EditChange
+	(*EditRequest)(nil),               // 22: nopacs.v1.EditRequest
+	(*EditPreviewAttribute)(nil),      // 23: nopacs.v1.EditPreviewAttribute
+	(*EditPreviewInstance)(nil),       // 24: nopacs.v1.EditPreviewInstance
+	(*EditPreview)(nil),               // 25: nopacs.v1.EditPreview
+	(*EditResponse)(nil),              // 26: nopacs.v1.EditResponse
+	(*ListCorrectionsRequest)(nil),    // 27: nopacs.v1.ListCorrectionsRequest
+	(*ListCorrectionsResponse)(nil),   // 28: nopacs.v1.ListCorrectionsResponse
+	(*GetCorrectionRequest)(nil),      // 29: nopacs.v1.GetCorrectionRequest
+	(*GetCorrectionResponse)(nil),     // 30: nopacs.v1.GetCorrectionResponse
+	(*UndoCorrectionRequest)(nil),     // 31: nopacs.v1.UndoCorrectionRequest
+	(*UndoCorrectionResponse)(nil),    // 32: nopacs.v1.UndoCorrectionResponse
+	(*PurgeCorrectionRequest)(nil),    // 33: nopacs.v1.PurgeCorrectionRequest
+	(*PurgeCorrectionResponse)(nil),   // 34: nopacs.v1.PurgeCorrectionResponse
+	(*AllowArrivalsRequest)(nil),      // 35: nopacs.v1.AllowArrivalsRequest
+	(*AllowArrivalsResponse)(nil),     // 36: nopacs.v1.AllowArrivalsResponse
+	(*ScrubFinding)(nil),              // 37: nopacs.v1.ScrubFinding
+	(*ListScrubFindingsRequest)(nil),  // 38: nopacs.v1.ListScrubFindingsRequest
+	(*ListScrubFindingsResponse)(nil), // 39: nopacs.v1.ListScrubFindingsResponse
+	(*InstanceRef)(nil),               // 40: nopacs.v1.InstanceRef
+	(*ResolvedInstance)(nil),          // 41: nopacs.v1.ResolvedInstance
+	(*ResolveInstancesRequest)(nil),   // 42: nopacs.v1.ResolveInstancesRequest
+	(*ResolveInstancesResponse)(nil),  // 43: nopacs.v1.ResolveInstancesResponse
+	(*timestamppb.Timestamp)(nil),     // 44: google.protobuf.Timestamp
 }
 var file_nopacs_v1_correction_proto_depIdxs = []int32{
-	38, // 0: nopacs.v1.StorageDisposition.retain_until:type_name -> google.protobuf.Timestamp
+	44, // 0: nopacs.v1.StorageDisposition.retain_until:type_name -> google.protobuf.Timestamp
 	3,  // 1: nopacs.v1.StoragePurge.expected:type_name -> nopacs.v1.ObjectDisposition
 	4,  // 2: nopacs.v1.HeldValue.kind:type_name -> nopacs.v1.HeldValueKind
-	38, // 3: nopacs.v1.PeerCopy.last_send_time:type_name -> google.protobuf.Timestamp
+	44, // 3: nopacs.v1.PeerCopy.last_send_time:type_name -> google.protobuf.Timestamp
 	10, // 4: nopacs.v1.DeletePreview.counts:type_name -> nopacs.v1.CorrectionCounts
 	12, // 5: nopacs.v1.DeletePreview.sent_to:type_name -> nopacs.v1.PeerCopy
-	38, // 6: nopacs.v1.DeletePreview.purge_time:type_name -> google.protobuf.Timestamp
+	44, // 6: nopacs.v1.DeletePreview.purge_time:type_name -> google.protobuf.Timestamp
 	9,  // 7: nopacs.v1.DeletePreview.storage_purges:type_name -> nopacs.v1.StoragePurge
-	38, // 8: nopacs.v1.DeletePreview.keep_until:type_name -> google.protobuf.Timestamp
+	44, // 8: nopacs.v1.DeletePreview.keep_until:type_name -> google.protobuf.Timestamp
 	0,  // 9: nopacs.v1.Correction.kind:type_name -> nopacs.v1.CorrectionKind
 	2,  // 10: nopacs.v1.Correction.state:type_name -> nopacs.v1.CorrectionState
 	7,  // 11: nopacs.v1.Correction.target:type_name -> nopacs.v1.CorrectionTarget
-	38, // 12: nopacs.v1.Correction.create_time:type_name -> google.protobuf.Timestamp
-	38, // 13: nopacs.v1.Correction.purge_time:type_name -> google.protobuf.Timestamp
-	38, // 14: nopacs.v1.Correction.end_time:type_name -> google.protobuf.Timestamp
+	44, // 12: nopacs.v1.Correction.create_time:type_name -> google.protobuf.Timestamp
+	44, // 13: nopacs.v1.Correction.purge_time:type_name -> google.protobuf.Timestamp
+	44, // 14: nopacs.v1.Correction.end_time:type_name -> google.protobuf.Timestamp
 	10, // 15: nopacs.v1.Correction.counts:type_name -> nopacs.v1.CorrectionCounts
 	12, // 16: nopacs.v1.Correction.sent_to:type_name -> nopacs.v1.PeerCopy
-	38, // 17: nopacs.v1.Correction.commit_time:type_name -> google.protobuf.Timestamp
+	44, // 17: nopacs.v1.Correction.commit_time:type_name -> google.protobuf.Timestamp
 	8,  // 18: nopacs.v1.Correction.dispositions:type_name -> nopacs.v1.StorageDisposition
 	1,  // 19: nopacs.v1.Correction.origin:type_name -> nopacs.v1.CorrectionOrigin
-	38, // 20: nopacs.v1.Correction.retention_due_time:type_name -> google.protobuf.Timestamp
+	44, // 20: nopacs.v1.Correction.retention_due_time:type_name -> google.protobuf.Timestamp
 	11, // 21: nopacs.v1.Correction.holds:type_name -> nopacs.v1.HeldValue
 	7,  // 22: nopacs.v1.DeleteRequest.target:type_name -> nopacs.v1.CorrectionTarget
 	13, // 23: nopacs.v1.DeleteResponse.preview:type_name -> nopacs.v1.DeletePreview
@@ -3694,49 +4237,58 @@ var file_nopacs_v1_correction_proto_depIdxs = []int32{
 	7,  // 25: nopacs.v1.RelabelRequest.target:type_name -> nopacs.v1.CorrectionTarget
 	14, // 26: nopacs.v1.RelabelResponse.correction:type_name -> nopacs.v1.Correction
 	14, // 27: nopacs.v1.ReplaceResponse.correction:type_name -> nopacs.v1.Correction
-	0,  // 28: nopacs.v1.ListCorrectionsRequest.kinds:type_name -> nopacs.v1.CorrectionKind
-	2,  // 29: nopacs.v1.ListCorrectionsRequest.states:type_name -> nopacs.v1.CorrectionState
-	1,  // 30: nopacs.v1.ListCorrectionsRequest.origins:type_name -> nopacs.v1.CorrectionOrigin
-	14, // 31: nopacs.v1.ListCorrectionsResponse.corrections:type_name -> nopacs.v1.Correction
-	14, // 32: nopacs.v1.GetCorrectionResponse.correction:type_name -> nopacs.v1.Correction
-	14, // 33: nopacs.v1.UndoCorrectionResponse.correction:type_name -> nopacs.v1.Correction
-	14, // 34: nopacs.v1.PurgeCorrectionResponse.correction:type_name -> nopacs.v1.Correction
-	11, // 35: nopacs.v1.AllowArrivalsRequest.value:type_name -> nopacs.v1.HeldValue
-	14, // 36: nopacs.v1.AllowArrivalsResponse.correction:type_name -> nopacs.v1.Correction
-	5,  // 37: nopacs.v1.ScrubFinding.kind:type_name -> nopacs.v1.ScrubFindingKind
-	38, // 38: nopacs.v1.ScrubFinding.find_time:type_name -> google.protobuf.Timestamp
-	38, // 39: nopacs.v1.ScrubFinding.clear_time:type_name -> google.protobuf.Timestamp
-	5,  // 40: nopacs.v1.ListScrubFindingsRequest.kinds:type_name -> nopacs.v1.ScrubFindingKind
-	31, // 41: nopacs.v1.ListScrubFindingsResponse.findings:type_name -> nopacs.v1.ScrubFinding
-	34, // 42: nopacs.v1.ResolvedInstance.member:type_name -> nopacs.v1.InstanceRef
-	6,  // 43: nopacs.v1.ResolvedInstance.disposition:type_name -> nopacs.v1.InstanceDisposition
-	34, // 44: nopacs.v1.ResolveInstancesRequest.members:type_name -> nopacs.v1.InstanceRef
-	35, // 45: nopacs.v1.ResolveInstancesResponse.instances:type_name -> nopacs.v1.ResolvedInstance
-	15, // 46: nopacs.v1.CorrectionService.Delete:input_type -> nopacs.v1.DeleteRequest
-	17, // 47: nopacs.v1.CorrectionService.Relabel:input_type -> nopacs.v1.RelabelRequest
-	19, // 48: nopacs.v1.CorrectionService.Replace:input_type -> nopacs.v1.ReplaceRequest
-	21, // 49: nopacs.v1.CorrectionService.ListCorrections:input_type -> nopacs.v1.ListCorrectionsRequest
-	23, // 50: nopacs.v1.CorrectionService.GetCorrection:input_type -> nopacs.v1.GetCorrectionRequest
-	25, // 51: nopacs.v1.CorrectionService.UndoCorrection:input_type -> nopacs.v1.UndoCorrectionRequest
-	27, // 52: nopacs.v1.CorrectionService.PurgeCorrection:input_type -> nopacs.v1.PurgeCorrectionRequest
-	29, // 53: nopacs.v1.CorrectionService.AllowArrivals:input_type -> nopacs.v1.AllowArrivalsRequest
-	32, // 54: nopacs.v1.CorrectionService.ListScrubFindings:input_type -> nopacs.v1.ListScrubFindingsRequest
-	36, // 55: nopacs.v1.CorrectionService.ResolveInstances:input_type -> nopacs.v1.ResolveInstancesRequest
-	16, // 56: nopacs.v1.CorrectionService.Delete:output_type -> nopacs.v1.DeleteResponse
-	18, // 57: nopacs.v1.CorrectionService.Relabel:output_type -> nopacs.v1.RelabelResponse
-	20, // 58: nopacs.v1.CorrectionService.Replace:output_type -> nopacs.v1.ReplaceResponse
-	22, // 59: nopacs.v1.CorrectionService.ListCorrections:output_type -> nopacs.v1.ListCorrectionsResponse
-	24, // 60: nopacs.v1.CorrectionService.GetCorrection:output_type -> nopacs.v1.GetCorrectionResponse
-	26, // 61: nopacs.v1.CorrectionService.UndoCorrection:output_type -> nopacs.v1.UndoCorrectionResponse
-	28, // 62: nopacs.v1.CorrectionService.PurgeCorrection:output_type -> nopacs.v1.PurgeCorrectionResponse
-	30, // 63: nopacs.v1.CorrectionService.AllowArrivals:output_type -> nopacs.v1.AllowArrivalsResponse
-	33, // 64: nopacs.v1.CorrectionService.ListScrubFindings:output_type -> nopacs.v1.ListScrubFindingsResponse
-	37, // 65: nopacs.v1.CorrectionService.ResolveInstances:output_type -> nopacs.v1.ResolveInstancesResponse
-	56, // [56:66] is the sub-list for method output_type
-	46, // [46:56] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	7,  // 28: nopacs.v1.EditRequest.target:type_name -> nopacs.v1.CorrectionTarget
+	21, // 29: nopacs.v1.EditRequest.changes:type_name -> nopacs.v1.EditChange
+	23, // 30: nopacs.v1.EditPreviewInstance.attributes:type_name -> nopacs.v1.EditPreviewAttribute
+	24, // 31: nopacs.v1.EditPreview.instances:type_name -> nopacs.v1.EditPreviewInstance
+	44, // 32: nopacs.v1.EditPreview.issue_time:type_name -> google.protobuf.Timestamp
+	25, // 33: nopacs.v1.EditResponse.preview:type_name -> nopacs.v1.EditPreview
+	14, // 34: nopacs.v1.EditResponse.correction:type_name -> nopacs.v1.Correction
+	0,  // 35: nopacs.v1.ListCorrectionsRequest.kinds:type_name -> nopacs.v1.CorrectionKind
+	2,  // 36: nopacs.v1.ListCorrectionsRequest.states:type_name -> nopacs.v1.CorrectionState
+	1,  // 37: nopacs.v1.ListCorrectionsRequest.origins:type_name -> nopacs.v1.CorrectionOrigin
+	14, // 38: nopacs.v1.ListCorrectionsResponse.corrections:type_name -> nopacs.v1.Correction
+	14, // 39: nopacs.v1.GetCorrectionResponse.correction:type_name -> nopacs.v1.Correction
+	14, // 40: nopacs.v1.UndoCorrectionResponse.correction:type_name -> nopacs.v1.Correction
+	14, // 41: nopacs.v1.PurgeCorrectionResponse.correction:type_name -> nopacs.v1.Correction
+	11, // 42: nopacs.v1.AllowArrivalsRequest.value:type_name -> nopacs.v1.HeldValue
+	14, // 43: nopacs.v1.AllowArrivalsResponse.correction:type_name -> nopacs.v1.Correction
+	5,  // 44: nopacs.v1.ScrubFinding.kind:type_name -> nopacs.v1.ScrubFindingKind
+	44, // 45: nopacs.v1.ScrubFinding.find_time:type_name -> google.protobuf.Timestamp
+	44, // 46: nopacs.v1.ScrubFinding.clear_time:type_name -> google.protobuf.Timestamp
+	5,  // 47: nopacs.v1.ListScrubFindingsRequest.kinds:type_name -> nopacs.v1.ScrubFindingKind
+	37, // 48: nopacs.v1.ListScrubFindingsResponse.findings:type_name -> nopacs.v1.ScrubFinding
+	40, // 49: nopacs.v1.ResolvedInstance.member:type_name -> nopacs.v1.InstanceRef
+	6,  // 50: nopacs.v1.ResolvedInstance.disposition:type_name -> nopacs.v1.InstanceDisposition
+	40, // 51: nopacs.v1.ResolveInstancesRequest.members:type_name -> nopacs.v1.InstanceRef
+	41, // 52: nopacs.v1.ResolveInstancesResponse.instances:type_name -> nopacs.v1.ResolvedInstance
+	15, // 53: nopacs.v1.CorrectionService.Delete:input_type -> nopacs.v1.DeleteRequest
+	17, // 54: nopacs.v1.CorrectionService.Relabel:input_type -> nopacs.v1.RelabelRequest
+	19, // 55: nopacs.v1.CorrectionService.Replace:input_type -> nopacs.v1.ReplaceRequest
+	22, // 56: nopacs.v1.CorrectionService.Edit:input_type -> nopacs.v1.EditRequest
+	27, // 57: nopacs.v1.CorrectionService.ListCorrections:input_type -> nopacs.v1.ListCorrectionsRequest
+	29, // 58: nopacs.v1.CorrectionService.GetCorrection:input_type -> nopacs.v1.GetCorrectionRequest
+	31, // 59: nopacs.v1.CorrectionService.UndoCorrection:input_type -> nopacs.v1.UndoCorrectionRequest
+	33, // 60: nopacs.v1.CorrectionService.PurgeCorrection:input_type -> nopacs.v1.PurgeCorrectionRequest
+	35, // 61: nopacs.v1.CorrectionService.AllowArrivals:input_type -> nopacs.v1.AllowArrivalsRequest
+	38, // 62: nopacs.v1.CorrectionService.ListScrubFindings:input_type -> nopacs.v1.ListScrubFindingsRequest
+	42, // 63: nopacs.v1.CorrectionService.ResolveInstances:input_type -> nopacs.v1.ResolveInstancesRequest
+	16, // 64: nopacs.v1.CorrectionService.Delete:output_type -> nopacs.v1.DeleteResponse
+	18, // 65: nopacs.v1.CorrectionService.Relabel:output_type -> nopacs.v1.RelabelResponse
+	20, // 66: nopacs.v1.CorrectionService.Replace:output_type -> nopacs.v1.ReplaceResponse
+	26, // 67: nopacs.v1.CorrectionService.Edit:output_type -> nopacs.v1.EditResponse
+	28, // 68: nopacs.v1.CorrectionService.ListCorrections:output_type -> nopacs.v1.ListCorrectionsResponse
+	30, // 69: nopacs.v1.CorrectionService.GetCorrection:output_type -> nopacs.v1.GetCorrectionResponse
+	32, // 70: nopacs.v1.CorrectionService.UndoCorrection:output_type -> nopacs.v1.UndoCorrectionResponse
+	34, // 71: nopacs.v1.CorrectionService.PurgeCorrection:output_type -> nopacs.v1.PurgeCorrectionResponse
+	36, // 72: nopacs.v1.CorrectionService.AllowArrivals:output_type -> nopacs.v1.AllowArrivalsResponse
+	39, // 73: nopacs.v1.CorrectionService.ListScrubFindings:output_type -> nopacs.v1.ListScrubFindingsResponse
+	43, // 74: nopacs.v1.CorrectionService.ResolveInstances:output_type -> nopacs.v1.ResolveInstancesResponse
+	64, // [64:75] is the sub-list for method output_type
+	53, // [53:64] is the sub-list for method input_type
+	53, // [53:53] is the sub-list for extension type_name
+	53, // [53:53] is the sub-list for extension extendee
+	0,  // [0:53] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_correction_proto_init() }
@@ -3744,14 +4296,14 @@ func file_nopacs_v1_correction_proto_init() {
 	if File_nopacs_v1_correction_proto != nil {
 		return
 	}
-	file_nopacs_v1_correction_proto_msgTypes[24].OneofWrappers = []any{}
+	file_nopacs_v1_correction_proto_msgTypes[30].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_correction_proto_rawDesc), len(file_nopacs_v1_correction_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   31,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

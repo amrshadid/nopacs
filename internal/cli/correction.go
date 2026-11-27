@@ -26,11 +26,12 @@ const (
 
 // newCorrection builds the correction noun.
 func (a *app) newCorrection() *cobra.Command {
-	return group("correction", "Delete, relabel or replace archived data, and follow, undo or purge each change",
+	return group("correction", "Delete, relabel, replace or edit archived data, and follow, undo or purge each change",
 		`Change archived data on purpose, each change kept as a correction with the
 reason a person gave: delete a subject, a session, a scan or one instance;
 relabel a subject, a session or a scan; replace an archived instance with the
-corrected file a sender sent again, held in quarantine.
+corrected file a sender sent again, held in quarantine; edit header values of
+every instance of a subject, a session, a scan or one instance.
 
 A delete hides its data from every read at once and keeps its bytes, unserved,
 for the tenant's grace period (the setting delete.grace, 7d by default), during
@@ -41,11 +42,11 @@ with each object. "correction purge" purges at once. What names deleted data
 purge, and a file that matches it later is quarantined, not archived, until
 "correction allow" lets that value arrive again.
 
-Every command takes the tenant first. Deleting, relabeling, replacing, undoing,
-purging and allowing need the admin role on the tenant; listing and showing need
-operator. Each reason is 1 to 1024 bytes, in your own words, never a value read
-from a file.`,
-		a.newCorrectionDelete(), a.newCorrectionRelabel(), a.newCorrectionReplace(), a.newCorrectionList(),
+Every command takes the tenant first. Deleting, relabeling, replacing, editing,
+undoing, purging and allowing need the admin role on the tenant; listing and
+showing need operator. Each reason is 1 to 1024 bytes, in your own words, never
+a value read from a file.`,
+		a.newCorrectionDelete(), a.newCorrectionRelabel(), a.newCorrectionReplace(), a.newCorrectionEdit(), a.newCorrectionList(),
 		a.newCorrectionShow(), a.newCorrectionUndo(), a.newCorrectionPurge(), a.newCorrectionAllow())
 }
 
@@ -404,11 +405,12 @@ func (a *app) newCorrectionUndo() *cobra.Command {
 	var reason string
 	cmd := &cobra.Command{
 		Use:   "undo <tenant> <id> --reason TEXT",
-		Short: "Undo a delete in its grace period, or stop a relabel still copying",
-		Long: `Show a committed delete's data again, as it was, during its grace period; or
-stop a relabel that is still copying, removing its copies. A correction already
-undone is answered as it stands. A delete whose purge has started cannot be
-undone (exit 5).`,
+		Short: "Undo a delete or an edit in its grace period, or stop a relabel still copying",
+		Long: `Show a committed delete's data again, as it was, during its grace period; put
+every instance a committed edit changed back at the revision it superseded,
+removing its new revisions; or stop a relabel that is still copying, removing its
+copies. A correction already undone is answered as it stands. A delete or an
+edit whose purge has started cannot be undone (exit 5).`,
 		Example: `  nopacs correction undo lab1 01jd2k9w6m3x4c5v6b7n8p9q0r --reason "wrong subject was deleted"`,
 		Args:    exactArgs(2),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {

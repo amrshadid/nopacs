@@ -238,7 +238,7 @@ Usage: `nopacs context use <name>`
 
 ### `nopacs correction`
 
-Delete, relabel or replace archived data, and follow, undo or purge each change
+Delete, relabel, replace or edit archived data, and follow, undo or purge each change
 
 Usage: `nopacs correction`
 
@@ -270,6 +270,21 @@ Usage: `nopacs correction delete <tenant> <subject>[/<session>[/<scan>]] [--inst
 | `--preview` | bool |  | show what the delete would remove, and delete nothing |
 | `--reason` | string |  | why, in your own words, kept with the correction (required) |
 | `--yes` | bool |  | do not ask for the target to be typed again |
+
+#### `nopacs correction edit`
+
+Set, change or remove header values of archived instances
+
+Usage: `nopacs correction edit <tenant> <subject>[/<session>[/<scan>]] [--instance UID] (--set Tag=Value | --remove Tag)... --reason TEXT [--preview] [--show-values] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--instance` | string |  | edit only this instance of the scan, by its id |
+| `--preview` | bool |  | show what the edit would change, and change nothing |
+| `--reason` | string |  | why, in your own words, kept with the correction (required) |
+| `--remove` | stringArray |  | Tag to remove, by keyword or gggg,eeee (repeatable) |
+| `--set` | stringArray |  | Tag=Value to set or change, by keyword or gggg,eeee (repeatable) |
+| `--show-values` | bool |  | show each attribute's value now in the preview (recorded in the audit log) |
 
 #### `nopacs correction list`
 
@@ -325,7 +340,7 @@ Usage: `nopacs correction show <tenant> <id>`
 
 #### `nopacs correction undo`
 
-Undo a delete in its grace period, or stop a relabel still copying
+Undo a delete or an edit in its grace period, or stop a relabel still copying
 
 Usage: `nopacs correction undo <tenant> <id> --reason TEXT [flags]`
 

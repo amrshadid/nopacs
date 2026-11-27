@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	corr "github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
@@ -35,14 +36,16 @@ const sidecarSQL = `SELECT sha256 FROM scan_sidecars WHERE series_uid = ? AND ma
 const purgeRewritesSQL = `SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
 	AND cs.series_uid = ? WHERE c.state = 'purging' AND c.kind = 'delete' AND c.level = 'instance' LIMIT 1`
 
-// preparedRewritesSQL finds a replace or a relabel prepared that touches
-// the scan of a series: a replace writes the scan's metadata file again
-// and releases the scan's lock before its publish keeps that file's digest,
-// and a relabel copies the file to its new keys before its publish keeps
-// the copy's. A file another writer puts between the two would be named by
-// a digest of another file once the publish commits.
+// preparedRewritesSQL finds a replace, an edit or a relabel prepared, or an
+// edit being undone, that touches the scan of a series: a replace and an
+// edit write the scan's metadata file again and release the scan's lock
+// before their publish keeps that file's digest (an edit's undo before the
+// undo's publish), and a relabel copies the file to its new keys before
+// its publish keeps the copy's. A file another writer puts between the two
+// would be named by a digest of another file once the publish commits.
 const preparedRewritesSQL = `SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
-	AND cs.series_uid = ? WHERE c.state = 'prepared' AND c.kind IN ('replace', 'relabel') LIMIT 1`
+	AND cs.series_uid = ? WHERE (c.state = 'prepared' AND c.kind IN ('replace', 'relabel', 'edit')
+	OR c.state = 'committed' AND c.kind = 'edit' AND c.state_reason = '` + tenant.StateReasonUndoing + `') LIMIT 1`
 
 // SetSidecarInTx keeps, in the caller's transaction, sidecar as the digest
 // of the metadata file of the scan of series written with the manifest of
@@ -71,6 +74,32 @@ func SetSidecarInTx(ctx context.Context, tx SendingTx, series string, manifest, 
 		ON CONFLICT (series_uid) DO UPDATE SET manifest_sha256 = excluded.manifest_sha256, sha256 = excluded.sha256`,
 		series, manifest[:], sidecar[:])
 	return err
+}
+
+// KeepRolledBack implements tenant.Corrections.
+func (k Sending) KeepRolledBack(ctx context.Context, id, series string, manifest, metadata tenant.SHA256) error {
+	if err := tenant.ValidateSeriesUID(series); err != nil {
+		return err
+	}
+	if manifest.IsZero() {
+		return fault.New(fault.Invalid, "the digest of the manifest a rollback wrote is given")
+	}
+	return k.stepRow(ctx, id, "the digests of a scan a rollback wrote cannot be kept", func(tx SendingTx, c *tenant.Correction) error {
+		if c.State != corr.StatePrepared || c.Kind != corr.KindReplace && c.Kind != corr.KindEdit {
+			return tenant.Precondition("the correction is not a prepared replace or edit")
+		}
+		ours, err := exists(ctx, tx, `SELECT 1 FROM correction_scans WHERE correction_id = ? AND series_uid = ?`, id, series)
+		if err != nil {
+			return err
+		}
+		if !ours {
+			return tenant.Precondition("the scan is not one of the correction's")
+		}
+		if _, err := tx.Exec(ctx, `UPDATE scans SET manifest_sha256 = ? WHERE series_uid = ?`, manifest[:], series); err != nil {
+			return err
+		}
+		return SetSidecarInTx(ctx, tx, series, manifest, metadata)
+	})
 }
 
 // dropPurgeSidecarsInTx drops, in the caller's transaction, the digests of

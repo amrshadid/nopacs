@@ -42,6 +42,11 @@ func (t *Tenant) AbandonCorrection(ctx context.Context, id, why string, now time
 	return t.sending().AbandonCorrection(ctx, id, why, now)
 }
 
+// KeepRolledBack implements tenant.Corrections.
+func (t *Tenant) KeepRolledBack(ctx context.Context, id, series string, manifest, metadata tenant.SHA256) error {
+	return t.sending().KeepRolledBack(ctx, id, series, manifest, metadata)
+}
+
 // UndoCorrection implements tenant.Corrections.
 func (t *Tenant) UndoCorrection(ctx context.Context, id, reason string, now time.Time, audit master.AuditEntry,
 	guard tenant.Guard) (tenant.Correction, error) {

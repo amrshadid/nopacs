@@ -428,9 +428,23 @@ func (k Sending) ClearWithdrawn(ctx context.Context, id string) ([]string, error
 
 // MarkSwept implements tenant.Corrections.
 func (k Sending) MarkSwept(ctx context.Context, id string) error {
-	return k.stepRow(ctx, id, "the relabel's sweep cannot be recorded", func(tx SendingTx, c *tenant.Correction) error {
-		if c.Kind != corr.KindRelabel || c.State != corr.StateAbandoned {
-			return tenant.Precondition("the correction is not an abandoned relabel")
+	return k.stepRow(ctx, id, "the correction's sweep cannot be recorded", func(tx SendingTx, c *tenant.Correction) error {
+		edit := c.Kind == corr.KindEdit && c.State == corr.StateUndone
+		if !edit && (c.Kind != corr.KindRelabel || c.State != corr.StateAbandoned) {
+			return tenant.Precondition("the correction is neither an abandoned relabel nor an undone edit")
+		}
+		if edit {
+			// The new revisions the undo took back are removed from every
+			// copy: no line of them is written back again.
+			if _, err := tx.Exec(ctx, `UPDATE correction_edits SET restore_line = NULL, new_line = NULL WHERE correction_id = ?`, id); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = 'purged' WHERE correction_id = ? AND outcome = ''`, id); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE instance_revisions SET purged = ? WHERE correction_id = ?`, k.D.Bool(true), id); err != nil {
+				return err
+			}
 		}
 		_, err := tx.Exec(ctx, `UPDATE corrections SET swept = ? WHERE id = ?`, k.D.Bool(true), id)
 		return err

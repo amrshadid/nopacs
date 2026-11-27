@@ -573,6 +573,12 @@ var rules = map[string]rule{
 	nopacsv1connect.CorrectionServiceReplaceProcedure: byMessage(func(r *v1.ReplaceRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: map[string]string{detailQuarantined: jobObject(r.GetQuarantinedFile())}}
 	}),
+	// An edit writes values a person types into archived files, which a
+	// masked key may not (access.Requirement.WritesValues); its preview
+	// is the same request, so it is refused the preview too.
+	nopacsv1connect.CorrectionServiceEditProcedure: byMessage(func(r *v1.EditRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).WritesValues(), access.Request{Details: editDetails(r)}
+	}),
 	nopacsv1connect.CorrectionServiceListCorrectionsProcedure: byMessage(func(r *v1.ListCorrectionsRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Details: correctionFilterDetails(r)}
 	}),

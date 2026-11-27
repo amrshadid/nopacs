@@ -154,6 +154,16 @@ type Corrections interface {
 	// (a phrase of at most MaxStateReasonLength bytes); what names a
 	// delete's data stops matching.
 	AbandonCorrection(ctx context.Context, id, why string, now time.Time) (Correction, error)
+	// KeepRolledBack keeps, for a prepared replace or edit whose writes the
+	// caller rolled back, the digests of the manifest and metadata file it
+	// wrote back on the scan of series (a zero metadata digest keeps none)
+	// as the catalog's: a reception that committed the scan between the
+	// correction's write and its rollback left the catalog naming the
+	// reception's manifest, which the rollback wrote over. The caller holds
+	// the scan's lock from its write until this answers, so no reception
+	// commits between the two. A correction not prepared, of another kind,
+	// or not of that scan is a precondition failure.
+	KeepRolledBack(ctx context.Context, id, series string, manifest, metadata SHA256) error
 	// UndoCorrection undoes a committed delete, showing its rows again as
 	// they were, with the reason given and an EventCatalogChanged, or
 	// abandons a prepared relabel. A row of the catalog that has taken one
@@ -491,6 +501,10 @@ type CorrectionPrepare struct {
 	// checked before the store; the store records it and KeyID.
 	OverrideRetention bool
 	OverrideReason    string
+	// Edits are an edit's instances, each with what the catalog held of it
+	// when the edit read it (EditPrepared); the store refuses the edit when
+	// any differs now. Confirm is then the edit preview's token.
+	Edits []EditPrepared
 	// Now is when.
 	Now time.Time
 }
@@ -524,6 +538,13 @@ type CorrectionCommit struct {
 	// step still; every other replica's row is queued (the replicator
 	// copies the scan under its new labels).
 	ReplicaManifests map[string]map[string]SHA256
+	// Edits are, for an edit, the new revision written of each of its
+	// instances, every one of them.
+	Edits []EditWritten
+	// Values are, for an edit, by Series Instance UID, the values the
+	// catalog holds of each scan whose instances it set them on
+	// (EditCatalogValues).
+	Values map[string]EditValues
 }
 
 // CorrectionScan is a scan a correction touches.
@@ -665,6 +686,9 @@ type Correction struct {
 	// a put of one of them can land; its purge removes nothing before it.
 	// Zero when it ended none ("Every copy").
 	CopiesInFlightUntil time.Time
+	// Edits are an edit's instances, read with one correction (Correction),
+	// not with a list.
+	Edits []EditedInstance
 }
 
 // HasEnded reports whether the correction reached an end.

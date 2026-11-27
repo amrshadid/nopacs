@@ -166,12 +166,17 @@ const reasonUndoneByRecord = "undone after the backup, as its record says"
 // moveAdopted moves a row the backup holds prepared to the state its
 // record is read in alone (record.Correction.Alone): committed and
 // unresolved, its times the record's, naming a delete's data, a replace
-// published with what its publish writes (publishReplace); or abandoned,
-// a delete naming nothing.
+// or an edit published with what its publish writes (publishReplace,
+// publishEdit); or abandoned, a delete naming nothing.
 func (k Sending) moveAdopted(ctx context.Context, tx SendingTx, rec corr.Correction, storage string, now time.Time) error {
 	state, unresolved := rec.Alone()
 	if rec.Kind == corr.KindReplace && state == corr.StateCommitted {
 		if err := k.publishMovedReplace(ctx, tx, rec.ID, storage, now); err != nil {
+			return err
+		}
+	}
+	if rec.Kind == corr.KindEdit && state == corr.StateCommitted {
+		if err := k.publishMovedEdit(ctx, tx, rec); err != nil {
 			return err
 		}
 	}
@@ -426,6 +431,12 @@ func (k Sending) insertAdopted(ctx context.Context, tx SendingTx, rec corr.Corre
 		if b, err := hex.DecodeString(rec.Replace.NewSHA256); err == nil {
 			newSum = b
 		}
+	case corr.KindEdit:
+		// An edit of one instance names it in its target, as its prepare
+		// does.
+		if level == corr.LevelInstance && len(rec.Edits) > 0 {
+			instance = rec.Edits[0].SOPInstanceUID
+		}
 	default:
 		if level == corr.LevelInstance && len(rec.Instances) > 0 {
 			instance = rec.Instances[0]
@@ -490,6 +501,9 @@ func (k Sending) adoptScans(ctx context.Context, tx SendingTx, rec corr.Correcti
 			np.Scan); err != nil {
 			return err
 		}
+	}
+	if rec.Kind == corr.KindEdit {
+		return adoptEdits(ctx, tx, rec)
 	}
 	if rec.Kind != corr.KindDelete || state == corr.StateUndone || state == corr.StateAbandoned {
 		return nil

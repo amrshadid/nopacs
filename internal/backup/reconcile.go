@@ -349,13 +349,13 @@ func adoptRecords(ctx context.Context, st blob.Store, rs tenant.Restoring, auth 
 				return err
 			}
 			res.Records++
+			sizeOf := func(ctx context.Context, key string) (int64, error) {
+				info, err := st.Stat(ctx, key)
+				return info.Size, err
+			}
 			switch got {
 			case tenant.AdoptedAdded:
 				res.Added++
-				sizeOf := func(ctx context.Context, key string) (int64, error) {
-					info, err := st.Stat(ctx, key)
-					return info.Size, err
-				}
 				if err := rs.OwnAdoptedReplace(ctx, rec, storage, sizeOf, now); err != nil {
 					return err
 				}
@@ -368,6 +368,13 @@ func adoptRecords(ctx context.Context, st blob.Store, rs tenant.Restoring, auth 
 				}
 			case tenant.AdoptedScans:
 				res.Scans++
+			}
+			// An edit has a record on each storage it touches, each naming
+			// the instances of its scans there: each one adopted owns them.
+			if got == tenant.AdoptedAdded || got == tenant.AdoptedScans {
+				if err := rs.OwnAdoptedEdit(ctx, rec, storage, sizeOf, now); err != nil {
+					return err
+				}
 			}
 		}
 		if token = page.Next; token == "" {

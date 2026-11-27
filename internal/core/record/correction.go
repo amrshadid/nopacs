@@ -28,6 +28,9 @@ const (
 	// MaxInstances is the most instance UIDs an instance delete's record
 	// names.
 	MaxInstances = 100000
+	// MaxEdits is the most instances an edit's record names: the most one
+	// edit changes (tenant.MaxEditInstances), with room to spare.
+	MaxEdits = 10000
 )
 
 // ErrFormat is returned, wrapped, for a record that is not in the form this
@@ -46,11 +49,14 @@ const (
 	KindRelabel Kind = "relabel"
 	// KindReplace swaps one instance's bytes for a later revision.
 	KindReplace Kind = "replace"
+	// KindEdit gives each instance of a subject, session, scan or instance
+	// a later revision whose named attributes were set, changed or removed.
+	KindEdit Kind = "edit"
 )
 
 // State is how far a correction got. It only moves forward: prepared to
-// committed or abandoned, committed to purging or (a delete) undone,
-// purging to purged.
+// committed or abandoned, committed to purging or (a delete or an edit)
+// undone, purging to purged.
 type State string
 
 // The states of a correction.
@@ -63,7 +69,7 @@ const (
 	StatePurging State = "purging"
 	// StatePurged is finished; its record is kept for good.
 	StatePurged State = "purged"
-	// StateUndone is a delete taken back before its purge began.
+	// StateUndone is a delete or an edit taken back before its purge began.
 	StateUndone State = "undone"
 	// StateAbandoned is a prepared correction recovery rolled back.
 	StateAbandoned State = "abandoned"
@@ -85,13 +91,14 @@ func (s State) Published() bool {
 }
 
 // CanFollow reports whether a correction of that kind may go from state s to
-// next: the forward moves only, and undone only for a delete.
+// next: the forward moves only, and undone only for a delete or an edit,
+// whose superseded revisions are kept until its purge.
 func (s State) CanFollow(next State, kind Kind) bool {
 	switch s {
 	case StatePrepared:
 		return next == StateCommitted || next == StateAbandoned
 	case StateCommitted:
-		return next == StatePurging || (next == StateUndone && kind == KindDelete)
+		return next == StatePurging || (next == StateUndone && (kind == KindDelete || kind == KindEdit))
 	case StatePurging:
 		return next == StatePurged
 	}
@@ -175,9 +182,13 @@ type Replacement struct {
 	OldRevision int `json:"old_revision"`
 	NewRevision int `json:"new_revision"`
 	// OldSHA256 and NewSHA256 are the checksums of the two revisions'
-	// bytes, in lowercase hex.
+	// bytes, in lowercase hex. An edit's NewSHA256 is empty until it is
+	// published: its new revisions are written after its record.
 	OldSHA256 string `json:"old_sha256"`
 	NewSHA256 string `json:"new_sha256"`
+	// SeriesUID is, for an edit, the Series Instance UID of the instance's
+	// scan, one of the record's; empty for a replace, which is of one scan.
+	SeriesUID string `json:"series_uid,omitempty"`
 }
 
 // Purge sums what a purge did on this storage, by what the storage said of
@@ -204,9 +215,9 @@ type Correction struct {
 	ID string `json:"id"`
 	// Kind says what the correction does.
 	Kind Kind `json:"kind"`
-	// Level is what a delete removes: LevelSubject, LevelSession,
-	// LevelScan or LevelInstance. Empty for a relabel, whose level is its
-	// Relabel's, and for a replace, which is of one instance.
+	// Level is what a delete removes, or what an edit names: LevelSubject,
+	// LevelSession, LevelScan or LevelInstance. Empty for a relabel, whose
+	// level is its Relabel's, and for a replace, which is of one instance.
 	Level string `json:"level,omitempty"`
 	// State says how far it got.
 	State State `json:"state"`
@@ -229,6 +240,9 @@ type Correction struct {
 	Relabel *Relabel `json:"relabel,omitempty"`
 	// Replace is set for a replace.
 	Replace *Replacement `json:"replace,omitempty"`
+	// Edits are, for an edit, the instances of the record's scans it gives a
+	// new revision, in byte order of SOP Instance UID.
+	Edits []Replacement `json:"edits,omitempty"`
 	// Purge is what the purge did here, set once it has begun.
 	Purge *Purge `json:"purge,omitempty"`
 	// KeyVersion is the version of the installation key the MAC's key is
@@ -283,15 +297,15 @@ func (c Correction) Validate() error {
 		return bad("id: %v", err)
 	}
 	switch c.Kind {
-	case KindDelete, KindRelabel, KindReplace:
+	case KindDelete, KindRelabel, KindReplace, KindEdit:
 	default:
-		return bad("kind is delete, relabel or replace")
+		return bad("kind is delete, relabel, replace or edit")
 	}
 	if !c.State.Valid() {
 		return bad("state is not one of the six")
 	}
-	if c.State == StateUndone && c.Kind != KindDelete {
-		return bad("only a delete is undone")
+	if c.State == StateUndone && c.Kind != KindDelete && c.Kind != KindEdit {
+		return bad("only a delete or an edit is undone")
 	}
 	if !lowerHex64(c.ReasonSHA256) {
 		return bad("reason_sha256 is 64 lowercase hex digits")
@@ -395,8 +409,8 @@ func (s Scan) labelAt(level string) string {
 func (c Correction) validTarget() error {
 	switch c.Kind {
 	case KindDelete:
-		if c.Relabel != nil || c.Replace != nil {
-			return bad("a delete has no relabel or replace")
+		if c.Relabel != nil || c.Replace != nil || len(c.Edits) > 0 {
+			return bad("a delete has no relabel, replace or edits")
 		}
 		switch c.Level {
 		case LevelSubject, LevelSession, LevelScan, LevelInstance:
@@ -425,8 +439,8 @@ func (c Correction) validTarget() error {
 		}
 	case KindRelabel:
 		r := c.Relabel
-		if r == nil || c.Replace != nil || len(c.Instances) > 0 || c.Level != "" {
-			return bad("a relabel has its relabel and nothing of a replace or a delete")
+		if r == nil || c.Replace != nil || len(c.Edits) > 0 || len(c.Instances) > 0 || c.Level != "" {
+			return bad("a relabel has its relabel and nothing of a replace, an edit or a delete")
 		}
 		if r.Level != LevelSubject && r.Level != LevelSession && r.Level != LevelScan {
 			return bad("a relabel's level is subject, session or scan")
@@ -442,14 +456,18 @@ func (c Correction) validTarget() error {
 		}
 	case KindReplace:
 		r := c.Replace
-		if r == nil || c.Relabel != nil || len(c.Instances) > 0 || len(c.Scans) != 1 || c.Level != "" {
+		if r == nil || c.Relabel != nil || len(c.Edits) > 0 || len(c.Instances) > 0 || len(c.Scans) != 1 || c.Level != "" ||
+			r.SeriesUID != "" {
 			return bad("a replace has its replace, one scan, and nothing else")
 		}
 		if err := uid.Check(r.SOPInstanceUID); err != nil {
 			return bad("replace: %v", err)
 		}
-		if r.OldRevision < 1 || r.NewRevision != r.OldRevision+1 || r.NewRevision > layout.MaxRevision {
-			return bad("a replace adds the next revision, within 1 to %d", layout.MaxRevision)
+		// The new revision is above the old one, not always the next: a
+		// revision an undone edit numbered is never numbered again, so its
+		// key never names two files.
+		if r.OldRevision < 1 || r.NewRevision <= r.OldRevision || r.NewRevision > layout.MaxRevision {
+			return bad("a replace adds a later revision, within 1 to %d", layout.MaxRevision)
 		}
 		// The two checksums may be equal: a replace that repairs an
 		// instance a scrub found damaged puts the bytes it was archived
@@ -457,6 +475,8 @@ func (c Correction) validTarget() error {
 		if !lowerHex64(r.OldSHA256) || !lowerHex64(r.NewSHA256) {
 			return bad("a replace's two checksums are 64 lowercase hex digits")
 		}
+	case KindEdit:
+		return c.validEdits()
 	}
 	return nil
 }

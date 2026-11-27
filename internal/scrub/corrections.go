@@ -50,13 +50,13 @@ type scanExpect struct {
 	// objects and lines stay until the purge rewrites the manifest and
 	// metadata without them.
 	hidden map[string]bool
-	// next are, by SOP Instance UID, the line a prepared replace wrote for
-	// its new revision: the manifest and the metadata name it before the
-	// publish gives the catalog its row.
+	// next are, by SOP Instance UID, the line a prepared replace or edit
+	// wrote for its new revision: the manifest and the metadata name it
+	// before the publish gives the catalog its row (nextAgrees).
 	next map[string]manifest.File
-	// keys are the objects a replace keeps beside the catalog's: its new
-	// revision before the publish, the revision it superseded until the
-	// purge.
+	// keys are the objects a replace or an edit keeps beside the catalog's:
+	// its new revision before the publish, the revision it superseded until
+	// the purge, and an undone edit's new revision until its sweep.
 	keys map[string]bool
 }
 
@@ -66,7 +66,25 @@ func (e *scanExpect) any() bool { return len(e.hidden)+len(e.next)+len(e.keys) >
 // listCorrections calls fn with every correction of the kinds given not
 // yet purged, by the database's rows.
 func (u *unitRun) listCorrections(kinds []record.Kind, fn func(tenant.Correction) error) error {
-	filter := tenant.CorrectionFilter{Kinds: kinds, States: pendingStates}
+	return u.listFiltered(tenant.CorrectionFilter{Kinds: kinds, States: pendingStates}, fn)
+}
+
+// listUndoneEdits calls fn with every undone edit whose new revisions are
+// not yet removed from every copy (not swept): they stay on the storages
+// until its sweep.
+func (u *unitRun) listUndoneEdits(fn func(tenant.Correction) error) error {
+	filter := tenant.CorrectionFilter{Kinds: []record.Kind{record.KindEdit}, States: []record.State{record.StateUndone}}
+	return u.listFiltered(filter, func(c tenant.Correction) error {
+		if c.Swept {
+			return nil
+		}
+		return fn(c)
+	})
+}
+
+// listFiltered calls fn with every correction filter selects, by the
+// database's rows.
+func (u *unitRun) listFiltered(filter tenant.CorrectionFilter, fn func(tenant.Correction) error) error {
 	page := master.Page{Limit: master.MaxPageLimit}
 	for range maxListPages {
 		ctx, cancel := context.WithTimeout(u.ctx, opTimeout)
@@ -96,7 +114,10 @@ func (s *scanCheck) expect() (*scanExpect, error) {
 		return s.exp, nil
 	}
 	e := &scanExpect{hidden: map[string]bool{}, next: map[string]manifest.File{}, keys: map[string]bool{}}
-	err := s.u.listCorrections([]record.Kind{record.KindDelete, record.KindReplace}, func(c tenant.Correction) error {
+	err := s.u.listCorrections([]record.Kind{record.KindDelete, record.KindReplace, record.KindEdit}, func(c tenant.Correction) error {
+		if c.Kind == record.KindEdit {
+			return s.expectEdit(e, c)
+		}
 		if c.Target.Path() != s.scan.Path || c.Target.Instance == "" {
 			return nil
 		}
@@ -121,6 +142,9 @@ func (s *scanCheck) expect() (*scanExpect, error) {
 		}
 		return nil
 	})
+	if err == nil {
+		err = s.u.listUndoneEdits(func(c tenant.Correction) error { return s.expectEdit(e, c) })
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +174,7 @@ func (s *scanCheck) sidecarLineExpected(uid, key, sum string, size int64) (bool,
 		return false, err
 	}
 	n, ok := e.next[uid]
-	return ok && n.Key == key && n.Size == size && n.SHA256 == sum, nil
+	return ok && nextAgrees(n, key, size, size, sum), nil
 }
 
 // expectedObject reports whether an object under the scan's keys that
@@ -169,6 +193,7 @@ func (s *scanCheck) expectedObject(key string) (bool, error) {
 		}
 		s.recs = map[string]bool{}
 		for _, r := range recs {
+			editRecordKeys(s.recs, r, s.scan.Path)
 			if r.Kind != record.KindReplace || r.Replace == nil || !pending(r.State) || len(r.Scans) != 1 || pathOfScan(r.Scans[0]) != s.scan.Path {
 				continue
 			}
@@ -210,8 +235,7 @@ func (s *scanCheck) manifestCorrected(v catalogView, data []byte) (map[string]bo
 		if e.hidden[f.SOPInstanceUID] {
 			continue
 		}
-		if n, ok := e.next[f.SOPInstanceUID]; ok && f.Key == n.Key && f.Offset == 0 && f.Length == n.Length && f.Size == n.Size &&
-			f.SHA256 == n.SHA256 {
+		if n, ok := e.next[f.SOPInstanceUID]; ok && f.Offset == 0 && nextAgrees(n, f.Key, f.Length, f.Size, f.SHA256) {
 			continue
 		}
 		in, held := v.byUID[f.SOPInstanceUID]
@@ -350,8 +374,9 @@ func (c coverage) add(to, from label.Path) {
 func (u *unitRun) coverageOf(store Storage, storage, catalog string) (coverage, recordCount, error) {
 	cov := coverage{}
 	err := u.listCorrections(nil, func(c tenant.Correction) error {
-		if c.Kind == record.KindReplace || c.Kind == record.KindDelete && (c.State == record.StatePrepared || c.Level == record.LevelInstance) {
-			return nil // a replace's scan, and an instance delete's, stay in the catalog
+		if c.Kind == record.KindReplace || c.Kind == record.KindEdit ||
+			c.Kind == record.KindDelete && (c.State == record.StatePrepared || c.Level == record.LevelInstance) {
+			return nil // a replace's and an edit's scans, and an instance delete's, stay in the catalog
 		}
 		ctx, cancel := context.WithTimeout(u.ctx, opTimeout)
 		scans, err := u.p.CorrectionScans(ctx, c.ID)
@@ -379,7 +404,7 @@ func (u *unitRun) coverageOf(store Storage, storage, catalog string) (coverage, 
 		return nil, recordCount{}, err
 	}
 	for _, r := range recs {
-		if !pending(r.State) || r.Kind == record.KindReplace ||
+		if !pending(r.State) || r.Kind == record.KindReplace || r.Kind == record.KindEdit ||
 			r.Kind == record.KindDelete && (r.State == record.StatePrepared || r.Level == record.LevelInstance) {
 			continue
 		}

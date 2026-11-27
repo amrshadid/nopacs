@@ -1489,7 +1489,7 @@ CREATE TABLE corrections (
     CONSTRAINT corrections_retention_due_check CHECK ((retention_rule = '') = (retention_due IS NULL)),
     CONSTRAINT corrections_override_check CHECK (override_retention = (override_reason <> '')),
     CONSTRAINT corrections_id_check CHECK (length(id) = 26),
-    CONSTRAINT corrections_kind_check CHECK (kind IN ('delete', 'relabel', 'replace')),
+    CONSTRAINT corrections_kind_check CHECK (kind IN ('delete', 'relabel', 'replace', 'edit')),
     CONSTRAINT corrections_level_check CHECK (level IN ('subject', 'session', 'scan', 'instance')),
     CONSTRAINT corrections_state_check CHECK (state IN ('prepared', 'committed', 'purging', 'purged', 'undone', 'abandoned')),
     CONSTRAINT corrections_origin_check CHECK (origin IN ('person', 'retention')),
@@ -1678,6 +1678,45 @@ CREATE TABLE instance_revisions (
 );
 
 CREATE INDEX instance_revisions_by_correction ON instance_revisions (correction_id);
+
+-- An edit's instances: each one's revision and archived checksum when the
+-- edit read it, its line of the scan's metadata then (written back by a
+-- stop before the publish and by an undo, and cleared once the edit ends),
+-- and the new revision it wrote (new_sha256 set by the publish). The new
+-- revision is above every revision the instance was ever given (an undone
+-- edit's among them), so no two corrections name one key. new_line is the
+-- new revision's line from the publish until the edit ends, which an undo
+-- that may not be published writes back.
+CREATE TABLE correction_edits (
+    correction_id    text   COLLATE "C" NOT NULL,
+    sop_instance_uid text   COLLATE "C" NOT NULL,
+    series_uid       text   COLLATE "C" NOT NULL,
+    old_revision     bigint NOT NULL,
+    new_revision     bigint NOT NULL,
+    old_sha256       bytea  NOT NULL,
+    new_sha256       bytea,
+    old_key          text   COLLATE "C" NOT NULL,
+    old_size         bigint NOT NULL,
+    new_size         bigint NOT NULL,
+    restore_line     bytea,
+    new_line         bytea,
+    CONSTRAINT correction_edits_pkey PRIMARY KEY (correction_id, sop_instance_uid),
+    CONSTRAINT correction_edits_check CHECK (old_revision >= 1 AND new_revision > old_revision AND old_size >= 0
+        AND new_size >= 0 AND octet_length(old_sha256) = 32 AND (new_sha256 IS NULL OR octet_length(new_sha256) = 32))
+);
+
+CREATE INDEX correction_edits_by_instance ON correction_edits (sop_instance_uid);
+
+-- The catalog values of each scan an edit touches as they were before it,
+-- which its undo gives back.
+CREATE TABLE correction_edit_scans (
+    correction_id      text   COLLATE "C" NOT NULL,
+    series_uid         text   COLLATE "C" NOT NULL,
+    modality           text   COLLATE "C" NOT NULL,
+    series_description text   NOT NULL,
+    series_number      integer,
+    CONSTRAINT correction_edit_scans_pkey PRIMARY KEY (correction_id, series_uid)
+);
 
 -- A relabel's labels, before and after, at its level.
 CREATE TABLE relabels (

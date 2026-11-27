@@ -118,6 +118,45 @@ func (h correctionHandler) Delete(_ context.Context, req *v1.DeleteRequest) (*v1
 	return &v1.DeleteResponse{Preview: prev, Correction: c}, nil
 }
 
+// Edit answers an edit's preview, one instance per target whose every
+// attribute is present, or records the edit committed; its token is the
+// target written out, as a delete's.
+func (h correctionHandler) Edit(_ context.Context, req *v1.EditRequest) (*v1.EditResponse, error) {
+	s := h.s
+	err := s.beginCorrection(req.GetTenant(), req.GetReason(), true)
+	defer s.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	t := req.GetTarget()
+	if t.GetSubjectLabel() == "" || len(req.GetChanges()) == 0 {
+		return nil, fault.New(fault.Invalid, "target: names a subject, and changes names an attribute")
+	}
+	if req.GetShowValues() && !req.GetValidateOnly() {
+		return nil, fault.New(fault.Invalid, "show_values: is asked only with validate_only")
+	}
+	in := &v1.EditPreviewInstance{SubjectLabel: t.GetSubjectLabel(), SessionLabel: t.GetSessionLabel(), ScanLabel: t.GetScanLabel(),
+		InstanceId: "1.2.3.4", Revision: 1}
+	for _, c := range req.GetChanges() {
+		a := &v1.EditPreviewAttribute{Attribute: c.GetAttribute(), Present: true, Known: true, NewValue: c.GetValue(), Remove: c.GetRemove()}
+		if req.GetShowValues() {
+			a.OldValue = "old"
+		}
+		in.Attributes = append(in.Attributes, a)
+	}
+	if req.GetValidateOnly() {
+		return &v1.EditResponse{Preview: &v1.EditPreview{Instances: []*v1.EditPreviewInstance{in}, Storages: []string{"main"},
+			IssueTime: timestamppb.New(s.now()), Confirm: tokenOf(t)}}, nil
+	}
+	if req.GetConfirm() != tokenOf(t) {
+		return nil, fault.New(fault.Precondition, "the confirm token is not this server's preview of the same edit")
+	}
+	c := s.newCorrection(req.GetTenant(), &v1.Correction{Kind: v1.CorrectionKind_CORRECTION_KIND_EDIT, State: v1.CorrectionState_CORRECTION_STATE_COMMITTED,
+		Target: t, Reason: req.GetReason(), Counts: &v1.CorrectionCounts{Scans: 1, Instances: 1}, CommitTime: timestamppb.New(s.now()),
+		PurgeTime: timestamppb.New(s.now().AddDate(0, 0, 7))})
+	return &v1.EditResponse{Correction: c}, nil
+}
+
 // Relabel records a relabel, switched at once.
 func (h correctionHandler) Relabel(_ context.Context, req *v1.RelabelRequest) (*v1.RelabelResponse, error) {
 	s := h.s

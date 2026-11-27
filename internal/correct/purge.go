@@ -144,10 +144,14 @@ func (e *Engine) purge(ctx context.Context, c tenant.Correction) (tenant.Correct
 	if err := e.purgeTargets(ctx, c, copies); err != nil {
 		return c, err
 	}
-	if c.Kind == record.KindReplace {
-		for _, name := range copies.of(scans[0].Storage) {
-			if err := e.purgeOlderMeta(ctx, c, name, scans[0].Path); err != nil {
-				return c, e.waitStorage(ctx, c, err)
+	if c.Kind == record.KindReplace || c.Kind == record.KindEdit {
+		// The older versions of each scan's manifest and metadata name the
+		// superseded revisions, and an edit's hold the values it changed.
+		for _, s := range scans {
+			for _, name := range copies.of(s.Storage) {
+				if err := e.purgeOlderMeta(ctx, c, name, s.Path); err != nil {
+					return c, e.waitStorage(ctx, c, err)
+				}
 			}
 		}
 	} else {
@@ -506,7 +510,9 @@ func (e *Engine) repurge(ctx context.Context, now time.Time) error {
 // then keep what is not its own. A scan a live scan sits at is the
 // catalog's, and nothing of it is taken.
 func (e *Engine) seedTargets(ctx context.Context, c tenant.Correction, scans []tenant.CorrectionScan) error {
-	if c.Kind == record.KindReplace || c.Level == record.LevelInstance || c.Counts.ObjectsOwned > 0 {
+	// A replace's and an edit's scans stay in the catalog whole: only the
+	// revisions their publish fixed are theirs.
+	if c.Kind == record.KindReplace || c.Kind == record.KindEdit || c.Level == record.LevelInstance || c.Counts.ObjectsOwned > 0 {
 		return nil
 	}
 	for _, s := range scans {

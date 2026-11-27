@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/amrshadid/nopacs/internal/core/record"
+	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -17,8 +18,9 @@ const pendingPage = 100
 // relabel left prepared goes on with its copy and its publish; an
 // abandoned relabel whose copies were not swept (a stop between its
 // abandon and the sweep, or a copy that wrote after the stop's sweep) has
-// them removed; a purge left purging goes on; and records that lag their
-// row are rewritten. It goes on past one correction's failure and answers
+// them removed; an edit's undo left part way is finished, and an undone
+// edit's new revisions not yet removed are; a purge left purging goes on;
+// and records that lag their row are rewritten. It goes on past one correction's failure and answers
 // them all.
 func (e *Engine) Recover(ctx context.Context) error {
 	var errs []error
@@ -60,6 +62,21 @@ func (e *Engine) recoverOne(ctx context.Context, c tenant.Correction) error {
 		return err
 	case c.Kind == record.KindRelabel && c.State == record.StateAbandoned && !c.Swept:
 		if err := e.sweep(ctx, c); err != nil {
+			return err
+		}
+	case c.Kind == record.KindEdit && c.State == record.StateCommitted && c.StateReason == tenant.StateReasonUndoing:
+		// The undo a person asked for, stopped part way: it is finished, or,
+		// when it may no longer be published (a hold placed since), written
+		// back and abandoned, which is not a failure of the start.
+		_, err := e.continueUndo(ctx, c)
+		if fault.KindOf(err) == fault.Precondition {
+			e.cfg.Log.Warn("an edit's undo stopped part way may not be published now; it was written back and abandoned", "correction", c.ID,
+				"reason", fault.Message(err))
+			return nil
+		}
+		return err
+	case c.Kind == record.KindEdit && c.State == record.StateUndone && !c.Swept:
+		if err := e.sweepEdit(ctx, c); err != nil {
 			return err
 		}
 	}

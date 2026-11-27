@@ -224,10 +224,12 @@ func (e *Engine) used(keyed string) (string, tenant.CorrectionTarget, bool) {
 
 // usedToken is what a keyed token that made a delete stood for: the store's
 // token, and the target, so the same token sent with another target is
-// refused rather than answered with the first delete.
+// refused rather than answered with the first delete; for an edit, the
+// correction it made (rememberEdit).
 type usedToken struct {
 	c1     string
 	target tenant.CorrectionTarget
+	id     string
 }
 
 // snapshots reads each scan of a correction's manifest and metadata under
@@ -370,6 +372,8 @@ func (e *Engine) undoWrites(ctx context.Context, c tenant.Correction) error {
 		return e.removeCopies(ctx, c)
 	case record.KindReplace:
 		return e.rollbackReplace(ctx, c)
+	case record.KindEdit:
+		return e.rollbackEdit(ctx, c)
 	}
 	return nil
 }
@@ -378,6 +382,11 @@ func (e *Engine) undoWrites(ctx context.Context, c tenant.Correction) error {
 // again, its records rewritten undone), or stops a prepared relabel (its
 // copies removed, abandoned).
 func (e *Engine) Undo(ctx context.Context, id, reason string, audit master.AuditEntry, guard tenant.Guard) (tenant.Correction, error) {
+	// An edit's undo writes its scans' manifests and metadata before the
+	// store publishes it (UndoEdit).
+	if cur, err := e.cfg.Store.Correction(ctx, id); err == nil && cur.Kind == record.KindEdit {
+		return e.UndoEdit(ctx, id, reason, audit, guard)
+	}
 	c, err := e.cfg.Store.UndoCorrection(ctx, id, reason, e.now(), audit, guard)
 	if err != nil {
 		return c, err

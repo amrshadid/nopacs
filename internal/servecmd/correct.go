@@ -8,6 +8,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/clock"
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/correct"
+	"github.com/amrshadid/nopacs/internal/deid/check"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/place"
 	"github.com/amrshadid/nopacs/internal/receive"
@@ -115,9 +116,11 @@ var _ api.ReplaceSources = (*runningPipelines)(nil)
 // While a switch of any of the tenant's storages runs, a correction's next
 // step that writes to a storage is refused as the switch gate refuses a
 // write (switchingFence), and a purge already running asks the gate before
-// each removal (correct.Config.Pause).
+// each removal (correct.Config.Pause). Each new revision an edit writes is
+// judged first by the tenant's profile (editJudge), within memory, the
+// server's one bound on de-identification's memory.
 func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, locks *tenantScanLocks, cleanups *place.Cleanups,
-	work *tenantWork) (*correct.Engines, error) {
+	work *tenantWork, memory check.Memory) (*correct.Engines, error) {
 	key, err := d.Keys.Derive(secret.ConfirmToken)
 	if err != nil {
 		return nil, err
@@ -160,8 +163,13 @@ func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, l
 			if err != nil {
 				return correct.Config{}, nil, err
 			}
+			judge, err := editJudge(ctx, values, src, p, memory)
+			if err != nil {
+				return correct.Config{}, nil, err
+			}
 			storages := newTenantStorages(opener, d.Master, name, p)
 			return correct.Config{
+				Judge:       judge,
 				TenantID:    row.ID,
 				Keys:        d.Keys,
 				OpenStorage: storages.Open,

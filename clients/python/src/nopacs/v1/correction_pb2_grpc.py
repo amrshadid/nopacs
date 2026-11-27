@@ -278,6 +278,11 @@ class CorrectionServiceStub:
                 request_serializer=nopacs_dot_v1_dot_correction__pb2.ReplaceRequest.SerializeToString,
                 response_deserializer=nopacs_dot_v1_dot_correction__pb2.ReplaceResponse.FromString,
                 _registered_method=True)
+        self.Edit = channel.unary_unary(
+                '/nopacs.v1.CorrectionService/Edit',
+                request_serializer=nopacs_dot_v1_dot_correction__pb2.EditRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_correction__pb2.EditResponse.FromString,
+                _registered_method=True)
         self.ListCorrections = channel.unary_unary(
                 '/nopacs.v1.CorrectionService/ListCorrections',
                 request_serializer=nopacs_dot_v1_dot_correction__pb2.ListCorrectionsRequest.SerializeToString,
@@ -654,6 +659,57 @@ class CorrectionServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Edit(self, request, context):
+        """Edit sets, changes or removes named attributes of every instance of a
+        subject, session, scan or instance, each instance given a later
+        revision through the path a replace takes; the revisions it supersedes
+        are kept until its purge, and UndoCorrection takes it back until then.
+        Each new revision is judged by the tenant's profile and its check after
+        before it is written. With validate_only it answers the preview: every
+        instance and attribute, the value now only with show_values, and the
+        token to confirm it. It is answered in one of three ways, as a replace
+        is: the correction committed; an error, with nothing recorded; or the
+        correction abandoned with its state_reason (the check after refused a
+        new revision, a file's character set would not be kept, a revision
+        could not be put or read back whole, the target changed before the
+        publish), anything it wrote removed.
+
+        Role: admin on the tenant.
+        Audit: one entry in the tenant's log, with the new correction's id as
+        its object (none for validate_only), and the target's path of labels,
+        the attributes' tags (never a value), the instance count of a preview,
+        validate_only and the reason in details; show_values is recorded.
+        Errors: unauthenticated, permission denied (no grant; also a tenant that
+        does not exist, for a caller who may not list every tenant; a masked
+        key, which never writes values into archived files), invalid (also a
+        missing or too long reason; no change or more than 64; an attribute
+        named twice, or not by a keyword or as gggg,eeee; a Study, Series or
+        SOP Instance UID, the SOP Class UID, the Specific Character Set, the
+        Study Date, Pixel Data or an attribute that lays out its bytes, overlay
+        data, a private attribute, a group length or the file meta information;
+        Patient Identity Removed, De-identification Method or Longitudinal
+        Temporal Information Modified; in an edit of one instance, Series
+        Description, Modality or Series Number, which the catalog keeps for the
+        whole scan;
+        an attribute of a binary VR; a value that does not fit its VR or is not
+        printable ASCII; a removal with a value; a confirm token with
+        validate_only, or none without it; show_values without validate_only),
+        not found (the tenant holds no such subject, session, scan or instance;
+        a tenant that does not exist, for a caller who may list every tenant),
+        precondition (the confirm token is not this server's preview of the
+        same edit, the target changed since, or it is more than an hour old;
+        more than 2000 instances; a hold covers the target, with the reason
+        HELD; a correction on it is prepared or not yet purged, or an undone
+        edit's revisions are not yet removed; a reception of it is in progress;
+        a rebuild of the tenant is running; the tenant is moved or fenced, with
+        the reason TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's
+        database or a storage does not answer before anything is written; the
+        server judges no edits; the tenant is not ready).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ListCorrections(self, request, context):
         """ListCorrections answers a tenant's corrections, newest first, filtered
         by kind and state.
@@ -693,8 +749,14 @@ class CorrectionServiceServicer:
         also how an admin settles an unresolved delete a rebuild or a restore
         applied fail-closed, and how a prepared relabel is stopped: it is
         abandoned and its copies removed, nothing having changed for any
-        reader. A correction already undone, or a relabel already abandoned,
-        is answered as it stands, so a repeated call changes nothing more.
+        reader. A committed edit is undone the same way before its purge: each
+        instance back at the revision it superseded, the scans' values as they
+        were, its new revisions removed from every copy; while it is being
+        undone it is never purged, and an undo that may no longer be published
+        (a hold placed over it meanwhile) is taken back, the edit committed as
+        it was, to be asked for again. A correction already
+        undone, or a relabel already abandoned, is answered as it stands, so a
+        repeated call changes nothing more.
 
         Role: admin on the tenant.
         Audit: one entry in the tenant's log, with the correction's id as its
@@ -704,8 +766,10 @@ class CorrectionServiceServicer:
         (also a missing or too long reason), not found (the tenant has no
         correction with that id; a tenant that does not exist, for a caller
         who may list every tenant), precondition (the correction is neither a
-        committed delete nor a prepared relabel; a rebuild of the tenant is
-        running; the tenant is moved or fenced), unavailable (the tenant's
+        committed delete or edit nor a prepared relabel; an edit taken from its
+        records by a restore, which keeps nothing to write back; a hold covers
+        an edit's revisions; a rebuild of the tenant is running; the tenant is
+        moved or fenced), unavailable (the tenant's
         database or a storage holding its record does not answer, or the
         tenant is not ready).
         """
@@ -715,8 +779,9 @@ class CorrectionServiceServicer:
 
     def PurgeCorrection(self, request, context):
         """PurgeCorrection starts the purge of a committed correction now, before
-        its grace period ends: a delete's hidden data, or the objects a relabel
-        or a replace superseded (the old tree, the old revision). It also
+        its grace period ends: a delete's hidden data, or the objects a
+        relabel, a replace or an edit superseded (the old tree, the old
+        revisions). It also
         confirms an unresolved delete. The purge runs in the background; the
         correction says how far it got. A purge of data a hold covers starts
         and waits, purging, with the state reason "held", removing nothing
@@ -731,7 +796,8 @@ class CorrectionServiceServicer:
         does not exist, for a caller who may not list every tenant), invalid,
         not found (the tenant has no correction with that id; a tenant that
         does not exist, for a caller who may list every tenant), precondition
-        (the correction is prepared, undone or abandoned; a rebuild of the
+        (the correction is prepared, undone or abandoned, or an edit being
+        undone; a rebuild of the
         tenant is running; the tenant is moved or fenced), unavailable (the
         tenant's database does not answer, or the tenant is not ready).
         """
@@ -833,6 +899,11 @@ def add_CorrectionServiceServicer_to_server(servicer, server):
                     servicer.Replace,
                     request_deserializer=nopacs_dot_v1_dot_correction__pb2.ReplaceRequest.FromString,
                     response_serializer=nopacs_dot_v1_dot_correction__pb2.ReplaceResponse.SerializeToString,
+            ),
+            'Edit': grpc.unary_unary_rpc_method_handler(
+                    servicer.Edit,
+                    request_deserializer=nopacs_dot_v1_dot_correction__pb2.EditRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_correction__pb2.EditResponse.SerializeToString,
             ),
             'ListCorrections': grpc.unary_unary_rpc_method_handler(
                     servicer.ListCorrections,
@@ -1180,6 +1251,33 @@ class CorrectionService:
             '/nopacs.v1.CorrectionService/Replace',
             nopacs_dot_v1_dot_correction__pb2.ReplaceRequest.SerializeToString,
             nopacs_dot_v1_dot_correction__pb2.ReplaceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Edit(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.CorrectionService/Edit',
+            nopacs_dot_v1_dot_correction__pb2.EditRequest.SerializeToString,
+            nopacs_dot_v1_dot_correction__pb2.EditResponse.FromString,
             options,
             channel_credentials,
             insecure,

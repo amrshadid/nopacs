@@ -6,7 +6,8 @@ A *correction* is a change to archived data made on purpose, with the reason a
 person gave, and kept as a record for as long as the tenant is: a **delete** of a
 subject, a session, a scan or one instance; a **relabel** of a subject, a
 session or a scan; a **replace** of an archived instance by the corrected file a
-sender sent again. Corrections are made with `nopacs correction` or
+sender sent again; an **edit** of named header values of every instance of a
+subject, a session, a scan or one instance. Corrections are made with `nopacs correction` or
 `CorrectionService`; the rules are in the contract's comments on
 [`correction.proto`](../../api/proto/nopacs/v1/correction.proto) and in
 [correct](../../internal/correct/doc.go).
@@ -17,7 +18,7 @@ audit entry and its record on the storage keep it.
 
 | What | Role on the tenant |
 |---|---|
-| delete, relabel, replace, undo, purge, allow | admin |
+| delete, relabel, replace, edit, undo, purge, allow | admin (never a masked key for an edit) |
 | list and show corrections | operator |
 
 ## The states of a correction
@@ -27,7 +28,7 @@ stateDiagram-v2
     [*] --> prepared: recorded, nothing visible yet
     prepared --> committed: one transaction makes it visible to every read
     prepared --> abandoned: a step failed, or a relabel was stopped
-    committed --> undone: a delete undone in its grace period
+    committed --> undone: a delete or an edit undone in its grace period
     committed --> purging: the grace period ended, or an admin purged it
     purging --> purged: every object of every storage handled and recorded
 ```
@@ -220,6 +221,69 @@ unserved, until the purge. `ResolveInstances` answers, for an (instance,
 revision) pair a platform kept, whether it is current, superseded, deleted or
 unknown. A replace is not undone: the way back is another replace from the old
 file.
+
+## Edit
+
+```
+nopacs correction edit lab1 sub-3f9a/ses-81c2/scan-7 --set SeriesDescription="T1 axial" --reason "series named wrongly at the scanner" --preview
+nopacs correction edit lab1 sub-3f9a/ses-81c2 --remove StationName --reason "station named by the site"
+```
+
+An edit sets, changes or removes named attributes (by keyword, or as
+`gggg,eeee`) of every instance of its target, at most 2000 instances and 64
+attributes; a larger target is edited a scan at a time. Each instance gets a
+later revision written by the DICOM library, through the path a replace takes:
+its bytes read and checked against the catalog, the changes made on its data
+set, the new file judged, put at its revision key and read back, each scan's
+manifest and metadata written to name the new revisions, then one transaction
+publishes them all. The revisions it supersedes stay, unserved, until the purge,
+and `correction undo` puts every instance back at them until then (the new
+revisions removed from every copy). An edit being undone is never purged. An
+undo that may no longer be published (a hold placed over the edit meanwhile, a
+rebuild, a switch or a repair) is taken back: every scan names the new
+revisions again, the edit stays committed, and the server's audit entry says
+why; ask for the undo again once that ends. A revision number is never used twice for
+an instance, so an edit made after an undone one numbers its revisions above
+the undone edit's. A catalog value an edit sets (Series Description, Modality,
+Series Number) is the scan's in the catalog from its publish. A new revision
+is written in UTF-8 (Specific Character Set `ISO_IR 192`), as a de-identified
+file is; its text reads the same. An element the DICOM library cannot decode
+(VR UN, such as a private element of an implicit-VR file) keeps its bytes as
+they are, so an edit of a file that holds one under a character set other than
+the default repertoire or UTF-8 is abandoned ("a file's character set would not
+be kept") rather than written declaring UTF-8 over text that is not.
+
+An edit is refused for what would change what the catalog or the pixels are:
+the Study, Series and SOP Instance UIDs, the SOP Class UID, the Specific
+Character Set, the Study Date, Pixel Data and what lays out its bytes, overlay
+data, private attributes, binary VRs, and a value that does not fit its VR or is
+not printable ASCII. So is what records how a file was de-identified (Patient
+Identity Removed, De-identification Method, Longitudinal Temporal Information
+Modified), and, in an edit of one instance, a value the catalog keeps for the
+whole scan (Series Description, Modality, Series Number): edit the scan. The preview (`--preview`, or `validate_only`) lists every
+instance and attribute, its value now hidden unless `--show-values` (which the
+audit log records), and a token that holds an hour, and only while the target
+is unchanged. A masked key is refused an edit, its preview too: what the
+archive's files say is a person's choice.
+
+Each new revision is judged before it is written by the tenant's profile: the
+version that de-identified the instance, or, for one archived as received, its
+receiver's profile now. The file is de-identified in memory and the check after
+runs over what that writes. An attribute the profile changes, removes or
+replaces (a lookup's code among them) is refused, since an edit never puts back
+what de-identification takes out; so is the removal of an attribute the profile
+writes; and so is a value in which the check after
+finds an identifier the profile removed (a Patient ID typed into a description).
+Either abandons the edit, anything it wrote removed. A profile whose lookup
+table would decide is judged as if every value had a code, and a judge that
+cannot decide refuses the edit.
+
+**What the check after cannot catch.** The check after searches a new revision
+for the values the profile removes from that same file. A name or another
+identifier typed by a person into an attribute the profile keeps (a series
+description, a comment) is not a value the file held, so in a de-identified
+archive nothing tells it from any other text, and it is archived. Type no
+identifier into an edit; the reason and the audit entry say who made it.
 
 ## While the catalog is rebuilt
 

@@ -35,6 +35,9 @@ const (
 	// MessageMaskedDestination answers a masked key that asks to choose
 	// where archived data goes. It says only what the key is.
 	MessageMaskedDestination = "a masked key may not choose where archived data goes; a person does"
+	// MessageMaskedWrite answers a masked key that asks to write values
+	// into archived files. It says only what the key is.
+	MessageMaskedWrite = "a masked key may not write values into archived files; a person does"
 )
 
 // The reasons a refusal's audit entry records. They are for the admin who
@@ -56,6 +59,7 @@ const (
 	reasonGone         = "the request ended before the check finished: canceled by the caller or past its deadline"
 	reasonMasked       = "a masked key asked for original values"
 	reasonMaskedPlace  = "a masked key asked to choose where archived data goes"
+	reasonMaskedWrite  = "a masked key asked to write values into archived files"
 )
 
 // maxGrantPages bounds how many pages of a key's grants WhoAmI reads: a
@@ -189,6 +193,10 @@ func (a *Access) Check(ctx context.Context, cred Credential, req Requirement, fa
 		// After the grant, as for originals.
 		a.record(entry, master.OutcomeRefused, reasonMaskedPlace)
 		return Decision{}, fault.New(fault.Denied, MessageMaskedDestination)
+	case req.writes && p.Masked():
+		// After the grant, as for originals.
+		a.record(entry, master.OutcomeRefused, reasonMaskedWrite)
+		return Decision{}, fault.New(fault.Denied, MessageMaskedWrite)
 	}
 	// A change of grants an installation's admin makes is a change of the
 	// master, judged by the installation's networks alone, as a tenant's

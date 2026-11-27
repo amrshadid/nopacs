@@ -252,7 +252,20 @@ func (e *Engine) rollbackReplace(ctx context.Context, c tenant.Correction) error
 			}
 			file := manifest.File{Key: c.InstanceKey, Length: c.InstanceSize, Size: c.InstanceSize, SHA256: sha256Text(c.OldSHA256),
 				SOPInstanceUID: c.Target.Instance}
-			if _, err := e.rewriteMeta(ctx, st, s.Storage, s.Path, c.Target.Instance, &old, &file); err != nil {
+			mk, err := layout.ManifestKey(s.Path)
+			if err != nil {
+				return fault.Wrap(fault.Internal, err, "a manifest's key cannot be made")
+			}
+			// Written and kept as the catalog's under the scan's lock
+			// (keepRolledBack): a reception may have committed the scan
+			// since the replace wrote it.
+			unlock := e.lockScan(s.Storage, mk)
+			defer unlock()
+			w, err := e.rewriteMetaOn(ctx, st, s.Path, c.Target.Instance, &old, &file)
+			if err != nil {
+				return err
+			}
+			if err := e.keepRolledBack(ctx, c.ID, s.SeriesUID)(w); err != nil {
 				return err
 			}
 		}

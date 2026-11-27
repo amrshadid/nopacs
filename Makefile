@@ -252,7 +252,7 @@ check-seal:
 # scripts/check/backup-cipher.py derives the keys with hmac and hashlib,
 # opens a backup Go wrote with the cryptography package, refuses it cut,
 # reordered, changed and extended, and writes one that Go then opens.
-.PHONY: check-backup-cipher check-auditchain check-record-mac
+.PHONY: check-backup-cipher check-auditchain check-record-mac check-edit
 check-backup-cipher:
 	@test -n "$(PYTHON)" || { echo "check-backup-cipher: PYTHON is empty; name an interpreter that has the cryptography package" >&2; exit 1; }
 	@command -v "$(PYTHON)" > /dev/null || { echo "check-backup-cipher: no interpreter $(PYTHON)" >&2; exit 1; }
@@ -265,6 +265,16 @@ check-record-mac:
 	@test -n "$(PYTHON)" || { echo "check-record-mac: PYTHON is empty; name a Python interpreter" >&2; exit 1; }
 	@command -v "$(PYTHON)" > /dev/null || { echo "check-record-mac: no interpreter $(PYTHON)" >&2; exit 1; }
 	NOPACS_CHECK_RECORD_MAC_PYTHON="$(PYTHON)" $(GO) test -count=1 -v -run '^Test(Hold)?RecordMACInPython$$' ./internal/core/record
+
+# The outside check of an edit of header values: scripts/check/edit-pydicom.py
+# reads each new revision an edit wrote with pydicom and finds it equal to the
+# revision it superseded but for the edit's changes (every element as pydicom
+# decodes it, Pixel Data byte for byte, the transfer syntax), on the primary
+# and a replica, and the old value again after an undo. PYTHON needs pydicom.
+check-edit:
+	@test -n "$(PYTHON)" || { echo "check-edit: PYTHON is empty; name an interpreter that has pydicom" >&2; exit 1; }
+	@command -v "$(PYTHON)" > /dev/null || { echo "check-edit: no interpreter $(PYTHON)" >&2; exit 1; }
+	NOPACS_CHECK_EDIT_PYTHON="$(PYTHON)" $(GO) test -count=1 -v -run '^TestEdit(MakesNewRevisionsOnEveryCopy|PurgeRemovesTheSupersededRevisionEverywhere)$$' ./internal/correct
 
 # The outside check of internal/core/auditchain: scripts/check/auditchain.py
 # recomputes the entry encoding and the chain with hashlib and has openssl

@@ -130,6 +130,21 @@ scan, keeps it whole, and serves it through an API with keys.
   with a grace period (`delete.grace`), relabel, replace, undo and purge, each
   kept as a signed record on the storage (`CorrectionService`,
   `nopacs correction`).
+- Edit a header value as a correction (`CorrectionService.Edit`, `nopacs
+  correction edit`): set, change or remove named attributes of every
+  instance of a subject, session, scan or instance, after a preview whose
+  values are hidden unless asked (audited). Each instance gets a later
+  revision written by go-dicom, judged first by the tenant's profile and its
+  check after; the UIDs the catalog is built on, Pixel Data and what lays out
+  its bytes, private attributes, binary VRs, the de-identification markers,
+  a value the profile takes out or writes, a scan's values below the scan,
+  and a file whose character set could not be kept are refused, and so is a
+  masked key. The superseded revisions are kept until the purge and an undo
+  puts them back; an undo that may not be published (a hold placed since) is
+  taken back, audited, and the edit stays; a revision number is never used twice, a
+  restore adopts an edit with what its publish owns, and a scrub expects what
+  an edit keeps. A replace or an edit rolled back after a reception committed
+  its scan keeps the digests of what the rollback wrote.
 - Scrub jobs read every stored object back against its checksum. Rebuild
   jobs make a tenant's catalog again from its storages into a shadow
   catalog, reading each correction record as the tenant's database says it

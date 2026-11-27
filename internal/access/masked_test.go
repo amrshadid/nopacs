@@ -121,6 +121,37 @@ func TestCheckRefusesADestinationToAMaskedKey(t *testing.T) {
 	wantErr(t, "a masked key with no grant", err, fault.Denied, access.MessageDenied)
 }
 
+// TestCheckRefusesAWriteOfValuesToAMaskedKey guards the check of a
+// requirement that writes values into archived files: a masked key whose
+// grant suffices is refused as Denied with MessageMaskedWrite, recorded
+// refused with the reason and the mark; a plain key with the same role and
+// the local operator are allowed; a masked key with no grant is told what
+// any key with no grant is told.
+func TestCheckRefusesAWriteOfValuesToAMaskedKey(t *testing.T) {
+	e := newEnv(t)
+	masked := e.maskedKey(on(master.TenantScope(e.lab.ID), master.RoleAdmin))
+	plain := e.key(time.Time{}, on(master.TenantScope(e.lab.ID), master.RoleAdmin))
+	ungranted := e.maskedKey()
+	need := access.OnTenant("lab", master.RoleAdmin).WritesValues()
+
+	e.reset()
+	_, err := e.access.Check(e.ctx, access.APIKey(masked.full), need, facts("Edit"))
+	wantErr(t, "a masked key writing values", err, fault.Denied, access.MessageMaskedWrite)
+	_, entries := e.recorded()
+	en := entryOf(t, entries, masked.id)
+	if en.Outcome != master.OutcomeRefused || !strings.Contains(en.Reason, "write values into archived files") || en.Details[access.DetailMasked] != "true" {
+		t.Errorf("the refusal's entry: outcome %q, reason %q, details %v", en.Outcome, en.Reason, en.Details)
+	}
+	if _, err := e.access.Check(e.ctx, access.APIKey(plain.full), need, facts("Edit")); err != nil {
+		t.Errorf("a plain key with the role was refused: %v", err)
+	}
+	if _, err := e.access.Check(e.ctx, local, need, facts("Edit")); err != nil {
+		t.Errorf("the local operator was refused: %v", err)
+	}
+	_, err = e.access.Check(e.ctx, access.APIKey(ungranted.full), need, facts("Edit"))
+	wantErr(t, "a masked key with no grant", err, fault.Denied, access.MessageDenied)
+}
+
 // TestRefuseOriginals guards the one check a handler makes of what only it
 // can tell holds originals: nil for a plain key and the local operator,
 // Denied with MessageMasked for a masked key, and refused for a Decision

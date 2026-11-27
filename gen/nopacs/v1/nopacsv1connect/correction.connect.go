@@ -33,6 +33,8 @@ const (
 	CorrectionServiceRelabelProcedure = "/nopacs.v1.CorrectionService/Relabel"
 	// CorrectionServiceReplaceProcedure is the procedure name of the CorrectionService's Replace RPC.
 	CorrectionServiceReplaceProcedure = "/nopacs.v1.CorrectionService/Replace"
+	// CorrectionServiceEditProcedure is the procedure name of the CorrectionService's Edit RPC.
+	CorrectionServiceEditProcedure = "/nopacs.v1.CorrectionService/Edit"
 	// CorrectionServiceListCorrectionsProcedure is the procedure name of the CorrectionService's
 	// ListCorrections RPC.
 	CorrectionServiceListCorrectionsProcedure = "/nopacs.v1.CorrectionService/ListCorrections"
@@ -78,6 +80,14 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_nopacs_v1_correction_proto.Services().ByName("CorrectionService").Methods().ByName("Replace"),
 			Procedure:        CorrectionServiceReplaceProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	correctionServiceEditSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_correction_proto.Services().ByName("CorrectionService").Methods().ByName("Edit"),
+			Procedure:        CorrectionServiceEditProcedure,
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
@@ -233,6 +243,52 @@ type CorrectionServiceClient interface {
 	// storage does not answer before anything is written, or the tenant is
 	// not ready).
 	Replace(context.Context, *v1.ReplaceRequest) (*v1.ReplaceResponse, error)
+	// Edit sets, changes or removes named attributes of every instance of a
+	// subject, session, scan or instance, each instance given a later
+	// revision through the path a replace takes; the revisions it supersedes
+	// are kept until its purge, and UndoCorrection takes it back until then.
+	// Each new revision is judged by the tenant's profile and its check after
+	// before it is written. With validate_only it answers the preview: every
+	// instance and attribute, the value now only with show_values, and the
+	// token to confirm it. It is answered in one of three ways, as a replace
+	// is: the correction committed; an error, with nothing recorded; or the
+	// correction abandoned with its state_reason (the check after refused a
+	// new revision, a file's character set would not be kept, a revision
+	// could not be put or read back whole, the target changed before the
+	// publish), anything it wrote removed.
+	//
+	// Role: admin on the tenant.
+	// Audit: one entry in the tenant's log, with the new correction's id as
+	// its object (none for validate_only), and the target's path of labels,
+	// the attributes' tags (never a value), the instance count of a preview,
+	// validate_only and the reason in details; show_values is recorded.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant that
+	// does not exist, for a caller who may not list every tenant; a masked
+	// key, which never writes values into archived files), invalid (also a
+	// missing or too long reason; no change or more than 64; an attribute
+	// named twice, or not by a keyword or as gggg,eeee; a Study, Series or
+	// SOP Instance UID, the SOP Class UID, the Specific Character Set, the
+	// Study Date, Pixel Data or an attribute that lays out its bytes, overlay
+	// data, a private attribute, a group length or the file meta information;
+	// Patient Identity Removed, De-identification Method or Longitudinal
+	// Temporal Information Modified; in an edit of one instance, Series
+	// Description, Modality or Series Number, which the catalog keeps for the
+	// whole scan;
+	// an attribute of a binary VR; a value that does not fit its VR or is not
+	// printable ASCII; a removal with a value; a confirm token with
+	// validate_only, or none without it; show_values without validate_only),
+	// not found (the tenant holds no such subject, session, scan or instance;
+	// a tenant that does not exist, for a caller who may list every tenant),
+	// precondition (the confirm token is not this server's preview of the
+	// same edit, the target changed since, or it is more than an hour old;
+	// more than 2000 instances; a hold covers the target, with the reason
+	// HELD; a correction on it is prepared or not yet purged, or an undone
+	// edit's revisions are not yet removed; a reception of it is in progress;
+	// a rebuild of the tenant is running; the tenant is moved or fenced, with
+	// the reason TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's
+	// database or a storage does not answer before anything is written; the
+	// server judges no edits; the tenant is not ready).
+	Edit(context.Context, *v1.EditRequest) (*v1.EditResponse, error)
 	// ListCorrections answers a tenant's corrections, newest first, filtered
 	// by kind and state.
 	//
@@ -261,8 +317,14 @@ type CorrectionServiceClient interface {
 	// also how an admin settles an unresolved delete a rebuild or a restore
 	// applied fail-closed, and how a prepared relabel is stopped: it is
 	// abandoned and its copies removed, nothing having changed for any
-	// reader. A correction already undone, or a relabel already abandoned,
-	// is answered as it stands, so a repeated call changes nothing more.
+	// reader. A committed edit is undone the same way before its purge: each
+	// instance back at the revision it superseded, the scans' values as they
+	// were, its new revisions removed from every copy; while it is being
+	// undone it is never purged, and an undo that may no longer be published
+	// (a hold placed over it meanwhile) is taken back, the edit committed as
+	// it was, to be asked for again. A correction already
+	// undone, or a relabel already abandoned, is answered as it stands, so a
+	// repeated call changes nothing more.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the correction's id as its
@@ -272,14 +334,17 @@ type CorrectionServiceClient interface {
 	// (also a missing or too long reason), not found (the tenant has no
 	// correction with that id; a tenant that does not exist, for a caller
 	// who may list every tenant), precondition (the correction is neither a
-	// committed delete nor a prepared relabel; a rebuild of the tenant is
-	// running; the tenant is moved or fenced), unavailable (the tenant's
+	// committed delete or edit nor a prepared relabel; an edit taken from its
+	// records by a restore, which keeps nothing to write back; a hold covers
+	// an edit's revisions; a rebuild of the tenant is running; the tenant is
+	// moved or fenced), unavailable (the tenant's
 	// database or a storage holding its record does not answer, or the
 	// tenant is not ready).
 	UndoCorrection(context.Context, *v1.UndoCorrectionRequest) (*v1.UndoCorrectionResponse, error)
 	// PurgeCorrection starts the purge of a committed correction now, before
-	// its grace period ends: a delete's hidden data, or the objects a relabel
-	// or a replace superseded (the old tree, the old revision). It also
+	// its grace period ends: a delete's hidden data, or the objects a
+	// relabel, a replace or an edit superseded (the old tree, the old
+	// revisions). It also
 	// confirms an unresolved delete. The purge runs in the background; the
 	// correction says how far it got. A purge of data a hold covers starts
 	// and waits, purging, with the state reason "held", removing nothing
@@ -294,7 +359,8 @@ type CorrectionServiceClient interface {
 	// does not exist, for a caller who may not list every tenant), invalid,
 	// not found (the tenant has no correction with that id; a tenant that
 	// does not exist, for a caller who may list every tenant), precondition
-	// (the correction is prepared, undone or abandoned; a rebuild of the
+	// (the correction is prepared, undone or abandoned, or an edit being
+	// undone; a rebuild of the
 	// tenant is running; the tenant is moved or fenced), unavailable (the
 	// tenant's database does not answer, or the tenant is not ready).
 	PurgeCorrection(context.Context, *v1.PurgeCorrectionRequest) (*v1.PurgeCorrectionResponse, error)
@@ -462,6 +528,52 @@ type CorrectionServiceHandler interface {
 	// storage does not answer before anything is written, or the tenant is
 	// not ready).
 	Replace(context.Context, *v1.ReplaceRequest) (*v1.ReplaceResponse, error)
+	// Edit sets, changes or removes named attributes of every instance of a
+	// subject, session, scan or instance, each instance given a later
+	// revision through the path a replace takes; the revisions it supersedes
+	// are kept until its purge, and UndoCorrection takes it back until then.
+	// Each new revision is judged by the tenant's profile and its check after
+	// before it is written. With validate_only it answers the preview: every
+	// instance and attribute, the value now only with show_values, and the
+	// token to confirm it. It is answered in one of three ways, as a replace
+	// is: the correction committed; an error, with nothing recorded; or the
+	// correction abandoned with its state_reason (the check after refused a
+	// new revision, a file's character set would not be kept, a revision
+	// could not be put or read back whole, the target changed before the
+	// publish), anything it wrote removed.
+	//
+	// Role: admin on the tenant.
+	// Audit: one entry in the tenant's log, with the new correction's id as
+	// its object (none for validate_only), and the target's path of labels,
+	// the attributes' tags (never a value), the instance count of a preview,
+	// validate_only and the reason in details; show_values is recorded.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant that
+	// does not exist, for a caller who may not list every tenant; a masked
+	// key, which never writes values into archived files), invalid (also a
+	// missing or too long reason; no change or more than 64; an attribute
+	// named twice, or not by a keyword or as gggg,eeee; a Study, Series or
+	// SOP Instance UID, the SOP Class UID, the Specific Character Set, the
+	// Study Date, Pixel Data or an attribute that lays out its bytes, overlay
+	// data, a private attribute, a group length or the file meta information;
+	// Patient Identity Removed, De-identification Method or Longitudinal
+	// Temporal Information Modified; in an edit of one instance, Series
+	// Description, Modality or Series Number, which the catalog keeps for the
+	// whole scan;
+	// an attribute of a binary VR; a value that does not fit its VR or is not
+	// printable ASCII; a removal with a value; a confirm token with
+	// validate_only, or none without it; show_values without validate_only),
+	// not found (the tenant holds no such subject, session, scan or instance;
+	// a tenant that does not exist, for a caller who may list every tenant),
+	// precondition (the confirm token is not this server's preview of the
+	// same edit, the target changed since, or it is more than an hour old;
+	// more than 2000 instances; a hold covers the target, with the reason
+	// HELD; a correction on it is prepared or not yet purged, or an undone
+	// edit's revisions are not yet removed; a reception of it is in progress;
+	// a rebuild of the tenant is running; the tenant is moved or fenced, with
+	// the reason TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's
+	// database or a storage does not answer before anything is written; the
+	// server judges no edits; the tenant is not ready).
+	Edit(context.Context, *v1.EditRequest) (*v1.EditResponse, error)
 	// ListCorrections answers a tenant's corrections, newest first, filtered
 	// by kind and state.
 	//
@@ -490,8 +602,14 @@ type CorrectionServiceHandler interface {
 	// also how an admin settles an unresolved delete a rebuild or a restore
 	// applied fail-closed, and how a prepared relabel is stopped: it is
 	// abandoned and its copies removed, nothing having changed for any
-	// reader. A correction already undone, or a relabel already abandoned,
-	// is answered as it stands, so a repeated call changes nothing more.
+	// reader. A committed edit is undone the same way before its purge: each
+	// instance back at the revision it superseded, the scans' values as they
+	// were, its new revisions removed from every copy; while it is being
+	// undone it is never purged, and an undo that may no longer be published
+	// (a hold placed over it meanwhile) is taken back, the edit committed as
+	// it was, to be asked for again. A correction already
+	// undone, or a relabel already abandoned, is answered as it stands, so a
+	// repeated call changes nothing more.
 	//
 	// Role: admin on the tenant.
 	// Audit: one entry in the tenant's log, with the correction's id as its
@@ -501,14 +619,17 @@ type CorrectionServiceHandler interface {
 	// (also a missing or too long reason), not found (the tenant has no
 	// correction with that id; a tenant that does not exist, for a caller
 	// who may list every tenant), precondition (the correction is neither a
-	// committed delete nor a prepared relabel; a rebuild of the tenant is
-	// running; the tenant is moved or fenced), unavailable (the tenant's
+	// committed delete or edit nor a prepared relabel; an edit taken from its
+	// records by a restore, which keeps nothing to write back; a hold covers
+	// an edit's revisions; a rebuild of the tenant is running; the tenant is
+	// moved or fenced), unavailable (the tenant's
 	// database or a storage holding its record does not answer, or the
 	// tenant is not ready).
 	UndoCorrection(context.Context, *v1.UndoCorrectionRequest) (*v1.UndoCorrectionResponse, error)
 	// PurgeCorrection starts the purge of a committed correction now, before
-	// its grace period ends: a delete's hidden data, or the objects a relabel
-	// or a replace superseded (the old tree, the old revision). It also
+	// its grace period ends: a delete's hidden data, or the objects a
+	// relabel, a replace or an edit superseded (the old tree, the old
+	// revisions). It also
 	// confirms an unresolved delete. The purge runs in the background; the
 	// correction says how far it got. A purge of data a hold covers starts
 	// and waits, purging, with the state reason "held", removing nothing
@@ -523,7 +644,8 @@ type CorrectionServiceHandler interface {
 	// does not exist, for a caller who may not list every tenant), invalid,
 	// not found (the tenant has no correction with that id; a tenant that
 	// does not exist, for a caller who may list every tenant), precondition
-	// (the correction is prepared, undone or abandoned; a rebuild of the
+	// (the correction is prepared, undone or abandoned, or an edit being
+	// undone; a rebuild of the
 	// tenant is running; the tenant is moved or fenced), unavailable (the
 	// tenant's database does not answer, or the tenant is not ready).
 	PurgeCorrection(context.Context, *v1.PurgeCorrectionRequest) (*v1.PurgeCorrectionResponse, error)
@@ -599,6 +721,7 @@ func RegisterCorrectionServiceHandler(server *connect.Server, svc CorrectionServ
 		connect.Method{Spec: correctionServiceDeleteSpec(), Handler: adapter.delete},
 		connect.Method{Spec: correctionServiceRelabelSpec(), Handler: adapter.relabel},
 		connect.Method{Spec: correctionServiceReplaceSpec(), Handler: adapter.replace},
+		connect.Method{Spec: correctionServiceEditSpec(), Handler: adapter.edit},
 		connect.Method{Spec: correctionServiceListCorrectionsSpec(), Handler: adapter.listCorrections},
 		connect.Method{Spec: correctionServiceGetCorrectionSpec(), Handler: adapter.getCorrection},
 		connect.Method{Spec: correctionServiceUndoCorrectionSpec(), Handler: adapter.undoCorrection},
@@ -622,6 +745,10 @@ func (UnimplementedCorrectionServiceHandler) Relabel(context.Context, *v1.Relabe
 
 func (UnimplementedCorrectionServiceHandler) Replace(context.Context, *v1.ReplaceRequest) (*v1.ReplaceResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.CorrectionService.Replace is not implemented")
+}
+
+func (UnimplementedCorrectionServiceHandler) Edit(context.Context, *v1.EditRequest) (*v1.EditResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.CorrectionService.Edit is not implemented")
 }
 
 func (UnimplementedCorrectionServiceHandler) ListCorrections(context.Context, *v1.ListCorrectionsRequest) (*v1.ListCorrectionsResponse, error) {
@@ -675,6 +802,14 @@ func (c *correctionServiceClient) Relabel(ctx context.Context, req *v1.RelabelRe
 func (c *correctionServiceClient) Replace(ctx context.Context, req *v1.ReplaceRequest) (*v1.ReplaceResponse, error) {
 	var res v1.ReplaceResponse
 	if err := c.client.CallUnary(ctx, correctionServiceReplaceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *correctionServiceClient) Edit(ctx context.Context, req *v1.EditRequest) (*v1.EditResponse, error) {
+	var res v1.EditResponse
+	if err := c.client.CallUnary(ctx, correctionServiceEditSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -768,6 +903,18 @@ func (h correctionServiceHandler) replace(ctx context.Context, _ connect.Spec, s
 		return err
 	}
 	res, err := h.svc.Replace(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h correctionServiceHandler) edit(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.EditRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Edit(ctx, &req)
 	if err != nil {
 		return err
 	}

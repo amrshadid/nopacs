@@ -16,6 +16,7 @@ class CorrectionKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     CORRECTION_KIND_DELETE: _ClassVar[CorrectionKind]
     CORRECTION_KIND_RELABEL: _ClassVar[CorrectionKind]
     CORRECTION_KIND_REPLACE: _ClassVar[CorrectionKind]
+    CORRECTION_KIND_EDIT: _ClassVar[CorrectionKind]
 
 class CorrectionOrigin(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -69,6 +70,7 @@ CORRECTION_KIND_UNSPECIFIED: CorrectionKind
 CORRECTION_KIND_DELETE: CorrectionKind
 CORRECTION_KIND_RELABEL: CorrectionKind
 CORRECTION_KIND_REPLACE: CorrectionKind
+CORRECTION_KIND_EDIT: CorrectionKind
 CORRECTION_ORIGIN_UNSPECIFIED: CorrectionOrigin
 CORRECTION_ORIGIN_PERSON: CorrectionOrigin
 CORRECTION_ORIGIN_RETENTION: CorrectionOrigin
@@ -352,6 +354,86 @@ class ReplaceResponse(_message.Message):
     CORRECTION_FIELD_NUMBER: _ClassVar[int]
     correction: Correction
     def __init__(self, correction: _Optional[_Union[Correction, _Mapping]] = ...) -> None: ...
+
+class EditChange(_message.Message):
+    __slots__ = ("attribute", "value", "remove")
+    ATTRIBUTE_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    REMOVE_FIELD_NUMBER: _ClassVar[int]
+    attribute: str
+    value: str
+    remove: bool
+    def __init__(self, attribute: _Optional[str] = ..., value: _Optional[str] = ..., remove: _Optional[bool] = ...) -> None: ...
+
+class EditRequest(_message.Message):
+    __slots__ = ("tenant", "target", "changes", "reason", "validate_only", "confirm", "show_values")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
+    CHANGES_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
+    CONFIRM_FIELD_NUMBER: _ClassVar[int]
+    SHOW_VALUES_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    target: CorrectionTarget
+    changes: _containers.RepeatedCompositeFieldContainer[EditChange]
+    reason: str
+    validate_only: bool
+    confirm: str
+    show_values: bool
+    def __init__(self, tenant: _Optional[str] = ..., target: _Optional[_Union[CorrectionTarget, _Mapping]] = ..., changes: _Optional[_Iterable[_Union[EditChange, _Mapping]]] = ..., reason: _Optional[str] = ..., validate_only: _Optional[bool] = ..., confirm: _Optional[str] = ..., show_values: _Optional[bool] = ...) -> None: ...
+
+class EditPreviewAttribute(_message.Message):
+    __slots__ = ("attribute", "present", "known", "old_value", "new_value", "remove")
+    ATTRIBUTE_FIELD_NUMBER: _ClassVar[int]
+    PRESENT_FIELD_NUMBER: _ClassVar[int]
+    KNOWN_FIELD_NUMBER: _ClassVar[int]
+    OLD_VALUE_FIELD_NUMBER: _ClassVar[int]
+    NEW_VALUE_FIELD_NUMBER: _ClassVar[int]
+    REMOVE_FIELD_NUMBER: _ClassVar[int]
+    attribute: str
+    present: bool
+    known: bool
+    old_value: str
+    new_value: str
+    remove: bool
+    def __init__(self, attribute: _Optional[str] = ..., present: _Optional[bool] = ..., known: _Optional[bool] = ..., old_value: _Optional[str] = ..., new_value: _Optional[str] = ..., remove: _Optional[bool] = ...) -> None: ...
+
+class EditPreviewInstance(_message.Message):
+    __slots__ = ("subject_label", "session_label", "scan_label", "instance_id", "revision", "attributes")
+    SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    SESSION_LABEL_FIELD_NUMBER: _ClassVar[int]
+    SCAN_LABEL_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    REVISION_FIELD_NUMBER: _ClassVar[int]
+    ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
+    subject_label: str
+    session_label: str
+    scan_label: str
+    instance_id: str
+    revision: int
+    attributes: _containers.RepeatedCompositeFieldContainer[EditPreviewAttribute]
+    def __init__(self, subject_label: _Optional[str] = ..., session_label: _Optional[str] = ..., scan_label: _Optional[str] = ..., instance_id: _Optional[str] = ..., revision: _Optional[int] = ..., attributes: _Optional[_Iterable[_Union[EditPreviewAttribute, _Mapping]]] = ...) -> None: ...
+
+class EditPreview(_message.Message):
+    __slots__ = ("instances", "storages", "issue_time", "confirm")
+    INSTANCES_FIELD_NUMBER: _ClassVar[int]
+    STORAGES_FIELD_NUMBER: _ClassVar[int]
+    ISSUE_TIME_FIELD_NUMBER: _ClassVar[int]
+    CONFIRM_FIELD_NUMBER: _ClassVar[int]
+    instances: _containers.RepeatedCompositeFieldContainer[EditPreviewInstance]
+    storages: _containers.RepeatedScalarFieldContainer[str]
+    issue_time: _timestamp_pb2.Timestamp
+    confirm: str
+    def __init__(self, instances: _Optional[_Iterable[_Union[EditPreviewInstance, _Mapping]]] = ..., storages: _Optional[_Iterable[str]] = ..., issue_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirm: _Optional[str] = ...) -> None: ...
+
+class EditResponse(_message.Message):
+    __slots__ = ("preview", "correction")
+    PREVIEW_FIELD_NUMBER: _ClassVar[int]
+    CORRECTION_FIELD_NUMBER: _ClassVar[int]
+    preview: EditPreview
+    correction: Correction
+    def __init__(self, preview: _Optional[_Union[EditPreview, _Mapping]] = ..., correction: _Optional[_Union[Correction, _Mapping]] = ...) -> None: ...
 
 class ListCorrectionsRequest(_message.Message):
     __slots__ = ("tenant", "kinds", "states", "page_size", "page_token", "origins")

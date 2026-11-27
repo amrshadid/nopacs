@@ -243,6 +243,10 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		"Replace": func(c clients) outcome {
 			return call(c.corrections.Replace, &v1.ReplaceRequest{Tenant: name, QuarantinedFile: "q1", Reason: "x"})
 		},
+		"Edit": func(c clients) outcome {
+			return call(c.corrections.Edit, &v1.EditRequest{Tenant: name, Target: &v1.CorrectionTarget{SubjectLabel: "S1"},
+				Changes: []*v1.EditChange{{Attribute: "SeriesDescription", Value: "x"}}, Reason: "x", ValidateOnly: true})
+		},
 		"ListCorrections": func(c clients) outcome {
 			return call(c.corrections.ListCorrections, &v1.ListCorrectionsRequest{Tenant: name})
 		},

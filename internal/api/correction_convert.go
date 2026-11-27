@@ -18,6 +18,7 @@ var (
 		record.KindDelete:  v1.CorrectionKind_CORRECTION_KIND_DELETE,
 		record.KindRelabel: v1.CorrectionKind_CORRECTION_KIND_RELABEL,
 		record.KindReplace: v1.CorrectionKind_CORRECTION_KIND_REPLACE,
+		record.KindEdit:    v1.CorrectionKind_CORRECTION_KIND_EDIT,
 	}
 	correctionStates = map[record.State]v1.CorrectionState{
 		record.StatePrepared:  v1.CorrectionState_CORRECTION_STATE_PREPARED,

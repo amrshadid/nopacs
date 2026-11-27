@@ -78,6 +78,12 @@ func (t *Tenant) OwnAdoptedReplace(ctx context.Context, rec record.Correction, s
 	return t.sending().OwnAdoptedReplace(ctx, rec, storage, sizeOf, now)
 }
 
+// OwnAdoptedEdit implements tenant.Restoring.
+func (t *Tenant) OwnAdoptedEdit(ctx context.Context, rec record.Correction, storage string,
+	sizeOf func(ctx context.Context, key string) (int64, error), now time.Time) error {
+	return t.sending().OwnAdoptedEdit(ctx, rec, storage, sizeOf, now)
+}
+
 // HoldCommittedDeletes implements tenant.Restoring.
 func (t *Tenant) HoldCommittedDeletes(ctx context.Context) (int64, error) {
 	return t.sending().HoldCommittedDeletes(ctx)

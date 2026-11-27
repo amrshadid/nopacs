@@ -254,11 +254,18 @@ func choosesDestination(proc string, req proto.Message) bool {
 	return when == nil || when(req)
 }
 
-// norm returns r as marked to answer original values and to choose a
-// destination, so two requirements are compared by kind, role and tenant
-// alone; the marks are checked apart.
+// writesValues names the methods whose every request writes values the
+// caller chooses into archived files, which a masked key is refused
+// (access.Requirement.WritesValues). A method not here never does.
+var writesValues = map[string]bool{
+	nopacsv1connect.CorrectionServiceEditProcedure: true,
+}
+
+// norm returns r as marked to answer original values, to choose a
+// destination and to write values, so two requirements are compared by
+// kind, role and tenant alone; the marks are checked apart.
 func norm(r access.Requirement) access.Requirement {
-	return r.AnswersOriginals().ChoosesDestination()
+	return r.AnswersOriginals().ChoosesDestination().WritesValues()
 }
 
 // withField returns msg with the top-level field named name set: a string
@@ -394,6 +401,9 @@ func TestRequirementsFollowTheRoleLines(t *testing.T) {
 			}
 			if has, want := r.ChoosesDestination() == r, choosesDestination(proc, req); has != want {
 				t.Errorf("%s: chooses a destination %v, want %v (request %v)", proc, has, want, req)
+			}
+			if has, want := r.WritesValues() == r, writesValues[proc]; has != want {
+				t.Errorf("%s: writes values %v, want %v (request %v)", proc, has, want, req)
 			}
 			return norm(r)
 		}
