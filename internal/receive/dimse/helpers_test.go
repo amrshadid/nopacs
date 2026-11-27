@@ -311,7 +311,7 @@ func within[T any](t *testing.T, what string, ch <-chan T) T {
 	return zero
 }
 
-// scuResult is what testdata/scu.py prints.
+// scuResult is what scripts/check/dimse-scu.py prints.
 type scuResult struct {
 	Assoc    string   `json:"assoc"`
 	RJ       []int    `json:"rj"`
@@ -323,7 +323,7 @@ type scuResult struct {
 	After string `json:"after"`
 }
 
-// scu runs testdata/scu.py with py (from python, called before the test
+// scu runs scripts/check/dimse-scu.py with py (from python, called before the test
 // started anything) and an action and its arguments against s.
 func scu(t *testing.T, py string, s *started, action, calling, called string, args ...string) scuResult {
 	t.Helper()
@@ -337,17 +337,21 @@ func scu(t *testing.T, py string, s *started, action, calling, called string, ar
 // runSCU is scu for a goroutine: it never touches the test, so a failure
 // is returned for the test's goroutine to report.
 func runSCU(py string, s *started, action, calling, called string, args ...string) (scuResult, error) {
+	script, err := filepath.Abs(filepath.Join("..", "..", "..", "scripts", "check", "dimse-scu.py"))
+	if err != nil {
+		return scuResult{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), toolBound)
 	defer cancel()
-	argv := append([]string{"-I", filepath.Join("testdata", "scu.py"), action, s.host, s.port, calling, called}, args...)
+	argv := append([]string{"-I", script, action, s.host, s.port, calling, called}, args...)
 	out, err := exec.CommandContext(ctx, py, argv...).CombinedOutput() // #nosec G204 -- the test's own script and arguments.
 	if err != nil {
-		return scuResult{}, fmt.Errorf("scu.py %s: %w\n%s", action, err, out)
+		return scuResult{}, fmt.Errorf("dimse-scu.py %s: %w\n%s", action, err, out)
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	var r scuResult
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &r); err != nil {
-		return scuResult{}, fmt.Errorf("scu.py %s printed %q", action, out)
+		return scuResult{}, fmt.Errorf("dimse-scu.py %s printed %q", action, out)
 	}
 	return r, nil
 }

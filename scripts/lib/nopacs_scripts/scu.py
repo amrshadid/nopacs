@@ -1,12 +1,15 @@
-"""A DICOM sender for the listener's tests, on pynetdicom: one action per
-run, its outcome printed as one line of JSON. It is another implementation
-of the protocol than the one the listener is built on, so what it sees is
-evidence the listener speaks the standard, not only the library it uses.
+"""A DICOM sender on pynetdicom for the listener's tests: one action per
+call, its outcome returned as a dict. It is another implementation of the
+protocol than the one the listener is built on, so what it sees is evidence
+the listener speaks the standard, not only the library it uses.
 
-  echo HOST PORT CALLING CALLED
-  store HOST PORT CALLING CALLED FILE...
-  propose HOST PORT CALLING CALLED SOPCLASS TRANSFERSYNTAX
-  garbage HOST PORT CALLING CALLED
+Actions, each with the listener's host and port and the calling and called
+AE titles:
+
+  echo
+  store FILE...
+  propose SOPCLASS TRANSFERSYNTAX
+  garbage
 
 garbage associates, then sends a PDU of a type PS3.8 Table 9-11 does not
 define on the association's socket, and waits for the listener's answer.
@@ -16,15 +19,18 @@ the data set (only the file meta information is read), so the bytes on the
 wire are the file's own after its meta group.
 """
 
-import json
-import sys
 import time
 
 from pydicom import dcmread
 from pynetdicom import AE
 
+VERIFICATION = "1.2.840.10008.1.1"
+IMPLICIT_LITTLE_ENDIAN = "1.2.840.10008.1.2"
+
 
 def associate(host, port, calling, called, contexts):
+    """Requests an association with the (abstract syntax, transfer syntax)
+    pairs in contexts and returns it, established or not."""
     ae = AE(ae_title=calling)
     ae.acse_timeout = 10
     ae.dimse_timeout = 60
@@ -35,6 +41,9 @@ def associate(host, port, calling, called, contexts):
 
 
 def outcome(assoc):
+    """Returns how the association request ended: "assoc" is accepted,
+    rejected (with "rj", the result, source and diagnostic), aborted or
+    failed."""
     out = {}
     if assoc.is_established:
         out["assoc"] = "accepted"
@@ -49,15 +58,20 @@ def outcome(assoc):
     return out
 
 
-def main(argv):
-    action, host, port, calling, called = argv[1:6]
-    rest = argv[6:]
+def status_of(st):
+    """Returns the Status of a DIMSE answer, None when it has none."""
+    return st.Status if "Status" in st else None
+
+
+def run(action, host, port, calling, called, rest):
+    """Runs one action against the listener and returns its outcome as a
+    dict of what the caller can print as JSON. An unknown action raises
+    ValueError."""
     if action == "echo":
-        assoc = associate(host, port, calling, called, [("1.2.840.10008.1.1", "1.2.840.10008.1.2")])
+        assoc = associate(host, port, calling, called, [(VERIFICATION, IMPLICIT_LITTLE_ENDIAN)])
         out = outcome(assoc)
         if assoc.is_established:
-            st = assoc.send_c_echo()
-            out["statuses"] = [st.Status if "Status" in st else None]
+            out["statuses"] = [status_of(assoc.send_c_echo())]
             assoc.release()
     elif action == "store":
         contexts = []
@@ -69,10 +83,7 @@ def main(argv):
         assoc = associate(host, port, calling, called, contexts)
         out = outcome(assoc)
         if assoc.is_established:
-            out["statuses"] = []
-            for path in rest:
-                st = assoc.send_c_store(path)
-                out["statuses"].append(st.Status if "Status" in st else None)
+            out["statuses"] = [status_of(assoc.send_c_store(path)) for path in rest]
             assoc.release()
     elif action == "propose":
         sop, ts = rest
@@ -83,7 +94,7 @@ def main(argv):
             out["rejected_contexts"] = [cx.abstract_syntax for cx in assoc.rejected_contexts]
             assoc.release()
     elif action == "garbage":
-        assoc = associate(host, port, calling, called, [("1.2.840.10008.1.1", "1.2.840.10008.1.2")])
+        assoc = associate(host, port, calling, called, [(VERIFICATION, IMPLICIT_LITTLE_ENDIAN)])
         out = outcome(assoc)
         if assoc.is_established:
             # Type 0x7F, length four, four bytes.
@@ -93,9 +104,5 @@ def main(argv):
                 time.sleep(0.05)
             out["after"] = "aborted" if assoc.is_aborted else ("open" if assoc.is_established else "closed")
     else:
-        raise SystemExit("unknown action " + action)
-    print(json.dumps(out))
-
-
-if __name__ == "__main__":
-    main(sys.argv)
+        raise ValueError("unknown action " + action)
+    return out
