@@ -75,7 +75,9 @@ func NewEngine(expanded *v1.ExpandedProfile, method string, unassigned *int) (*e
 	if err != nil {
 		return nil, keys, err
 	}
-	en, err := engine.New(expanded, keys, engine.Options{Lookups: Lookups{Unassigned: unassigned}, Method: method})
+	// A trial's engine is used once: its lists are not kept in the cache
+	// stored versions' engines share.
+	en, err := engine.New(expanded, keys, engine.Options{Lookups: Lookups{Unassigned: unassigned}, Method: method, OneOff: true})
 	if err != nil {
 		return nil, keys, fault.New(fault.Precondition, "profile: this server cannot run the profile: "+ReceptionRefusal(err))
 	}

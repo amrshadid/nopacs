@@ -44,6 +44,9 @@ type parsed struct {
 	// VR (a LUT, an overlay, an encapsulated document), in order, where a
 	// short raw form is not taken.
 	binary [][2]int64
+	// skipped are the ranges of the values the lists' terms are not
+	// searched in (listsSkipped), in order.
+	skipped [][2]int64
 	// nestedPixels is the path of the first element of group 7FE0 inside
 	// a sequence item, or "": de-identification keeps pixel data at the
 	// top level only, so one found deeper is an image no pixel rule
@@ -108,6 +111,7 @@ func (c *Checker) parse(src io.ReaderAt, size int64, written engine.Written) (*p
 	cut = append(cut, writtenValues(p.written)...)
 	p.segs = outside(cut, size)
 	sort.Slice(p.binary, func(i, j int) bool { return p.binary[i][0] < p.binary[j][0] })
+	sort.Slice(p.skipped, func(i, j int) bool { return p.skipped[i][0] < p.skipped[j][0] })
 	return p, nil
 }
 
@@ -140,7 +144,10 @@ func (p *parsed) survey(elements []*attributes.DataElementValue, prefix string, 
 			continue
 		}
 		text := dataelem.IsTextVR(dataelem.VR(e.VR))
-		if !text && e.VR != "UN" && e.VR != "" && !e.Tag.IsPrivate() && pos.End > pos.ValueOffset {
+		if listsSkipped(e) && pos.End > pos.ValueOffset {
+			p.skipped = append(p.skipped, [2]int64{pos.ValueOffset, pos.End})
+		}
+		if standardBinary(e) && pos.End > pos.ValueOffset {
 			p.binary = append(p.binary, [2]int64{pos.ValueOffset, pos.End})
 		}
 		switch {
@@ -241,6 +248,13 @@ func outside(cut [][2]int64, n int64) [][2]int64 {
 func (p *parsed) inBinary(off int64) bool {
 	i := sort.Search(len(p.binary), func(i int) bool { return p.binary[i][1] > off })
 	return i < len(p.binary) && p.binary[i][0] <= off
+}
+
+// inListsSkipped reports whether offset is in a value the lists' terms are
+// not searched in (listsSkipped).
+func (p *parsed) inListsSkipped(off int64) bool {
+	i := sort.Search(len(p.skipped), func(i int) bool { return p.skipped[i][1] > off })
+	return i < len(p.skipped) && p.skipped[i][0] <= off
 }
 
 // locate returns the path of the innermost element whose bytes hold

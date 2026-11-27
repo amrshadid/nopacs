@@ -98,7 +98,7 @@ func TestRedactValueKeepsTheStructure(t *testing.T) {
 		{"cut again until clean", `ab`, "", "LO", "aabbc", "c", []string{"ab"}, 2},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got, cuts, count, cause := redactValue(compileSearch(t, c.pattern), c.repl, c.vr, c.value, func(int) bool { return true })
+			got, cuts, count, cause := redactValue(compileSearch(t, c.pattern), c.repl, c.vr, c.value, func(int) bool { return true }, nil)
 			if cause != "" || got != c.want || !slices.Equal(cuts, c.cuts) || count != c.count {
 				t.Errorf("got %q, cuts %q (%d), cause %q; want %q, cuts %q (%d)", got, cuts, count, cause, c.want, c.cuts, c.count)
 			}

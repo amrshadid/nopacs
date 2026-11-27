@@ -82,6 +82,10 @@ it.
   tenant. Work that does not fit waits for room; a file whose check alone needs more
   than the whole is quarantined (`deid_failed`, cause `check_too_large`) with its bytes
   kept, and archived by a release once the setting is raised.
+- `deid.list-cache-bytes` bounds the memory the text lists of stored profile versions
+  are kept in (256 MiB by default): every reception, job and correction of a version
+  shares one copy of their automata, and the least recently used version's are dropped
+  past it, built again when next needed.
 - `receiver.header-limit` bounds the header a file may have before it is quarantined.
 - `receiver.allow-as-received` is `false` by default: every receiver de-identifies. A
   tenant that had receivers before receivers could de-identify was given `true` when
@@ -185,6 +189,7 @@ when it starts do not change until it is started again.
 | `receiver.header-limit` | Within a second, for the next file read |
 | `deid.pixel-limit` | Within a second, for the next file de-identified; a file held as `pixels_too_large` is archived by its release once the setting is raised |
 | `deid.memory` | Within a second, for the next file checked or tried; work that waits for room reads it again each second, and a file held as `check_too_large` is archived by its release once the setting is raised |
+| `deid.list-cache-bytes` | Within ten seconds: the server reads it again on that interval, and drops the least recently used lists at once when it is lowered |
 | `receiver.allow-as-received` | At the next `AddReceiver`, or `SetReceiver` that changes the receiver's de-identification; a receiver that archives as received keeps doing so when it is turned off |
 | `api.cors-origins` | Within ten seconds: the server keeps the value it read for that long |
 | `sender.destinations`, `sender.allow-plain-http` | At the next `AddSender` or `SetSender` that changes a destination; a sender that is configured already is checked again when the value is changed |

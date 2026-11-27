@@ -419,6 +419,65 @@ message ProfileDocument {
   // pixel_text_unsearched whatever this says. An image a pixel rule fills
   // is written native and has no segments.
   UnsearchedSegments unsearched_segments = 7;
+
+  // Named, versioned lists of terms (names of staff, sites, departments).
+  // The clean and redact rules that name a list cut its terms out of free
+  // text where a term stands as a word: on a side where the term ends in a
+  // letter or a digit, no letter or digit beside it (a term of a script
+  // written without spaces stands anywhere), compared in any letter case
+  // and width, in Unicode NFC, a run of white space for a term's one
+  // space. The check after de-identification searches every value of every
+  // file for every term of every list, and holds a file in which one is
+  // found (residual_value, with the kind "list_term" and the element's
+  // path, never the term). At most 16 lists
+  // and 20,000 terms in all. Terms are answered only in the document
+  // itself, and never to a masked key (ProfileVersion.terms_withheld); a
+  // description gives each list's name, version, count of terms and the
+  // SHA-256 of its folded terms (TextListSummary).
+  repeated TextList text_lists = 8;
+}
+
+// TextList is a named, versioned list of terms a profile's clean and
+// redact rules may cut out of free text (ProfileDocument.text_lists).
+message TextList {
+  // 1 to 63 of a-z, 0-9 and -, starting with a letter; unique in the
+  // profile.
+  string name = 1;
+
+  // The list's own version, from 1 to 10,000, raised when its terms
+  // change, so a description tells two lists of one name apart.
+  int32 version = 2;
+
+  // 1 to 10,000 terms, each at most 256 bytes of UTF-8 with no control
+  // character and no backslash, at least 2 characters (1 in Han,
+  // Hiragana, Katakana or Hangul), no two of a list alike once letter
+  // case, width and white space are folded. All the lists' terms together
+  // are at most 512 KiB folded, and 3 MiB written in every case and
+  // Unicode form (composed and decomposed) as the character set that
+  // writes them longest does, so a version accepted is never refused a
+  // file for the set it was received in.
+  repeated string terms = 3;
+}
+
+// TextListSummary is what a description says of a text list: never a
+// term.
+message TextListSummary {
+  // The list's name.
+  string name = 1;
+
+  // The list's version.
+  int32 version = 2;
+
+  // How many terms it has.
+  int32 terms = 3;
+
+  // The SHA-256 of its terms folded (NFC, letter case and width folded,
+  // white space runs one space, trimmed), sorted, each followed by a line
+  // feed, in lowercase hexadecimal: two lists with one checksum hold the
+  // same terms however they were written. It is not keyed, so a list of a
+  // few terms can be found by hashing guesses: it is answered only to a
+  // caller that may read the terms, and empty to a masked key.
+  string sha256 = 4;
 }
 
 // UnsearchedSegments is what happens to an image whose compressed pixel
@@ -988,7 +1047,15 @@ enum LookupMissing {
 //                           for text, and removing them takes out no less
 //                           than cleaning them would. The other elements of
 //                           its group follow their own rules.
-message CleanAction {}
+//
+// With lists, clean also cuts the terms of those text lists of the
+// profile (ProfileDocument.text_lists) where they stand as words, in the
+// same passes, every other character kept.
+message CleanAction {
+  // Names of the profile's text lists whose terms clean also cuts; at most
+  // 16, each once.
+  repeated string lists = 1;
+}
 
 // QuarantineAction quarantines the whole file. It has no fields.
 message QuarantineAction {}
@@ -1052,7 +1119,8 @@ message RedactAction {
   // The regular expression, in the RE2 syntax, searched for anywhere in
   // each part of the value; the bounds of ValuePatternSelector.pattern. A
   // pattern that matches the empty string, such as \d*, is refused: it
-  // would cut nothing and match everywhere.
+  // would cut nothing and match everywhere. Required unless lists names a
+  // list.
   string pattern = 1;
 
   // The text each match becomes: empty, the default, or at most 64 bytes
@@ -1061,6 +1129,14 @@ message RedactAction {
   // fixed text: it never holds a capture of the value, and a replacement
   // the pattern matches is refused, since it would be cut again.
   string replacement = 2;
+
+  // Names of the profile's text lists whose terms redact also cuts where
+  // they stand as words, each becoming the replacement, terms that overlap
+  // cut as one; at most 16, each once. With lists, the pattern may be
+  // empty. A replacement holding a term of these lists is refused. The
+  // terms cut are no needle of their own: the check after searches for
+  // every term of every list.
+  repeated string lists = 3;
 }
 
 // RemoveUnlessRequiredAction removes an element unless the IOD of the
@@ -1244,8 +1320,9 @@ message ExpandedProfile {
   // what each selector selects and each action does, as this file
   // describes them. A server runs only a version of an edition it knows,
   // and keeps the meaning of every edition it has shipped, so a stored
-  // version never changes what it does when the language grows. This
-  // edition is 1.
+  // version never changes what it does when the language grows. Edition 2
+  // adds value patterns and redact, edition 3 text lists; a version is of
+  // the oldest edition that has everything it uses.
   int32 language_edition = 6;
 
   // What happens to an image whose compressed pixel data has segments
@@ -1253,6 +1330,10 @@ message ExpandedProfile {
   // image. Hold is written as unspecified, so a document that says hold
   // and one that says nothing have one expanded form and one checksum.
   UnsearchedSegments unsearched_segments = 7;
+
+  // The document's text lists, as written: part of the checksum, so a
+  // version's terms never change. Bases have none.
+  repeated TextList text_lists = 8;
 }
 
 // ExpandedRule is a rule of an expanded profile, where it came from, and
@@ -1310,6 +1391,15 @@ message ProfileVersion {
 
   // The expanded form. Answered only with the view PROFILE_VIEW_FULL.
   ExpandedProfile expanded = 8;
+
+  // True when the version has text lists and the caller is a masked key,
+  // which is never answered a term (as sensitive as a file's values) nor
+  // what confirms a guess of one: the document's lists are answered with
+  // their names and versions and no term, and checksum and expanded are
+  // empty (the checksum covers the expanded text, terms included). Such a
+  // document cannot be stored again as it is. A masked key may not store,
+  // try or explain a version with lists.
+  bool terms_withheld = 9;
 }
 
 // ProfileView is how much of a version an answer carries. A version's
@@ -2100,6 +2190,28 @@ message DiffProfileVersionsResponse {
 
   // See unsearched_segments_from.
   UnsearchedSegments unsearched_segments_to = 18;
+
+  // Each text list that differs between the two, by name in byte order:
+  // added, removed, or changed (its version or its terms), with each
+  // side's summary. Never a term.
+  repeated TextListChange text_lists = 19;
+}
+
+// TextListChange is how a text list differs between two versions of a
+// profile, by its summaries; never a term.
+message TextListChange {
+  // The list's name.
+  string name = 1;
+
+  // ADDED (only in the version compared to), REMOVED (only in the one
+  // compared from) or CHANGED (in both, its version or its terms differ).
+  ProfileChange change = 2;
+
+  // The list in the version compared from; absent when added.
+  TextListSummary from = 3;
+
+  // The list in the version compared to; absent when removed.
+  TextListSummary to = 4;
 }
 
 // ProfileChange is how a rule differs between two versions.
@@ -2200,6 +2312,10 @@ message DescribeProfileResponse {
 
   // The record of the de-identification each file carries.
   ProfileMethod method = 5;
+
+  // Each text list of the profile, in its order: name, version, count of
+  // terms and checksum, never a term.
+  repeated TextListSummary text_lists = 6;
 }
 
 // ProfileElementClass is a class of element a description groups the

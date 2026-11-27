@@ -11,6 +11,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/deid/check"
 	"github.com/amrshadid/nopacs/internal/deid/engine"
+	"github.com/amrshadid/nopacs/internal/deid/profile"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/receive/header"
 	"github.com/amrshadid/nopacs/internal/tenant"
@@ -328,6 +329,14 @@ func labelResidual(rcv tenant.Receiver, path label.Path, needles engine.Needles)
 	for _, l := range []struct{ level, label string }{{"subject", path.Subject}, {"session", path.Session}, {"scan", path.Scan}} {
 		low := strings.ToLower(l.label)
 		for _, n := range needles {
+			if n.Kind == engine.NeedleList {
+				// The profile's text lists: a term standing in the label,
+				// as the check after finds one in a value.
+				if listInLabel(n, l.label) {
+					return l.level, residualKindOf(n.Kind)
+				}
+				continue
+			}
 			forms := []string{n.Value}
 			if n.Kind == engine.NeedleName {
 				forms = append(forms, strings.FieldsFunc(n.Value, func(r rune) bool { return r == '^' || r == ' ' || r == '=' })...)
@@ -346,6 +355,8 @@ func labelResidual(rcv tenant.Receiver, path label.Path, needles engine.Needles)
 // by, as the check after names it.
 func residualKindOf(k engine.NeedleKind) string {
 	switch k {
+	case engine.NeedleList:
+		return string(check.KindListTerm)
 	case engine.NeedleName:
 		return string(check.KindName)
 	case engine.NeedleDate:
@@ -354,4 +365,17 @@ func residualKindOf(k engine.NeedleKind) string {
 		return string(check.KindUID)
 	}
 	return string(check.KindIdentifier)
+}
+
+// listInLabel reports whether a term of the lists of a needle of kind
+// engine.NeedleList stands in a label as the check after finds one
+// (profile.TermStands), or the label could not be searched within its
+// bound, which holds the file too.
+func listInLabel(n engine.Needle, lbl string) bool {
+	if n.Lists == nil {
+		return false
+	}
+	budget := int64(len(lbl)+1) * 1024
+	spans, err := n.Lists.Find(context.Background(), []rune(profile.NFC(lbl)), n.Lists.All(), &budget)
+	return err != nil || len(spans) > 0
 }

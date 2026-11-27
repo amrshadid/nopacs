@@ -687,8 +687,23 @@ type ProfileDocument struct {
 	// pixel_text_unsearched whatever this says. An image a pixel rule fills
 	// is written native and has no segments.
 	UnsearchedSegments UnsearchedSegments `protobuf:"varint,7,opt,name=unsearched_segments,json=unsearchedSegments,proto3,enum=nopacs.v1.UnsearchedSegments" json:"unsearched_segments,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Named, versioned lists of terms (names of staff, sites, departments).
+	// The clean and redact rules that name a list cut its terms out of free
+	// text where a term stands as a word: on a side where the term ends in a
+	// letter or a digit, no letter or digit beside it (a term of a script
+	// written without spaces stands anywhere), compared in any letter case
+	// and width, in Unicode NFC, a run of white space for a term's one
+	// space. The check after de-identification searches every value of every
+	// file for every term of every list, and holds a file in which one is
+	// found (residual_value, with the kind "list_term" and the element's
+	// path, never the term). At most 16 lists
+	// and 20,000 terms in all. Terms are answered only in the document
+	// itself, and never to a masked key (ProfileVersion.terms_withheld); a
+	// description gives each list's name, version, count of terms and the
+	// SHA-256 of its folded terms (TextListSummary).
+	TextLists     []*TextList `protobuf:"bytes,8,rep,name=text_lists,json=textLists,proto3" json:"text_lists,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProfileDocument) Reset() {
@@ -770,6 +785,166 @@ func (x *ProfileDocument) GetUnsearchedSegments() UnsearchedSegments {
 	return UnsearchedSegments_UNSEARCHED_SEGMENTS_UNSPECIFIED
 }
 
+func (x *ProfileDocument) GetTextLists() []*TextList {
+	if x != nil {
+		return x.TextLists
+	}
+	return nil
+}
+
+// TextList is a named, versioned list of terms a profile's clean and
+// redact rules may cut out of free text (ProfileDocument.text_lists).
+type TextList struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 1 to 63 of a-z, 0-9 and -, starting with a letter; unique in the
+	// profile.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The list's own version, from 1 to 10,000, raised when its terms
+	// change, so a description tells two lists of one name apart.
+	Version int32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// 1 to 10,000 terms, each at most 256 bytes of UTF-8 with no control
+	// character and no backslash, at least 2 characters (1 in Han,
+	// Hiragana, Katakana or Hangul), no two of a list alike once letter
+	// case, width and white space are folded. All the lists' terms together
+	// are at most 512 KiB folded, and 3 MiB written in every case and
+	// Unicode form (composed and decomposed) as the character set that
+	// writes them longest does, so a version accepted is never refused a
+	// file for the set it was received in.
+	Terms         []string `protobuf:"bytes,3,rep,name=terms,proto3" json:"terms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextList) Reset() {
+	*x = TextList{}
+	mi := &file_nopacs_v1_profile_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextList) ProtoMessage() {}
+
+func (x *TextList) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_profile_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextList.ProtoReflect.Descriptor instead.
+func (*TextList) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *TextList) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *TextList) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *TextList) GetTerms() []string {
+	if x != nil {
+		return x.Terms
+	}
+	return nil
+}
+
+// TextListSummary is what a description says of a text list: never a
+// term.
+type TextListSummary struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The list's name.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The list's version.
+	Version int32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// How many terms it has.
+	Terms int32 `protobuf:"varint,3,opt,name=terms,proto3" json:"terms,omitempty"`
+	// The SHA-256 of its terms folded (NFC, letter case and width folded,
+	// white space runs one space, trimmed), sorted, each followed by a line
+	// feed, in lowercase hexadecimal: two lists with one checksum hold the
+	// same terms however they were written. It is not keyed, so a list of a
+	// few terms can be found by hashing guesses: it is answered only to a
+	// caller that may read the terms, and empty to a masked key.
+	Sha256        string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextListSummary) Reset() {
+	*x = TextListSummary{}
+	mi := &file_nopacs_v1_profile_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextListSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextListSummary) ProtoMessage() {}
+
+func (x *TextListSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_profile_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextListSummary.ProtoReflect.Descriptor instead.
+func (*TextListSummary) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TextListSummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *TextListSummary) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *TextListSummary) GetTerms() int32 {
+	if x != nil {
+		return x.Terms
+	}
+	return 0
+}
+
+func (x *TextListSummary) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
 // ProfileRule is one rule: what it selects, when it applies, and what it
 // does.
 type ProfileRule struct {
@@ -797,7 +972,7 @@ type ProfileRule struct {
 
 func (x *ProfileRule) Reset() {
 	*x = ProfileRule{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[1]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -809,7 +984,7 @@ func (x *ProfileRule) String() string {
 func (*ProfileRule) ProtoMessage() {}
 
 func (x *ProfileRule) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[1]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -822,7 +997,7 @@ func (x *ProfileRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileRule.ProtoReflect.Descriptor instead.
 func (*ProfileRule) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{1}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProfileRule) GetName() string {
@@ -898,7 +1073,7 @@ type ProfileSelector struct {
 
 func (x *ProfileSelector) Reset() {
 	*x = ProfileSelector{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[2]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -910,7 +1085,7 @@ func (x *ProfileSelector) String() string {
 func (*ProfileSelector) ProtoMessage() {}
 
 func (x *ProfileSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[2]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -923,7 +1098,7 @@ func (x *ProfileSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileSelector.ProtoReflect.Descriptor instead.
 func (*ProfileSelector) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{2}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProfileSelector) GetKind() isProfileSelector_Kind {
@@ -1178,7 +1353,7 @@ type ValuePatternSelector struct {
 
 func (x *ValuePatternSelector) Reset() {
 	*x = ValuePatternSelector{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[3]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1190,7 +1365,7 @@ func (x *ValuePatternSelector) String() string {
 func (*ValuePatternSelector) ProtoMessage() {}
 
 func (x *ValuePatternSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[3]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1203,7 +1378,7 @@ func (x *ValuePatternSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValuePatternSelector.ProtoReflect.Descriptor instead.
 func (*ValuePatternSelector) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{3}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ValuePatternSelector) GetPattern() string {
@@ -1246,7 +1421,7 @@ type PrivateElement struct {
 
 func (x *PrivateElement) Reset() {
 	*x = PrivateElement{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[4]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1258,7 +1433,7 @@ func (x *PrivateElement) String() string {
 func (*PrivateElement) ProtoMessage() {}
 
 func (x *PrivateElement) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[4]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1271,7 +1446,7 @@ func (x *PrivateElement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrivateElement.ProtoReflect.Descriptor instead.
 func (*PrivateElement) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{4}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PrivateElement) GetCreator() string {
@@ -1346,7 +1521,7 @@ type ContentItemSelector struct {
 
 func (x *ContentItemSelector) Reset() {
 	*x = ContentItemSelector{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[5]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1358,7 +1533,7 @@ func (x *ContentItemSelector) String() string {
 func (*ContentItemSelector) ProtoMessage() {}
 
 func (x *ContentItemSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[5]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1371,7 +1546,7 @@ func (x *ContentItemSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContentItemSelector.ProtoReflect.Descriptor instead.
 func (*ContentItemSelector) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{5}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ContentItemSelector) GetScheme() string {
@@ -1426,7 +1601,7 @@ type ProfileCondition struct {
 
 func (x *ProfileCondition) Reset() {
 	*x = ProfileCondition{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[6]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1438,7 +1613,7 @@ func (x *ProfileCondition) String() string {
 func (*ProfileCondition) ProtoMessage() {}
 
 func (x *ProfileCondition) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[6]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1451,7 +1626,7 @@ func (x *ProfileCondition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileCondition.ProtoReflect.Descriptor instead.
 func (*ProfileCondition) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{6}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ProfileCondition) GetSubject() ConditionSubject {
@@ -1617,7 +1792,7 @@ type ProfileAction struct {
 
 func (x *ProfileAction) Reset() {
 	*x = ProfileAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[7]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1629,7 +1804,7 @@ func (x *ProfileAction) String() string {
 func (*ProfileAction) ProtoMessage() {}
 
 func (x *ProfileAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[7]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1642,7 +1817,7 @@ func (x *ProfileAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileAction.ProtoReflect.Descriptor instead.
 func (*ProfileAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{7}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ProfileAction) GetKind() isProfileAction_Kind {
@@ -1929,7 +2104,7 @@ type KeepAction struct {
 
 func (x *KeepAction) Reset() {
 	*x = KeepAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[8]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1941,7 +2116,7 @@ func (x *KeepAction) String() string {
 func (*KeepAction) ProtoMessage() {}
 
 func (x *KeepAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[8]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1954,7 +2129,7 @@ func (x *KeepAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeepAction.ProtoReflect.Descriptor instead.
 func (*KeepAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{8}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{10}
 }
 
 // RemoveAction removes an element. It has no fields.
@@ -1966,7 +2141,7 @@ type RemoveAction struct {
 
 func (x *RemoveAction) Reset() {
 	*x = RemoveAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[9]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1978,7 +2153,7 @@ func (x *RemoveAction) String() string {
 func (*RemoveAction) ProtoMessage() {}
 
 func (x *RemoveAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[9]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1991,7 +2166,7 @@ func (x *RemoveAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAction.ProtoReflect.Descriptor instead.
 func (*RemoveAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{9}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{11}
 }
 
 // EmptyAction empties an element. It has no fields.
@@ -2003,7 +2178,7 @@ type EmptyAction struct {
 
 func (x *EmptyAction) Reset() {
 	*x = EmptyAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[10]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2015,7 +2190,7 @@ func (x *EmptyAction) String() string {
 func (*EmptyAction) ProtoMessage() {}
 
 func (x *EmptyAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[10]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2028,7 +2203,7 @@ func (x *EmptyAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmptyAction.ProtoReflect.Descriptor instead.
 func (*EmptyAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{10}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{12}
 }
 
 // ReplaceAction replaces an element's value.
@@ -2047,7 +2222,7 @@ type ReplaceAction struct {
 
 func (x *ReplaceAction) Reset() {
 	*x = ReplaceAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[11]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2059,7 +2234,7 @@ func (x *ReplaceAction) String() string {
 func (*ReplaceAction) ProtoMessage() {}
 
 func (x *ReplaceAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[11]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2072,7 +2247,7 @@ func (x *ReplaceAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplaceAction.ProtoReflect.Descriptor instead.
 func (*ReplaceAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{11}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ReplaceAction) GetValue() isReplaceAction_Value {
@@ -2149,7 +2324,7 @@ type SetAction struct {
 
 func (x *SetAction) Reset() {
 	*x = SetAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[12]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2161,7 +2336,7 @@ func (x *SetAction) String() string {
 func (*SetAction) ProtoMessage() {}
 
 func (x *SetAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[12]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2174,7 +2349,7 @@ func (x *SetAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAction.ProtoReflect.Descriptor instead.
 func (*SetAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{12}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SetAction) GetValue() isSetAction_Value {
@@ -2237,7 +2412,7 @@ type HashAction struct {
 
 func (x *HashAction) Reset() {
 	*x = HashAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[13]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2249,7 +2424,7 @@ func (x *HashAction) String() string {
 func (*HashAction) ProtoMessage() {}
 
 func (x *HashAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[13]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2262,7 +2437,7 @@ func (x *HashAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HashAction.ProtoReflect.Descriptor instead.
 func (*HashAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{13}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{15}
 }
 
 // UidAction replaces a UID by its keyed remapping. It has no fields.
@@ -2274,7 +2449,7 @@ type UidAction struct {
 
 func (x *UidAction) Reset() {
 	*x = UidAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[14]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2286,7 +2461,7 @@ func (x *UidAction) String() string {
 func (*UidAction) ProtoMessage() {}
 
 func (x *UidAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[14]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2299,7 +2474,7 @@ func (x *UidAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UidAction.ProtoReflect.Descriptor instead.
 func (*UidAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{14}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{16}
 }
 
 // ShiftAction moves a date back by the subject's shift. It has no fields.
@@ -2311,7 +2486,7 @@ type ShiftAction struct {
 
 func (x *ShiftAction) Reset() {
 	*x = ShiftAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[15]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2323,7 +2498,7 @@ func (x *ShiftAction) String() string {
 func (*ShiftAction) ProtoMessage() {}
 
 func (x *ShiftAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[15]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2336,7 +2511,7 @@ func (x *ShiftAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShiftAction.ProtoReflect.Descriptor instead.
 func (*ShiftAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{15}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{17}
 }
 
 // GeneralizeAction makes a value less precise. It has no fields.
@@ -2348,7 +2523,7 @@ type GeneralizeAction struct {
 
 func (x *GeneralizeAction) Reset() {
 	*x = GeneralizeAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[16]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2360,7 +2535,7 @@ func (x *GeneralizeAction) String() string {
 func (*GeneralizeAction) ProtoMessage() {}
 
 func (x *GeneralizeAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[16]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2373,7 +2548,7 @@ func (x *GeneralizeAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GeneralizeAction.ProtoReflect.Descriptor instead.
 func (*GeneralizeAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{16}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{18}
 }
 
 // LookupAction replaces a value by the code a table of the tenant assigns.
@@ -2397,7 +2572,7 @@ type LookupAction struct {
 
 func (x *LookupAction) Reset() {
 	*x = LookupAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[17]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2409,7 +2584,7 @@ func (x *LookupAction) String() string {
 func (*LookupAction) ProtoMessage() {}
 
 func (x *LookupAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[17]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2422,7 +2597,7 @@ func (x *LookupAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupAction.ProtoReflect.Descriptor instead.
 func (*LookupAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{17}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *LookupAction) GetTable() string {
@@ -2455,15 +2630,22 @@ func (x *LookupAction) GetOnMissing() LookupMissing {
 //	                        for text, and removing them takes out no less
 //	                        than cleaning them would. The other elements of
 //	                        its group follow their own rules.
+//
+// With lists, clean also cuts the terms of those text lists of the
+// profile (ProfileDocument.text_lists) where they stand as words, in the
+// same passes, every other character kept.
 type CleanAction struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Names of the profile's text lists whose terms clean also cuts; at most
+	// 16, each once.
+	Lists         []string `protobuf:"bytes,1,rep,name=lists,proto3" json:"lists,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CleanAction) Reset() {
 	*x = CleanAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[18]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2475,7 +2657,7 @@ func (x *CleanAction) String() string {
 func (*CleanAction) ProtoMessage() {}
 
 func (x *CleanAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[18]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2488,7 +2670,14 @@ func (x *CleanAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanAction.ProtoReflect.Descriptor instead.
 func (*CleanAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{18}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CleanAction) GetLists() []string {
+	if x != nil {
+		return x.Lists
+	}
+	return nil
 }
 
 // QuarantineAction quarantines the whole file. It has no fields.
@@ -2500,7 +2689,7 @@ type QuarantineAction struct {
 
 func (x *QuarantineAction) Reset() {
 	*x = QuarantineAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[19]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2512,7 +2701,7 @@ func (x *QuarantineAction) String() string {
 func (*QuarantineAction) ProtoMessage() {}
 
 func (x *QuarantineAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[19]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2525,7 +2714,7 @@ func (x *QuarantineAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuarantineAction.ProtoReflect.Descriptor instead.
 func (*QuarantineAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{19}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{21}
 }
 
 // DummyAction replaces a value by a dummy: a fixed value that says nothing
@@ -2558,7 +2747,7 @@ type DummyAction struct {
 
 func (x *DummyAction) Reset() {
 	*x = DummyAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[20]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2570,7 +2759,7 @@ func (x *DummyAction) String() string {
 func (*DummyAction) ProtoMessage() {}
 
 func (x *DummyAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[20]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2583,7 +2772,7 @@ func (x *DummyAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DummyAction.ProtoReflect.Descriptor instead.
 func (*DummyAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{20}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{22}
 }
 
 // RedactAction cuts the matches of a regular expression out of a text
@@ -2622,21 +2811,29 @@ type RedactAction struct {
 	// The regular expression, in the RE2 syntax, searched for anywhere in
 	// each part of the value; the bounds of ValuePatternSelector.pattern. A
 	// pattern that matches the empty string, such as \d*, is refused: it
-	// would cut nothing and match everywhere.
+	// would cut nothing and match everywhere. Required unless lists names a
+	// list.
 	Pattern string `protobuf:"bytes,1,opt,name=pattern,proto3" json:"pattern,omitempty"`
 	// The text each match becomes: empty, the default, or at most 64 bytes
 	// of printable ASCII (0x20 to 0x7E) without a backslash, and for a PN
 	// without "^" or "=", so the value keeps one part and its structure. A
 	// fixed text: it never holds a capture of the value, and a replacement
 	// the pattern matches is refused, since it would be cut again.
-	Replacement   string `protobuf:"bytes,2,opt,name=replacement,proto3" json:"replacement,omitempty"`
+	Replacement string `protobuf:"bytes,2,opt,name=replacement,proto3" json:"replacement,omitempty"`
+	// Names of the profile's text lists whose terms redact also cuts where
+	// they stand as words, each becoming the replacement, terms that overlap
+	// cut as one; at most 16, each once. With lists, the pattern may be
+	// empty. A replacement holding a term of these lists is refused. The
+	// terms cut are no needle of their own: the check after searches for
+	// every term of every list.
+	Lists         []string `protobuf:"bytes,3,rep,name=lists,proto3" json:"lists,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RedactAction) Reset() {
 	*x = RedactAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[21]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2648,7 +2845,7 @@ func (x *RedactAction) String() string {
 func (*RedactAction) ProtoMessage() {}
 
 func (x *RedactAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[21]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2661,7 +2858,7 @@ func (x *RedactAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RedactAction.ProtoReflect.Descriptor instead.
 func (*RedactAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{21}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RedactAction) GetPattern() string {
@@ -2676,6 +2873,13 @@ func (x *RedactAction) GetReplacement() string {
 		return x.Replacement
 	}
 	return ""
+}
+
+func (x *RedactAction) GetLists() []string {
+	if x != nil {
+		return x.Lists
+	}
+	return nil
 }
 
 // RemoveUnlessRequiredAction removes an element unless the IOD of the
@@ -2705,7 +2909,7 @@ type RemoveUnlessRequiredAction struct {
 
 func (x *RemoveUnlessRequiredAction) Reset() {
 	*x = RemoveUnlessRequiredAction{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[22]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2717,7 +2921,7 @@ func (x *RemoveUnlessRequiredAction) String() string {
 func (*RemoveUnlessRequiredAction) ProtoMessage() {}
 
 func (x *RemoveUnlessRequiredAction) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[22]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2730,7 +2934,7 @@ func (x *RemoveUnlessRequiredAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveUnlessRequiredAction.ProtoReflect.Descriptor instead.
 func (*RemoveUnlessRequiredAction) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{22}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *RemoveUnlessRequiredAction) GetFallback() RequiredFallback {
@@ -2790,7 +2994,7 @@ type PixelRule struct {
 
 func (x *PixelRule) Reset() {
 	*x = PixelRule{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[23]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2802,7 +3006,7 @@ func (x *PixelRule) String() string {
 func (*PixelRule) ProtoMessage() {}
 
 func (x *PixelRule) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[23]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2815,7 +3019,7 @@ func (x *PixelRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PixelRule.ProtoReflect.Descriptor instead.
 func (*PixelRule) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{23}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PixelRule) GetName() string {
@@ -2945,7 +3149,7 @@ type RedactPixels struct {
 
 func (x *RedactPixels) Reset() {
 	*x = RedactPixels{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[24]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2957,7 +3161,7 @@ func (x *RedactPixels) String() string {
 func (*RedactPixels) ProtoMessage() {}
 
 func (x *RedactPixels) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[24]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2970,7 +3174,7 @@ func (x *RedactPixels) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RedactPixels.ProtoReflect.Descriptor instead.
 func (*RedactPixels) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{24}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RedactPixels) GetRectangles() []*PixelRectangle {
@@ -3005,7 +3209,7 @@ type PixelRectangle struct {
 
 func (x *PixelRectangle) Reset() {
 	*x = PixelRectangle{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[25]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3017,7 +3221,7 @@ func (x *PixelRectangle) String() string {
 func (*PixelRectangle) ProtoMessage() {}
 
 func (x *PixelRectangle) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[25]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3030,7 +3234,7 @@ func (x *PixelRectangle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PixelRectangle.ProtoReflect.Descriptor instead.
 func (*PixelRectangle) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{25}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *PixelRectangle) GetX() int32 {
@@ -3084,7 +3288,7 @@ type DetectText struct {
 
 func (x *DetectText) Reset() {
 	*x = DetectText{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[26]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3096,7 +3300,7 @@ func (x *DetectText) String() string {
 func (*DetectText) ProtoMessage() {}
 
 func (x *DetectText) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[26]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3109,7 +3313,7 @@ func (x *DetectText) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DetectText.ProtoReflect.Descriptor instead.
 func (*DetectText) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{26}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{28}
 }
 
 // AcceptPixels archives an image as it is. It has no fields.
@@ -3121,7 +3325,7 @@ type AcceptPixels struct {
 
 func (x *AcceptPixels) Reset() {
 	*x = AcceptPixels{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[27]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3133,7 +3337,7 @@ func (x *AcceptPixels) String() string {
 func (*AcceptPixels) ProtoMessage() {}
 
 func (x *AcceptPixels) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[27]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3146,7 +3350,7 @@ func (x *AcceptPixels) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptPixels.ProtoReflect.Descriptor instead.
 func (*AcceptPixels) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{27}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{29}
 }
 
 // ExpandedProfile is a document with its bases copied in: what a version
@@ -3173,21 +3377,25 @@ type ExpandedProfile struct {
 	// what each selector selects and each action does, as this file
 	// describes them. A server runs only a version of an edition it knows,
 	// and keeps the meaning of every edition it has shipped, so a stored
-	// version never changes what it does when the language grows. This
-	// edition is 1.
+	// version never changes what it does when the language grows. Edition 2
+	// adds value patterns and redact, edition 3 text lists; a version is of
+	// the oldest edition that has everything it uses.
 	LanguageEdition int32 `protobuf:"varint,6,opt,name=language_edition,json=languageEdition,proto3" json:"language_edition,omitempty"`
 	// What happens to an image whose compressed pixel data has segments
 	// that are not searched: keep, or unspecified, which holds such an
 	// image. Hold is written as unspecified, so a document that says hold
 	// and one that says nothing have one expanded form and one checksum.
 	UnsearchedSegments UnsearchedSegments `protobuf:"varint,7,opt,name=unsearched_segments,json=unsearchedSegments,proto3,enum=nopacs.v1.UnsearchedSegments" json:"unsearched_segments,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// The document's text lists, as written: part of the checksum, so a
+	// version's terms never change. Bases have none.
+	TextLists     []*TextList `protobuf:"bytes,8,rep,name=text_lists,json=textLists,proto3" json:"text_lists,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExpandedProfile) Reset() {
 	*x = ExpandedProfile{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[28]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3199,7 +3407,7 @@ func (x *ExpandedProfile) String() string {
 func (*ExpandedProfile) ProtoMessage() {}
 
 func (x *ExpandedProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[28]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3212,7 +3420,7 @@ func (x *ExpandedProfile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpandedProfile.ProtoReflect.Descriptor instead.
 func (*ExpandedProfile) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{28}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ExpandedProfile) GetRules() []*ExpandedRule {
@@ -3264,6 +3472,13 @@ func (x *ExpandedProfile) GetUnsearchedSegments() UnsearchedSegments {
 	return UnsearchedSegments_UNSEARCHED_SEGMENTS_UNSPECIFIED
 }
 
+func (x *ExpandedProfile) GetTextLists() []*TextList {
+	if x != nil {
+		return x.TextLists
+	}
+	return nil
+}
+
 // ExpandedRule is a rule of an expanded profile, where it came from, and
 // what validation decided of it.
 type ExpandedRule struct {
@@ -3286,7 +3501,7 @@ type ExpandedRule struct {
 
 func (x *ExpandedRule) Reset() {
 	*x = ExpandedRule{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[29]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3298,7 +3513,7 @@ func (x *ExpandedRule) String() string {
 func (*ExpandedRule) ProtoMessage() {}
 
 func (x *ExpandedRule) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[29]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3311,7 +3526,7 @@ func (x *ExpandedRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpandedRule.ProtoReflect.Descriptor instead.
 func (*ExpandedRule) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{29}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ExpandedRule) GetRule() *ProfileRule {
@@ -3349,7 +3564,7 @@ type ExpandedPixelRule struct {
 
 func (x *ExpandedPixelRule) Reset() {
 	*x = ExpandedPixelRule{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[30]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3361,7 +3576,7 @@ func (x *ExpandedPixelRule) String() string {
 func (*ExpandedPixelRule) ProtoMessage() {}
 
 func (x *ExpandedPixelRule) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[30]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3374,7 +3589,7 @@ func (x *ExpandedPixelRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpandedPixelRule.ProtoReflect.Descriptor instead.
 func (*ExpandedPixelRule) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{30}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ExpandedPixelRule) GetRule() *PixelRule {
@@ -3410,14 +3625,22 @@ type ProfileVersion struct {
 	// The document as it was given. Absent in a list.
 	Document *ProfileDocument `protobuf:"bytes,7,opt,name=document,proto3" json:"document,omitempty"`
 	// The expanded form. Answered only with the view PROFILE_VIEW_FULL.
-	Expanded      *ExpandedProfile `protobuf:"bytes,8,opt,name=expanded,proto3" json:"expanded,omitempty"`
+	Expanded *ExpandedProfile `protobuf:"bytes,8,opt,name=expanded,proto3" json:"expanded,omitempty"`
+	// True when the version has text lists and the caller is a masked key,
+	// which is never answered a term (as sensitive as a file's values) nor
+	// what confirms a guess of one: the document's lists are answered with
+	// their names and versions and no term, and checksum and expanded are
+	// empty (the checksum covers the expanded text, terms included). Such a
+	// document cannot be stored again as it is. A masked key may not store,
+	// try or explain a version with lists.
+	TermsWithheld bool `protobuf:"varint,9,opt,name=terms_withheld,json=termsWithheld,proto3" json:"terms_withheld,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProfileVersion) Reset() {
 	*x = ProfileVersion{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[31]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3429,7 +3652,7 @@ func (x *ProfileVersion) String() string {
 func (*ProfileVersion) ProtoMessage() {}
 
 func (x *ProfileVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[31]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3442,7 +3665,7 @@ func (x *ProfileVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileVersion.ProtoReflect.Descriptor instead.
 func (*ProfileVersion) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{31}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ProfileVersion) GetName() string {
@@ -3501,6 +3724,13 @@ func (x *ProfileVersion) GetExpanded() *ExpandedProfile {
 	return nil
 }
 
+func (x *ProfileVersion) GetTermsWithheld() bool {
+	if x != nil {
+		return x.TermsWithheld
+	}
+	return false
+}
+
 // ProfileSummary is a profile in a list.
 type ProfileSummary struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -3516,7 +3746,7 @@ type ProfileSummary struct {
 
 func (x *ProfileSummary) Reset() {
 	*x = ProfileSummary{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[32]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3528,7 +3758,7 @@ func (x *ProfileSummary) String() string {
 func (*ProfileSummary) ProtoMessage() {}
 
 func (x *ProfileSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[32]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3541,7 +3771,7 @@ func (x *ProfileSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileSummary.ProtoReflect.Descriptor instead.
 func (*ProfileSummary) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{32}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ProfileSummary) GetName() string {
@@ -3595,7 +3825,7 @@ type ProfileProblem struct {
 
 func (x *ProfileProblem) Reset() {
 	*x = ProfileProblem{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[33]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3607,7 +3837,7 @@ func (x *ProfileProblem) String() string {
 func (*ProfileProblem) ProtoMessage() {}
 
 func (x *ProfileProblem) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[33]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3620,7 +3850,7 @@ func (x *ProfileProblem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileProblem.ProtoReflect.Descriptor instead.
 func (*ProfileProblem) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{33}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ProfileProblem) GetRule() int32 {
@@ -3677,7 +3907,7 @@ type ProfileProblems struct {
 
 func (x *ProfileProblems) Reset() {
 	*x = ProfileProblems{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[34]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3689,7 +3919,7 @@ func (x *ProfileProblems) String() string {
 func (*ProfileProblems) ProtoMessage() {}
 
 func (x *ProfileProblems) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[34]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3702,7 +3932,7 @@ func (x *ProfileProblems) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileProblems.ProtoReflect.Descriptor instead.
 func (*ProfileProblems) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{34}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ProfileProblems) GetProblems() []*ProfileProblem {
@@ -3733,7 +3963,7 @@ type ProfileBase struct {
 
 func (x *ProfileBase) Reset() {
 	*x = ProfileBase{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[35]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3745,7 +3975,7 @@ func (x *ProfileBase) String() string {
 func (*ProfileBase) ProtoMessage() {}
 
 func (x *ProfileBase) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[35]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3758,7 +3988,7 @@ func (x *ProfileBase) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileBase.ProtoReflect.Descriptor instead.
 func (*ProfileBase) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{35}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ProfileBase) GetName() string {
@@ -3822,7 +4052,7 @@ type CreateProfileVersionRequest struct {
 
 func (x *CreateProfileVersionRequest) Reset() {
 	*x = CreateProfileVersionRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[36]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3834,7 +4064,7 @@ func (x *CreateProfileVersionRequest) String() string {
 func (*CreateProfileVersionRequest) ProtoMessage() {}
 
 func (x *CreateProfileVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[36]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3847,7 +4077,7 @@ func (x *CreateProfileVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProfileVersionRequest.ProtoReflect.Descriptor instead.
 func (*CreateProfileVersionRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{36}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *CreateProfileVersionRequest) GetTenant() string {
@@ -3913,7 +4143,7 @@ type CreateProfileVersionResponse struct {
 
 func (x *CreateProfileVersionResponse) Reset() {
 	*x = CreateProfileVersionResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[37]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3925,7 +4155,7 @@ func (x *CreateProfileVersionResponse) String() string {
 func (*CreateProfileVersionResponse) ProtoMessage() {}
 
 func (x *CreateProfileVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[37]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3938,7 +4168,7 @@ func (x *CreateProfileVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProfileVersionResponse.ProtoReflect.Descriptor instead.
 func (*CreateProfileVersionResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{37}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *CreateProfileVersionResponse) GetVersion() *ProfileVersion {
@@ -3986,7 +4216,7 @@ type GetProfileVersionRequest struct {
 
 func (x *GetProfileVersionRequest) Reset() {
 	*x = GetProfileVersionRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[38]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3998,7 +4228,7 @@ func (x *GetProfileVersionRequest) String() string {
 func (*GetProfileVersionRequest) ProtoMessage() {}
 
 func (x *GetProfileVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[38]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4011,7 +4241,7 @@ func (x *GetProfileVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetProfileVersionRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{38}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetProfileVersionRequest) GetTenant() string {
@@ -4054,7 +4284,7 @@ type GetProfileVersionResponse struct {
 
 func (x *GetProfileVersionResponse) Reset() {
 	*x = GetProfileVersionResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[39]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4066,7 +4296,7 @@ func (x *GetProfileVersionResponse) String() string {
 func (*GetProfileVersionResponse) ProtoMessage() {}
 
 func (x *GetProfileVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[39]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4079,7 +4309,7 @@ func (x *GetProfileVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileVersionResponse.ProtoReflect.Descriptor instead.
 func (*GetProfileVersionResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{39}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetProfileVersionResponse) GetVersion() *ProfileVersion {
@@ -4107,7 +4337,7 @@ type ListProfilesRequest struct {
 
 func (x *ListProfilesRequest) Reset() {
 	*x = ListProfilesRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[40]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4119,7 +4349,7 @@ func (x *ListProfilesRequest) String() string {
 func (*ListProfilesRequest) ProtoMessage() {}
 
 func (x *ListProfilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[40]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4132,7 +4362,7 @@ func (x *ListProfilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProfilesRequest.ProtoReflect.Descriptor instead.
 func (*ListProfilesRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{40}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListProfilesRequest) GetTenant() string {
@@ -4169,7 +4399,7 @@ type ListProfilesResponse struct {
 
 func (x *ListProfilesResponse) Reset() {
 	*x = ListProfilesResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[41]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4181,7 +4411,7 @@ func (x *ListProfilesResponse) String() string {
 func (*ListProfilesResponse) ProtoMessage() {}
 
 func (x *ListProfilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[41]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4194,7 +4424,7 @@ func (x *ListProfilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProfilesResponse.ProtoReflect.Descriptor instead.
 func (*ListProfilesResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{41}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListProfilesResponse) GetProfiles() []*ProfileSummary {
@@ -4231,7 +4461,7 @@ type ListProfileVersionsRequest struct {
 
 func (x *ListProfileVersionsRequest) Reset() {
 	*x = ListProfileVersionsRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[42]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4243,7 +4473,7 @@ func (x *ListProfileVersionsRequest) String() string {
 func (*ListProfileVersionsRequest) ProtoMessage() {}
 
 func (x *ListProfileVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[42]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4256,7 +4486,7 @@ func (x *ListProfileVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProfileVersionsRequest.ProtoReflect.Descriptor instead.
 func (*ListProfileVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{42}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListProfileVersionsRequest) GetTenant() string {
@@ -4301,7 +4531,7 @@ type ListProfileVersionsResponse struct {
 
 func (x *ListProfileVersionsResponse) Reset() {
 	*x = ListProfileVersionsResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[43]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4313,7 +4543,7 @@ func (x *ListProfileVersionsResponse) String() string {
 func (*ListProfileVersionsResponse) ProtoMessage() {}
 
 func (x *ListProfileVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[43]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4326,7 +4556,7 @@ func (x *ListProfileVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProfileVersionsResponse.ProtoReflect.Descriptor instead.
 func (*ListProfileVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{43}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ListProfileVersionsResponse) GetVersions() []*ProfileVersion {
@@ -4359,7 +4589,7 @@ type ValidateProfileRequest struct {
 
 func (x *ValidateProfileRequest) Reset() {
 	*x = ValidateProfileRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[44]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4371,7 +4601,7 @@ func (x *ValidateProfileRequest) String() string {
 func (*ValidateProfileRequest) ProtoMessage() {}
 
 func (x *ValidateProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[44]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4384,7 +4614,7 @@ func (x *ValidateProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateProfileRequest.ProtoReflect.Descriptor instead.
 func (*ValidateProfileRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{44}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ValidateProfileRequest) GetTenant() string {
@@ -4432,7 +4662,7 @@ type ValidateProfileResponse struct {
 
 func (x *ValidateProfileResponse) Reset() {
 	*x = ValidateProfileResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[45]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4444,7 +4674,7 @@ func (x *ValidateProfileResponse) String() string {
 func (*ValidateProfileResponse) ProtoMessage() {}
 
 func (x *ValidateProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[45]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4457,7 +4687,7 @@ func (x *ValidateProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateProfileResponse.ProtoReflect.Descriptor instead.
 func (*ValidateProfileResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{45}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ValidateProfileResponse) GetProblems() []*ProfileProblem {
@@ -4498,7 +4728,7 @@ type ListProfileBasesRequest struct {
 
 func (x *ListProfileBasesRequest) Reset() {
 	*x = ListProfileBasesRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[46]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4510,7 +4740,7 @@ func (x *ListProfileBasesRequest) String() string {
 func (*ListProfileBasesRequest) ProtoMessage() {}
 
 func (x *ListProfileBasesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[46]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4523,7 +4753,7 @@ func (x *ListProfileBasesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProfileBasesRequest.ProtoReflect.Descriptor instead.
 func (*ListProfileBasesRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{46}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{48}
 }
 
 // ListProfileBasesResponse is every base the server knows.
@@ -4537,7 +4767,7 @@ type ListProfileBasesResponse struct {
 
 func (x *ListProfileBasesResponse) Reset() {
 	*x = ListProfileBasesResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[47]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4549,7 +4779,7 @@ func (x *ListProfileBasesResponse) String() string {
 func (*ListProfileBasesResponse) ProtoMessage() {}
 
 func (x *ListProfileBasesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[47]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4562,7 +4792,7 @@ func (x *ListProfileBasesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProfileBasesResponse.ProtoReflect.Descriptor instead.
 func (*ListProfileBasesResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{47}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListProfileBasesResponse) GetBases() []*ProfileBase {
@@ -4589,7 +4819,7 @@ type TrialProfile struct {
 
 func (x *TrialProfile) Reset() {
 	*x = TrialProfile{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[48]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4601,7 +4831,7 @@ func (x *TrialProfile) String() string {
 func (*TrialProfile) ProtoMessage() {}
 
 func (x *TrialProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[48]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4614,7 +4844,7 @@ func (x *TrialProfile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrialProfile.ProtoReflect.Descriptor instead.
 func (*TrialProfile) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{48}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *TrialProfile) GetKind() isTrialProfile_Kind {
@@ -4674,7 +4904,7 @@ type ProfileVersionName struct {
 
 func (x *ProfileVersionName) Reset() {
 	*x = ProfileVersionName{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[49]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4686,7 +4916,7 @@ func (x *ProfileVersionName) String() string {
 func (*ProfileVersionName) ProtoMessage() {}
 
 func (x *ProfileVersionName) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[49]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4699,7 +4929,7 @@ func (x *ProfileVersionName) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileVersionName.ProtoReflect.Descriptor instead.
 func (*ProfileVersionName) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{49}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ProfileVersionName) GetName() string {
@@ -4732,7 +4962,7 @@ type TrialFile struct {
 
 func (x *TrialFile) Reset() {
 	*x = TrialFile{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[50]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4744,7 +4974,7 @@ func (x *TrialFile) String() string {
 func (*TrialFile) ProtoMessage() {}
 
 func (x *TrialFile) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[50]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4757,7 +4987,7 @@ func (x *TrialFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrialFile.ProtoReflect.Descriptor instead.
 func (*TrialFile) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{50}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *TrialFile) GetName() string {
@@ -4795,7 +5025,7 @@ type TrialReception struct {
 
 func (x *TrialReception) Reset() {
 	*x = TrialReception{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[51]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4807,7 +5037,7 @@ func (x *TrialReception) String() string {
 func (*TrialReception) ProtoMessage() {}
 
 func (x *TrialReception) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[51]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4820,7 +5050,7 @@ func (x *TrialReception) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrialReception.ProtoReflect.Descriptor instead.
 func (*TrialReception) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{51}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *TrialReception) GetReceiver() string {
@@ -4871,7 +5101,7 @@ type TryProfileRequest struct {
 
 func (x *TryProfileRequest) Reset() {
 	*x = TryProfileRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[52]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4883,7 +5113,7 @@ func (x *TryProfileRequest) String() string {
 func (*TryProfileRequest) ProtoMessage() {}
 
 func (x *TryProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[52]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4896,7 +5126,7 @@ func (x *TryProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TryProfileRequest.ProtoReflect.Descriptor instead.
 func (*TryProfileRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{52}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *TryProfileRequest) GetTenant() string {
@@ -4963,7 +5193,7 @@ type TryProfileResponse struct {
 
 func (x *TryProfileResponse) Reset() {
 	*x = TryProfileResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[53]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4975,7 +5205,7 @@ func (x *TryProfileResponse) String() string {
 func (*TryProfileResponse) ProtoMessage() {}
 
 func (x *TryProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[53]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4988,7 +5218,7 @@ func (x *TryProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TryProfileResponse.ProtoReflect.Descriptor instead.
 func (*TryProfileResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{53}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *TryProfileResponse) GetVersion() *ProfileVersion {
@@ -5099,7 +5329,7 @@ type TrialResult struct {
 
 func (x *TrialResult) Reset() {
 	*x = TrialResult{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[54]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5111,7 +5341,7 @@ func (x *TrialResult) String() string {
 func (*TrialResult) ProtoMessage() {}
 
 func (x *TrialResult) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[54]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5124,7 +5354,7 @@ func (x *TrialResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrialResult.ProtoReflect.Descriptor instead.
 func (*TrialResult) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{54}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *TrialResult) GetName() string {
@@ -5284,7 +5514,7 @@ type TrialPixels struct {
 
 func (x *TrialPixels) Reset() {
 	*x = TrialPixels{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[55]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5296,7 +5526,7 @@ func (x *TrialPixels) String() string {
 func (*TrialPixels) ProtoMessage() {}
 
 func (x *TrialPixels) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[55]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5309,7 +5539,7 @@ func (x *TrialPixels) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrialPixels.ProtoReflect.Descriptor instead.
 func (*TrialPixels) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{55}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *TrialPixels) GetAtRisk() bool {
@@ -5443,7 +5673,7 @@ type TrialElement struct {
 
 func (x *TrialElement) Reset() {
 	*x = TrialElement{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[56]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5455,7 +5685,7 @@ func (x *TrialElement) String() string {
 func (*TrialElement) ProtoMessage() {}
 
 func (x *TrialElement) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[56]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5468,7 +5698,7 @@ func (x *TrialElement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrialElement.ProtoReflect.Descriptor instead.
 func (*TrialElement) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{56}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *TrialElement) GetPath() string {
@@ -5607,7 +5837,7 @@ type TrialSummary struct {
 
 func (x *TrialSummary) Reset() {
 	*x = TrialSummary{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[57]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5619,7 +5849,7 @@ func (x *TrialSummary) String() string {
 func (*TrialSummary) ProtoMessage() {}
 
 func (x *TrialSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[57]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5632,7 +5862,7 @@ func (x *TrialSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrialSummary.ProtoReflect.Descriptor instead.
 func (*TrialSummary) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{57}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *TrialSummary) GetFiles() int32 {
@@ -5690,7 +5920,7 @@ type TrialCount struct {
 
 func (x *TrialCount) Reset() {
 	*x = TrialCount{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[58]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5702,7 +5932,7 @@ func (x *TrialCount) String() string {
 func (*TrialCount) ProtoMessage() {}
 
 func (x *TrialCount) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[58]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5715,7 +5945,7 @@ func (x *TrialCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrialCount.ProtoReflect.Descriptor instead.
 func (*TrialCount) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{58}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *TrialCount) GetKey() string {
@@ -5751,7 +5981,7 @@ type ExplainProfileRequest struct {
 
 func (x *ExplainProfileRequest) Reset() {
 	*x = ExplainProfileRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[59]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5763,7 +5993,7 @@ func (x *ExplainProfileRequest) String() string {
 func (*ExplainProfileRequest) ProtoMessage() {}
 
 func (x *ExplainProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[59]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5776,7 +6006,7 @@ func (x *ExplainProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainProfileRequest.ProtoReflect.Descriptor instead.
 func (*ExplainProfileRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{59}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ExplainProfileRequest) GetTenant() string {
@@ -5838,7 +6068,7 @@ type ExplainProfileResponse struct {
 
 func (x *ExplainProfileResponse) Reset() {
 	*x = ExplainProfileResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[60]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5850,7 +6080,7 @@ func (x *ExplainProfileResponse) String() string {
 func (*ExplainProfileResponse) ProtoMessage() {}
 
 func (x *ExplainProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[60]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5863,7 +6093,7 @@ func (x *ExplainProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainProfileResponse.ProtoReflect.Descriptor instead.
 func (*ExplainProfileResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{60}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ExplainProfileResponse) GetVersion() *ProfileVersion {
@@ -5945,7 +6175,7 @@ type ExplainedElement struct {
 
 func (x *ExplainedElement) Reset() {
 	*x = ExplainedElement{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[61]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5957,7 +6187,7 @@ func (x *ExplainedElement) String() string {
 func (*ExplainedElement) ProtoMessage() {}
 
 func (x *ExplainedElement) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[61]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5970,7 +6200,7 @@ func (x *ExplainedElement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainedElement.ProtoReflect.Descriptor instead.
 func (*ExplainedElement) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{61}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ExplainedElement) GetPath() string {
@@ -6073,7 +6303,7 @@ type ExplainedCandidate struct {
 
 func (x *ExplainedCandidate) Reset() {
 	*x = ExplainedCandidate{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[62]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6085,7 +6315,7 @@ func (x *ExplainedCandidate) String() string {
 func (*ExplainedCandidate) ProtoMessage() {}
 
 func (x *ExplainedCandidate) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[62]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6098,7 +6328,7 @@ func (x *ExplainedCandidate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainedCandidate.ProtoReflect.Descriptor instead.
 func (*ExplainedCandidate) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{62}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ExplainedCandidate) GetRule() int32 {
@@ -6156,7 +6386,7 @@ type DiffProfileVersionsRequest struct {
 
 func (x *DiffProfileVersionsRequest) Reset() {
 	*x = DiffProfileVersionsRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[63]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6168,7 +6398,7 @@ func (x *DiffProfileVersionsRequest) String() string {
 func (*DiffProfileVersionsRequest) ProtoMessage() {}
 
 func (x *DiffProfileVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[63]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6181,7 +6411,7 @@ func (x *DiffProfileVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffProfileVersionsRequest.ProtoReflect.Descriptor instead.
 func (*DiffProfileVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{63}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *DiffProfileVersionsRequest) GetTenant() string {
@@ -6268,13 +6498,17 @@ type DiffProfileVersionsResponse struct {
 	UnsearchedSegmentsFrom UnsearchedSegments `protobuf:"varint,17,opt,name=unsearched_segments_from,json=unsearchedSegmentsFrom,proto3,enum=nopacs.v1.UnsearchedSegments" json:"unsearched_segments_from,omitempty"`
 	// See unsearched_segments_from.
 	UnsearchedSegmentsTo UnsearchedSegments `protobuf:"varint,18,opt,name=unsearched_segments_to,json=unsearchedSegmentsTo,proto3,enum=nopacs.v1.UnsearchedSegments" json:"unsearched_segments_to,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Each text list that differs between the two, by name in byte order:
+	// added, removed, or changed (its version or its terms), with each
+	// side's summary. Never a term.
+	TextLists     []*TextListChange `protobuf:"bytes,19,rep,name=text_lists,json=textLists,proto3" json:"text_lists,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DiffProfileVersionsResponse) Reset() {
 	*x = DiffProfileVersionsResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[64]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6286,7 +6520,7 @@ func (x *DiffProfileVersionsResponse) String() string {
 func (*DiffProfileVersionsResponse) ProtoMessage() {}
 
 func (x *DiffProfileVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[64]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6299,7 +6533,7 @@ func (x *DiffProfileVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffProfileVersionsResponse.ProtoReflect.Descriptor instead.
 func (*DiffProfileVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{64}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *DiffProfileVersionsResponse) GetFrom() *ProfileVersion {
@@ -6428,6 +6662,88 @@ func (x *DiffProfileVersionsResponse) GetUnsearchedSegmentsTo() UnsearchedSegmen
 	return UnsearchedSegments_UNSEARCHED_SEGMENTS_UNSPECIFIED
 }
 
+func (x *DiffProfileVersionsResponse) GetTextLists() []*TextListChange {
+	if x != nil {
+		return x.TextLists
+	}
+	return nil
+}
+
+// TextListChange is how a text list differs between two versions of a
+// profile, by its summaries; never a term.
+type TextListChange struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The list's name.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// ADDED (only in the version compared to), REMOVED (only in the one
+	// compared from) or CHANGED (in both, its version or its terms differ).
+	Change ProfileChange `protobuf:"varint,2,opt,name=change,proto3,enum=nopacs.v1.ProfileChange" json:"change,omitempty"`
+	// The list in the version compared from; absent when added.
+	From *TextListSummary `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	// The list in the version compared to; absent when removed.
+	To            *TextListSummary `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextListChange) Reset() {
+	*x = TextListChange{}
+	mi := &file_nopacs_v1_profile_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextListChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextListChange) ProtoMessage() {}
+
+func (x *TextListChange) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_profile_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextListChange.ProtoReflect.Descriptor instead.
+func (*TextListChange) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *TextListChange) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *TextListChange) GetChange() ProfileChange {
+	if x != nil {
+		return x.Change
+	}
+	return ProfileChange_PROFILE_CHANGE_UNSPECIFIED
+}
+
+func (x *TextListChange) GetFrom() *TextListSummary {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *TextListChange) GetTo() *TextListSummary {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
 // ProfileRuleChange is one rule that differs.
 type ProfileRuleChange struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -6449,7 +6765,7 @@ type ProfileRuleChange struct {
 
 func (x *ProfileRuleChange) Reset() {
 	*x = ProfileRuleChange{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[65]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6461,7 +6777,7 @@ func (x *ProfileRuleChange) String() string {
 func (*ProfileRuleChange) ProtoMessage() {}
 
 func (x *ProfileRuleChange) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[65]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6474,7 +6790,7 @@ func (x *ProfileRuleChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileRuleChange.ProtoReflect.Descriptor instead.
 func (*ProfileRuleChange) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{65}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ProfileRuleChange) GetChange() ProfileChange {
@@ -6548,7 +6864,7 @@ type ProfileEffectChange struct {
 
 func (x *ProfileEffectChange) Reset() {
 	*x = ProfileEffectChange{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[66]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6560,7 +6876,7 @@ func (x *ProfileEffectChange) String() string {
 func (*ProfileEffectChange) ProtoMessage() {}
 
 func (x *ProfileEffectChange) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[66]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6573,7 +6889,7 @@ func (x *ProfileEffectChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileEffectChange.ProtoReflect.Descriptor instead.
 func (*ProfileEffectChange) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{66}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ProfileEffectChange) GetSelector() *ProfileSelector {
@@ -6638,7 +6954,7 @@ type DescribeProfileRequest struct {
 
 func (x *DescribeProfileRequest) Reset() {
 	*x = DescribeProfileRequest{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[67]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6650,7 +6966,7 @@ func (x *DescribeProfileRequest) String() string {
 func (*DescribeProfileRequest) ProtoMessage() {}
 
 func (x *DescribeProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[67]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6663,7 +6979,7 @@ func (x *DescribeProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeProfileRequest.ProtoReflect.Descriptor instead.
 func (*DescribeProfileRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{67}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *DescribeProfileRequest) GetTenant() string {
@@ -6695,14 +7011,17 @@ type DescribeProfileResponse struct {
 	// Sentences that hold for the whole profile, in plain words.
 	Notes []string `protobuf:"bytes,4,rep,name=notes,proto3" json:"notes,omitempty"`
 	// The record of the de-identification each file carries.
-	Method        *ProfileMethod `protobuf:"bytes,5,opt,name=method,proto3" json:"method,omitempty"`
+	Method *ProfileMethod `protobuf:"bytes,5,opt,name=method,proto3" json:"method,omitempty"`
+	// Each text list of the profile, in its order: name, version, count of
+	// terms and checksum, never a term.
+	TextLists     []*TextListSummary `protobuf:"bytes,6,rep,name=text_lists,json=textLists,proto3" json:"text_lists,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DescribeProfileResponse) Reset() {
 	*x = DescribeProfileResponse{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[68]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6714,7 +7033,7 @@ func (x *DescribeProfileResponse) String() string {
 func (*DescribeProfileResponse) ProtoMessage() {}
 
 func (x *DescribeProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[68]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6727,7 +7046,7 @@ func (x *DescribeProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeProfileResponse.ProtoReflect.Descriptor instead.
 func (*DescribeProfileResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{68}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *DescribeProfileResponse) GetVersion() *ProfileVersion {
@@ -6765,6 +7084,13 @@ func (x *DescribeProfileResponse) GetMethod() *ProfileMethod {
 	return nil
 }
 
+func (x *DescribeProfileResponse) GetTextLists() []*TextListSummary {
+	if x != nil {
+		return x.TextLists
+	}
+	return nil
+}
+
 // ProfileClassEffects is what a profile does to one class of element.
 type ProfileClassEffects struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -6779,7 +7105,7 @@ type ProfileClassEffects struct {
 
 func (x *ProfileClassEffects) Reset() {
 	*x = ProfileClassEffects{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[69]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6791,7 +7117,7 @@ func (x *ProfileClassEffects) String() string {
 func (*ProfileClassEffects) ProtoMessage() {}
 
 func (x *ProfileClassEffects) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[69]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6804,7 +7130,7 @@ func (x *ProfileClassEffects) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileClassEffects.ProtoReflect.Descriptor instead.
 func (*ProfileClassEffects) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{69}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ProfileClassEffects) GetClass() ProfileElementClass {
@@ -6848,7 +7174,7 @@ type ProfileClassEffect struct {
 
 func (x *ProfileClassEffect) Reset() {
 	*x = ProfileClassEffect{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[70]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6860,7 +7186,7 @@ func (x *ProfileClassEffect) String() string {
 func (*ProfileClassEffect) ProtoMessage() {}
 
 func (x *ProfileClassEffect) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[70]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6873,7 +7199,7 @@ func (x *ProfileClassEffect) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileClassEffect.ProtoReflect.Descriptor instead.
 func (*ProfileClassEffect) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{70}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ProfileClassEffect) GetAction() string {
@@ -6938,7 +7264,7 @@ type ProfileMethod struct {
 
 func (x *ProfileMethod) Reset() {
 	*x = ProfileMethod{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[71]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6950,7 +7276,7 @@ func (x *ProfileMethod) String() string {
 func (*ProfileMethod) ProtoMessage() {}
 
 func (x *ProfileMethod) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[71]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6963,7 +7289,7 @@ func (x *ProfileMethod) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileMethod.ProtoReflect.Descriptor instead.
 func (*ProfileMethod) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{71}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *ProfileMethod) GetCodes() []*MethodCode {
@@ -7016,7 +7342,7 @@ type MethodCode struct {
 
 func (x *MethodCode) Reset() {
 	*x = MethodCode{}
-	mi := &file_nopacs_v1_profile_proto_msgTypes[72]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7028,7 +7354,7 @@ func (x *MethodCode) String() string {
 func (*MethodCode) ProtoMessage() {}
 
 func (x *MethodCode) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_profile_proto_msgTypes[72]
+	mi := &file_nopacs_v1_profile_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7041,7 +7367,7 @@ func (x *MethodCode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MethodCode.ProtoReflect.Descriptor instead.
 func (*MethodCode) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{72}
+	return file_nopacs_v1_profile_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *MethodCode) GetValue() string {
@@ -7069,7 +7395,7 @@ var File_nopacs_v1_profile_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\n" +
-	"\x17nopacs/v1/profile.proto\x12\tnopacs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdc\x02\n" +
+	"\x17nopacs/v1/profile.proto\x12\tnopacs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x90\x03\n" +
 	"\x0fProfileDocument\x12\x14\n" +
 	"\x05bases\x18\x01 \x03(\tR\x05bases\x12,\n" +
 	"\x05rules\x18\x02 \x03(\v2\x16.nopacs.v1.ProfileRuleR\x05rules\x124\n" +
@@ -7078,7 +7404,18 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\vpixel_rules\x18\x05 \x03(\v2\x14.nopacs.v1.PixelRuleR\n" +
 	"pixelRules\x12 \n" +
 	"\vdescription\x18\x06 \x01(\tR\vdescription\x12N\n" +
-	"\x13unsearched_segments\x18\a \x01(\x0e2\x1d.nopacs.v1.UnsearchedSegmentsR\x12unsearchedSegments\"\xd4\x01\n" +
+	"\x13unsearched_segments\x18\a \x01(\x0e2\x1d.nopacs.v1.UnsearchedSegmentsR\x12unsearchedSegments\x122\n" +
+	"\n" +
+	"text_lists\x18\b \x03(\v2\x13.nopacs.v1.TextListR\ttextLists\"N\n" +
+	"\bTextList\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x14\n" +
+	"\x05terms\x18\x03 \x03(\tR\x05terms\"m\n" +
+	"\x0fTextListSummary\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x14\n" +
+	"\x05terms\x18\x03 \x01(\x05R\x05terms\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\"\xd4\x01\n" +
 	"\vProfileRule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x126\n" +
 	"\bselector\x18\x02 \x01(\v2\x1a.nopacs.v1.ProfileSelectorR\bselector\x12/\n" +
@@ -7159,13 +7496,15 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\fLookupAction\x12\x14\n" +
 	"\x05table\x18\x01 \x01(\tR\x05table\x127\n" +
 	"\n" +
-	"on_missing\x18\x02 \x01(\x0e2\x18.nopacs.v1.LookupMissingR\tonMissing\"\r\n" +
-	"\vCleanAction\"\x12\n" +
+	"on_missing\x18\x02 \x01(\x0e2\x18.nopacs.v1.LookupMissingR\tonMissing\"#\n" +
+	"\vCleanAction\x12\x14\n" +
+	"\x05lists\x18\x01 \x03(\tR\x05lists\"\x12\n" +
 	"\x10QuarantineAction\"\r\n" +
-	"\vDummyAction\"J\n" +
+	"\vDummyAction\"`\n" +
 	"\fRedactAction\x12\x18\n" +
 	"\apattern\x18\x01 \x01(\tR\apattern\x12 \n" +
-	"\vreplacement\x18\x02 \x01(\tR\vreplacement\"U\n" +
+	"\vreplacement\x18\x02 \x01(\tR\vreplacement\x12\x14\n" +
+	"\x05lists\x18\x03 \x03(\tR\x05lists\"U\n" +
 	"\x1aRemoveUnlessRequiredAction\x127\n" +
 	"\bfallback\x18\x01 \x01(\x0e2\x1b.nopacs.v1.RequiredFallbackR\bfallback\"\xb7\x02\n" +
 	"\tPixelRule\x12\x12\n" +
@@ -7193,7 +7532,7 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"fromBottom\"\f\n" +
 	"\n" +
 	"DetectText\"\x0e\n" +
-	"\fAcceptPixels\"\xee\x02\n" +
+	"\fAcceptPixels\"\xa2\x03\n" +
 	"\x0fExpandedProfile\x12-\n" +
 	"\x05rules\x18\x01 \x03(\v2\x17.nopacs.v1.ExpandedRuleR\x05rules\x124\n" +
 	"\aunnamed\x18\x02 \x01(\x0e2\x1a.nopacs.v1.UnnamedElementsR\aunnamed\x12&\n" +
@@ -7202,14 +7541,16 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"pixelRules\x12\x14\n" +
 	"\x05bases\x18\x05 \x03(\tR\x05bases\x12)\n" +
 	"\x10language_edition\x18\x06 \x01(\x05R\x0flanguageEdition\x12N\n" +
-	"\x13unsearched_segments\x18\a \x01(\x0e2\x1d.nopacs.v1.UnsearchedSegmentsR\x12unsearchedSegments\"d\n" +
+	"\x13unsearched_segments\x18\a \x01(\x0e2\x1d.nopacs.v1.UnsearchedSegmentsR\x12unsearchedSegments\x122\n" +
+	"\n" +
+	"text_lists\x18\b \x03(\v2\x13.nopacs.v1.TextListR\ttextLists\"d\n" +
 	"\fExpandedRule\x12*\n" +
 	"\x04rule\x18\x01 \x01(\v2\x16.nopacs.v1.ProfileRuleR\x04rule\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x10\n" +
 	"\x03vrs\x18\x03 \x03(\tR\x03vrs\"U\n" +
 	"\x11ExpandedPixelRule\x12(\n" +
 	"\x04rule\x18\x01 \x01(\v2\x14.nopacs.v1.PixelRuleR\x04rule\x12\x16\n" +
-	"\x06origin\x18\x02 \x01(\tR\x06origin\"\xc6\x02\n" +
+	"\x06origin\x18\x02 \x01(\tR\x06origin\"\xed\x02\n" +
 	"\x0eProfileVersion\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x1a\n" +
@@ -7219,7 +7560,8 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\x11created_by_key_id\x18\x05 \x01(\tR\x0ecreatedByKeyId\x12\x12\n" +
 	"\x04note\x18\x06 \x01(\tR\x04note\x126\n" +
 	"\bdocument\x18\a \x01(\v2\x1a.nopacs.v1.ProfileDocumentR\bdocument\x126\n" +
-	"\bexpanded\x18\b \x01(\v2\x1a.nopacs.v1.ExpandedProfileR\bexpanded\"\x95\x01\n" +
+	"\bexpanded\x18\b \x01(\v2\x1a.nopacs.v1.ExpandedProfileR\bexpanded\x12%\n" +
+	"\x0eterms_withheld\x18\t \x01(\bR\rtermsWithheld\"\x95\x01\n" +
 	"\x0eProfileSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12%\n" +
 	"\x0elatest_version\x18\x02 \x01(\x05R\rlatestVersion\x12H\n" +
@@ -7420,7 +7762,7 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\ffrom_version\x18\x03 \x01(\x05R\vfromVersion\x12\x1d\n" +
 	"\n" +
 	"to_version\x18\x04 \x01(\x05R\ttoVersion\x12\x17\n" +
-	"\ato_name\x18\x05 \x01(\tR\x06toName\"\xa2\a\n" +
+	"\ato_name\x18\x05 \x01(\tR\x06toName\"\xdc\a\n" +
 	"\x1bDiffProfileVersionsResponse\x12-\n" +
 	"\x04from\x18\x01 \x01(\v2\x19.nopacs.v1.ProfileVersionR\x04from\x12)\n" +
 	"\x02to\x18\x02 \x01(\v2\x19.nopacs.v1.ProfileVersionR\x02to\x12\x1f\n" +
@@ -7443,7 +7785,14 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\x0fbases_reordered\x18\x0f \x01(\bR\x0ebasesReordered\x12'\n" +
 	"\x0funlisted_change\x18\x10 \x01(\bR\x0eunlistedChange\x12W\n" +
 	"\x18unsearched_segments_from\x18\x11 \x01(\x0e2\x1d.nopacs.v1.UnsearchedSegmentsR\x16unsearchedSegmentsFrom\x12S\n" +
-	"\x16unsearched_segments_to\x18\x12 \x01(\x0e2\x1d.nopacs.v1.UnsearchedSegmentsR\x14unsearchedSegmentsTo\"\xf7\x01\n" +
+	"\x16unsearched_segments_to\x18\x12 \x01(\x0e2\x1d.nopacs.v1.UnsearchedSegmentsR\x14unsearchedSegmentsTo\x128\n" +
+	"\n" +
+	"text_lists\x18\x13 \x03(\v2\x19.nopacs.v1.TextListChangeR\ttextLists\"\xb2\x01\n" +
+	"\x0eTextListChange\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x120\n" +
+	"\x06change\x18\x02 \x01(\x0e2\x18.nopacs.v1.ProfileChangeR\x06change\x12.\n" +
+	"\x04from\x18\x03 \x01(\v2\x1a.nopacs.v1.TextListSummaryR\x04from\x12*\n" +
+	"\x02to\x18\x04 \x01(\v2\x1a.nopacs.v1.TextListSummaryR\x02to\"\xf7\x01\n" +
 	"\x11ProfileRuleChange\x120\n" +
 	"\x06change\x18\x01 \x01(\x0e2\x18.nopacs.v1.ProfileChangeR\x06change\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12#\n" +
@@ -7463,13 +7812,15 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\rorder_changed\x18\a \x01(\bR\forderChanged\"c\n" +
 	"\x16DescribeProfileRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x121\n" +
-	"\aprofile\x18\x02 \x01(\v2\x17.nopacs.v1.TrialProfileR\aprofile\"\xec\x01\n" +
+	"\aprofile\x18\x02 \x01(\v2\x17.nopacs.v1.TrialProfileR\aprofile\"\xa7\x02\n" +
 	"\x17DescribeProfileResponse\x123\n" +
 	"\aversion\x18\x01 \x01(\v2\x19.nopacs.v1.ProfileVersionR\aversion\x12\x1a\n" +
 	"\bchecksum\x18\x02 \x01(\tR\bchecksum\x128\n" +
 	"\aclasses\x18\x03 \x03(\v2\x1e.nopacs.v1.ProfileClassEffectsR\aclasses\x12\x14\n" +
 	"\x05notes\x18\x04 \x03(\tR\x05notes\x120\n" +
-	"\x06method\x18\x05 \x01(\v2\x18.nopacs.v1.ProfileMethodR\x06method\"\x84\x01\n" +
+	"\x06method\x18\x05 \x01(\v2\x18.nopacs.v1.ProfileMethodR\x06method\x129\n" +
+	"\n" +
+	"text_lists\x18\x06 \x03(\v2\x1a.nopacs.v1.TextListSummaryR\ttextLists\"\x84\x01\n" +
 	"\x13ProfileClassEffects\x124\n" +
 	"\x05class\x18\x01 \x01(\x0e2\x1e.nopacs.v1.ProfileElementClassR\x05class\x127\n" +
 	"\aeffects\x18\x02 \x03(\v2\x1d.nopacs.v1.ProfileClassEffectR\aeffects\"\x95\x01\n" +
@@ -7568,7 +7919,7 @@ func file_nopacs_v1_profile_proto_rawDescGZIP() []byte {
 }
 
 var file_nopacs_v1_profile_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_nopacs_v1_profile_proto_msgTypes = make([]protoimpl.MessageInfo, 73)
+var file_nopacs_v1_profile_proto_msgTypes = make([]protoimpl.MessageInfo, 76)
 var file_nopacs_v1_profile_proto_goTypes = []any{
 	(UnsearchedSegments)(0),              // 0: nopacs.v1.UnsearchedSegments
 	(UnnamedElements)(0),                 // 1: nopacs.v1.UnnamedElements
@@ -7580,208 +7931,218 @@ var file_nopacs_v1_profile_proto_goTypes = []any{
 	(ProfileChange)(0),                   // 7: nopacs.v1.ProfileChange
 	(ProfileElementClass)(0),             // 8: nopacs.v1.ProfileElementClass
 	(*ProfileDocument)(nil),              // 9: nopacs.v1.ProfileDocument
-	(*ProfileRule)(nil),                  // 10: nopacs.v1.ProfileRule
-	(*ProfileSelector)(nil),              // 11: nopacs.v1.ProfileSelector
-	(*ValuePatternSelector)(nil),         // 12: nopacs.v1.ValuePatternSelector
-	(*PrivateElement)(nil),               // 13: nopacs.v1.PrivateElement
-	(*ContentItemSelector)(nil),          // 14: nopacs.v1.ContentItemSelector
-	(*ProfileCondition)(nil),             // 15: nopacs.v1.ProfileCondition
-	(*ProfileAction)(nil),                // 16: nopacs.v1.ProfileAction
-	(*KeepAction)(nil),                   // 17: nopacs.v1.KeepAction
-	(*RemoveAction)(nil),                 // 18: nopacs.v1.RemoveAction
-	(*EmptyAction)(nil),                  // 19: nopacs.v1.EmptyAction
-	(*ReplaceAction)(nil),                // 20: nopacs.v1.ReplaceAction
-	(*SetAction)(nil),                    // 21: nopacs.v1.SetAction
-	(*HashAction)(nil),                   // 22: nopacs.v1.HashAction
-	(*UidAction)(nil),                    // 23: nopacs.v1.UidAction
-	(*ShiftAction)(nil),                  // 24: nopacs.v1.ShiftAction
-	(*GeneralizeAction)(nil),             // 25: nopacs.v1.GeneralizeAction
-	(*LookupAction)(nil),                 // 26: nopacs.v1.LookupAction
-	(*CleanAction)(nil),                  // 27: nopacs.v1.CleanAction
-	(*QuarantineAction)(nil),             // 28: nopacs.v1.QuarantineAction
-	(*DummyAction)(nil),                  // 29: nopacs.v1.DummyAction
-	(*RedactAction)(nil),                 // 30: nopacs.v1.RedactAction
-	(*RemoveUnlessRequiredAction)(nil),   // 31: nopacs.v1.RemoveUnlessRequiredAction
-	(*PixelRule)(nil),                    // 32: nopacs.v1.PixelRule
-	(*RedactPixels)(nil),                 // 33: nopacs.v1.RedactPixels
-	(*PixelRectangle)(nil),               // 34: nopacs.v1.PixelRectangle
-	(*DetectText)(nil),                   // 35: nopacs.v1.DetectText
-	(*AcceptPixels)(nil),                 // 36: nopacs.v1.AcceptPixels
-	(*ExpandedProfile)(nil),              // 37: nopacs.v1.ExpandedProfile
-	(*ExpandedRule)(nil),                 // 38: nopacs.v1.ExpandedRule
-	(*ExpandedPixelRule)(nil),            // 39: nopacs.v1.ExpandedPixelRule
-	(*ProfileVersion)(nil),               // 40: nopacs.v1.ProfileVersion
-	(*ProfileSummary)(nil),               // 41: nopacs.v1.ProfileSummary
-	(*ProfileProblem)(nil),               // 42: nopacs.v1.ProfileProblem
-	(*ProfileProblems)(nil),              // 43: nopacs.v1.ProfileProblems
-	(*ProfileBase)(nil),                  // 44: nopacs.v1.ProfileBase
-	(*CreateProfileVersionRequest)(nil),  // 45: nopacs.v1.CreateProfileVersionRequest
-	(*CreateProfileVersionResponse)(nil), // 46: nopacs.v1.CreateProfileVersionResponse
-	(*GetProfileVersionRequest)(nil),     // 47: nopacs.v1.GetProfileVersionRequest
-	(*GetProfileVersionResponse)(nil),    // 48: nopacs.v1.GetProfileVersionResponse
-	(*ListProfilesRequest)(nil),          // 49: nopacs.v1.ListProfilesRequest
-	(*ListProfilesResponse)(nil),         // 50: nopacs.v1.ListProfilesResponse
-	(*ListProfileVersionsRequest)(nil),   // 51: nopacs.v1.ListProfileVersionsRequest
-	(*ListProfileVersionsResponse)(nil),  // 52: nopacs.v1.ListProfileVersionsResponse
-	(*ValidateProfileRequest)(nil),       // 53: nopacs.v1.ValidateProfileRequest
-	(*ValidateProfileResponse)(nil),      // 54: nopacs.v1.ValidateProfileResponse
-	(*ListProfileBasesRequest)(nil),      // 55: nopacs.v1.ListProfileBasesRequest
-	(*ListProfileBasesResponse)(nil),     // 56: nopacs.v1.ListProfileBasesResponse
-	(*TrialProfile)(nil),                 // 57: nopacs.v1.TrialProfile
-	(*ProfileVersionName)(nil),           // 58: nopacs.v1.ProfileVersionName
-	(*TrialFile)(nil),                    // 59: nopacs.v1.TrialFile
-	(*TrialReception)(nil),               // 60: nopacs.v1.TrialReception
-	(*TryProfileRequest)(nil),            // 61: nopacs.v1.TryProfileRequest
-	(*TryProfileResponse)(nil),           // 62: nopacs.v1.TryProfileResponse
-	(*TrialResult)(nil),                  // 63: nopacs.v1.TrialResult
-	(*TrialPixels)(nil),                  // 64: nopacs.v1.TrialPixels
-	(*TrialElement)(nil),                 // 65: nopacs.v1.TrialElement
-	(*TrialSummary)(nil),                 // 66: nopacs.v1.TrialSummary
-	(*TrialCount)(nil),                   // 67: nopacs.v1.TrialCount
-	(*ExplainProfileRequest)(nil),        // 68: nopacs.v1.ExplainProfileRequest
-	(*ExplainProfileResponse)(nil),       // 69: nopacs.v1.ExplainProfileResponse
-	(*ExplainedElement)(nil),             // 70: nopacs.v1.ExplainedElement
-	(*ExplainedCandidate)(nil),           // 71: nopacs.v1.ExplainedCandidate
-	(*DiffProfileVersionsRequest)(nil),   // 72: nopacs.v1.DiffProfileVersionsRequest
-	(*DiffProfileVersionsResponse)(nil),  // 73: nopacs.v1.DiffProfileVersionsResponse
-	(*ProfileRuleChange)(nil),            // 74: nopacs.v1.ProfileRuleChange
-	(*ProfileEffectChange)(nil),          // 75: nopacs.v1.ProfileEffectChange
-	(*DescribeProfileRequest)(nil),       // 76: nopacs.v1.DescribeProfileRequest
-	(*DescribeProfileResponse)(nil),      // 77: nopacs.v1.DescribeProfileResponse
-	(*ProfileClassEffects)(nil),          // 78: nopacs.v1.ProfileClassEffects
-	(*ProfileClassEffect)(nil),           // 79: nopacs.v1.ProfileClassEffect
-	(*ProfileMethod)(nil),                // 80: nopacs.v1.ProfileMethod
-	(*MethodCode)(nil),                   // 81: nopacs.v1.MethodCode
-	(*timestamppb.Timestamp)(nil),        // 82: google.protobuf.Timestamp
+	(*TextList)(nil),                     // 10: nopacs.v1.TextList
+	(*TextListSummary)(nil),              // 11: nopacs.v1.TextListSummary
+	(*ProfileRule)(nil),                  // 12: nopacs.v1.ProfileRule
+	(*ProfileSelector)(nil),              // 13: nopacs.v1.ProfileSelector
+	(*ValuePatternSelector)(nil),         // 14: nopacs.v1.ValuePatternSelector
+	(*PrivateElement)(nil),               // 15: nopacs.v1.PrivateElement
+	(*ContentItemSelector)(nil),          // 16: nopacs.v1.ContentItemSelector
+	(*ProfileCondition)(nil),             // 17: nopacs.v1.ProfileCondition
+	(*ProfileAction)(nil),                // 18: nopacs.v1.ProfileAction
+	(*KeepAction)(nil),                   // 19: nopacs.v1.KeepAction
+	(*RemoveAction)(nil),                 // 20: nopacs.v1.RemoveAction
+	(*EmptyAction)(nil),                  // 21: nopacs.v1.EmptyAction
+	(*ReplaceAction)(nil),                // 22: nopacs.v1.ReplaceAction
+	(*SetAction)(nil),                    // 23: nopacs.v1.SetAction
+	(*HashAction)(nil),                   // 24: nopacs.v1.HashAction
+	(*UidAction)(nil),                    // 25: nopacs.v1.UidAction
+	(*ShiftAction)(nil),                  // 26: nopacs.v1.ShiftAction
+	(*GeneralizeAction)(nil),             // 27: nopacs.v1.GeneralizeAction
+	(*LookupAction)(nil),                 // 28: nopacs.v1.LookupAction
+	(*CleanAction)(nil),                  // 29: nopacs.v1.CleanAction
+	(*QuarantineAction)(nil),             // 30: nopacs.v1.QuarantineAction
+	(*DummyAction)(nil),                  // 31: nopacs.v1.DummyAction
+	(*RedactAction)(nil),                 // 32: nopacs.v1.RedactAction
+	(*RemoveUnlessRequiredAction)(nil),   // 33: nopacs.v1.RemoveUnlessRequiredAction
+	(*PixelRule)(nil),                    // 34: nopacs.v1.PixelRule
+	(*RedactPixels)(nil),                 // 35: nopacs.v1.RedactPixels
+	(*PixelRectangle)(nil),               // 36: nopacs.v1.PixelRectangle
+	(*DetectText)(nil),                   // 37: nopacs.v1.DetectText
+	(*AcceptPixels)(nil),                 // 38: nopacs.v1.AcceptPixels
+	(*ExpandedProfile)(nil),              // 39: nopacs.v1.ExpandedProfile
+	(*ExpandedRule)(nil),                 // 40: nopacs.v1.ExpandedRule
+	(*ExpandedPixelRule)(nil),            // 41: nopacs.v1.ExpandedPixelRule
+	(*ProfileVersion)(nil),               // 42: nopacs.v1.ProfileVersion
+	(*ProfileSummary)(nil),               // 43: nopacs.v1.ProfileSummary
+	(*ProfileProblem)(nil),               // 44: nopacs.v1.ProfileProblem
+	(*ProfileProblems)(nil),              // 45: nopacs.v1.ProfileProblems
+	(*ProfileBase)(nil),                  // 46: nopacs.v1.ProfileBase
+	(*CreateProfileVersionRequest)(nil),  // 47: nopacs.v1.CreateProfileVersionRequest
+	(*CreateProfileVersionResponse)(nil), // 48: nopacs.v1.CreateProfileVersionResponse
+	(*GetProfileVersionRequest)(nil),     // 49: nopacs.v1.GetProfileVersionRequest
+	(*GetProfileVersionResponse)(nil),    // 50: nopacs.v1.GetProfileVersionResponse
+	(*ListProfilesRequest)(nil),          // 51: nopacs.v1.ListProfilesRequest
+	(*ListProfilesResponse)(nil),         // 52: nopacs.v1.ListProfilesResponse
+	(*ListProfileVersionsRequest)(nil),   // 53: nopacs.v1.ListProfileVersionsRequest
+	(*ListProfileVersionsResponse)(nil),  // 54: nopacs.v1.ListProfileVersionsResponse
+	(*ValidateProfileRequest)(nil),       // 55: nopacs.v1.ValidateProfileRequest
+	(*ValidateProfileResponse)(nil),      // 56: nopacs.v1.ValidateProfileResponse
+	(*ListProfileBasesRequest)(nil),      // 57: nopacs.v1.ListProfileBasesRequest
+	(*ListProfileBasesResponse)(nil),     // 58: nopacs.v1.ListProfileBasesResponse
+	(*TrialProfile)(nil),                 // 59: nopacs.v1.TrialProfile
+	(*ProfileVersionName)(nil),           // 60: nopacs.v1.ProfileVersionName
+	(*TrialFile)(nil),                    // 61: nopacs.v1.TrialFile
+	(*TrialReception)(nil),               // 62: nopacs.v1.TrialReception
+	(*TryProfileRequest)(nil),            // 63: nopacs.v1.TryProfileRequest
+	(*TryProfileResponse)(nil),           // 64: nopacs.v1.TryProfileResponse
+	(*TrialResult)(nil),                  // 65: nopacs.v1.TrialResult
+	(*TrialPixels)(nil),                  // 66: nopacs.v1.TrialPixels
+	(*TrialElement)(nil),                 // 67: nopacs.v1.TrialElement
+	(*TrialSummary)(nil),                 // 68: nopacs.v1.TrialSummary
+	(*TrialCount)(nil),                   // 69: nopacs.v1.TrialCount
+	(*ExplainProfileRequest)(nil),        // 70: nopacs.v1.ExplainProfileRequest
+	(*ExplainProfileResponse)(nil),       // 71: nopacs.v1.ExplainProfileResponse
+	(*ExplainedElement)(nil),             // 72: nopacs.v1.ExplainedElement
+	(*ExplainedCandidate)(nil),           // 73: nopacs.v1.ExplainedCandidate
+	(*DiffProfileVersionsRequest)(nil),   // 74: nopacs.v1.DiffProfileVersionsRequest
+	(*DiffProfileVersionsResponse)(nil),  // 75: nopacs.v1.DiffProfileVersionsResponse
+	(*TextListChange)(nil),               // 76: nopacs.v1.TextListChange
+	(*ProfileRuleChange)(nil),            // 77: nopacs.v1.ProfileRuleChange
+	(*ProfileEffectChange)(nil),          // 78: nopacs.v1.ProfileEffectChange
+	(*DescribeProfileRequest)(nil),       // 79: nopacs.v1.DescribeProfileRequest
+	(*DescribeProfileResponse)(nil),      // 80: nopacs.v1.DescribeProfileResponse
+	(*ProfileClassEffects)(nil),          // 81: nopacs.v1.ProfileClassEffects
+	(*ProfileClassEffect)(nil),           // 82: nopacs.v1.ProfileClassEffect
+	(*ProfileMethod)(nil),                // 83: nopacs.v1.ProfileMethod
+	(*MethodCode)(nil),                   // 84: nopacs.v1.MethodCode
+	(*timestamppb.Timestamp)(nil),        // 85: google.protobuf.Timestamp
 }
 var file_nopacs_v1_profile_proto_depIdxs = []int32{
-	10,  // 0: nopacs.v1.ProfileDocument.rules:type_name -> nopacs.v1.ProfileRule
+	12,  // 0: nopacs.v1.ProfileDocument.rules:type_name -> nopacs.v1.ProfileRule
 	1,   // 1: nopacs.v1.ProfileDocument.unnamed:type_name -> nopacs.v1.UnnamedElements
-	32,  // 2: nopacs.v1.ProfileDocument.pixel_rules:type_name -> nopacs.v1.PixelRule
+	34,  // 2: nopacs.v1.ProfileDocument.pixel_rules:type_name -> nopacs.v1.PixelRule
 	0,   // 3: nopacs.v1.ProfileDocument.unsearched_segments:type_name -> nopacs.v1.UnsearchedSegments
-	11,  // 4: nopacs.v1.ProfileRule.selector:type_name -> nopacs.v1.ProfileSelector
-	15,  // 5: nopacs.v1.ProfileRule.when:type_name -> nopacs.v1.ProfileCondition
-	16,  // 6: nopacs.v1.ProfileRule.action:type_name -> nopacs.v1.ProfileAction
-	13,  // 7: nopacs.v1.ProfileSelector.private_element:type_name -> nopacs.v1.PrivateElement
-	14,  // 8: nopacs.v1.ProfileSelector.content_item:type_name -> nopacs.v1.ContentItemSelector
-	12,  // 9: nopacs.v1.ProfileSelector.value_pattern:type_name -> nopacs.v1.ValuePatternSelector
-	2,   // 10: nopacs.v1.ProfileCondition.subject:type_name -> nopacs.v1.ConditionSubject
-	17,  // 11: nopacs.v1.ProfileAction.keep:type_name -> nopacs.v1.KeepAction
-	18,  // 12: nopacs.v1.ProfileAction.remove:type_name -> nopacs.v1.RemoveAction
-	19,  // 13: nopacs.v1.ProfileAction.empty:type_name -> nopacs.v1.EmptyAction
-	20,  // 14: nopacs.v1.ProfileAction.replace:type_name -> nopacs.v1.ReplaceAction
-	21,  // 15: nopacs.v1.ProfileAction.set:type_name -> nopacs.v1.SetAction
-	22,  // 16: nopacs.v1.ProfileAction.hash:type_name -> nopacs.v1.HashAction
-	23,  // 17: nopacs.v1.ProfileAction.uid:type_name -> nopacs.v1.UidAction
-	24,  // 18: nopacs.v1.ProfileAction.shift:type_name -> nopacs.v1.ShiftAction
-	25,  // 19: nopacs.v1.ProfileAction.generalize:type_name -> nopacs.v1.GeneralizeAction
-	26,  // 20: nopacs.v1.ProfileAction.lookup:type_name -> nopacs.v1.LookupAction
-	27,  // 21: nopacs.v1.ProfileAction.clean:type_name -> nopacs.v1.CleanAction
-	28,  // 22: nopacs.v1.ProfileAction.quarantine:type_name -> nopacs.v1.QuarantineAction
-	29,  // 23: nopacs.v1.ProfileAction.dummy:type_name -> nopacs.v1.DummyAction
-	31,  // 24: nopacs.v1.ProfileAction.remove_unless_required:type_name -> nopacs.v1.RemoveUnlessRequiredAction
-	30,  // 25: nopacs.v1.ProfileAction.redact:type_name -> nopacs.v1.RedactAction
-	3,   // 26: nopacs.v1.LookupAction.on_missing:type_name -> nopacs.v1.LookupMissing
-	4,   // 27: nopacs.v1.RemoveUnlessRequiredAction.fallback:type_name -> nopacs.v1.RequiredFallback
-	15,  // 28: nopacs.v1.PixelRule.when:type_name -> nopacs.v1.ProfileCondition
-	33,  // 29: nopacs.v1.PixelRule.redact:type_name -> nopacs.v1.RedactPixels
-	35,  // 30: nopacs.v1.PixelRule.detect:type_name -> nopacs.v1.DetectText
-	36,  // 31: nopacs.v1.PixelRule.accept:type_name -> nopacs.v1.AcceptPixels
-	34,  // 32: nopacs.v1.RedactPixels.rectangles:type_name -> nopacs.v1.PixelRectangle
-	38,  // 33: nopacs.v1.ExpandedProfile.rules:type_name -> nopacs.v1.ExpandedRule
-	1,   // 34: nopacs.v1.ExpandedProfile.unnamed:type_name -> nopacs.v1.UnnamedElements
-	39,  // 35: nopacs.v1.ExpandedProfile.pixel_rules:type_name -> nopacs.v1.ExpandedPixelRule
-	0,   // 36: nopacs.v1.ExpandedProfile.unsearched_segments:type_name -> nopacs.v1.UnsearchedSegments
-	10,  // 37: nopacs.v1.ExpandedRule.rule:type_name -> nopacs.v1.ProfileRule
-	32,  // 38: nopacs.v1.ExpandedPixelRule.rule:type_name -> nopacs.v1.PixelRule
-	82,  // 39: nopacs.v1.ProfileVersion.create_time:type_name -> google.protobuf.Timestamp
-	9,   // 40: nopacs.v1.ProfileVersion.document:type_name -> nopacs.v1.ProfileDocument
-	37,  // 41: nopacs.v1.ProfileVersion.expanded:type_name -> nopacs.v1.ExpandedProfile
-	82,  // 42: nopacs.v1.ProfileSummary.latest_create_time:type_name -> google.protobuf.Timestamp
-	42,  // 43: nopacs.v1.ProfileProblems.problems:type_name -> nopacs.v1.ProfileProblem
-	9,   // 44: nopacs.v1.ProfileBase.document:type_name -> nopacs.v1.ProfileDocument
-	9,   // 45: nopacs.v1.CreateProfileVersionRequest.document:type_name -> nopacs.v1.ProfileDocument
-	5,   // 46: nopacs.v1.CreateProfileVersionRequest.view:type_name -> nopacs.v1.ProfileView
-	40,  // 47: nopacs.v1.CreateProfileVersionResponse.version:type_name -> nopacs.v1.ProfileVersion
-	42,  // 48: nopacs.v1.CreateProfileVersionResponse.warnings:type_name -> nopacs.v1.ProfileProblem
-	5,   // 49: nopacs.v1.GetProfileVersionRequest.view:type_name -> nopacs.v1.ProfileView
-	40,  // 50: nopacs.v1.GetProfileVersionResponse.version:type_name -> nopacs.v1.ProfileVersion
-	41,  // 51: nopacs.v1.ListProfilesResponse.profiles:type_name -> nopacs.v1.ProfileSummary
-	40,  // 52: nopacs.v1.ListProfileVersionsResponse.versions:type_name -> nopacs.v1.ProfileVersion
-	9,   // 53: nopacs.v1.ValidateProfileRequest.document:type_name -> nopacs.v1.ProfileDocument
-	5,   // 54: nopacs.v1.ValidateProfileRequest.view:type_name -> nopacs.v1.ProfileView
-	42,  // 55: nopacs.v1.ValidateProfileResponse.problems:type_name -> nopacs.v1.ProfileProblem
-	37,  // 56: nopacs.v1.ValidateProfileResponse.expanded:type_name -> nopacs.v1.ExpandedProfile
-	42,  // 57: nopacs.v1.ValidateProfileResponse.warnings:type_name -> nopacs.v1.ProfileProblem
-	44,  // 58: nopacs.v1.ListProfileBasesResponse.bases:type_name -> nopacs.v1.ProfileBase
-	58,  // 59: nopacs.v1.TrialProfile.version:type_name -> nopacs.v1.ProfileVersionName
-	9,   // 60: nopacs.v1.TrialProfile.document:type_name -> nopacs.v1.ProfileDocument
-	57,  // 61: nopacs.v1.TryProfileRequest.profile:type_name -> nopacs.v1.TrialProfile
-	59,  // 62: nopacs.v1.TryProfileRequest.files:type_name -> nopacs.v1.TrialFile
-	60,  // 63: nopacs.v1.TryProfileRequest.reception:type_name -> nopacs.v1.TrialReception
-	40,  // 64: nopacs.v1.TryProfileResponse.version:type_name -> nopacs.v1.ProfileVersion
-	63,  // 65: nopacs.v1.TryProfileResponse.results:type_name -> nopacs.v1.TrialResult
-	66,  // 66: nopacs.v1.TryProfileResponse.summary:type_name -> nopacs.v1.TrialSummary
-	6,   // 67: nopacs.v1.TrialResult.verdict:type_name -> nopacs.v1.TrialVerdict
-	65,  // 68: nopacs.v1.TrialResult.elements:type_name -> nopacs.v1.TrialElement
-	64,  // 69: nopacs.v1.TrialResult.pixels:type_name -> nopacs.v1.TrialPixels
-	58,  // 70: nopacs.v1.TrialResult.routed_profile:type_name -> nopacs.v1.ProfileVersionName
-	34,  // 71: nopacs.v1.TrialPixels.regions:type_name -> nopacs.v1.PixelRectangle
-	67,  // 72: nopacs.v1.TrialSummary.by_rule:type_name -> nopacs.v1.TrialCount
-	67,  // 73: nopacs.v1.TrialSummary.by_reason:type_name -> nopacs.v1.TrialCount
-	57,  // 74: nopacs.v1.ExplainProfileRequest.profile:type_name -> nopacs.v1.TrialProfile
-	59,  // 75: nopacs.v1.ExplainProfileRequest.file:type_name -> nopacs.v1.TrialFile
-	60,  // 76: nopacs.v1.ExplainProfileRequest.reception:type_name -> nopacs.v1.TrialReception
-	40,  // 77: nopacs.v1.ExplainProfileResponse.version:type_name -> nopacs.v1.ProfileVersion
-	70,  // 78: nopacs.v1.ExplainProfileResponse.elements:type_name -> nopacs.v1.ExplainedElement
-	71,  // 79: nopacs.v1.ExplainedElement.others:type_name -> nopacs.v1.ExplainedCandidate
-	40,  // 80: nopacs.v1.DiffProfileVersionsResponse.from:type_name -> nopacs.v1.ProfileVersion
-	40,  // 81: nopacs.v1.DiffProfileVersionsResponse.to:type_name -> nopacs.v1.ProfileVersion
-	1,   // 82: nopacs.v1.DiffProfileVersionsResponse.unnamed_from:type_name -> nopacs.v1.UnnamedElements
-	1,   // 83: nopacs.v1.DiffProfileVersionsResponse.unnamed_to:type_name -> nopacs.v1.UnnamedElements
-	74,  // 84: nopacs.v1.DiffProfileVersionsResponse.rules:type_name -> nopacs.v1.ProfileRuleChange
-	75,  // 85: nopacs.v1.DiffProfileVersionsResponse.effects:type_name -> nopacs.v1.ProfileEffectChange
-	0,   // 86: nopacs.v1.DiffProfileVersionsResponse.unsearched_segments_from:type_name -> nopacs.v1.UnsearchedSegments
-	0,   // 87: nopacs.v1.DiffProfileVersionsResponse.unsearched_segments_to:type_name -> nopacs.v1.UnsearchedSegments
-	7,   // 88: nopacs.v1.ProfileRuleChange.change:type_name -> nopacs.v1.ProfileChange
-	10,  // 89: nopacs.v1.ProfileRuleChange.from:type_name -> nopacs.v1.ProfileRule
-	10,  // 90: nopacs.v1.ProfileRuleChange.to:type_name -> nopacs.v1.ProfileRule
-	11,  // 91: nopacs.v1.ProfileEffectChange.selector:type_name -> nopacs.v1.ProfileSelector
-	15,  // 92: nopacs.v1.ProfileEffectChange.when:type_name -> nopacs.v1.ProfileCondition
-	16,  // 93: nopacs.v1.ProfileEffectChange.from:type_name -> nopacs.v1.ProfileAction
-	16,  // 94: nopacs.v1.ProfileEffectChange.to:type_name -> nopacs.v1.ProfileAction
-	57,  // 95: nopacs.v1.DescribeProfileRequest.profile:type_name -> nopacs.v1.TrialProfile
-	40,  // 96: nopacs.v1.DescribeProfileResponse.version:type_name -> nopacs.v1.ProfileVersion
-	78,  // 97: nopacs.v1.DescribeProfileResponse.classes:type_name -> nopacs.v1.ProfileClassEffects
-	80,  // 98: nopacs.v1.DescribeProfileResponse.method:type_name -> nopacs.v1.ProfileMethod
-	8,   // 99: nopacs.v1.ProfileClassEffects.class:type_name -> nopacs.v1.ProfileElementClass
-	79,  // 100: nopacs.v1.ProfileClassEffects.effects:type_name -> nopacs.v1.ProfileClassEffect
-	81,  // 101: nopacs.v1.ProfileMethod.codes:type_name -> nopacs.v1.MethodCode
-	45,  // 102: nopacs.v1.ProfileService.CreateProfileVersion:input_type -> nopacs.v1.CreateProfileVersionRequest
-	47,  // 103: nopacs.v1.ProfileService.GetProfileVersion:input_type -> nopacs.v1.GetProfileVersionRequest
-	49,  // 104: nopacs.v1.ProfileService.ListProfiles:input_type -> nopacs.v1.ListProfilesRequest
-	51,  // 105: nopacs.v1.ProfileService.ListProfileVersions:input_type -> nopacs.v1.ListProfileVersionsRequest
-	53,  // 106: nopacs.v1.ProfileService.ValidateProfile:input_type -> nopacs.v1.ValidateProfileRequest
-	55,  // 107: nopacs.v1.ProfileService.ListProfileBases:input_type -> nopacs.v1.ListProfileBasesRequest
-	61,  // 108: nopacs.v1.ProfileService.TryProfile:input_type -> nopacs.v1.TryProfileRequest
-	68,  // 109: nopacs.v1.ProfileService.ExplainProfile:input_type -> nopacs.v1.ExplainProfileRequest
-	72,  // 110: nopacs.v1.ProfileService.DiffProfileVersions:input_type -> nopacs.v1.DiffProfileVersionsRequest
-	76,  // 111: nopacs.v1.ProfileService.DescribeProfile:input_type -> nopacs.v1.DescribeProfileRequest
-	46,  // 112: nopacs.v1.ProfileService.CreateProfileVersion:output_type -> nopacs.v1.CreateProfileVersionResponse
-	48,  // 113: nopacs.v1.ProfileService.GetProfileVersion:output_type -> nopacs.v1.GetProfileVersionResponse
-	50,  // 114: nopacs.v1.ProfileService.ListProfiles:output_type -> nopacs.v1.ListProfilesResponse
-	52,  // 115: nopacs.v1.ProfileService.ListProfileVersions:output_type -> nopacs.v1.ListProfileVersionsResponse
-	54,  // 116: nopacs.v1.ProfileService.ValidateProfile:output_type -> nopacs.v1.ValidateProfileResponse
-	56,  // 117: nopacs.v1.ProfileService.ListProfileBases:output_type -> nopacs.v1.ListProfileBasesResponse
-	62,  // 118: nopacs.v1.ProfileService.TryProfile:output_type -> nopacs.v1.TryProfileResponse
-	69,  // 119: nopacs.v1.ProfileService.ExplainProfile:output_type -> nopacs.v1.ExplainProfileResponse
-	73,  // 120: nopacs.v1.ProfileService.DiffProfileVersions:output_type -> nopacs.v1.DiffProfileVersionsResponse
-	77,  // 121: nopacs.v1.ProfileService.DescribeProfile:output_type -> nopacs.v1.DescribeProfileResponse
-	112, // [112:122] is the sub-list for method output_type
-	102, // [102:112] is the sub-list for method input_type
-	102, // [102:102] is the sub-list for extension type_name
-	102, // [102:102] is the sub-list for extension extendee
-	0,   // [0:102] is the sub-list for field type_name
+	10,  // 4: nopacs.v1.ProfileDocument.text_lists:type_name -> nopacs.v1.TextList
+	13,  // 5: nopacs.v1.ProfileRule.selector:type_name -> nopacs.v1.ProfileSelector
+	17,  // 6: nopacs.v1.ProfileRule.when:type_name -> nopacs.v1.ProfileCondition
+	18,  // 7: nopacs.v1.ProfileRule.action:type_name -> nopacs.v1.ProfileAction
+	15,  // 8: nopacs.v1.ProfileSelector.private_element:type_name -> nopacs.v1.PrivateElement
+	16,  // 9: nopacs.v1.ProfileSelector.content_item:type_name -> nopacs.v1.ContentItemSelector
+	14,  // 10: nopacs.v1.ProfileSelector.value_pattern:type_name -> nopacs.v1.ValuePatternSelector
+	2,   // 11: nopacs.v1.ProfileCondition.subject:type_name -> nopacs.v1.ConditionSubject
+	19,  // 12: nopacs.v1.ProfileAction.keep:type_name -> nopacs.v1.KeepAction
+	20,  // 13: nopacs.v1.ProfileAction.remove:type_name -> nopacs.v1.RemoveAction
+	21,  // 14: nopacs.v1.ProfileAction.empty:type_name -> nopacs.v1.EmptyAction
+	22,  // 15: nopacs.v1.ProfileAction.replace:type_name -> nopacs.v1.ReplaceAction
+	23,  // 16: nopacs.v1.ProfileAction.set:type_name -> nopacs.v1.SetAction
+	24,  // 17: nopacs.v1.ProfileAction.hash:type_name -> nopacs.v1.HashAction
+	25,  // 18: nopacs.v1.ProfileAction.uid:type_name -> nopacs.v1.UidAction
+	26,  // 19: nopacs.v1.ProfileAction.shift:type_name -> nopacs.v1.ShiftAction
+	27,  // 20: nopacs.v1.ProfileAction.generalize:type_name -> nopacs.v1.GeneralizeAction
+	28,  // 21: nopacs.v1.ProfileAction.lookup:type_name -> nopacs.v1.LookupAction
+	29,  // 22: nopacs.v1.ProfileAction.clean:type_name -> nopacs.v1.CleanAction
+	30,  // 23: nopacs.v1.ProfileAction.quarantine:type_name -> nopacs.v1.QuarantineAction
+	31,  // 24: nopacs.v1.ProfileAction.dummy:type_name -> nopacs.v1.DummyAction
+	33,  // 25: nopacs.v1.ProfileAction.remove_unless_required:type_name -> nopacs.v1.RemoveUnlessRequiredAction
+	32,  // 26: nopacs.v1.ProfileAction.redact:type_name -> nopacs.v1.RedactAction
+	3,   // 27: nopacs.v1.LookupAction.on_missing:type_name -> nopacs.v1.LookupMissing
+	4,   // 28: nopacs.v1.RemoveUnlessRequiredAction.fallback:type_name -> nopacs.v1.RequiredFallback
+	17,  // 29: nopacs.v1.PixelRule.when:type_name -> nopacs.v1.ProfileCondition
+	35,  // 30: nopacs.v1.PixelRule.redact:type_name -> nopacs.v1.RedactPixels
+	37,  // 31: nopacs.v1.PixelRule.detect:type_name -> nopacs.v1.DetectText
+	38,  // 32: nopacs.v1.PixelRule.accept:type_name -> nopacs.v1.AcceptPixels
+	36,  // 33: nopacs.v1.RedactPixels.rectangles:type_name -> nopacs.v1.PixelRectangle
+	40,  // 34: nopacs.v1.ExpandedProfile.rules:type_name -> nopacs.v1.ExpandedRule
+	1,   // 35: nopacs.v1.ExpandedProfile.unnamed:type_name -> nopacs.v1.UnnamedElements
+	41,  // 36: nopacs.v1.ExpandedProfile.pixel_rules:type_name -> nopacs.v1.ExpandedPixelRule
+	0,   // 37: nopacs.v1.ExpandedProfile.unsearched_segments:type_name -> nopacs.v1.UnsearchedSegments
+	10,  // 38: nopacs.v1.ExpandedProfile.text_lists:type_name -> nopacs.v1.TextList
+	12,  // 39: nopacs.v1.ExpandedRule.rule:type_name -> nopacs.v1.ProfileRule
+	34,  // 40: nopacs.v1.ExpandedPixelRule.rule:type_name -> nopacs.v1.PixelRule
+	85,  // 41: nopacs.v1.ProfileVersion.create_time:type_name -> google.protobuf.Timestamp
+	9,   // 42: nopacs.v1.ProfileVersion.document:type_name -> nopacs.v1.ProfileDocument
+	39,  // 43: nopacs.v1.ProfileVersion.expanded:type_name -> nopacs.v1.ExpandedProfile
+	85,  // 44: nopacs.v1.ProfileSummary.latest_create_time:type_name -> google.protobuf.Timestamp
+	44,  // 45: nopacs.v1.ProfileProblems.problems:type_name -> nopacs.v1.ProfileProblem
+	9,   // 46: nopacs.v1.ProfileBase.document:type_name -> nopacs.v1.ProfileDocument
+	9,   // 47: nopacs.v1.CreateProfileVersionRequest.document:type_name -> nopacs.v1.ProfileDocument
+	5,   // 48: nopacs.v1.CreateProfileVersionRequest.view:type_name -> nopacs.v1.ProfileView
+	42,  // 49: nopacs.v1.CreateProfileVersionResponse.version:type_name -> nopacs.v1.ProfileVersion
+	44,  // 50: nopacs.v1.CreateProfileVersionResponse.warnings:type_name -> nopacs.v1.ProfileProblem
+	5,   // 51: nopacs.v1.GetProfileVersionRequest.view:type_name -> nopacs.v1.ProfileView
+	42,  // 52: nopacs.v1.GetProfileVersionResponse.version:type_name -> nopacs.v1.ProfileVersion
+	43,  // 53: nopacs.v1.ListProfilesResponse.profiles:type_name -> nopacs.v1.ProfileSummary
+	42,  // 54: nopacs.v1.ListProfileVersionsResponse.versions:type_name -> nopacs.v1.ProfileVersion
+	9,   // 55: nopacs.v1.ValidateProfileRequest.document:type_name -> nopacs.v1.ProfileDocument
+	5,   // 56: nopacs.v1.ValidateProfileRequest.view:type_name -> nopacs.v1.ProfileView
+	44,  // 57: nopacs.v1.ValidateProfileResponse.problems:type_name -> nopacs.v1.ProfileProblem
+	39,  // 58: nopacs.v1.ValidateProfileResponse.expanded:type_name -> nopacs.v1.ExpandedProfile
+	44,  // 59: nopacs.v1.ValidateProfileResponse.warnings:type_name -> nopacs.v1.ProfileProblem
+	46,  // 60: nopacs.v1.ListProfileBasesResponse.bases:type_name -> nopacs.v1.ProfileBase
+	60,  // 61: nopacs.v1.TrialProfile.version:type_name -> nopacs.v1.ProfileVersionName
+	9,   // 62: nopacs.v1.TrialProfile.document:type_name -> nopacs.v1.ProfileDocument
+	59,  // 63: nopacs.v1.TryProfileRequest.profile:type_name -> nopacs.v1.TrialProfile
+	61,  // 64: nopacs.v1.TryProfileRequest.files:type_name -> nopacs.v1.TrialFile
+	62,  // 65: nopacs.v1.TryProfileRequest.reception:type_name -> nopacs.v1.TrialReception
+	42,  // 66: nopacs.v1.TryProfileResponse.version:type_name -> nopacs.v1.ProfileVersion
+	65,  // 67: nopacs.v1.TryProfileResponse.results:type_name -> nopacs.v1.TrialResult
+	68,  // 68: nopacs.v1.TryProfileResponse.summary:type_name -> nopacs.v1.TrialSummary
+	6,   // 69: nopacs.v1.TrialResult.verdict:type_name -> nopacs.v1.TrialVerdict
+	67,  // 70: nopacs.v1.TrialResult.elements:type_name -> nopacs.v1.TrialElement
+	66,  // 71: nopacs.v1.TrialResult.pixels:type_name -> nopacs.v1.TrialPixels
+	60,  // 72: nopacs.v1.TrialResult.routed_profile:type_name -> nopacs.v1.ProfileVersionName
+	36,  // 73: nopacs.v1.TrialPixels.regions:type_name -> nopacs.v1.PixelRectangle
+	69,  // 74: nopacs.v1.TrialSummary.by_rule:type_name -> nopacs.v1.TrialCount
+	69,  // 75: nopacs.v1.TrialSummary.by_reason:type_name -> nopacs.v1.TrialCount
+	59,  // 76: nopacs.v1.ExplainProfileRequest.profile:type_name -> nopacs.v1.TrialProfile
+	61,  // 77: nopacs.v1.ExplainProfileRequest.file:type_name -> nopacs.v1.TrialFile
+	62,  // 78: nopacs.v1.ExplainProfileRequest.reception:type_name -> nopacs.v1.TrialReception
+	42,  // 79: nopacs.v1.ExplainProfileResponse.version:type_name -> nopacs.v1.ProfileVersion
+	72,  // 80: nopacs.v1.ExplainProfileResponse.elements:type_name -> nopacs.v1.ExplainedElement
+	73,  // 81: nopacs.v1.ExplainedElement.others:type_name -> nopacs.v1.ExplainedCandidate
+	42,  // 82: nopacs.v1.DiffProfileVersionsResponse.from:type_name -> nopacs.v1.ProfileVersion
+	42,  // 83: nopacs.v1.DiffProfileVersionsResponse.to:type_name -> nopacs.v1.ProfileVersion
+	1,   // 84: nopacs.v1.DiffProfileVersionsResponse.unnamed_from:type_name -> nopacs.v1.UnnamedElements
+	1,   // 85: nopacs.v1.DiffProfileVersionsResponse.unnamed_to:type_name -> nopacs.v1.UnnamedElements
+	77,  // 86: nopacs.v1.DiffProfileVersionsResponse.rules:type_name -> nopacs.v1.ProfileRuleChange
+	78,  // 87: nopacs.v1.DiffProfileVersionsResponse.effects:type_name -> nopacs.v1.ProfileEffectChange
+	0,   // 88: nopacs.v1.DiffProfileVersionsResponse.unsearched_segments_from:type_name -> nopacs.v1.UnsearchedSegments
+	0,   // 89: nopacs.v1.DiffProfileVersionsResponse.unsearched_segments_to:type_name -> nopacs.v1.UnsearchedSegments
+	76,  // 90: nopacs.v1.DiffProfileVersionsResponse.text_lists:type_name -> nopacs.v1.TextListChange
+	7,   // 91: nopacs.v1.TextListChange.change:type_name -> nopacs.v1.ProfileChange
+	11,  // 92: nopacs.v1.TextListChange.from:type_name -> nopacs.v1.TextListSummary
+	11,  // 93: nopacs.v1.TextListChange.to:type_name -> nopacs.v1.TextListSummary
+	7,   // 94: nopacs.v1.ProfileRuleChange.change:type_name -> nopacs.v1.ProfileChange
+	12,  // 95: nopacs.v1.ProfileRuleChange.from:type_name -> nopacs.v1.ProfileRule
+	12,  // 96: nopacs.v1.ProfileRuleChange.to:type_name -> nopacs.v1.ProfileRule
+	13,  // 97: nopacs.v1.ProfileEffectChange.selector:type_name -> nopacs.v1.ProfileSelector
+	17,  // 98: nopacs.v1.ProfileEffectChange.when:type_name -> nopacs.v1.ProfileCondition
+	18,  // 99: nopacs.v1.ProfileEffectChange.from:type_name -> nopacs.v1.ProfileAction
+	18,  // 100: nopacs.v1.ProfileEffectChange.to:type_name -> nopacs.v1.ProfileAction
+	59,  // 101: nopacs.v1.DescribeProfileRequest.profile:type_name -> nopacs.v1.TrialProfile
+	42,  // 102: nopacs.v1.DescribeProfileResponse.version:type_name -> nopacs.v1.ProfileVersion
+	81,  // 103: nopacs.v1.DescribeProfileResponse.classes:type_name -> nopacs.v1.ProfileClassEffects
+	83,  // 104: nopacs.v1.DescribeProfileResponse.method:type_name -> nopacs.v1.ProfileMethod
+	11,  // 105: nopacs.v1.DescribeProfileResponse.text_lists:type_name -> nopacs.v1.TextListSummary
+	8,   // 106: nopacs.v1.ProfileClassEffects.class:type_name -> nopacs.v1.ProfileElementClass
+	82,  // 107: nopacs.v1.ProfileClassEffects.effects:type_name -> nopacs.v1.ProfileClassEffect
+	84,  // 108: nopacs.v1.ProfileMethod.codes:type_name -> nopacs.v1.MethodCode
+	47,  // 109: nopacs.v1.ProfileService.CreateProfileVersion:input_type -> nopacs.v1.CreateProfileVersionRequest
+	49,  // 110: nopacs.v1.ProfileService.GetProfileVersion:input_type -> nopacs.v1.GetProfileVersionRequest
+	51,  // 111: nopacs.v1.ProfileService.ListProfiles:input_type -> nopacs.v1.ListProfilesRequest
+	53,  // 112: nopacs.v1.ProfileService.ListProfileVersions:input_type -> nopacs.v1.ListProfileVersionsRequest
+	55,  // 113: nopacs.v1.ProfileService.ValidateProfile:input_type -> nopacs.v1.ValidateProfileRequest
+	57,  // 114: nopacs.v1.ProfileService.ListProfileBases:input_type -> nopacs.v1.ListProfileBasesRequest
+	63,  // 115: nopacs.v1.ProfileService.TryProfile:input_type -> nopacs.v1.TryProfileRequest
+	70,  // 116: nopacs.v1.ProfileService.ExplainProfile:input_type -> nopacs.v1.ExplainProfileRequest
+	74,  // 117: nopacs.v1.ProfileService.DiffProfileVersions:input_type -> nopacs.v1.DiffProfileVersionsRequest
+	79,  // 118: nopacs.v1.ProfileService.DescribeProfile:input_type -> nopacs.v1.DescribeProfileRequest
+	48,  // 119: nopacs.v1.ProfileService.CreateProfileVersion:output_type -> nopacs.v1.CreateProfileVersionResponse
+	50,  // 120: nopacs.v1.ProfileService.GetProfileVersion:output_type -> nopacs.v1.GetProfileVersionResponse
+	52,  // 121: nopacs.v1.ProfileService.ListProfiles:output_type -> nopacs.v1.ListProfilesResponse
+	54,  // 122: nopacs.v1.ProfileService.ListProfileVersions:output_type -> nopacs.v1.ListProfileVersionsResponse
+	56,  // 123: nopacs.v1.ProfileService.ValidateProfile:output_type -> nopacs.v1.ValidateProfileResponse
+	58,  // 124: nopacs.v1.ProfileService.ListProfileBases:output_type -> nopacs.v1.ListProfileBasesResponse
+	64,  // 125: nopacs.v1.ProfileService.TryProfile:output_type -> nopacs.v1.TryProfileResponse
+	71,  // 126: nopacs.v1.ProfileService.ExplainProfile:output_type -> nopacs.v1.ExplainProfileResponse
+	75,  // 127: nopacs.v1.ProfileService.DiffProfileVersions:output_type -> nopacs.v1.DiffProfileVersionsResponse
+	80,  // 128: nopacs.v1.ProfileService.DescribeProfile:output_type -> nopacs.v1.DescribeProfileResponse
+	119, // [119:129] is the sub-list for method output_type
+	109, // [109:119] is the sub-list for method input_type
+	109, // [109:109] is the sub-list for extension type_name
+	109, // [109:109] is the sub-list for extension extendee
+	0,   // [0:109] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_profile_proto_init() }
@@ -7789,7 +8150,7 @@ func file_nopacs_v1_profile_proto_init() {
 	if File_nopacs_v1_profile_proto != nil {
 		return
 	}
-	file_nopacs_v1_profile_proto_msgTypes[2].OneofWrappers = []any{
+	file_nopacs_v1_profile_proto_msgTypes[4].OneofWrappers = []any{
 		(*ProfileSelector_Tag)(nil),
 		(*ProfileSelector_Keyword)(nil),
 		(*ProfileSelector_Group)(nil),
@@ -7799,13 +8160,13 @@ func file_nopacs_v1_profile_proto_init() {
 		(*ProfileSelector_ContentItem)(nil),
 		(*ProfileSelector_ValuePattern)(nil),
 	}
-	file_nopacs_v1_profile_proto_msgTypes[6].OneofWrappers = []any{
+	file_nopacs_v1_profile_proto_msgTypes[8].OneofWrappers = []any{
 		(*ProfileCondition_Equals)(nil),
 		(*ProfileCondition_Prefix)(nil),
 		(*ProfileCondition_Pattern)(nil),
 		(*ProfileCondition_Present)(nil),
 	}
-	file_nopacs_v1_profile_proto_msgTypes[7].OneofWrappers = []any{
+	file_nopacs_v1_profile_proto_msgTypes[9].OneofWrappers = []any{
 		(*ProfileAction_Keep)(nil),
 		(*ProfileAction_Remove)(nil),
 		(*ProfileAction_Empty)(nil),
@@ -7822,21 +8183,21 @@ func file_nopacs_v1_profile_proto_init() {
 		(*ProfileAction_RemoveUnlessRequired)(nil),
 		(*ProfileAction_Redact)(nil),
 	}
-	file_nopacs_v1_profile_proto_msgTypes[11].OneofWrappers = []any{
+	file_nopacs_v1_profile_proto_msgTypes[13].OneofWrappers = []any{
 		(*ReplaceAction_Constant)(nil),
 		(*ReplaceAction_Template)(nil),
 	}
-	file_nopacs_v1_profile_proto_msgTypes[12].OneofWrappers = []any{
+	file_nopacs_v1_profile_proto_msgTypes[14].OneofWrappers = []any{
 		(*SetAction_Constant)(nil),
 		(*SetAction_Template)(nil),
 	}
-	file_nopacs_v1_profile_proto_msgTypes[23].OneofWrappers = []any{
+	file_nopacs_v1_profile_proto_msgTypes[25].OneofWrappers = []any{
 		(*PixelRule_Redact)(nil),
 		(*PixelRule_Detect)(nil),
 		(*PixelRule_Accept)(nil),
 	}
-	file_nopacs_v1_profile_proto_msgTypes[36].OneofWrappers = []any{}
-	file_nopacs_v1_profile_proto_msgTypes[48].OneofWrappers = []any{
+	file_nopacs_v1_profile_proto_msgTypes[38].OneofWrappers = []any{}
+	file_nopacs_v1_profile_proto_msgTypes[50].OneofWrappers = []any{
 		(*TrialProfile_Version)(nil),
 		(*TrialProfile_Document)(nil),
 	}
@@ -7846,7 +8207,7 @@ func file_nopacs_v1_profile_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_profile_proto_rawDesc), len(file_nopacs_v1_profile_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   73,
+			NumMessages:   76,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

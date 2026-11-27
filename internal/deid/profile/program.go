@@ -71,6 +71,9 @@ type Decision struct {
 	// Redact is a redact action's pattern, compiled for a search; nil for
 	// any other action.
 	Redact *regexp.Regexp
+	// Lists are the bits (TextLists.Mask) of the text lists the deciding
+	// clean or redact rule removes the terms of; zero for none.
+	Lists uint32
 }
 
 // Program is an expanded profile compiled for deciding, element by element,
@@ -89,6 +92,10 @@ type Program struct {
 	groups []int
 	values []int
 	byVR   map[string][]int
+	// lists are the profile's text lists, nil when it has none; listMask
+	// the lists each clean or redact rule names, by position.
+	lists    *TextLists
+	listMask map[int]uint32
 }
 
 // privateKey is a private block: its creator and group.
@@ -109,7 +116,19 @@ var (
 // it, so a later library cannot change what a stored version does. An
 // expanded profile that does not compile was not made by Expand, was
 // changed after, or is of a language edition this build does not know.
-func Compile(e *v1.ExpandedProfile) (*Program, error) {
+//
+// Its text lists are taken from, or kept in, the cache every user of a
+// stored version shares, so one copy of their automata exists; a
+// document's, compiled for a trial or a description, take CompileOneOff.
+func Compile(e *v1.ExpandedProfile) (*Program, error) { return compile(e, true) }
+
+// CompileOneOff is Compile for a profile used once (a document tried or
+// described): its text lists are built, used and dropped, never kept in
+// the cache stored versions share.
+func CompileOneOff(e *v1.ExpandedProfile) (*Program, error) { return compile(e, false) }
+
+// compile is Compile, its lists shared or not.
+func compile(e *v1.ExpandedProfile, shared bool) (*Program, error) {
 	if e == nil {
 		return nil, fmt.Errorf("profile: no expanded profile")
 	}
@@ -129,24 +148,41 @@ func Compile(e *v1.ExpandedProfile) (*Program, error) {
 	if len(e.GetRules()) > MaxExpandedRules {
 		return nil, fmt.Errorf("profile: an expanded profile has at most %d rules", MaxExpandedRules)
 	}
-	p := &Program{expanded: e, byTag: map[uint32][]int{}, privEl: map[privateKey][]int{}, block: map[privateKey][]int{}, byVR: map[string][]int{}}
+	p := &Program{expanded: e, byTag: map[uint32][]int{}, privEl: map[privateKey][]int{}, block: map[privateKey][]int{}, byVR: map[string][]int{},
+		listMask: map[int]uint32{}}
 	chk := newChecker(true)
+	chk.shared = shared
+	if ed < listEdition && len(e.GetTextLists()) > 0 {
+		return nil, fmt.Errorf("profile: %s: the expanded profile has text lists, which language edition %d does not have", CodeBadEdition, ed)
+	}
+	useLists(chk, at{c: chk}, e.GetTextLists())
+	if len(chk.list) > 0 {
+		return nil, fmt.Errorf("profile: the expanded profile: %w", chk.list)
+	}
+	p.lists = chk.lists
 	for i, er := range e.GetRules() {
 		r := er.GetRule()
 		a := at{c: chk, rule: i + 1, name: r.GetName()}
 		if ed < valuePatternEdition && usesValuePatterns(r) {
 			return nil, fmt.Errorf("profile: %s: rule %d has a value pattern or redact, which language edition %d does not have", CodeBadEdition, i+1, ed)
 		}
+		if ed < listEdition && usesLists(r) {
+			return nil, fmt.Errorf("profile: %s: rule %d names a text list, which language edition %d does not have", CodeBadEdition, i+1, ed)
+		}
 		sel, _, ok := parseSelector(a.in("selector"), r.GetSelector(), er.GetVrs())
 		when := parseConditions(a, "when", r.GetWhen())
 		var redact *regexp.Regexp
+		var lists uint32
 		if ok {
-			_, redact = checkAction(a, r.GetAction(), sel)
+			_, redact, lists = checkAction(a, r.GetAction(), sel)
 		}
 		if len(chk.list) > 0 {
 			return nil, fmt.Errorf("profile: the expanded profile: %w", chk.list)
 		}
-		p.rules = append(p.rules, rule{sel: sel, when: when, action: r.GetAction(), redact: redact, norm: r, origin: er.GetOrigin()})
+		if lists != 0 {
+			p.listMask[i] = lists
+		}
+		p.rules = append(p.rules, rule{sel: sel, when: when, action: r.GetAction(), redact: redact, lists: lists, norm: r, origin: er.GetOrigin()})
 		switch sel.tier {
 		case TierPlace:
 			p.places = append(p.places, i)
@@ -231,7 +267,7 @@ func (p *Program) Decide(loc Location, f Facts) Decision {
 				continue
 			}
 			return Decision{Index: i, Rule: p.expanded.GetRules()[i], Action: r.action, VRs: r.sel.vrs,
-				PatternMatches: matches, PatternOver: over, PatternUnread: unread, Redact: r.redact}
+				PatternMatches: matches, PatternOver: over, PatternUnread: unread, Redact: r.redact, Lists: p.listMask[i]}
 		}
 	}
 	if group(loc.Tag)%2 == 1 || p.Unnamed() == v1.UnnamedElements_UNNAMED_ELEMENTS_REMOVE {

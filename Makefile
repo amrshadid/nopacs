@@ -330,7 +330,7 @@ check-dicomweb:
 check-deid:
 	@test -n "$(PYTHON)" || { echo "check-deid: PYTHON is empty; name an interpreter that has pydicom" >&2; exit 1; }
 	@command -v "$(PYTHON)" > /dev/null || { echo "check-deid: no interpreter $(PYTHON)" >&2; exit 1; }
-	NOPACS_CHECK_DEID_PYTHON="$(PYTHON)" $(CHECK_READING_ENV) $(GO) test -count=1 -v -run '^(TestCorpusFilesAreDeidentified|TestValuePatternsAgreeWithPydicom)$$' ./internal/deid/engine
+	NOPACS_CHECK_DEID_PYTHON="$(PYTHON)" $(CHECK_READING_ENV) $(GO) test -count=1 -v -run '^(TestCorpusFilesAreDeidentified|TestValuePatternsAgreeWithPydicom|TestListCleanAgainstPydicom)$$' ./internal/deid/engine
 	NOPACS_CHECK_DEID_PYTHON="$(PYTHON)" $(CHECK_READING_ENV) $(GO) test -count=1 -v -run '^TestAgreesWithPydicom$$' ./internal/deid/check
 
 # The JPEG 2000 walk against OpenJPEG (OPENJPEG=<dir> holding opj_compress,

@@ -246,7 +246,7 @@ func (r *run) finishCleans() error {
 	}
 	for _, i := range cleans {
 		o := &r.ops[i]
-		out, err := cl.clean(r.ctx, o.text)
+		out, err := cl.cleanWith(r.ctx, o.text, r.en.lists, o.lists)
 		if errors.Is(err, errCleanTooLarge) {
 			return &Failure{Cause: CauseTooLarge, Path: o.path, Rule: o.rule}
 		}

@@ -119,6 +119,8 @@ const (
 	KindDate Kind = "date"
 	// KindUID is a UID.
 	KindUID Kind = "uid"
+	// KindListTerm is a term of one of the profile's text lists.
+	KindListTerm Kind = "list_term"
 )
 
 // kindOf maps the engine's kind of needle to a finding's.
@@ -323,8 +325,11 @@ func (c *Checker) CheckWritten(ctx context.Context, src io.ReaderAt, size int64,
 	if err := s.encodeRaw(); err != nil {
 		return rep, err
 	}
+	if err := s.prepareLists(); err != nil {
+		return rep, err
+	}
 	if c.opts.Memory != nil {
-		release, err := c.opts.Memory.Reserve(ctx, c.reservation(size, f, set, s.rawBytes, s.rawLongest))
+		release, err := c.opts.Memory.Reserve(ctx, c.reservation(size, f, set, s.rawBytes, s.rawLongest)+s.listsBytes())
 		if err != nil {
 			return rep, err
 		}

@@ -80,6 +80,13 @@ const (
 	// raised. Installation-only: the memory is the server's, which tenants
 	// share.
 	DeidMemory = "deid.memory"
+	// DeidListCacheBytes is the most bytes the compiled text lists of
+	// stored profile versions are kept in, their automata and the raw ones
+	// the check after builds from them (ParseListCacheBytes): every
+	// reception, job and correction of a version shares one copy, the
+	// least recently used dropped past it and built again when next
+	// needed. Installation-only: the memory is the server's.
+	DeidListCacheBytes = "deid.list-cache-bytes"
 )
 
 // ReservedPrefix starts the names the system keeps for itself in the
@@ -251,6 +258,12 @@ func Builtin() []Definition {
 		Name:     DeidMemory,
 		Default:  "2GiB",
 		Validate: func(v string) error { _, err := ParseDeidMemory(v); return err },
+	}, {
+		// 256 MiB keeps the lists of several versions at their largest (a
+		// few tens of megabytes each) beside the server's other work.
+		Name:     DeidListCacheBytes,
+		Default:  "256MiB",
+		Validate: func(v string) error { _, err := ParseListCacheBytes(v); return err },
 	}, {
 		// Empty by default, so no page in a browser can read an answer of
 		// the API until the installation's admin lists its origin.

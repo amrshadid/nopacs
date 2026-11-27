@@ -1,4 +1,9 @@
-package check
+// Package textmatch finds every pattern of a set in a text in one pass
+// over it: the automaton of Aho and Corasick (Communications of the ACM
+// 18(6), 1975). The check after de-identification searches a file for its
+// needles with it, and the engine and the check search text for the terms
+// of a profile's lists with it, so the two read text through one search.
+package textmatch
 
 import (
 	"bytes"
@@ -7,19 +12,19 @@ import (
 	"sort"
 )
 
-// matcher finds every pattern of a set in a text in one pass over it, the
-// automaton of Aho and Corasick (Communications of the ACM 18(6), 1975): a
-// trie of the patterns whose every node knows the longest proper suffix of
-// its path that is also a path (fail) and the nearest such suffix that
-// ends a pattern (dict). The work of a pass is the bytes of the text, plus
-// the steps back along fail links, at most as many again, plus one per
-// pattern ending at each position, which the caller's budget bounds.
+// Matcher is the automaton of a set of patterns: a trie of the patterns
+// whose every node knows the longest proper suffix of its path that is
+// also a path (fail) and the nearest such suffix that ends a pattern
+// (dict). The work of a pass is the bytes of the text, plus the steps back
+// along fail links, at most as many again, plus one per pattern ending at
+// each position, which the caller's budget bounds.
 //
 // The trie is built level by level from the patterns in sorted order, so
 // the children of a node are contiguous and sorted, and a node is a few
 // numbers in flat slices: about 19 bytes a node, a node a byte of the
-// patterns at most.
-type matcher struct {
+// patterns at most. A Matcher is never changed after New, so one serves
+// many passes at once.
+type Matcher struct {
 	// label is the byte on the edge into each node; first and count give
 	// its children, nodes first to first+count-1.
 	label []byte
@@ -39,36 +44,47 @@ type matcher struct {
 }
 
 // child returns the child of node n by b, or -1.
-func (m *matcher) child(n int32, b byte) int32 {
+func (m *Matcher) child(n int32, b byte) int32 {
 	lo, hi := int(m.first[n]), int(m.first[n])+int(m.count[n])
 	i := lo + sort.Search(hi-lo, func(i int) bool { return m.label[lo+i] >= b })
 	if i < hi && m.label[i] == b {
-		return int32(i) //nolint:gosec // G115: nodes are bounded by the forms' bound, far below 2^31.
+		return int32(i) //nolint:gosec // G115: nodes are bounded by the patterns' bound, far below 2^31.
 	}
 	return -1
 }
 
 // newNode appends a node with the label b and returns it.
-func (m *matcher) newNode(b byte) int32 {
+func (m *Matcher) newNode(b byte) int32 {
 	m.label = append(m.label, b)
 	m.first = append(m.first, 0)
 	m.count = append(m.count, 0)
 	m.fail = append(m.fail, 0)
 	m.dict = append(m.dict, -1)
 	m.pat = append(m.pat, -1)
-	return int32(len(m.label) - 1) //nolint:gosec // G115: nodes are bounded by the forms' bound, far below 2^31.
+	return int32(len(m.label) - 1) //nolint:gosec // G115: nodes are bounded by the patterns' bound, far below 2^31.
 }
 
-// newMatcher builds the automaton of patterns, which the caller has made
-// distinct and none empty; pattern i is reported as i.
-func newMatcher(patterns [][]byte) *matcher {
-	m := &matcher{lens: make([]int, len(patterns))}
+// New builds the automaton of patterns, which the caller has made distinct
+// and none empty; pattern i is reported as i.
+func New(patterns [][]byte) *Matcher {
+	m := &Matcher{lens: make([]int, len(patterns))}
 	order := make([]int32, len(patterns))
+	nodes := 1
 	for i, p := range patterns {
 		m.lens[i] = len(p)
 		m.longest = max(m.longest, len(p))
-		order[i] = int32(i) //nolint:gosec // G115: the patterns are bounded by the forms' bound.
+		order[i] = int32(i) //nolint:gosec // G115: the patterns are bounded by the caller's bound.
+		nodes += len(p)
 	}
+	// A node a byte of the patterns at most: the slices are made that long
+	// once, so building never copies them as they grow (a few hundred
+	// thousand nodes grown by doubling allocate several times their size).
+	m.label = make([]byte, 0, nodes)
+	m.first = make([]int32, 0, nodes)
+	m.count = make([]uint16, 0, nodes)
+	m.fail = make([]int32, 0, nodes)
+	m.dict = make([]int32, 0, nodes)
+	m.pat = make([]int32, 0, nodes)
 	slices.SortFunc(order, func(a, b int32) int { return bytes.Compare(patterns[a], patterns[b]) })
 	m.newNode(0)
 	// Each node of a level holds the range of sorted patterns that begin
@@ -133,29 +149,38 @@ func newMatcher(patterns [][]byte) *matcher {
 	return m
 }
 
-// errBudget is a pass that would pass its budget of work.
-type errBudget struct{}
+// Len returns the length in bytes of pattern i.
+func (m *Matcher) Len(i int) int { return m.lens[i] }
 
-func (errBudget) Error() string { return "deid check: the search passes its bound" }
+// Longest returns the length in bytes of the longest pattern.
+func (m *Matcher) Longest() int { return m.longest }
+
+// Nodes returns the nodes of the automaton, a measure of its memory: about
+// 19 bytes each.
+func (m *Matcher) Nodes() int { return len(m.label) }
+
+// ErrBudget is a pass that would pass its budget of work.
+type ErrBudget struct{}
+
+func (ErrBudget) Error() string { return "text search: the search passes its bound" }
 
 // ctxEvery is how many bytes a pass reads between looks at its context.
 const ctxEvery = 64 << 10
 
-// scan passes over text once and calls found with each pattern ending at
+// Scan passes over text once and calls found with each pattern ending at
 // each position: the pattern and the offset one past its end. Each pattern
-// reported costs one unit of *budget; past it the pass ends with
-// errBudget and the offset it had read to. The steps of the automaton are
-// not charged: there are at most two a byte. ctx is read every ctxEvery
-// bytes.
-func (m *matcher) scan(ctx context.Context, text []byte, budget *int64, found func(pat, end int)) (int, error) {
-	return m.scanRange(ctx, text, 0, len(text), budget, found)
+// reported costs one unit of *budget; past it the pass ends with ErrBudget
+// and the offset it had read to. The steps of the automaton are not
+// charged: there are at most two a byte. ctx is read every 64 KiB.
+func (m *Matcher) Scan(ctx context.Context, text []byte, budget *int64, found func(pat, end int)) (int, error) {
+	return m.ScanRange(ctx, text, 0, len(text), budget, found)
 }
 
-// scanRange is scan over text[:to] that reports, and charges, only the
+// ScanRange is Scan over text[:to] that reports, and charges, only the
 // patterns ending past from: the bytes before from are read for the state
 // of the automaton, as a window's overlap with the one before is, whose
 // matches that window reported.
-func (m *matcher) scanRange(ctx context.Context, text []byte, from, to int, budget *int64, found func(pat, end int)) (int, error) {
+func (m *Matcher) ScanRange(ctx context.Context, text []byte, from, to int, budget *int64, found func(pat, end int)) (int, error) {
 	cur := int32(0)
 	for i, b := range text[:to] {
 		if i%ctxEvery == 0 {
@@ -187,7 +212,7 @@ func (m *matcher) scanRange(ctx context.Context, text []byte, from, to int, budg
 			n = m.dict[n]
 		}
 		if *budget < 0 {
-			return i + 1, errBudget{}
+			return i + 1, ErrBudget{}
 		}
 	}
 	return to, nil

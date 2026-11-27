@@ -132,8 +132,9 @@ var UnroutedCauses = []string{"no_match", "route_unusable", "session_elsewhere",
 const UnroutedReceiverRemoved = "receiver_removed"
 
 // ResidualKinds are the kinds of value a residual_value record names: a
-// person's name, an identifier or any other text, a date, a UID.
-var ResidualKinds = []string{"name", "identifier", "date", "uid"}
+// person's name, an identifier or any other text, a date, a UID, a term of
+// one of the profile's text lists.
+var ResidualKinds = []string{"name", "identifier", "date", "uid", "list_term"}
 
 // The fault words a quarantine record's details carry under "fault", the API
 // contract's, each listed with the reasons that use it (the label conflict

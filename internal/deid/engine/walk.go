@@ -57,6 +57,14 @@ type run struct {
 	// patternWork is what the file's value patterns and redacts have
 	// spent of maxPatternWork.
 	patternWork int64
+	// listWork is what the file's redacts have spent searching for their
+	// lists' terms, of maxCleanWork.
+	listWork int64
+	// unnamedAt is where each element no rule named is in Record.Unnamed,
+	// by its key (noteUnnamed); creators are the file's private creators'
+	// numbers in a key (creatorID).
+	unnamedAt map[uint64]int
+	creators  map[string]uint16
 }
 
 // opKind is what an op does.
@@ -106,6 +114,8 @@ type op struct {
 	path    string
 	rule    string
 	charset charsetKind
+	// lists are a clean's text lists (Action.Lists).
+	lists uint32
 }
 
 // charsetKind is what character set governs a data set's text (PS3.5
@@ -296,6 +306,9 @@ func (r *run) element(ds *dataset.Dataset, t tag.Tag, elem *dataelem.DataElement
 	dec := r.en.dec.Decide(loc, r.facts)
 	if err := patternFailure(dec, unread, path, ruleLabel(dec)); err != nil {
 		return false, err
+	}
+	if dec.Rule < 0 {
+		r.noteUnnamed(uint32(t), creator, vr)
 	}
 	e := Entry{Path: path, Tag: uint32(t), VR: vr, Action: dec.Action.Kind.String(), Rule: dec.Rule, RuleName: dec.Name, Origin: dec.Origin, Reason: dec.Reason, PatternMatches: len(dec.PatternMatches)}
 	raw, _ := elementText(ds, t)

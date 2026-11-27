@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"unicode/utf8"
+
+	"github.com/amrshadid/nopacs/internal/deid/profile"
+	"github.com/amrshadid/nopacs/internal/deid/textmatch"
 )
 
 // window is the bytes of a stream (the raw bytes of the file, or the text
@@ -36,12 +39,12 @@ const readerBuffer = 64 << 10
 //
 // The work is the automaton's steps over each byte, once over the bytes of
 // a window and again over the overlap, plus a unit of *budget for each
-// pattern reported, as matcher.scan's; past the budget it returns
-// errBudget and how far into the stream it had read.
-func scanStream(ctx context.Context, m *matcher, r io.Reader, size int, buf []byte, budget *int64,
+// pattern reported, as textmatch.Matcher.Scan's; past the budget it returns
+// textmatch.ErrBudget and how far into the stream it had read.
+func scanStream(ctx context.Context, m *textmatch.Matcher, r io.Reader, size int, buf []byte, budget *int64,
 	prepare func(win []byte, fresh, from, to int, base int64), found func(win []byte, pat, start, end int, base int64),
 ) ([]byte, int64, error) {
-	keep := m.longest + edgeRoom
+	keep := m.Longest() + edgeRoom
 	if need := max(size, 1) + keep + edgeRoom; cap(buf) < need {
 		buf = make([]byte, 0, need)
 	}
@@ -69,8 +72,8 @@ func scanStream(ctx context.Context, m *matcher, r io.Reader, size int, buf []by
 		if prepare != nil {
 			prepare(buf, fresh, from, to, base)
 		}
-		at, err := m.scanRange(ctx, buf, from, to, budget, func(pat, end int) {
-			found(buf, pat, end-m.lens[pat], end, base)
+		at, err := m.ScanRange(ctx, buf, from, to, budget, func(pat, end int) {
+			found(buf, pat, end-m.Len(pat), end, base)
 		})
 		if err != nil {
 			return buf, base + int64(at), err
@@ -202,7 +205,7 @@ func foldInto(dst []byte, s []byte, space *bool) []byte {
 	for len(s) > 0 {
 		r, size := utf8.DecodeRune(s)
 		s = s[size:]
-		dst = foldRune(dst, r, space)
+		dst = profile.AppendFolded(dst, r, space)
 	}
 	return dst
 }

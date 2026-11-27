@@ -299,8 +299,9 @@ enum QuarantineReason {
   // still in it (or in a label made for it), so it was never archived.
   // Details: "path", the element it was found in as for
   // QUARANTINE_REASON_DEID_FAILED, and "kind", the kind of value found:
-  // "name", "date", "uid" or "text" (an identifier or any other text).
-  // Never the value. A release de-identifies the file again with its
+  // "name", "date", "uid" or "text" (an identifier or any other text), or
+  // "list_term" (a term of one of the profile's text lists). Never the
+  // value. A release de-identifies the file again with its
   // receiver's profile version then, so a profile changed to clean the
   // value lets it through.
   QUARANTINE_REASON_RESIDUAL_VALUE = 15;

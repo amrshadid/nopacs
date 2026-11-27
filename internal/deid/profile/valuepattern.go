@@ -187,15 +187,30 @@ func patternInNFC(a at, p string) bool {
 	return false
 }
 
-// checkRedact checks a redact action against its selector and compiles
-// its pattern for a search.
-func checkRedact(a at, r *v1.RedactAction, sel selector) *regexp.Regexp {
+// checkRedact checks a redact action against its selector, compiles its
+// pattern for a search, and returns the bits of the text lists it names.
+// The pattern may be empty only when it names a list.
+func checkRedact(a at, r *v1.RedactAction, sel selector) (*regexp.Regexp, uint32) {
 	a = a.in("redact")
 	fits(a, sel, valueVRs, "redact")
+	lists := checkListNames(a, r.GetLists())
+	re := checkRedactText(a, r, sel)
+	if replacementHoldsTerm(a.c.lists, a.c.lists.All(), r.GetReplacement()) {
+		a.in("replacement").add(CodeBadValue, "the replacement holds a term of one of the profile's lists: the check after searches every file for every term, so every file the rule changes would be held")
+		return nil, 0
+	}
+	return re, lists
+}
+
+// checkRedactText checks a redact's pattern and replacement and compiles
+// the pattern for a search; nil for no pattern, or one with a problem.
+func checkRedactText(a at, r *v1.RedactAction, sel selector) *regexp.Regexp {
 	pa := a.in("pattern")
 	var re *regexp.Regexp
 	if r.GetPattern() == "" {
-		pa.add(CodeRequired, "redact needs the pattern of what it cuts")
+		if len(r.GetLists()) == 0 {
+			pa.add(CodeRequired, "redact needs the pattern of what it cuts, or lists whose terms it cuts")
+		}
 	} else if !patternInNFC(pa, r.GetPattern()) {
 		re = nil
 	} else if re = compileSearch(pa, r.GetPattern()); re != nil && re.MatchString("") {

@@ -429,8 +429,10 @@ func (a *app) newProfileDiff() *cobra.Command {
 		Short: "Show what changes from one version to another",
 		Long: `Show what changes from the first version to the second (either may be of another
 profile; without @VERSION, the latest): the bases added and removed, the
-defaults, each rule added, removed or changed, and the effect: for each
-selector with its conditions, the action that wins before and after. Equal
+defaults, each rule added, removed or changed, each text list added, removed
+or changed (its version, number of terms and checksum on each side, never a
+term), and the effect: for each selector with its conditions, the action
+that wins before and after. Equal
 checksums treat every file alike, and no effect is listed. The effect is judged
 rule against rule; "profile try" over sample files shows it element by element.`,
 		Example: `  nopacs profile diff lab1 research@1 research@2
@@ -500,6 +502,28 @@ func (a *app) diffText(w io.Writer, res *v1.DiffProfileVersionsResponse) error {
 	}
 	if err := output.Details(w, a.style(), pairs); err != nil {
 		return err
+	}
+	if len(res.GetTextLists()) > 0 {
+		// A list is shown by its summaries on each side; its terms never.
+		side := func(s *v1.TextListSummary) string {
+			if s == nil {
+				return "-"
+			}
+			sum := s.GetSha256()[:min(12, len(s.GetSha256()))]
+			if sum == "" {
+				sum = "checksum withheld"
+			}
+			return "v" + strconv.Itoa(int(s.GetVersion())) + ", " + strconv.Itoa(int(s.GetTerms())) + " terms, " + sum
+		}
+		rows := [][]string{}
+		for _, l := range res.GetTextLists() {
+			change := strings.ToLower(strings.TrimPrefix(l.GetChange().String(), "PROFILE_CHANGE_"))
+			rows = append(rows, []string{change, output.Clean(l.GetName()), side(l.GetFrom()), side(l.GetTo())})
+		}
+		_, _ = fmt.Fprintln(w, "\nText lists (terms not shown):")
+		if err := output.Table(w, a.style(), []string{"CHANGE", "LIST", "FROM", "TO"}, rows); err != nil {
+			return err
+		}
 	}
 	if len(res.GetRules()) > 0 {
 		rows := [][]string{}

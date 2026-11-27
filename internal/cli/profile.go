@@ -121,6 +121,9 @@ func (a *app) versionDetails(w io.Writer, v *v1.ProfileVersion) error {
 		{Label: "Created by key", Value: output.Dash(v.GetCreatedByKeyId())},
 		{Label: "Note", Value: output.Dash(output.Clean(v.GetNote()))},
 	}
+	if v.GetTermsWithheld() {
+		pairs = append(pairs, output.Pair{Label: "List terms", Value: "withheld from this key"})
+	}
 	if d := v.GetDocument(); d != nil {
 		pairs = append(pairs,
 			output.Pair{Label: "Bases", Value: output.Dash(strings.Join(d.GetBases(), ", "))},
@@ -377,6 +380,11 @@ checksum. With --json the answer is the version, document included.`,
 			}
 			if a.opts.json {
 				return a.write(func(w io.Writer) error { return output.JSONMessage(w, res) })
+			}
+			if res.GetVersion().GetTermsWithheld() {
+				// A document without its lists' terms would expand to
+				// another version; the key may not read them.
+				return fault.New(fault.Denied, "the version's text lists' terms were withheld from this key, so its document cannot be exported; export it with a key that is not masked")
 			}
 			text, err := profile.FormatDocument(res.GetVersion().GetDocument())
 			if err != nil {

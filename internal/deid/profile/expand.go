@@ -79,6 +79,10 @@ func Expand(doc *v1.ProfileDocument, cat *Catalog) (*v1.ExpandedProfile, Problem
 		e.PixelRules = append(e.PixelRules, &v1.ExpandedPixelRule{Rule: clonePixelRule(p.norm)})
 	}
 	takeDefaults(e, doc)
+	for _, l := range doc.GetTextLists() {
+		c, _ := proto.Clone(l).(*v1.TextList)
+		e.TextLists = append(e.TextLists, c)
+	}
 	e.LanguageEdition = editionOf(e)
 	switch {
 	case len(e.Rules) > MaxExpandedRules:
@@ -102,21 +106,29 @@ func Expand(doc *v1.ProfileDocument, cat *Catalog) (*v1.ExpandedProfile, Problem
 // meaning of every edition it has shipped, so a stored version never
 // changes what it does when the language grows.
 //
-// Edition 2 adds value patterns and redact. A profile that uses neither,
-// its bases included, is written as edition 1, so its expanded text and
-// checksum are what they were before edition 2 existed, and a build of
-// edition 1 still runs it.
-const LanguageEdition = 2
+// Edition 2 adds value patterns and redact, edition 3 text lists. A
+// profile is written as the oldest edition that has everything it uses,
+// its bases included, so the expanded text and checksum of one that uses
+// nothing newer are what they were before the newer edition existed, and
+// an older build still runs it.
+const LanguageEdition = 3
 
 // editionOf returns the oldest language edition that has everything an
-// expanded profile's rules use.
+// expanded profile uses.
 func editionOf(e *v1.ExpandedProfile) int32 {
+	if len(e.GetTextLists()) > 0 {
+		return listEdition
+	}
+	ed := int32(1)
 	for _, er := range e.GetRules() {
+		if usesLists(er.GetRule()) {
+			return listEdition
+		}
 		if usesValuePatterns(er.GetRule()) {
-			return valuePatternEdition
+			ed = valuePatternEdition
 		}
 	}
-	return 1
+	return ed
 }
 
 // MaxVersionBytes is the bound of a version's document and expanded form

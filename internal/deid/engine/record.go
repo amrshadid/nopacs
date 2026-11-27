@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/amrshadid/go-dicom/anonymize"
+
+	"github.com/amrshadid/nopacs/internal/deid/profile"
 )
 
 // Cause is the fixed reason a file could not be de-identified. A program
@@ -192,6 +194,10 @@ const (
 	NeedleDate
 	// NeedleUID is a UID (VR UI).
 	NeedleUID
+	// NeedleList is every term of the profile's text lists (Needle.Lists):
+	// one needle in every file's record, whatever the file holds, so a
+	// term found again in any value holds the file. It has no Value.
+	NeedleList
 )
 
 // Needle is a value the profile removed or replaced that can identify
@@ -214,6 +220,10 @@ type Needle struct {
 	// values at its backslashes: a text a pattern took out of one value,
 	// in which a backslash is text (ST, LT, UT) or absent.
 	Whole bool
+	// Lists are the profile's text lists, for a needle of kind
+	// NeedleList; nil for any other. They are compiled once per profile
+	// version and shared by every file's record.
+	Lists *profile.TextLists
 }
 
 // Needles is the values a profile removed from a file. It holds patient
@@ -248,6 +258,13 @@ type Record struct {
 	// Written is the record of the de-identification the engine wrote at
 	// the data set's top level in this run, none of it read from the file.
 	Written Written
+	// Unnamed are the elements of the file no rule of the profile named,
+	// each once with its count, in the order they were first visited, at
+	// most MaxUnnamed (seen.go); no value.
+	Unnamed []Unnamed
+	// UnnamedOver counts the elements no rule named that were visited once
+	// Unnamed held MaxUnnamed distinct ones and were not among them.
+	UnnamedOver int
 }
 
 // Written is the record of the de-identification (PS3.15 E.1.1, E.3.6) an

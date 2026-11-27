@@ -299,3 +299,40 @@ func TestReceiverProfileFlags(t *testing.T) {
 		t.Errorf("both: %+v", res)
 	}
 }
+
+// TestProfileExportRefusesWithheldTerms guards export to a masked key: a
+// version whose text lists' terms the server withheld is refused with
+// exit 3 and writes no document, neither to standard output nor to --to,
+// since a document without its terms would expand to another version;
+// get shows the terms withheld and never a term; a version without lists
+// is still exported whole.
+func TestProfileExportRefusesWithheldTerms(t *testing.T) {
+	r := newRig(t)
+	r.must("tenant", "create", "lab1")
+	dir := t.TempDir()
+	lists := writeFile(t, dir, "lists.json", `{"bases": ["annex-e/basic:2026d"],
+  "textLists": [{"name": "staff", "version": 1, "terms": ["Zebulonquist Ann"]}],
+  "rules": [{"name": "clean-desc", "selector": {"keyword": "StudyDescription"}, "action": {"clean": {"lists": ["staff"]}}}]}`)
+	r.must("profile", "create", "lab1", "research", "--document", lists)
+	r.must("profile", "create", "lab1", "plain", "--document", writeFile(t, dir, "basic.json", basicJSON))
+	r.fake.SetCallerMasked(true)
+
+	export := r.run("profile", "export", "lab1", "research@1")
+	if export.code != 3 || export.stdout != "" || !strings.Contains(export.stderr, "withheld from this key") || strings.Contains(export.stderr, "Zebulonquist") {
+		t.Errorf("export of a version with withheld terms: %+v", export)
+	}
+	out := filepath.Join(dir, "out.json")
+	if res := r.run("profile", "export", "lab1", "research", "--to", out); res.code != 3 {
+		t.Errorf("export --to of a version with withheld terms: %+v", res)
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("export --to wrote a file: %v", err)
+	}
+	get := r.run("profile", "get", "lab1", "research@1")
+	if get.code != 0 || !strings.Contains(get.stdout, "withheld from this key") || strings.Contains(get.stdout, "Zebulonquist") {
+		t.Errorf("get of a version with withheld terms: %+v", get)
+	}
+	if res := r.run("profile", "export", "lab1", "plain"); res.code != 0 || !strings.Contains(res.stdout, "annex-e/basic:2026d") {
+		t.Errorf("export of a version without lists: %+v", res)
+	}
+}

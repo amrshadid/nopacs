@@ -2,8 +2,8 @@ package check
 
 import (
 	"context"
+	"slices"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/amrshadid/go-dicom/charset"
@@ -61,6 +61,10 @@ type formSet struct {
 	skipped int
 	// bytes is the bytes of the forms' folded texts together.
 	bytes int
+	// lists are the profile's text lists of the needles of kind
+	// engine.NeedleList, each once: their terms are searched for by their
+	// own automata, built once per profile version (lists.go).
+	lists []*profile.TextLists
 }
 
 // forms returns the distinct forms of needles, refusing more needles than
@@ -101,6 +105,12 @@ func (c *Checker) forms(needles engine.Needles) (formSet, error) {
 		set.forms = append(set.forms, form{text: text, folded: folded, kind: kind, mode: m, unspaced: un})
 	}
 	for _, n := range needles {
+		if n.Kind == engine.NeedleList {
+			if n.Lists.Matcher() != nil && !slices.Contains(set.lists, n.Lists) {
+				set.lists = append(set.lists, n.Lists)
+			}
+			continue
+		}
 		if len(n.Value) > c.opts.MaxNeedleBytes {
 			return formSet{}, &Refusal{Cause: CauseTooManyNeedles}
 		}
@@ -161,38 +171,19 @@ func modeOf(e engine.Edge, anyMode mode) mode {
 	return anyMode
 }
 
-// foldText returns s in NFC (profile.NFC: a letter written with combining
-// marks as its composed character) with every rune folded (engine.Fold:
-// case, and full-width ASCII) and every run of white space made one space,
-// so "MRN  778812" and "MRN 778812" are one text, and "Müller" is one text
-// however its "ü" was written. Bytes that are not UTF-8 become U+FFFD,
-// which no form holds. Forms and texts are folded alike.
-func foldText(s string) string {
-	space := false
-	return string(foldString(make([]byte, 0, len(s)), profile.NFC(s), &space))
-}
+// foldText returns s folded as profile.FoldText folds it: in NFC, every
+// rune folded (case, and full-width ASCII), every run of white space one
+// space. Bytes that are not UTF-8 become U+FFFD, which no form holds.
+// Forms, list terms and texts are folded alike.
+func foldText(s string) string { return profile.FoldText(s) }
 
 // foldString appends s, already in NFC, to dst folded as foldText folds
 // it; *space says whether what was appended before ended in white space.
 func foldString(dst []byte, s string, space *bool) []byte {
 	for _, r := range s {
-		dst = foldRune(dst, r, space)
+		dst = profile.AppendFolded(dst, r, space)
 	}
 	return dst
-}
-
-// foldRune appends r folded: one space for a run of white space, *space
-// saying whether the rune before was white space.
-func foldRune(dst []byte, r rune, space *bool) []byte {
-	if unicode.IsSpace(r) {
-		if !*space {
-			dst = append(dst, ' ')
-		}
-		*space = true
-		return dst
-	}
-	*space = false
-	return utf8.AppendRune(dst, engine.Fold(r))
 }
 
 // sourceEncodings returns the encodings of the character set a file was
@@ -296,7 +287,7 @@ func (e *encoder) encodeRuns(text string, only string) (out []byte, g0, ok bool,
 		if err != nil {
 			return false
 		}
-		b = stripEscapes(b)
+		b = profile.StripEscapes(b)
 		if !plainASCII([]byte(string(run))) && plainASCII(b) {
 			g0 = true
 		}
@@ -360,11 +351,13 @@ func (f form) encodings(e *encoder, minBytes int) ([]rawForm, error) {
 			out = append(out, rawForm{bytes: b, short: len(b) < minBytes, g0: g0})
 		}
 	}
+	// In UTF-8, the forms a list's term is searched for in too: one
+	// implementation of them (profile.RawForms).
+	for _, b := range profile.RawForms(f.text) {
+		put(b, false)
+	}
 	for _, v := range []string{strings.ToUpper(f.text), strings.ToLower(f.text), f.text} {
-		put([]byte(v), false)
-		put([]byte(profile.NFD(v)), false)
 		v = profile.NFC(v)
-		put([]byte(v), false)
 		alone := []string{""}
 		if len(e.source) > 1 {
 			alone = append(alone, e.source...)
@@ -380,30 +373,6 @@ func (f form) encodings(e *encoder, minBytes int) ([]rawForm, error) {
 		}
 	}
 	return out, nil
-}
-
-// stripEscapes removes ISO 2022 escape sequences (ECMA-35 13: ESC,
-// intermediate bytes 0x20-0x2F, a final byte 0x30-0x7E) from b, so the
-// bytes of a value written in a code extension match between the escapes
-// the file wrote around a longer run (PS3.5 6.1.2.5.3).
-func stripEscapes(b []byte) []byte {
-	out := b[:0:0]
-	for i := 0; i < len(b); i++ {
-		if b[i] != 0x1B {
-			out = append(out, b[i])
-			continue
-		}
-		j := i + 1
-		for j < len(b) && b[j] >= 0x20 && b[j] <= 0x2F {
-			j++
-		}
-		if j < len(b) && b[j] >= 0x30 && b[j] <= 0x7E {
-			i = j
-			continue
-		}
-		out = append(out, b[i])
-	}
-	return out
 }
 
 // upperASCII changes the ASCII lower-case letters of b to upper case, in

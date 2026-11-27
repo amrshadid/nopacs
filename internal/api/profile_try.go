@@ -273,7 +273,7 @@ func (s profileService) TryProfile(ctx context.Context, req *v1.TryProfileReques
 	if err != nil {
 		return nil, err
 	}
-	out, sum, object, err := c.tryProfile(ctx, req, pipe, st)
+	out, sum, object, err := c.tryProfile(ctx, req, pipe, st, d.Masked())
 	if err != nil {
 		var ps profile.Problems
 		var pe problemsErr
@@ -303,7 +303,7 @@ func (e problemsErr) Error() string { return e.err.Error() }
 
 // tryProfile does TryProfile's work once the tenant is in hand, and
 // returns the answer, its summary and the audit entry's object.
-func (c *core) tryProfile(ctx context.Context, req *v1.TryProfileRequest, pipe tenant.Pipeline, st tenant.Store) (*v1.TryProfileResponse, *trial.Summary, string, error) {
+func (c *core) tryProfile(ctx context.Context, req *v1.TryProfileRequest, pipe tenant.Pipeline, st tenant.Store, masked bool) (*v1.TryProfileResponse, *trial.Summary, string, error) {
 	p, err := profilesOf(st)
 	if err != nil {
 		return nil, nil, "", err
@@ -311,6 +311,9 @@ func (c *core) tryProfile(ctx context.Context, req *v1.TryProfileRequest, pipe t
 	target, ps, err := resolveTrial(ctx, p, req.GetProfile())
 	if err != nil {
 		return nil, nil, "", problemsErr{err, ps}
+	}
+	if err := maskedListsRefusal(masked, target); err != nil {
+		return nil, nil, "", err
 	}
 	if n := len(req.GetFiles()) + len(req.GetQuarantineRecords()); n == 0 || n > MaxTrialFiles {
 		return nil, nil, "", invalid("files", "with quarantine_records, 1 to "+strconv.Itoa(MaxTrialFiles)+" files are tried at once")
@@ -409,7 +412,7 @@ func (s profileService) ExplainProfile(ctx context.Context, req *v1.ExplainProfi
 	if err != nil {
 		return nil, err
 	}
-	out, object, err := c.explainProfile(ctx, req, pipe, st)
+	out, object, err := c.explainProfile(ctx, req, pipe, st, d.Masked())
 	if err != nil {
 		var ps profile.Problems
 		var pe problemsErr
@@ -425,7 +428,7 @@ func (s profileService) ExplainProfile(ctx context.Context, req *v1.ExplainProfi
 // explainProfile does ExplainProfile's work once the tenant is in hand.
 // The answer is bounded before it is returned, so a success is recorded
 // only for an answer that is sent.
-func (c *core) explainProfile(ctx context.Context, req *v1.ExplainProfileRequest, pipe tenant.Pipeline, st tenant.Store) (*v1.ExplainProfileResponse, string, error) {
+func (c *core) explainProfile(ctx context.Context, req *v1.ExplainProfileRequest, pipe tenant.Pipeline, st tenant.Store, masked bool) (*v1.ExplainProfileResponse, string, error) {
 	p, err := profilesOf(st)
 	if err != nil {
 		return nil, "", err
@@ -433,6 +436,9 @@ func (c *core) explainProfile(ctx context.Context, req *v1.ExplainProfileRequest
 	target, ps, err := resolveTrial(ctx, p, req.GetProfile())
 	if err != nil {
 		return nil, "", problemsErr{err, ps}
+	}
+	if err := maskedListsRefusal(masked, target); err != nil {
+		return nil, "", err
 	}
 	if (req.GetFile() == nil) == (req.GetQuarantineRecord() == "") {
 		return nil, "", invalid("file", "or quarantine_record: exactly one is given")

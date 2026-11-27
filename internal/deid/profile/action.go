@@ -47,11 +47,12 @@ var (
 // checkAction checks an action against what the selector says of the
 // elements it selects, and returns its normalized form, in which a
 // template's keywords are their tags, and for redact its pattern compiled
-// for a search.
-func checkAction(a at, act *v1.ProfileAction, sel selector) (*v1.ProfileAction, *regexp.Regexp) {
+// for a search; and the bits of the text lists a clean or redact names.
+func checkAction(a at, act *v1.ProfileAction, sel selector) (*v1.ProfileAction, *regexp.Regexp, uint32) {
 	a = a.in("action")
 	norm, _ := proto.Clone(act).(*v1.ProfileAction)
 	var redact *regexp.Regexp
+	var lists uint32
 	switch k := norm.GetKind().(type) {
 	case nil:
 		a.add(CodeRequired, "a rule needs an action")
@@ -76,11 +77,11 @@ func checkAction(a at, act *v1.ProfileAction, sel selector) (*v1.ProfileAction, 
 	case *v1.ProfileAction_Set:
 		if sel.tier != TierTag {
 			a.in("set").add(CodeActionSelector, "set makes an element where it is absent, so it needs one place: a tag or keyword selector")
-			return norm, nil
+			return norm, nil, 0
 		}
 		if len(sel.vrs) != 1 {
 			a.in("set").add(CodeActionVR, "set makes an element, so the data dictionary must give it one VR; %s has %q", formatTag(sel.tag), strings.Join(sel.vrs, " or "))
-			return norm, nil
+			return norm, nil, 0
 		}
 		if t, ok := checkValue(a.in("set"), sel, k.Set.GetConstant(), k.Set.GetTemplate(), k.Set.GetValue() != nil, isTemplate(k.Set.GetValue())); ok {
 			k.Set.Value = &v1.SetAction_Template{Template: t}
@@ -95,8 +96,9 @@ func checkAction(a at, act *v1.ProfileAction, sel selector) (*v1.ProfileAction, 
 		fits(a.in("generalize"), sel, coarseVRs, "generalize")
 	case *v1.ProfileAction_Clean:
 		fits(a.in("clean"), sel, cleanVRs, "clean")
+		lists = checkListNames(a.in("clean"), k.Clean.GetLists())
 	case *v1.ProfileAction_Redact:
-		redact = checkRedact(a, k.Redact, sel)
+		redact, lists = checkRedact(a, k.Redact, sel)
 	case *v1.ProfileAction_Lookup:
 		a := a.in("lookup")
 		fits(a, sel, textVRs, "lookup")
@@ -117,7 +119,7 @@ func checkAction(a at, act *v1.ProfileAction, sel selector) (*v1.ProfileAction, 
 	default:
 		a.add(CodeBadEnum, "an action this version does not know")
 	}
-	return norm, redact
+	return norm, redact, lists
 }
 
 // isTemplate reports whether a value choice is a template.
@@ -139,6 +141,10 @@ func checkValue(a at, sel selector, constant, template string, given, isTmpl boo
 	}
 	if isTmpl {
 		fieldA := a.in("template")
+		if replacementHoldsTerm(a.c.lists, a.c.lists.All(), template) {
+			fieldA.add(CodeBadValue, "the template's text holds a term of one of the profile's lists, so every file the rule writes it into would be held")
+			return "", false
+		}
 		if !fits(fieldA, sel, textVRs, "a template") {
 			return "", false
 		}
@@ -155,6 +161,11 @@ func checkValue(a at, sel selector, constant, template string, given, isTmpl boo
 		return norm, ok
 	}
 	fieldA := a.in("constant")
+	if replacementHoldsTerm(a.c.lists, a.c.lists.All(), constant) {
+		// The check after searches every file for every term of every list.
+		fieldA.add(CodeBadValue, "the constant holds a term of one of the profile's lists, so every file the rule writes it into would be held")
+		return "", false
+	}
 	if len(constant) > MaxValueLength {
 		fieldA.add(CodeTooLong, "a constant is at most %d bytes", MaxValueLength)
 		return "", false

@@ -161,7 +161,7 @@ func (r *run) act(c *target, a Action, vrs []string) (bool, error) {
 	case ActLookup:
 		return false, r.actLookup(c, a)
 	case ActClean:
-		return false, r.actClean(c)
+		return false, r.actClean(c, a)
 	case ActRedact:
 		return false, r.actRedact(c, a)
 	}
@@ -488,9 +488,10 @@ func (r *run) actLookup(c *target, a Action) error {
 	return r.write(c, code)
 }
 
-// actClean plans the removal of the file's identifying values from free
-// text, worked out once every needle of the file is known.
-func (r *run) actClean(c *target) error {
+// actClean plans the removal of the file's identifying values, and of the
+// terms of the rule's text lists (a.Lists), from free text, worked out
+// once every needle of the file is known.
+func (r *run) actClean(c *target, a Action) error {
 	if !slices.Contains(freeTextVRs, c.vr) {
 		return c.fail(CauseBadValue)
 	}
@@ -498,7 +499,7 @@ func (r *run) actClean(c *target) error {
 	if err != nil || len(v) > maxCleanValue || strings.IndexByte(v, esc) >= 0 {
 		return c.fail(CauseBadValue)
 	}
-	r.ops = append(r.ops, op{kind: opClean, ds: c.ds, tag: c.tag, text: v, entry: c.entry, path: c.path, rule: c.rule, vr: vrIfUN(c.elem, c.vr), charset: c.sc.charset})
+	r.ops = append(r.ops, op{kind: opClean, ds: c.ds, tag: c.tag, text: v, entry: c.entry, path: c.path, rule: c.rule, vr: vrIfUN(c.elem, c.vr), charset: c.sc.charset, lists: a.Lists})
 	return nil
 }
 

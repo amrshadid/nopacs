@@ -134,6 +134,11 @@ type Options struct {
 	// (0012,0063) after the meanings of the Annex E codes: the profile and
 	// version that made the file, as the caller names them. At most 64 characters of the default repertoire.
 	Method string
+	// OneOff is set for an Engine used once, for a trial or a description:
+	// the profile's text lists are built for it and dropped with it, never
+	// kept in the cache stored versions' engines share
+	// (profile.CompileOneOff).
+	OneOff bool
 }
 
 // errNoDataset is Apply or Explain given no data set.
@@ -168,7 +173,10 @@ type Engine struct {
 	// pixels decides the pixel rules; nil for an Engine over a Decider
 	// of a test, which matches none.
 	pixels pixelRules
-	seams  engineSeams
+	// lists are the profile's text lists, nil when it has none: a needle of
+	// them is in every file's record, for the check after.
+	lists *profile.TextLists
+	seams engineSeams
 }
 
 // engineSeams are the points a test of this package reaches into an
@@ -183,7 +191,7 @@ type engineSeams struct {
 // or equal to one another, and a method that is not an LO value of the
 // default repertoire.
 func New(e *v1.ExpandedProfile, keys Keys, opts Options) (*Engine, error) {
-	dec, err := newProgramDecider(e)
+	dec, err := newProgramDecider(e, opts.OneOff)
 	if err != nil {
 		return nil, err
 	}
@@ -202,6 +210,11 @@ func New(e *v1.ExpandedProfile, keys Keys, opts Options) (*Engine, error) {
 		return nil, err
 	}
 	en.pixels = programPixels{dec.prog}
+	// The version's text lists: every term is searched for by the check
+	// after, through a needle of kind NeedleList in each file's record.
+	if l := dec.prog.TextLists(); l.Len() > 0 {
+		en.lists = l
+	}
 	weakened, err := profile.KeepsBaseChange(e)
 	if err != nil {
 		return nil, err
@@ -355,6 +368,7 @@ func (en *Engine) apply(ctx context.Context, ds *dataset.Dataset, rec Reception,
 	if err := r.finishCleans(); err != nil {
 		return nil, err
 	}
+	r.hideCreators()
 	if locs == nil {
 		// An explanation judges elements, never pixels.
 		if err := r.planPixels(img); err != nil {
@@ -369,6 +383,9 @@ func (en *Engine) apply(ctx context.Context, ds *dataset.Dataset, rec Reception,
 	}
 	if err := r.planMethod(); err != nil {
 		return nil, err
+	}
+	if en.lists != nil {
+		r.record.Needles = append(r.record.Needles, Needle{Kind: NeedleList, Lists: en.lists})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

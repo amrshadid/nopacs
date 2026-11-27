@@ -92,6 +92,9 @@ type Action struct {
 	Pattern     *regexp.Regexp
 	Replacement string
 	PatternCost int64
+	// Lists are the bits of the text lists (profile.TextLists.Mask)
+	// ActClean and ActRedact also remove the terms of; zero for none.
+	Lists uint32
 }
 
 // Decision is what a profile does to one element.
@@ -164,8 +167,12 @@ type programDecider struct {
 // newProgramDecider compiles an expanded profile into a Decider. A set
 // rule must carry exactly one VR, the one its element is made with, as
 // validation stores it.
-func newProgramDecider(e *v1.ExpandedProfile) (*programDecider, error) {
-	prog, err := profile.Compile(e)
+func newProgramDecider(e *v1.ExpandedProfile, oneOff bool) (*programDecider, error) {
+	compile := profile.Compile
+	if oneOff {
+		compile = profile.CompileOneOff
+	}
+	prog, err := compile(e)
 	if err != nil {
 		return nil, err
 	}
@@ -206,13 +213,17 @@ func (d *programDecider) Decide(loc profile.Location, f profile.Facts) Decision 
 	pd := d.prog.Decide(loc, f)
 	out := Decision{Rule: pd.Index, Action: toAction(pd.Action), VRs: pd.VRs, PatternMatches: pd.PatternMatches, PatternOver: pd.PatternOver, PatternUnread: pd.PatternUnread}
 	if out.Action.Kind == ActRedact {
-		if pd.Redact == nil {
-			// A redact whose pattern did not compile cannot cut; the file
-			// is refused rather than kept as it is.
+		if pd.Redact == nil && pd.Lists == 0 {
+			// A redact whose pattern did not compile, and that names no
+			// list, cannot cut; the file is refused rather than kept as it
+			// is.
 			out.Action = Action{Kind: ActQuarantine}
 		}
 		out.Action.Pattern = pd.Redact
 		out.Action.PatternCost = d.redactCost[pd.Index]
+	}
+	if out.Action.Kind == ActClean || out.Action.Kind == ActRedact {
+		out.Action.Lists = pd.Lists
 	}
 	if pd.Rule == nil {
 		switch {

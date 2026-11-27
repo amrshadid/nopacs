@@ -19,17 +19,20 @@ import (
 
 // describeDoc is the JSON document of "profile describe": the version or
 // document's checksum, its expanded rules and warnings, and the
-// description (classes, notes and the method record) as the API answers
-// them.
+// description (classes, notes, the method record and the text lists'
+// summaries) as the API answers them. The expanded form is given without
+// its text lists, whose terms a description never prints: textLists holds
+// each list's name, version, count of terms and checksum.
 type describeDoc struct {
-	Name     string          `json:"name,omitempty"`
-	Version  int32           `json:"version,omitempty"`
-	Checksum string          `json:"checksum"`
-	Expanded json.RawMessage `json:"expanded"`
-	Warnings json.RawMessage `json:"warnings"`
-	Classes  json.RawMessage `json:"classes"`
-	Notes    json.RawMessage `json:"notes"`
-	Method   json.RawMessage `json:"method"`
+	Name      string          `json:"name,omitempty"`
+	Version   int32           `json:"version,omitempty"`
+	Checksum  string          `json:"checksum"`
+	Expanded  json.RawMessage `json:"expanded"`
+	Warnings  json.RawMessage `json:"warnings"`
+	Classes   json.RawMessage `json:"classes"`
+	Notes     json.RawMessage `json:"notes"`
+	Method    json.RawMessage `json:"method"`
+	TextLists json.RawMessage `json:"textLists"`
 }
 
 // classWords names a class of element for a person.
@@ -88,6 +91,19 @@ func (a *app) describeText(w io.Writer, d *v1.DescribeProfileResponse) error {
 	}
 	for _, n := range d.GetNotes() {
 		_, _ = fmt.Fprintf(w, "  - %s\n", n)
+	}
+	if lists := d.GetTextLists(); len(lists) > 0 {
+		// A list is named by its summary; its terms are never printed.
+		_, _ = fmt.Fprintln(w, "\nText lists (terms not shown):")
+		for _, l := range lists {
+			sum := ", sha256 " + l.GetSha256()
+			if l.GetSha256() == "" {
+				// Not answered to a masked key (an unkeyed checksum of a
+				// short list gives its terms away to guesses).
+				sum = ", checksum withheld"
+			}
+			_, _ = fmt.Fprintf(w, "  list %s v%d: %d terms%s\n", output.Clean(l.GetName()), l.GetVersion(), l.GetTerms(), sum)
+		}
 	}
 	m := d.GetMethod()
 	_, _ = fmt.Fprintln(w, "\nMethod, for a Conformance Statement (PS3.15 E.1.1):")
@@ -148,6 +164,9 @@ terms a DICOM Conformance Statement needs (PS3.15 E.3.5, E.3.6, E.3.10):
   - what holds for the whole profile: the default for an element no rule
     names, the date shift, what is never kept whatever the rules say, and
     the search of every file after;
+  - each text list: its name, version, number of terms and the SHA-256 of
+    its folded terms, never a term (with --json, "textLists"; the expanded
+    form is given without its lists);
   - the record every file it makes carries: the PS3.16 CID 7050 codes in
     De-identification Method Code Sequence (0012,0064) with their meanings,
     the text the server writes in De-identification Method (0012,0063),
@@ -211,7 +230,14 @@ decision for each element of a file. With --json, all of it as one document.`,
 				return a.withProblems(err)
 			}
 			if a.opts.json {
-				if doc.Expanded, err = protoJSON(expanded, ""); err != nil {
+				// The terms of the text lists are never printed by a
+				// description; their summaries are.
+				shown, _ := proto.Clone(expanded).(*v1.ExpandedProfile)
+				shown.TextLists = nil
+				if doc.Expanded, err = protoJSON(shown, ""); err != nil {
+					return err
+				}
+				if doc.TextLists, err = protoJSON(desc, "textLists"); err != nil {
 					return err
 				}
 				if doc.Warnings, err = protoJSON(&v1.ProfileProblems{Problems: warnings}, "problems"); err != nil {

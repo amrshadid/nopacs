@@ -42,7 +42,9 @@ func ForReception(e *v1.ExpandedProfile) error {
 			return fmt.Errorf("engine: the profile is built on %s, and this build runs the Annex E bases of edition %s only", b, profile.AnnexEEdition)
 		}
 	}
-	dec, err := newProgramDecider(e)
+	// A check of a version before a receiver points at it: its lists are
+	// not kept for it.
+	dec, err := newProgramDecider(e, true)
 	if err != nil {
 		return err
 	}

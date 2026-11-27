@@ -31,8 +31,12 @@ const maxNamed = 5
 // element against its block, or a group or VR that includes private
 // elements. Where neither selector names the elements (a group against a
 // VR), no warning is given.
+//
+// The profile is compiled for this once: a document validated is not yet
+// a stored version, and its lists never enter the cache stored versions
+// share.
 func Warnings(e *v1.ExpandedProfile) (Problems, error) {
-	p, err := Compile(e)
+	p, err := CompileOneOff(e)
 	if err != nil {
 		return nil, err
 	}

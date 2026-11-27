@@ -425,6 +425,28 @@ const (
 	MaxDeidMemory = 64 << 30
 )
 
+// The bounds of deid.list-cache-bytes.
+const (
+	// MinListCacheBytes is the smallest: one version's lists at their
+	// largest fit in it.
+	MinListCacheBytes = 64 << 20
+	// MaxListCacheBytes is the largest.
+	MaxListCacheBytes = 16 << 30
+)
+
+// ParseListCacheBytes reads deid.list-cache-bytes: a size (ParseSize)
+// from MinListCacheBytes to MaxListCacheBytes.
+func ParseListCacheBytes(v string) (int64, error) {
+	n, err := ParseSize(v)
+	if err != nil {
+		return 0, err
+	}
+	if n < MinListCacheBytes || n > MaxListCacheBytes {
+		return 0, errors.New("is a size from 64MiB to 16GiB")
+	}
+	return n, nil
+}
+
 // ParseDeidMemory reads deid.memory: a size (ParseSize) from MinDeidMemory
 // to MaxDeidMemory.
 func ParseDeidMemory(v string) (int64, error) {

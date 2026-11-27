@@ -42,8 +42,9 @@ func TestExpandedFormStoresWhatValidationDecided(t *testing.T) {
 		t.Errorf("a lookup's default is %v in the expanded form", got)
 	}
 	// A document that uses nothing of a later edition is written as
-	// edition 1, as it was before any later edition existed.
-	if e.GetLanguageEdition() != 1 || profile.LanguageEdition != 2 {
+	// edition 1, as it was before any later edition existed; this build
+	// writes edition 3, which adds text lists.
+	if e.GetLanguageEdition() != 1 || profile.LanguageEdition != 3 {
 		t.Errorf("language edition %d", e.GetLanguageEdition())
 	}
 	p, err := profile.Compile(e)

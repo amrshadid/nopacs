@@ -38,7 +38,7 @@ const (
 	// beside the window: the reader's buffers, folded.
 	streamRoom = 160 << 10
 	// automatonBytes is the memory of an automaton a byte of its patterns
-	// at most (a node a byte): 19 bytes a node (matcher), in slices that
+	// at most (a node a byte): 19 bytes a node (textmatch.Matcher), in slices that
 	// grow by doubling and so hold up to three times that while one is
 	// copied, and the patterns and their index beside it.
 	automatonBytes = 64
@@ -80,8 +80,9 @@ func (c *Checker) formBytes(set formSet, rawBytes int) int64 {
 // is largestText bytes as written, for needles, the file received in
 // characterSet: a window of its raw bytes, the reader's buffer, a value of
 // unknown kind read whole or as a stream, the longest text decoded
-// (textSpread) textCopies times, and the automata of the needles' forms,
-// written as the check writes them. A caller that takes the check's memory
+// (textSpread) textCopies times, the automata of the needles' forms,
+// written as the check writes them, and those its text lists are searched
+// with (listsBytes). A caller that takes the check's memory
 // itself, for a file it holds, takes this. Needles the check would refuse,
 // or whose forms pass its budget, count nothing: the check refuses them
 // before it holds anything. ctx is read as the forms are written.
@@ -98,10 +99,10 @@ func Reservation(ctx context.Context, size, largestText int64, needles engine.Ne
 	}
 	quiet := config.WithLogger(ctx, slog.New(slog.DiscardHandler))
 	s := newSearcher(ctx, quiet, nil, set, sourceEncodings(characterSet), c.opts, nil, seams{})
-	if s.encodeRaw() != nil {
+	if s.encodeRaw() != nil || s.prepareLists() != nil {
 		return n
 	}
-	return n + int64(s.rawLongest+2*edgeRoom) + c.formBytes(set, s.rawBytes)
+	return n + int64(s.rawLongest+2*edgeRoom) + c.formBytes(set, s.rawBytes) + s.listsBytes()
 }
 
 // Memory is a bound on the bytes the server's de-identification work holds

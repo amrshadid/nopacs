@@ -169,6 +169,11 @@ func (s profileService) CreateProfileVersion(ctx context.Context, req *v1.Create
 	if req.GetDocument() == nil {
 		return nil, c.failIn(d, st, invalid("document", "is required"))
 	}
+	if d.Masked() && len(req.GetDocument().GetTextLists()) > 0 {
+		// The answer for a document equal to a stored version would
+		// confirm that version's terms (profile_lists.go).
+		return nil, c.failIn(d, st, maskedListsError())
+	}
 	if req.ExpectedLatestVersion != nil && req.GetExpectedLatestVersion() < 0 {
 		return nil, c.failIn(d, st, invalid("expected_latest_version", "is 0 or more"))
 	}
@@ -198,6 +203,9 @@ func (s profileService) CreateProfileVersion(ctx context.Context, req *v1.Create
 	msg, err := versionMessage(stored, full)
 	if err != nil {
 		return nil, c.toAPI(d, err)
+	}
+	if d.Masked() {
+		withholdLists(msg, versionHasLists(stored))
 	}
 	return &v1.CreateProfileVersionResponse{
 		Version: msg, Created: created, Warnings: problemsProto(warnings),
@@ -234,6 +242,9 @@ func (s profileService) GetProfileVersion(ctx context.Context, req *v1.GetProfil
 	msg, err := versionMessage(v, full)
 	if err != nil {
 		return nil, c.failIn(d, st, err)
+	}
+	if d.Masked() {
+		withholdLists(msg, versionHasLists(v))
 	}
 	c.done(d, st)
 	return &v1.GetProfileVersionResponse{Version: msg}, nil
@@ -293,13 +304,22 @@ func (s profileService) ListProfileVersions(ctx context.Context, req *v1.ListPro
 	if err != nil {
 		return nil, c.failIn(d, st, listError(err, page.Cursor))
 	}
-	c.done(d, st)
 	out := &v1.ListProfileVersionsResponse{Versions: make([]*v1.ProfileVersion, 0, len(items)), NextPageToken: next}
 	for _, it := range items {
 		it.Source, it.Expanded = nil, nil
 		msg, _ := versionMessage(it, false)
+		if d.Masked() {
+			// A list's rows hold no texts: each version is read to know
+			// whether its checksum covers list terms.
+			full, err := readVersion(ctx, p, it.Name, it.Version)
+			if err != nil {
+				return nil, c.failIn(d, st, err)
+			}
+			withholdLists(msg, versionHasLists(full))
+		}
 		out.Versions = append(out.Versions, msg)
 	}
+	c.done(d, st)
 	return out, nil
 }
 

@@ -186,6 +186,21 @@ func TestParseDeidMemory(t *testing.T) {
 	}
 }
 
+// TestParseListCacheBytes guards deid.list-cache-bytes: a size from 64 MiB
+// to 16 GiB, nothing else.
+func TestParseListCacheBytes(t *testing.T) {
+	for v, want := range map[string]int64{"64MiB": 64 << 20, "256MiB": 256 << 20, "16GiB": 16 << 30} {
+		if got, err := ParseListCacheBytes(v); err != nil || got != want {
+			t.Errorf("%q: %d, %v; want %d", v, got, err, want)
+		}
+	}
+	for _, v := range []string{"", "0", "63MiB", "17GiB", "256MB", "-1GiB"} {
+		if _, err := ParseListCacheBytes(v); err == nil {
+			t.Errorf("%q: accepted", v)
+		}
+	}
+}
+
 // TestParseReserve guards storage.reserve: one or two terms, one of each
 // kind, and that the larger applies.
 func TestParseReserve(t *testing.T) {

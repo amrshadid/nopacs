@@ -77,7 +77,7 @@ func TestCleanJudgesACombiningMarkInNFC(t *testing.T) {
 // composed cuts the name a value writes with a combining mark, the text
 // cut is the composed name, and what is left is in NFC.
 func TestRedactCutsDecomposedText(t *testing.T) {
-	got, cuts, count, cause := redactValue(compileSearch(t, mullerNFC), "", "LO", "Dr "+mullerNFD+" Jörg", func(int) bool { return true })
+	got, cuts, count, cause := redactValue(compileSearch(t, mullerNFC), "", "LO", "Dr "+mullerNFD+" Jörg", func(int) bool { return true }, nil)
 	if cause != "" || got != "Dr  Jörg" || !slices.Equal(cuts, []string{mullerNFC}) || count != 1 {
 		t.Errorf("got %q, cuts %q (%d), cause %q", got, cuts, count, cause)
 	}

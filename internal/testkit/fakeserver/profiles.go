@@ -88,11 +88,34 @@ func (s *Server) version(tenant, name string, n int32) (*v1.ProfileVersion, erro
 	return vs[n-1], nil
 }
 
-// shown returns a version as an answer carries it with the view.
-func shown(v *v1.ProfileVersion, view v1.ProfileView, withDocument bool) *v1.ProfileVersion {
+// messageMaskedLists is the real server's refusal of a masked key's
+// request that would tell it a text list's terms.
+const messageMaskedLists = "a masked key is never answered a profile's text list terms, nor what confirms a guess of them: a version with lists may not be stored, tried or explained with it; use a key that is not masked"
+
+// SetCallerMasked makes every caller from now on a masked key, as one made
+// for an outside model, or not: a profile version with text lists is
+// answered to it without its terms, its expanded form and its checksum,
+// marked as withheld, and storing a document with lists is refused, as the
+// real server answers such a key.
+func (s *Server) SetCallerMasked(masked bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.masked = masked
+}
+
+// shown returns a version as an answer carries it with the view, to the
+// caller: a masked one is answered a version with lists without its
+// terms, its expanded form and its checksum. The caller holds s.mu.
+func (s *Server) shown(v *v1.ProfileVersion, view v1.ProfileView, withDocument bool) *v1.ProfileVersion {
 	out := proto.Clone(v).(*v1.ProfileVersion)
 	if view != v1.ProfileView_PROFILE_VIEW_FULL {
 		out.Expanded = nil
+	}
+	if s.masked && len(v.GetDocument().GetTextLists()) > 0 {
+		for _, l := range out.GetDocument().GetTextLists() {
+			l.Terms = nil
+		}
+		out.Expanded, out.Checksum, out.TermsWithheld = nil, "", true
 	}
 	if !withDocument {
 		out.Document, out.Expanded = nil, nil
@@ -109,6 +132,9 @@ func (h profileHandler) CreateProfileVersion(_ context.Context, req *v1.CreatePr
 		return nil, err
 	}
 	s.prof.ensure()
+	if s.masked && len(req.GetDocument().GetTextLists()) > 0 {
+		return nil, fault.New(fault.Denied, messageMaskedLists)
+	}
 	if !profile.ValidName(req.GetName()) {
 		return nil, fault.New(fault.Invalid, "name: is 1 to 63 of a-z, 0-9 and -, starting with a letter")
 	}
@@ -123,7 +149,7 @@ func (h profileHandler) CreateProfileVersion(_ context.Context, req *v1.CreatePr
 	k := key(req.GetTenant(), req.GetName())
 	vs := s.prof.versions[k]
 	if n := len(vs); n > 0 && vs[n-1].GetChecksum() == v.Checksum() && proto.Equal(vs[n-1].GetDocument(), v.Document()) {
-		return &v1.CreateProfileVersionResponse{Version: shown(vs[n-1], req.GetView(), true)}, nil
+		return &v1.CreateProfileVersionResponse{Version: s.shown(vs[n-1], req.GetView(), true)}, nil
 	}
 	if req.ExpectedLatestVersion != nil && int(req.GetExpectedLatestVersion()) != len(vs) {
 		return nil, fault.New(fault.Precondition, "the profile's latest version is not the one expected")
@@ -131,7 +157,7 @@ func (h profileHandler) CreateProfileVersion(_ context.Context, req *v1.CreatePr
 	stored := &v1.ProfileVersion{Name: req.GetName(), Version: int32(len(vs) + 1), Checksum: v.Checksum(), Note: req.GetNote(), //nolint:gosec // G115: a fake's few versions.
 		CreateTime: timestamppb.New(s.now()), Document: v.Document(), Expanded: v.Expanded()}
 	s.prof.versions[k] = append(vs, stored)
-	return &v1.CreateProfileVersionResponse{Version: shown(stored, req.GetView(), true), Created: true}, nil
+	return &v1.CreateProfileVersionResponse{Version: s.shown(stored, req.GetView(), true), Created: true}, nil
 }
 
 // GetProfileVersion answers one version.
@@ -147,7 +173,7 @@ func (h profileHandler) GetProfileVersion(_ context.Context, req *v1.GetProfileV
 	if err != nil {
 		return nil, err
 	}
-	return &v1.GetProfileVersionResponse{Version: shown(v, req.GetView(), true)}, nil
+	return &v1.GetProfileVersionResponse{Version: s.shown(v, req.GetView(), true)}, nil
 }
 
 // ListProfiles answers the tenant's profiles by name.
@@ -189,7 +215,7 @@ func (h profileHandler) ListProfileVersions(_ context.Context, req *v1.ListProfi
 	}
 	out := &v1.ListProfileVersionsResponse{}
 	for i := len(vs) - 1; i >= 0; i-- {
-		out.Versions = append(out.Versions, shown(vs[i], 0, false))
+		out.Versions = append(out.Versions, s.shown(vs[i], 0, false))
 	}
 	return out, nil
 }
@@ -275,7 +301,7 @@ func (h profileHandler) DiffProfileVersions(_ context.Context, req *v1.DiffProfi
 		return nil, err
 	}
 	out := profile.Diff(from.GetExpanded(), to.GetExpanded())
-	out.From, out.To = shown(from, 0, false), shown(to, 0, false)
+	out.From, out.To = s.shown(from, 0, false), s.shown(to, 0, false)
 	return out, nil
 }
 
@@ -311,7 +337,10 @@ func (h profileHandler) DescribeProfile(_ context.Context, req *v1.DescribeProfi
 		if err != nil {
 			return nil, err
 		}
-		e, out.Version, out.Checksum = v.GetExpanded(), shown(v, 0, false), v.GetChecksum()
+		e, out.Version, out.Checksum = v.GetExpanded(), s.shown(v, 0, false), v.GetChecksum()
+		if out.GetVersion().GetTermsWithheld() {
+			out.Checksum = ""
+		}
 		method = v.GetName() + "@" + strconv.Itoa(int(v.GetVersion()))
 	case *v1.TrialProfile_Document:
 		var ps profile.Problems
@@ -323,7 +352,7 @@ func (h profileHandler) DescribeProfile(_ context.Context, req *v1.DescribeProfi
 	default:
 		return nil, fault.New(fault.Invalid, "profile: is required: a stored version or a document")
 	}
-	out.Classes, out.Notes = profile.Describe(e), profile.DescribeNotes(e)
+	out.Classes, out.Notes, out.TextLists = profile.Describe(e), profile.DescribeNotes(e), profile.DescribeTextLists(e)
 	out.Method = &v1.ProfileMethod{IdentityRemoved: "YES"}
 	for _, c := range profile.MethodCodes(e.GetBases()) {
 		out.Method.Codes = append(out.Method.Codes, &v1.MethodCode{Value: c.Value, Scheme: "DCM", Meaning: c.Meaning})

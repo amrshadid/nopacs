@@ -37,8 +37,9 @@ func codeOf(attribute, value string) func(clients) outcome {
 // receiveWithTenantKey makes lab1's receiver archive files, its labels
 // made with the tenant's own naming key and its files de-identified with
 // the tenant's own keys, as a server's reception makes them, and waits
-// until the catalog holds them.
-func receiveWithTenantKey(t *testing.T, f *placeFixture, receiver string, files ...[]byte) {
+// until the catalog holds them. It returns the running pipeline and its
+// wait, for a test that sends more.
+func receiveWithTenantKey(t *testing.T, f *placeFixture, receiver string, files ...[]byte) (*receive.Pipeline, *settle) {
 	t.Helper()
 	store, err := dir.Open(filepath.Join(f.root, "lab1", "mri"))
 	if err != nil {
@@ -72,6 +73,7 @@ func receiveWithTenantKey(t *testing.T, f *placeFixture, receiver string, files 
 		}
 	}
 	wait.await(t, pipe, p, len(files))
+	return pipe, wait
 }
 
 // testCode guards the forward lookup: admin on the tenant only; an

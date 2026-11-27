@@ -46,6 +46,8 @@ type rule struct {
 	action *v1.ProfileAction
 	// redact is a redact action's pattern, compiled for a search.
 	redact *regexp.Regexp
+	// lists are the bits of the text lists a clean or redact names.
+	lists  uint32
 	norm   *v1.ProfileRule
 	origin string
 	// cost is the compiled size of its patterns: its conditions', its
@@ -79,6 +81,7 @@ func checkDocument(c *checker, doc *v1.ProfileDocument) ([]rule, []pixelRule) {
 	if _, known := v1.UnsearchedSegments_name[int32(doc.GetUnsearchedSegments())]; !known {
 		top.in("unsearchedSegments").add(CodeBadEnum, "%d is not a value of UnsearchedSegments", doc.GetUnsearchedSegments())
 	}
+	useLists(c, top, doc.GetTextLists())
 	var rules []rule
 	if len(doc.GetRules()) > MaxRules {
 		top.in("rules").add(CodeTooMany, "a document has at most %d rules", MaxRules)
@@ -136,8 +139,9 @@ func checkRule(a at, r *v1.ProfileRule, names map[string]int) (rule, bool) {
 	when := parseConditions(a, "when", r.GetWhen())
 	var action *v1.ProfileAction
 	var redact *regexp.Regexp
+	var lists uint32
 	if ok {
-		action, redact = checkAction(a, r.GetAction(), sel)
+		action, redact, lists = checkAction(a, r.GetAction(), sel)
 	} else if r.GetAction().GetKind() == nil {
 		a.in("action").add(CodeRequired, "a rule needs an action")
 	}
@@ -147,7 +151,7 @@ func checkRule(a at, r *v1.ProfileRule, names map[string]int) (rule, bool) {
 	norm, _ := proto.Clone(r).(*v1.ProfileRule)
 	norm.Selector = normSel
 	norm.Action = action
-	return rule{sel: sel, when: when, action: action, redact: redact, norm: norm, cost: a.c.cost - costBefore}, true
+	return rule{sel: sel, when: when, action: action, redact: redact, lists: lists, norm: norm, cost: a.c.cost - costBefore}, true
 }
 
 // checkPixelRule checks and compiles one pixel rule.

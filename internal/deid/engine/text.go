@@ -10,6 +10,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/core/naming"
 	"github.com/amrshadid/nopacs/internal/deid/profile"
+	"github.com/amrshadid/nopacs/internal/deid/textmatch"
 )
 
 // hashValue is the keyed hash of a value as the naming rule's {#...}
@@ -138,7 +139,7 @@ func cleanTerms(needles []Needle) ([]cleanTerm, bool) {
 		}
 		runes := foldString(v)
 		key := string(runes)
-		if seen[key] {
+		if len(runes) == 0 || seen[key] {
 			return
 		}
 		t := cleanTerm{runes: runes, word: edge == EdgeWord, partial: edge == EdgeDate, digits: edge == EdgeDigits,
@@ -156,6 +157,9 @@ func cleanTerms(needles []Needle) ([]cleanTerm, bool) {
 	}
 	for _, n := range needles {
 		switch n.Kind {
+		case NeedleList:
+			// The lists' terms are cut by their own automaton
+			// (cleaner.cleanWith), where a rule names them.
 		case NeedleDate:
 			forms, partial := DateForms(n.Value)
 			if !partial {
@@ -183,13 +187,16 @@ func cleanTerms(needles []Needle) ([]cleanTerm, bool) {
 
 // foldString returns the runes of s in NFC (profile.NFC), each folded
 // (Fold), so a term written with combining marks is the term written
-// composed.
+// composed, without its ignorable code points (profile.Ignorable).
 func foldString(s string) []rune {
 	runes := []rune(profile.NFC(s))
-	for i, r := range runes {
-		runes[i] = Fold(r)
+	out := runes[:0]
+	for _, r := range runes {
+		if !profile.Ignorable(r) {
+			out = append(out, Fold(r))
+		}
 	}
-	return runes
+	return out
 }
 
 // cleaner removes a file's terms from its free text, within a budget of
@@ -200,11 +207,17 @@ type cleaner struct {
 	// searching one character of text for all of them, at most.
 	weight int
 	budget int
+	// listBudget is the work left for the lists' terms: a unit for each
+	// character searched and each term found ending there
+	// (profile.TextLists.Find), whatever the number of terms, since one
+	// automaton searches for them all.
+	listBudget int64
 }
 
-// newCleaner returns a cleaner of terms with a budget of work.
+// newCleaner returns a cleaner of terms with a budget of work, for the
+// file's needles and for the lists' terms each.
 func newCleaner(terms []cleanTerm, budget int) *cleaner {
-	c := &cleaner{terms: terms, budget: budget}
+	c := &cleaner{terms: terms, budget: budget, listBudget: int64(budget)}
 	for _, t := range terms {
 		c.weight += len(t.runes)
 	}
@@ -230,7 +243,17 @@ func (c *cleaner) affords(n int) bool {
 // from which something is removed is returned in NFC, one from which
 // nothing is removed as it came.
 func (c *cleaner) clean(ctx context.Context, s string) (string, error) {
-	if len(c.terms) == 0 {
+	return c.cleanWith(ctx, s, nil, 0)
+}
+
+// cleanWith is clean that also removes the terms of the lists in mask
+// wherever they stand as words (profile.TermStands), in the same passes,
+// so a cut of one can never leave the other joined whole.
+func (c *cleaner) cleanWith(ctx context.Context, s string, lists *profile.TextLists, mask uint32) (string, error) {
+	if lists == nil {
+		mask = 0
+	}
+	if len(c.terms) == 0 && mask == 0 {
 		return s, nil
 	}
 	runes := []rune(profile.NFC(s))
@@ -243,12 +266,37 @@ func (c *cleaner) clean(ctx context.Context, s string) (string, error) {
 			return "", errCleanTooLarge
 		}
 		c.budget -= len(runes) * c.weight
-		folded := make([]rune, len(runes))
-		for i, r := range runes {
-			folded[i] = Fold(r)
-		}
 		cut := make([]bool, len(runes))
 		found := false
+		if mask != 0 {
+			if c.listBudget -= int64(len(runes)); c.listBudget < 0 {
+				return "", errCleanTooLarge
+			}
+			spans, err := lists.Find(ctx, runes, mask, &c.listBudget)
+			if err != nil {
+				if errors.As(err, new(textmatch.ErrBudget)) {
+					return "", errCleanTooLarge
+				}
+				return "", err
+			}
+			for _, sp := range spans {
+				for j := sp[0]; j < sp[1]; j++ {
+					cut[j] = true
+				}
+				found = true
+			}
+		}
+		// The text folded without its ignorable code points (profile.Ignorable),
+		// as the check after reads it; at is where each folded rune is in
+		// runes, so a cut spans what it skipped.
+		folded := make([]rune, 0, len(runes))
+		at := make([]int, 0, len(runes))
+		for i, r := range runes {
+			if !profile.Ignorable(r) {
+				folded = append(folded, Fold(r))
+				at = append(at, i)
+			}
+		}
 		for _, t := range c.terms {
 			m := len(t.runes)
 			for i := 0; i+m <= len(folded); i++ {
@@ -267,7 +315,7 @@ func (c *cleaner) clean(ctx context.Context, s string) (string, error) {
 				if t.ident && !identEdges(folded, i, i+m) {
 					continue
 				}
-				for j := i; j < i+m; j++ {
+				for j := at[i]; j <= at[i+m-1]; j++ {
 					cut[j] = true
 				}
 				found = true

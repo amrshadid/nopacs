@@ -154,6 +154,13 @@ func (r Reader) DeidMemory(ctx context.Context) (int64, error) {
 	return typed(settings.DeidMemory, v, err, settings.ParseDeidMemory)
 }
 
+// ListCacheBytes returns the installation's deid.list-cache-bytes: the
+// bound of the memory stored profile versions' text lists are kept in.
+func (r Reader) ListCacheBytes(ctx context.Context) (int64, error) {
+	v, err := r.Installation(ctx, settings.DeidListCacheBytes)
+	return typed(settings.DeidListCacheBytes, v, err, settings.ParseListCacheBytes)
+}
+
 // CORSOrigins returns the installation's api.cors-origins: the web origins
 // whose pages may call the API from a browser.
 func (r Reader) CORSOrigins(ctx context.Context) (settings.Origins, error) {

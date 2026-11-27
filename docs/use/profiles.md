@@ -77,6 +77,135 @@ letter, so a copy of a redacted MRN kept elsewhere in the file holds it.
 `profile explain` names the selector `value_pattern`. A version that uses
 either is of language edition 2; versions that do not keep their checksums.
 
+### Text lists: names of staff, sites and departments
+
+A profile can hold named lists of terms that `clean` and `redact` cut out of
+free text, such as the names of a site's staff or its clinics. A list is part
+of the version: changing a term makes a new version, as changing a rule does.
+
+```
+{"bases": ["annex-e/basic:2026d"],
+ "textLists": [{"name": "staff", "version": 3,
+                "terms": ["Ann Lee", "Okonkwo-Hale", "North Riverbend Clinic"]}],
+ "rules": [
+   {"name": "clean-desc", "selector": {"keyword": "StudyDescription"},
+    "action": {"clean": {"lists": ["staff"]}}},
+   {"name": "cut-comments", "selector": {"keyword": "ImageComments"},
+    "action": {"redact": {"pattern": "MRN\\d{6}", "lists": ["staff"], "replacement": "[x]"}}}]}
+```
+
+- **A list** has a name (1 to 63 of `a-z`, `0-9` and `-`, starting with a
+  letter), a version of its own from 1 (raise it when the terms change, so a
+  description tells two lists of one name apart), and 1 to 10,000 terms. A
+  profile has at most 16 lists and 20,000 terms in all, at most 512 KiB of
+  terms folded and 3 MiB of their forms in every case and Unicode form, in
+  UTF-8 and in the character set that writes them longest (`too_large` past
+  either: 20,000 terms of ASCII of 25 bytes each take 0.5 MB, 10,000
+  accented names of 10 letters 1.6 MB, 20,000 of 5 letters 1.5 MB; 20,000
+  of 20 letters are past it). The second bound counts each term's forms
+  exactly, written in each encoding the server reads, so a version it
+  accepts never has a file refused for the set the file was received in; it
+  bounds the automata a version's search holds to some tens of megabytes. In
+  a set of several encodings (ISO 2022 code extensions), a form of a term
+  written across them that would pass what was counted for the term is left
+  to the search of the decoded text. A term is at most 256
+  bytes of UTF-8, with no control
+  character and no backslash (which separates the values of an element), and
+  at least 2 characters, or 1 in a script written without spaces (Han,
+  Hiragana, Katakana, Hangul). Two terms of a list that are one once folded
+  are refused as `duplicate_term`. A list past a bound is refused whole,
+  never cut to fit; a problem names the list's and the term's position
+  (`textLists[1].terms[17]`), never the term.
+- **Matching** ignores letter case and full-width forms, compares in Unicode
+  NFC (an accented letter written decomposed is its composed letter), and
+  takes a run of white space in the text for the one space of a term: "ann
+  lee", "ANN  LEE" and full-width "ＡＮＮ ＬＥＥ" are "Ann Lee". A term is taken
+  only where it stands as a word: on a side where the term ends in a letter or
+  a digit, no letter or digit may stand beside it, so "Ann" is not cut out of
+  "Annual" nor "Lee" out of "Leeds"; on a side where it ends in punctuation
+  ("Dr."), anything may. A term of a script written without spaces is taken
+  wherever it stands. Removing what does not identify is a failure as much as
+  leaving what does (PS3.15 E.3.3 keeps a descriptor's text that does not
+  identify; the MIDI-B evaluation scores over-removal as an error). A soft
+  hyphen, a zero-width space, joiner or word joiner, or a zero-width
+  no-break space inside a term does not hide it: they are dropped before
+  comparing, in clean and in the check alike. Not folded, a limit: full case
+  folding (`ß` is not `ss`), compatibility forms (the ligature `ﬃ` is not
+  `ffi`) and the Turkish dotted `İ`; an accented letter is its own letter
+  (`José` is not `Jose`). List each spelling a site writes.
+- **`clean` with `lists`** cuts the terms of those lists, besides the file's
+  own identifying values it always cuts, and keeps every other character.
+  **`redact` with `lists`** cuts the terms with the matches of its pattern,
+  each becoming the replacement, terms that overlap cut as one, a person's
+  name component by component; a redact may name lists and no pattern. A rule
+  names at most 16 lists, each a list of the profile (`unknown_list`). A
+  redact's replacement, and a replace or set constant or template, holding a
+  term of any list of the profile is refused (`bad_value`): the check after
+  would hold every file the rule writes it into.
+- **The check after** searches every value of every file the version makes for
+  every term of every list, whether or not a rule named the list, in the text
+  of each element and in the raw bytes, in UTF-8 and in the character set the
+  file was received in, by the same rule of words. Only values that hold
+  numbers are not searched for the terms, since names of four letters occur
+  by chance in a megabyte of random bytes: a standard element whose VR, as
+  sent and in the data dictionary, is one of numbers (OW, OF, OD, OL, OV, FL,
+  FD, SL, SS, SV, UL, US, UV, AT), and pixel data, float and double float
+  pixel data, overlay data (60xx,3000) and waveform data (5400,1010).
+  Everything else is searched: OB and UN values, so an encapsulated document
+  (0042,0011, a PDF or CDA) holding a term holds the file; a Series
+  Description sent as OW, since the dictionary says it is text; a private
+  value whatever its VR; and a value of a tag the dictionary does not know.
+  `clean` does not rewrite an OB or OW value but removes it, and `redact`
+  acts on text only, so a document kept whole with a term inside is held,
+  never archived.
+  A label a naming rule made from a value as received is searched too. A term
+  found again, in a value the profile kept or anywhere else, holds the file as
+  `residual_value` with the kind `list_term` and the element's path, never the term. So a
+  list is also a list of words that must not leave the site: a term a profile
+  keeps somewhere holds every file that has it.
+- **Terms are never printed.** `profile try`, `explain`, `diff` and their
+  `--json`, problems, errors, logs and audit entries never hold a term;
+  `profile describe` gives each list's name, version, number of terms and the
+  SHA-256 of its terms folded and sorted, each followed by a line feed, so two
+  lists written apart are seen to be the same; `profile diff` lists each list
+  added, removed or changed between two versions with those summaries on
+  each side. The checksum is not keyed, so a list of a few terms could be
+  found from it by hashing guesses: it is answered only to a key that may
+  read the terms. A masked key (an outside model's) is never answered a term
+  nor what confirms a guess of one. A version with lists is answered to it
+  with its lists' names and versions and no term, and without its expanded
+  form and its checksum, which covers the terms (`terms_withheld`; `profile
+  export` refuses such a document); a list's summary without its checksum.
+  It may not store a version with lists (the answer for a document equal to
+  a stored version would confirm it), nor try or explain a stored version
+  with lists (whether a value changes tells a guessed name in the list from
+  one that is not); it may check a document of its own (`profile
+  validate`). Masking bounds what the API answers, not what goes through the
+  archive: a key that may both send files and read archived headers can send
+  a file holding a guessed word and see whether it was held or cut, and so
+  learn whether the word is a term. Give a masked key one of the two, not
+  both. A private creator holding a term, or a value the profile removed
+  from the file (the patient's name written as a block's creator), is
+  withheld from the report of elements no rule named. A list's term is
+  found in a creator by the same rule of words as the check after; the
+  patient's name and identifiers are found anywhere inside a creator, as
+  part of a longer word too.
+
+Bounds of the work: the terms of every list are found in one pass over a text
+whatever their number, and a file's searches for them share clean's bound of
+work; past it the file is held (`too_large`). A list of 10,000 terms adds about
+30 µs to clean a text of 1 KiB, and about 45 ms to the check after for each
+MiB of text and binary values a file keeps outside its pixel data (measured
+on a 10-core Apple silicon laptop). A stored version's automata are built
+once, by one caller while the others wait, and kept in a cache all its
+receptions, jobs and corrections share, bounded by the bytes of the automata
+it holds (256 MiB by default, the setting `deid.list-cache-bytes`), the
+least recently used dropped first; the
+raw forms of up to 8 character sets per version are kept with them and
+counted. A document tried, described or validated builds its own, uses them
+and drops them, never entering the cache. Each file's check counts the
+automata it searches with in the memory it takes from `deid.memory`.
+
 ## Describe a version, and try it with no server
 
 `nopacs profile describe lab1 research@1` says what the version does in plain

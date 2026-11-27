@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/deid/engine"
+	"github.com/amrshadid/nopacs/internal/deid/textmatch"
 )
 
 // TestScanStreamFindsAMatchAcrossEveryEdge guards the windows of a stream
@@ -21,7 +22,7 @@ import (
 // are judged by beside it in the window that reports it.
 func TestScanStreamFindsAMatchAcrossEveryEdge(t *testing.T) {
 	const needle = "NEEDLE77"
-	m := newMatcher([][]byte{[]byte(needle)})
+	m := textmatch.New([][]byte{[]byte(needle)})
 	for at := 0; at < 120; at++ {
 		text := []byte(strings.Repeat(".", at) + needle + strings.Repeat(".", 120-at))
 		budget := int64(workBudget)

@@ -53,6 +53,7 @@ type Server struct {
 	Settings *settings.Table
 
 	mu        sync.Mutex
+	masked    bool
 	tenants   map[string]*v1.Tenant
 	addresses map[string]string
 	keys      []*keyRecord

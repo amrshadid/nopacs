@@ -60,6 +60,13 @@ func (s profileService) DiffProfileVersions(ctx context.Context, req *v1.DiffPro
 	}
 	out := profile.Diff(from, to)
 	out.From, out.To = fromMsg, toMsg
+	if d.Masked() {
+		for _, l := range out.TextLists {
+			withholdChecksums(l.From, l.To)
+		}
+		withholdLists(out.From, len(from.GetTextLists()) > 0)
+		withholdLists(out.To, len(to.GetTextLists()) > 0)
+	}
 	c.done(d, st)
 	return out, nil
 }

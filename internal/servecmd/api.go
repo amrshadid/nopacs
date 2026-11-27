@@ -340,7 +340,10 @@ func APIServices(d Deps) (Built, error) {
 		Reception: runners{closer{feeds}, sealer, work, sup, startOnly{engines}, senders, deids, scrubs, rebuilds, imports, events.NewKeeper(events.KeeperConfig{
 			Tenants: keptFeeds{tenants: registryTenants{master: d.Master, registry: reg}, registry: reg, values: settingvalue.Reader{Master: d.Master}},
 			Logger:  d.Log,
-		})},
+		}),
+			// The bound of the text lists' cache (deid.list-cache-bytes),
+			// read live.
+			&listCacheBound{read: settingvalue.Reader{Master: d.Master}.ListCacheBytes, log: d.Log}},
 		// Once the server has drained its requests: the corrections' pass
 		// and background work (each at its next step), whose storages a
 		// request in flight may still write through, so they are closed only

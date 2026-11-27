@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/amrshadid/nopacs/internal/deid/profile"
 )
 
 // The written forms of removed values. Clean removes them from free text
@@ -298,25 +300,7 @@ func Unspaced(s string) bool {
 	return false
 }
 
-// Fold returns the rune every rune of r's case folding orbit maps to
-// (unicode.SimpleFold), its least, after a full-width form of an ASCII
-// character (U+FF01 to U+FF5E, written in East Asian text) is taken as
-// that character: "K", "k", "ｋ" and the Kelvin sign are one rune, and
-// "１２３" is "123". It maps a rune to a rune, so positions in a folded
-// text are positions in the text.
-func Fold(r rune) rune {
-	if r >= 0xFF01 && r <= 0xFF5E {
-		r -= 0xFEE0
-	}
-	if r < utf8.RuneSelf {
-		if 'a' <= r && r <= 'z' {
-			return r - 'a' + 'A'
-		}
-		return r
-	}
-	least := r
-	for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
-		least = min(least, f)
-	}
-	return least
-}
+// Fold returns the rune every rune of r's case folding orbit maps to, as
+// profile.Fold does: the one folding the profile's lists, clean and the
+// check after share.
+func Fold(r rune) rune { return profile.Fold(r) }

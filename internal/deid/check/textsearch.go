@@ -8,6 +8,7 @@ import (
 	"github.com/amrshadid/go-dicom/filereader/attributes"
 
 	"github.com/amrshadid/nopacs/internal/deid/profile"
+	"github.com/amrshadid/nopacs/internal/deid/textmatch"
 )
 
 // searcher is one check's search of one file: the text of its elements,
@@ -32,11 +33,19 @@ type searcher struct {
 	rawBytes, rawLongest int
 
 	// The text search: one pattern per distinct folded form.
-	m       *matcher
+	m       *textmatch.Matcher
 	targets [][]int
 	// read is the text searched so far, in folded bytes and a separator
 	// after each text, for the seam told where a refusal came.
 	read int
+	// listFound is set once a term of a list is found (lists.go); listsOff
+	// while the value searched is a standard binary one, which the lists'
+	// terms are not searched in.
+	listFound bool
+	listsOff  bool
+	// listRaws are the raw automata of the file's lists in its received
+	// character set, by list (prepareLists).
+	listRaws []*rawLists
 
 	// Room reused from one value, and one window, to the next.
 	hay   []byte
@@ -69,7 +78,7 @@ func (s *searcher) text() error {
 		}
 		s.targets[at] = append(s.targets[at], i)
 	}
-	s.m = newMatcher(patterns)
+	s.m = textmatch.New(patterns)
 	defer func() { s.m = nil }()
 	f := s.p.file
 	if f.HasPreamble && s.p.size >= preambleLength {
@@ -111,6 +120,9 @@ func (s *searcher) walk(elements []*attributes.DataElementValue, inherited []str
 			continue
 		}
 		var err error
+		// A value of numbers only is not searched for the lists' terms
+		// (listsSkipped).
+		s.listsOff = listsSkipped(e)
 		switch {
 		case dataelem.IsTextVR(dataelem.VR(e.VR)):
 			if len(e.Value) > 0 {
@@ -128,6 +140,7 @@ func (s *searcher) walk(elements []*attributes.DataElementValue, inherited []str
 		default:
 			err = s.stream(path, e.Position.ValueOffset, e.Position.ValueOffset+int64(e.Length))
 		}
+		s.listsOff = false
 		if err != nil {
 			return err
 		}
@@ -187,11 +200,14 @@ func (s *searcher) texts(path string, texts []string) error {
 			s.hay = make([]byte, 0, len(t))
 		}
 		s.hay = foldString(s.hay[:0], t, &space)
-		at, err := s.m.scan(s.ctx, s.hay, &s.budget, func(pat, end int) {
-			s.foundText(s.hay, end-s.m.lens[pat], end, pat, path)
+		at, err := s.m.Scan(s.ctx, s.hay, &s.budget, func(pat, end int) {
+			s.foundText(s.hay, end-s.m.Len(pat), end, pat, path)
 		})
 		if err != nil {
 			return s.refused(s.read+at, err)
+		}
+		if err := s.listsText(path, s.hay); err != nil {
+			return err
 		}
 		s.read += len(s.hay) + 1
 	}
@@ -210,6 +226,9 @@ func (s *searcher) stream(path string, off, end int64) error {
 	})
 	if err != nil {
 		return s.refused(s.read+int(at), err)
+	}
+	if err := s.listsStream(path, off, end); err != nil {
+		return err
 	}
 	s.read += int(at) + 1
 	return nil

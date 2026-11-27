@@ -10,6 +10,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/deid/engine"
 	"github.com/amrshadid/nopacs/internal/deid/profile"
+	"github.com/amrshadid/nopacs/internal/deid/textmatch"
 )
 
 // workBudget bounds the work of a check that does not grow with the file:
@@ -31,7 +32,10 @@ func (s *searcher) search() error {
 	if err := s.text(); err != nil {
 		return err
 	}
-	return s.raw()
+	if err := s.raw(); err != nil {
+		return err
+	}
+	return s.rawListsSearch()
 }
 
 // rawTarget is a form a raw pattern is a byte form of.
@@ -103,7 +107,7 @@ func (s *searcher) raw() error {
 	if len(rawPatterns) == 0 {
 		return nil
 	}
-	rm := newMatcher(rawPatterns)
+	rm := textmatch.New(rawPatterns)
 	for _, seg := range s.p.segs {
 		// A run of two-byte characters never crosses the image data: the
 		// tag after it begins with a byte that is not such a character
@@ -185,7 +189,7 @@ const utf8Encoding = "UTF-8"
 // budgetRefusal turns a pass past its budget into the refusal too_large,
 // and returns any other error as it is.
 func budgetRefusal(err error) error {
-	var b errBudget
+	var b textmatch.ErrBudget
 	if errors.As(err, &b) {
 		return &Refusal{Cause: CauseTooLarge}
 	}

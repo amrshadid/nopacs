@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"maps"
 	"slices"
 	"strconv"
 
@@ -32,6 +33,8 @@ const MaxDiffItems = 1000
 // compared; a selector whose rules of different conditions win in another
 // order is listed as order_changed. Bases in another order are said to
 // be, and a difference none of this shows is said to be (UnlistedChange).
+// A text list added, removed, or of another version or other terms is
+// listed by its summaries, never a term (TextLists).
 // A difference between rules of different selectors (a tag rule
 // that now takes an element from a group rule) is not an effect here; a
 // trial run over files shows it. Equal checksums mean equal treatment of
@@ -67,11 +70,53 @@ func Diff(from, to *v1.ExpandedProfile) *v1.DiffProfileVersionsResponse {
 		diffOrder(out, from.GetRules(), to.GetRules())
 	}
 	out.PixelRulesChanged = int32(pixelChanges(from.GetPixelRules(), to.GetPixelRules())) //nolint:gosec // G115: at most twice MaxPixelRules.
-	listed := len(out.Rules) > 0 || out.RulesOmitted > 0 || len(out.Effects) > 0 || out.EffectsOmitted > 0 ||
+	out.TextLists = diffTextLists(from, to)
+	listed := len(out.TextLists) > 0 || len(out.Rules) > 0 || out.RulesOmitted > 0 || len(out.Effects) > 0 || out.EffectsOmitted > 0 ||
 		len(out.BasesAdded) > 0 || len(out.BasesRemoved) > 0 || out.BasesReordered || out.PixelRulesChanged > 0 ||
 		out.UnnamedFrom != out.UnnamedTo || out.DateShiftDaysFrom != out.DateShiftDaysTo ||
 		out.UnsearchedSegmentsFrom != out.UnsearchedSegmentsTo
 	out.UnlistedChange = !out.SameEffect && !listed
+	return out
+}
+
+// diffTextLists returns each text list that differs between two expanded
+// profiles, by name in byte order, with each side's summary
+// (DescribeTextLists): added, removed, or changed when its version or its
+// folded terms differ. A list whose terms differ only in how they are
+// written (case, width, white space, order) has one checksum, and is
+// changed only when its version is. Never a term.
+func diffTextLists(from, to *v1.ExpandedProfile) []*v1.TextListChange {
+	byName := func(e *v1.ExpandedProfile) map[string]*v1.TextListSummary {
+		m := map[string]*v1.TextListSummary{}
+		for _, s := range DescribeTextLists(e) {
+			m[s.GetName()] = s
+		}
+		return m
+	}
+	f, t := byName(from), byName(to)
+	names := map[string]bool{}
+	for n := range f {
+		names[n] = true
+	}
+	for n := range t {
+		names[n] = true
+	}
+	var out []*v1.TextListChange
+	for _, n := range slices.Sorted(maps.Keys(names)) {
+		a, b := f[n], t[n]
+		c := &v1.TextListChange{Name: n, From: a, To: b}
+		switch {
+		case a == nil:
+			c.Change = v1.ProfileChange_PROFILE_CHANGE_ADDED
+		case b == nil:
+			c.Change = v1.ProfileChange_PROFILE_CHANGE_REMOVED
+		case a.GetVersion() != b.GetVersion() || a.GetSha256() != b.GetSha256():
+			c.Change = v1.ProfileChange_PROFILE_CHANGE_CHANGED
+		default:
+			continue
+		}
+		out = append(out, c)
+	}
 	return out
 }
 

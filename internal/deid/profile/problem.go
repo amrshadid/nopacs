@@ -185,6 +185,16 @@ type checker struct {
 	// overBudget is set once the budget's problem is recorded, so it is
 	// recorded once.
 	overBudget bool
+	// lists are the document's text lists, compiled, which clean and
+	// redact rules name; nil when it has none or they have a problem.
+	// listNames are the names the document gives its lists, so a rule
+	// naming one of a list with a problem is not refused twice.
+	lists     *TextLists
+	listNames map[string]bool
+	// shared is set when the lists are a stored version's, taken from and
+	// kept in the cache all its users share (sharedTextLists); a
+	// document's (a validation, a trial) are built, used and dropped.
+	shared bool
 }
 
 // newChecker returns a checker for a document, or for a stored expanded

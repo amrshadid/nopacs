@@ -103,6 +103,23 @@ func TestShortAndCJKNamesAreCleaned(t *testing.T) {
 	}
 }
 
+// TestCleanSeesThroughInvisibleCharacters guards clean against a removed
+// value split by a code point a reader does not see (a soft hyphen, a
+// zero-width space), which the check after's folding drops: the value is
+// cut with what splits it, as the check would find it.
+func TestCleanSeesThroughInvisibleCharacters(t *testing.T) {
+	shy, zwsp := string(rune(0x00AD)), string(rune(0x200B))
+	terms, ok := cleanTerms([]Needle{{Kind: NeedleText, Value: "PAT001"}, {Kind: NeedleName, Value: "Zebulonquist^Ann"}})
+	if !ok {
+		t.Fatal("too many terms")
+	}
+	in := "id PAT" + shy + "001, seen by Zebu" + zwsp + "lonquist."
+	got, err := newCleaner(terms, maxCleanWork).clean(context.Background(), in)
+	if err != nil || got != "id , seen by ." {
+		t.Errorf("clean %q = %q, %v", in, got, err)
+	}
+}
+
 // TestCleanIsRuneSafeAndRepeats guards clean's handling of text: a term
 // cut that joins the text around it into the term again is cut again; a
 // letter whose lower case is longer in bytes (İ) moves no offset; case

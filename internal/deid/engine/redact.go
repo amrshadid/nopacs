@@ -133,7 +133,7 @@ func (r *run) patternNeedle(text, path string) {
 // and keeps the rest. Each text cut is an identifier needle, so a copy of
 // it kept anywhere in the file holds the file.
 func (r *run) actRedact(c *target, a Action) error {
-	if !patternVRs[c.vr] || a.Pattern == nil {
+	if !patternVRs[c.vr] || (a.Pattern == nil && a.Lists == 0) {
 		return c.fail(CauseBadValue)
 	}
 	orig, err := r.text(c.ds, c.tag, c.vr)
@@ -143,7 +143,8 @@ func (r *run) actRedact(c *target, a Action) error {
 	case len(orig) > profile.MaxPatternValue:
 		return c.fail(CauseTooLarge)
 	}
-	out, cuts, count, cause := redactValue(a.Pattern, a.Replacement, c.vr, orig, func(n int) bool { return r.spend(n, a.PatternCost) })
+	out, cuts, count, cause := redactValue(a.Pattern, a.Replacement, c.vr, orig, func(n int) bool { return r.spend(n, a.PatternCost) },
+		r.listCutter(a))
 	if cause != "" {
 		return c.fail(cause)
 	}
@@ -176,7 +177,14 @@ func (r *run) actRedact(c *target, a Action) error {
 // name written with combining marks is cut by a pattern that writes it
 // composed, and what is left is written in NFC. A value with nothing cut
 // is not written (count is 0), so it stays as it came.
-func redactValue(re *regexp.Regexp, repl, vr, value string, spend func(n int) bool) (out string, cuts []string, count int, cause Cause) {
+//
+// lists, when not nil, cuts the terms of the rule's text lists from each
+// piece before the pattern (re may then be nil, for a redact of lists
+// alone), each term becoming repl too, in the same
+// repeated passes; what it cuts counts in count and is not in cuts (the
+// check after searches for every term already). Past its budget it
+// refuses (CauseTooLarge).
+func redactValue(re *regexp.Regexp, repl, vr, value string, spend func(n int) bool, lists func(s string) (string, int, bool)) (out string, cuts []string, count int, cause Cause) {
 	value = profile.NFC(value)
 	seen := map[string]bool{}
 	var over bool
@@ -188,7 +196,20 @@ func redactValue(re *regexp.Regexp, repl, vr, value string, spend func(n int) bo
 			}
 			var b strings.Builder
 			last, n := 0, 0
-			for _, m := range re.FindAllStringIndex(s, -1) {
+			listed := 0
+			if lists != nil {
+				var ok bool
+				if s, listed, ok = lists(s); !ok {
+					over = true
+					return "", false
+				}
+				count += listed
+			}
+			var matches [][]int
+			if re != nil {
+				matches = re.FindAllStringIndex(s, -1)
+			}
+			for _, m := range matches {
 				if m[1] == m[0] {
 					continue
 				}
@@ -204,7 +225,7 @@ func redactValue(re *regexp.Regexp, repl, vr, value string, spend func(n int) bo
 				b.WriteString(repl)
 				last = m[1]
 			}
-			if n == 0 {
+			if n == 0 && listed == 0 {
 				return s, true
 			}
 			count += n
@@ -241,6 +262,50 @@ func redactValue(re *regexp.Regexp, repl, vr, value string, spend func(n int) bo
 	return out, cuts, count, ""
 }
 
+// listCutter returns what cuts the terms of a redact's lists from a piece
+// of a value, each standing term (profile.TermStands) becoming the
+// replacement, terms that overlap cut as one; nil when the rule names no
+// list. It reports the pieces cut, and false past the file's budget for
+// the lists' work, the bound clean's lists share (maxCleanWork).
+func (r *run) listCutter(a Action) func(s string) (string, int, bool) {
+	if a.Lists == 0 || r.en.lists == nil {
+		return nil
+	}
+	return func(s string) (string, int, bool) {
+		runes := []rune(s)
+		if r.listWork += int64(len(runes)); r.listWork > maxCleanWork {
+			return "", 0, false
+		}
+		left := maxCleanWork - r.listWork
+		spans, err := r.en.lists.Find(r.ctx, runes, a.Lists, &left)
+		r.listWork = maxCleanWork - left
+		if err != nil {
+			return "", 0, false
+		}
+		if len(spans) == 0 {
+			return s, 0, true
+		}
+		cut := make([]bool, len(runes))
+		for _, sp := range spans {
+			for j := sp[0]; j < sp[1]; j++ {
+				cut[j] = true
+			}
+		}
+		var b strings.Builder
+		n := 0
+		for i, rn := range runes {
+			switch {
+			case !cut[i]:
+				b.WriteRune(rn)
+			case i == 0 || !cut[i-1]:
+				b.WriteString(a.Replacement)
+				n++
+			}
+		}
+		return b.String(), n, true
+	}
+}
+
 // maxLengthField is the longest value an element of VR vr can be written
 // with in explicit VR: 65,534 bytes (the even length under 0xFFFF) for a
 // VR of a 16-bit length field, and 2^32-2 for UC and UT, whose field is
@@ -273,7 +338,9 @@ func (r *run) redactNeedles(act Action, vr, value, path string) error {
 	if act.Kind != ActRedact || act.Pattern == nil || !patternVRs[vr] || len(value) > profile.MaxPatternValue {
 		return nil
 	}
-	_, cuts, _, cause := redactValue(act.Pattern, act.Replacement, vr, value, func(n int) bool { return r.spend(n, act.PatternCost) })
+	// The lists' terms are no needle of their own: the check after
+	// searches for every term of every list already.
+	_, cuts, _, cause := redactValue(act.Pattern, act.Replacement, vr, value, func(n int) bool { return r.spend(n, act.PatternCost) }, nil)
 	switch cause {
 	case "":
 		for _, cut := range cuts {

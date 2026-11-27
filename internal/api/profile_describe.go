@@ -35,6 +35,14 @@ func (s profileService) DescribeProfile(ctx context.Context, req *v1.DescribePro
 		return nil, c.failIn(d, st, err)
 	}
 	out.Version, out.Checksum = target.versionMessage(), target.checksum
+	if d.Masked() {
+		withholdChecksums(out.TextLists...)
+		if target.stored != nil && len(target.expanded.GetTextLists()) > 0 {
+			// The version's checksum covers its terms.
+			out.Checksum = ""
+			withholdLists(out.Version, true)
+		}
+	}
 	c.record(d, st, master.OutcomeDone, "", access.Facts{Object: target.object})
 	return out, nil
 }
@@ -51,7 +59,7 @@ func describeTarget(e *v1.ExpandedProfile, method string) (*v1.DescribeProfileRe
 	}
 	// The keys decide no part of the record; the engine needs some to be
 	// made, and these are thrown away with it.
-	en, err := engine.New(e, keys, engine.Options{Lookups: trial.Lookups{Unassigned: new(int)}, Method: method})
+	en, err := engine.New(e, keys, engine.Options{Lookups: trial.Lookups{Unassigned: new(int)}, Method: method, OneOff: true})
 	if err != nil {
 		return nil, precondition("profile: this server cannot run the profile: " + trial.ReceptionRefusal(err))
 	}
@@ -63,6 +71,8 @@ func describeTarget(e *v1.ExpandedProfile, method string) (*v1.DescribeProfileRe
 		Classes: profile.Describe(e),
 		Notes:   profile.DescribeNotes(e),
 		Method:  &v1.ProfileMethod{MethodValues: m.Values, IdentityRemoved: "YES", TemporalModified: m.Temporal},
+		// Each list's name, version, count and checksum; never a term.
+		TextLists: profile.DescribeTextLists(e),
 	}
 	for _, code := range m.Codes {
 		scheme := code.Scheme
