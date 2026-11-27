@@ -63,7 +63,11 @@ func (t Table) Requirement(procedure string, msg proto.Message) (access.Requirem
 // pendingMethods are the methods of services otherwise served that the
 // contract defines and no handler serves yet: the method lines of
 // api/not-served.txt, which a test compares with this list.
-var pendingMethods = []string{}
+var pendingMethods = []string{
+	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure,
+	nopacsv1connect.ReplicaServiceRecallProcedure,
+	nopacsv1connect.ReplicaServiceVerifySampleProcedure,
+}
 
 // Pending reports whether procedure is one of pendingMethods, so the server
 // leaves it out of its routes as the binary's server does
@@ -113,12 +117,27 @@ func Contract() Table {
 	return Table{
 		nopacsv1connect.AccessServiceCreateKeyProcedure:   admin,
 		nopacsv1connect.AccessServiceGetKeyProcedure:      admin,
-		nopacsv1connect.AccessServiceListKeysProcedure:    admin,
 		nopacsv1connect.AccessServiceRevokeKeyProcedure:   admin,
-		nopacsv1connect.AccessServiceSetGrantProcedure:    admin,
-		nopacsv1connect.AccessServiceListGrantsProcedure:  admin,
-		nopacsv1connect.AccessServiceRemoveGrantProcedure: admin,
 		nopacsv1connect.AccessServiceSetKeyRulesProcedure: admin,
+		// "Role: admin on the installation; with a tenant, admin on the
+		// installation or on that tenant", and the same for the grants on a
+		// scope: a tenant's admin is held to its bounds by package access.
+		nopacsv1connect.AccessServiceListKeysProcedure: byMessage(
+			func() *nopacsv1.ListKeysRequest { return &nopacsv1.ListKeysRequest{} },
+			func(m *nopacsv1.ListKeysRequest) access.Requirement { return grantsOn(m.GetTenant()) },
+		),
+		nopacsv1connect.AccessServiceSetGrantProcedure: byMessage(
+			func() *nopacsv1.SetGrantRequest { return &nopacsv1.SetGrantRequest{} },
+			func(m *nopacsv1.SetGrantRequest) access.Requirement { return grantsOnScope(m.GetScope()) },
+		),
+		nopacsv1connect.AccessServiceListGrantsProcedure: byMessage(
+			func() *nopacsv1.ListGrantsRequest { return &nopacsv1.ListGrantsRequest{} },
+			func(m *nopacsv1.ListGrantsRequest) access.Requirement { return grantsOnScope(m.GetScope()) },
+		),
+		nopacsv1connect.AccessServiceRemoveGrantProcedure: byMessage(
+			func() *nopacsv1.RemoveGrantRequest { return &nopacsv1.RemoveGrantRequest{} },
+			func(m *nopacsv1.RemoveGrantRequest) access.Requirement { return grantsOnScope(m.GetScope()) },
+		),
 		// "Role: admin on the installation." The handler also asks for the
 		// local operator, after the check.
 		nopacsv1connect.AccessServiceReinstateKeysProcedure: admin,
@@ -314,6 +333,7 @@ func Contract() Table {
 		nopacsv1connect.CorrectionServiceDeleteProcedure:            onTenant(func() *nopacsv1.DeleteRequest { return &nopacsv1.DeleteRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceRelabelProcedure:           onTenant(func() *nopacsv1.RelabelRequest { return &nopacsv1.RelabelRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceReplaceProcedure:           onTenant(func() *nopacsv1.ReplaceRequest { return &nopacsv1.ReplaceRequest{} }, master.RoleAdmin),
+		nopacsv1connect.CorrectionServiceEditProcedure:              onTenant(func() *nopacsv1.EditRequest { return &nopacsv1.EditRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceListCorrectionsProcedure:   onTenant(func() *nopacsv1.ListCorrectionsRequest { return &nopacsv1.ListCorrectionsRequest{} }, master.RoleOperator),
 		nopacsv1connect.CorrectionServiceGetCorrectionProcedure:     onTenant(func() *nopacsv1.GetCorrectionRequest { return &nopacsv1.GetCorrectionRequest{} }, master.RoleOperator),
 		nopacsv1connect.CorrectionServiceUndoCorrectionProcedure:    onTenant(func() *nopacsv1.UndoCorrectionRequest { return &nopacsv1.UndoCorrectionRequest{} }, master.RoleAdmin),
@@ -321,6 +341,37 @@ func Contract() Table {
 		nopacsv1connect.CorrectionServiceAllowArrivalsProcedure:     onTenant(func() *nopacsv1.AllowArrivalsRequest { return &nopacsv1.AllowArrivalsRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceListScrubFindingsProcedure: onTenant(func() *nopacsv1.ListScrubFindingsRequest { return &nopacsv1.ListScrubFindingsRequest{} }, master.RoleReader),
 		nopacsv1connect.CorrectionServiceResolveInstancesProcedure:  onTenant(func() *nopacsv1.ResolveInstancesRequest { return &nopacsv1.ResolveInstancesRequest{} }, master.RoleReader),
+
+		// ReplicaService: "reader on the tenant." to list replicas, "admin on
+		// the tenant." to attach, detach, repair and switch. Its methods that
+		// copy, recall and sample (operator) are pending.
+		nopacsv1connect.ReplicaServiceListReplicasProcedure:  onTenant(func() *nopacsv1.ListReplicasRequest { return &nopacsv1.ListReplicasRequest{} }, master.RoleReader),
+		nopacsv1connect.ReplicaServiceAttachReplicaProcedure: onTenant(func() *nopacsv1.AttachReplicaRequest { return &nopacsv1.AttachReplicaRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReplicaServiceDetachReplicaProcedure: onTenant(func() *nopacsv1.DetachReplicaRequest { return &nopacsv1.DetachReplicaRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReplicaServiceRepairProcedure:        onTenant(func() *nopacsv1.RepairRequest { return &nopacsv1.RepairRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReplicaServiceSwitchStorageProcedure: onTenant(func() *nopacsv1.SwitchStorageRequest { return &nopacsv1.SwitchStorageRequest{} }, master.RoleAdmin),
+
+		// RetentionService: "admin on the tenant." for rules, disposal and
+		// holds' placing and release; "reader on the tenant." for rules and
+		// due sessions; "operator on the tenant." to read holds; "admin on
+		// the scope." to confirm the clock.
+		nopacsv1connect.RetentionServiceAddRetentionRuleProcedure:    onTenant(func() *nopacsv1.AddRetentionRuleRequest { return &nopacsv1.AddRetentionRuleRequest{} }, master.RoleAdmin),
+		nopacsv1connect.RetentionServiceGetRetentionRuleProcedure:    onTenant(func() *nopacsv1.GetRetentionRuleRequest { return &nopacsv1.GetRetentionRuleRequest{} }, master.RoleReader),
+		nopacsv1connect.RetentionServiceListRetentionRulesProcedure:  onTenant(func() *nopacsv1.ListRetentionRulesRequest { return &nopacsv1.ListRetentionRulesRequest{} }, master.RoleReader),
+		nopacsv1connect.RetentionServiceSetRetentionRuleProcedure:    onTenant(func() *nopacsv1.SetRetentionRuleRequest { return &nopacsv1.SetRetentionRuleRequest{} }, master.RoleAdmin),
+		nopacsv1connect.RetentionServiceRemoveRetentionRuleProcedure: onTenant(func() *nopacsv1.RemoveRetentionRuleRequest { return &nopacsv1.RemoveRetentionRuleRequest{} }, master.RoleAdmin),
+		nopacsv1connect.RetentionServiceListDueSessionsProcedure:     onTenant(func() *nopacsv1.ListDueSessionsRequest { return &nopacsv1.ListDueSessionsRequest{} }, master.RoleReader),
+		nopacsv1connect.RetentionServiceDisposeProcedure:             onTenant(func() *nopacsv1.DisposeRequest { return &nopacsv1.DisposeRequest{} }, master.RoleAdmin),
+		nopacsv1connect.RetentionServiceConfirmClockProcedure: byMessage(
+			func() *nopacsv1.ConfirmClockRequest { return &nopacsv1.ConfirmClockRequest{} },
+			func(m *nopacsv1.ConfirmClockRequest) access.Requirement {
+				return onScope(m.GetScope(), master.RoleAdmin)
+			},
+		),
+		nopacsv1connect.RetentionServicePlaceHoldProcedure:   onTenant(func() *nopacsv1.PlaceHoldRequest { return &nopacsv1.PlaceHoldRequest{} }, master.RoleAdmin),
+		nopacsv1connect.RetentionServiceReleaseHoldProcedure: onTenant(func() *nopacsv1.ReleaseHoldRequest { return &nopacsv1.ReleaseHoldRequest{} }, master.RoleAdmin),
+		nopacsv1connect.RetentionServiceGetHoldProcedure:     onTenant(func() *nopacsv1.GetHoldRequest { return &nopacsv1.GetHoldRequest{} }, master.RoleOperator),
+		nopacsv1connect.RetentionServiceListHoldsProcedure:   onTenant(func() *nopacsv1.ListHoldsRequest { return &nopacsv1.ListHoldsRequest{} }, master.RoleOperator),
 
 		// MonitorService: "reader on the tenant asked for; operator on the
 		// installation for every tenant."
@@ -333,6 +384,25 @@ func Contract() Table {
 			func(m *nopacsv1.WatchRequest) access.Requirement { return onMonitorScope(m.GetScope()) },
 		),
 	}
+}
+
+// grantsOn is the requirement of a change or listing of the grants on the
+// tenant named name: admin on the installation or on that tenant; admin on
+// the installation for an empty name.
+func grantsOn(name string) access.Requirement {
+	if name == "" {
+		return access.OnInstallation(master.RoleAdmin)
+	}
+	return access.TenantGrants(name)
+}
+
+// grantsOnScope is grantsOn for a scope a request names: a tenant's, or the
+// installation's, whose grants only its admin changes.
+func grantsOnScope(s *nopacsv1.Scope) access.Requirement {
+	if t, ok := s.GetKind().(*nopacsv1.Scope_Tenant); ok {
+		return grantsOn(t.Tenant)
+	}
+	return access.OnInstallation(master.RoleAdmin)
 }
 
 // onMonitorScope is the requirement of a Monitor method: reader on the
@@ -376,7 +446,8 @@ func tenantRole(name string, role master.Role, operator bool) access.Requirement
 // settings, so the table stays test data and its test compares the two.
 var installationSet = map[string]bool{"receiver.ports": true, "incoming.limit": true, "sender.tenant-max-associations": true,
 	"receiver.allow-as-received": true, "deid.pixel-limit": true,
-	"import.allowed-roots": true, "import.max-units": true}
+	"import.allowed-roots": true, "import.max-units": true,
+	"retention.shorten-notice": true, "retention.max-per-pass": true}
 
 // settingChange is the requirement of a change of the setting named name
 // on scope.

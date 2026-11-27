@@ -313,6 +313,8 @@ var contractFiles = []protoreflect.FileDescriptor{
 	nopacsv1.File_nopacs_v1_audit_seal_proto,
 	nopacsv1.File_nopacs_v1_correction_proto,
 	nopacsv1.File_nopacs_v1_backup_proto,
+	nopacsv1.File_nopacs_v1_replica_proto,
+	nopacsv1.File_nopacs_v1_retention_proto,
 }
 
 // contractMethods returns every served method of the contract by procedure
@@ -457,6 +459,11 @@ func checkRole(t *testing.T, proc, role string, md protoreflect.MethodDescriptor
 		"admin on the installation; or the key being rotated itself, so a system renews its own key with no person involved. Any other key is answered permission denied.",
 		"none beyond an authenticated caller; the caller's grants decide what is listed.":
 		expectStatic(t, proc, got, access.Authenticated())
+	case "admin on the installation; with a tenant, admin on the installation or on that tenant.":
+		expectGrants(t, proc, md, false)
+	case "admin on the installation; on a tenant, admin on the installation or on that tenant, a tenant's admin held to its bounds (the service says which).",
+		"admin on the installation; for the grants on a tenant, admin on the installation or on that tenant. A key's grants on every scope are the installation's admin's alone to read.":
+		expectGrants(t, proc, md, true)
 	case "reader on that tenant, or reader on the installation.":
 		msg := newRequest(md)
 		setString(msg, "name", "lab")
@@ -524,6 +531,36 @@ func expectTenant(t *testing.T, proc string, md protoreflect.MethodDescriptor, r
 		}
 		if _, got, _ := ruleFor(proc, m); got != access.OnTenant("lab", master.RoleOperator) {
 			t.Errorf("%s with %s: the requirement is not operator on the tenant", proc, f)
+		}
+	}
+}
+
+// expectGrants checks the requirement of a method on grants: admin on the
+// installation or on the tenant the request names, by its field "tenant" or,
+// when byScope is set, by its scope, and admin on the installation for the
+// installation's scope or no tenant.
+func expectGrants(t *testing.T, proc string, md protoreflect.MethodDescriptor, byScope bool) {
+	t.Helper()
+	tenant, inst, none := newRequest(md), newRequest(md), newRequest(md)
+	if byScope {
+		if !setScope(tenant.ProtoReflect(), &nopacsv1.Scope{Kind: &nopacsv1.Scope_Tenant{Tenant: "lab"}}, 2) {
+			t.Errorf("%s: no scope field found in its request", proc)
+			return
+		}
+		setScope(inst.ProtoReflect(), installation(), 2)
+	} else {
+		setString(tenant, "tenant", "lab")
+	}
+	for _, c := range []struct {
+		msg  proto.Message
+		want access.Requirement
+	}{
+		{tenant, access.TenantGrants("lab")},
+		{inst, access.OnInstallation(master.RoleAdmin)},
+		{none, access.OnInstallation(master.RoleAdmin)},
+	} {
+		if _, got, _ := ruleFor(proc, c.msg); got != c.want {
+			t.Errorf("%s: the requirement for %v is not %v", proc, c.msg, c.want)
 		}
 	}
 }

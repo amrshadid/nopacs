@@ -886,10 +886,10 @@ func TestKeyReadOncePerRequest(t *testing.T) {
 		if _, err := e.network("Bearer "+admin).access.WhoAmI(e.ctx, &nopacsv1.WhoAmIRequest{}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := e.network("Bearer "+noGrant).access.ListKeys(e.ctx, &nopacsv1.ListKeysRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		if _, err := e.network("Bearer "+noGrant).access.GetKey(e.ctx, &nopacsv1.GetKeyRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Fatal(err)
 		}
-		if _, err := e.network("Bearer "+stranger.Key()).access.ListKeys(e.ctx, &nopacsv1.ListKeysRequest{}); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		if _, err := e.network("Bearer "+stranger.Key()).access.GetKey(e.ctx, &nopacsv1.GetKeyRequest{}); connect.CodeOf(err) != connect.CodeUnauthenticated {
 			t.Fatal(err)
 		}
 		req, _ := http.NewRequest(http.MethodGet, e.netURL+"/metrics", nil)
