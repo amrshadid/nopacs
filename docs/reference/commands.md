@@ -946,6 +946,19 @@ Usage: `nopacs quarantine show <tenant> <id> [--header [--show-values]] [flags]`
 | `--header` | bool |  | also show the file's DICOM header as JSON, without bulk data or values (needs the operator role; refused to a masked key) |
 | `--show-values` | bool |  | with --header, show the header's values too (audited) |
 
+### `nopacs recall`
+
+Bring a subject's, session's or scan's objects back from an archive tier
+
+Usage: `nopacs recall <tenant> <subject>[/<session>[/<scan>]] [--storage NAME] [--days N] [--dry-run] [--yes] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--days` | int |  | how many days the objects stay readable, 1 to 365; each storage's own recall days when not given |
+| `--dry-run` | bool |  | show what the recall would ask for, and ask for nothing |
+| `--storage` | string |  | the archive-tier storage to recall from; every one that holds the target when empty |
+| `--yes` | bool |  | do not ask for the target to be typed again |
+
 ### `nopacs receiver`
 
 Add, list, show, change and remove a tenant's receivers
@@ -1291,6 +1304,17 @@ Usage: `nopacs replica list <tenant> [--primary NAME] [flags]`
 | `--all` | bool |  | fetch every item, page after page |
 | `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
 | `--primary` | string |  | only the replicas of this primary |
+
+#### `nopacs replica verify`
+
+List a random sample of a storage's objects to check with tools outside the server
+
+Usage: `nopacs replica verify <tenant> <storage> [--count N] [--seed S] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--count` | int | `200` | how many instances to sample, 1 to 10000 |
+| `--seed` | int64 |  | a seed for the draw, so the same sample can be drawn again |
 
 ### `nopacs retention`
 

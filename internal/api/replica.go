@@ -62,14 +62,11 @@ func (f SwitchesFunc) Switcher(ctx context.Context, tenantName string) (Switcher
 }
 
 // replicaService is ReplicaService: a tenant's replicas, kept in its store,
-// copied by the server's replicator, mended by repair jobs and swapped in
-// by the tenant's switch runner (Config.Switches).
-//
-// BackfillReplica, Recall and VerifySample are in the contract and not
-// served yet (api/not-served.txt): the server keeps no replicate job a
-// backfill could answer, and no read of a target's objects per storage
-// that a recall's preview and a sample need. The server does not mount
-// them, so their bodies here are never reached.
+// copied by the server's replicator, mended by repair jobs, swapped in by
+// the tenant's switch runner (Config.Switches), and recalled from an
+// archive tier by the server's recall worker, which reads the recalls a
+// person asks for here (replica_recall.go). A backfill and a sample are in
+// replica_serve.go.
 type replicaService struct {
 	nopacsv1connect.UnimplementedReplicaServiceHandler
 	c *core
@@ -190,9 +187,18 @@ func (s replicaService) AttachReplica(ctx context.Context, req *v1.AttachReplica
 	if err != nil {
 		return nil, c.failWith(d, st, facts, storageNotFound(err))
 	}
-	// The store keeps the backfill as the replica's scans owed, not yet as
-	// a job of its own, so no backfill job is answered.
-	return &v1.AttachReplicaResponse{Storage: storageMessage(out)}, nil
+	// The attach made the replicate job that follows its backfill, when the
+	// primary held any scan; a repeated attach answers the one still open.
+	res := &v1.AttachReplicaResponse{Storage: storageMessage(out)}
+	job, open, err := rs.ReplicateJob(ctx, req.GetReplica())
+	if err != nil {
+		// The attach and its entry are written; only the answer failed.
+		return nil, c.toAPI(d, err)
+	}
+	if open {
+		res.Backfill = jobMessage(job, "")
+	}
+	return res, nil
 }
 
 // DetachReplica makes a replica an ordinary storage again, deleting

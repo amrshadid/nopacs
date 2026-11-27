@@ -126,13 +126,14 @@ func TestReplicaDetachAbandonNeedsReasonAndConfirmation(t *testing.T) {
 	}
 }
 
-// TestReplicaBackfillNotServed guards the way a command shows a method the
-// server does not serve yet: one plain line saying so and that nothing was
-// changed, exit 1, nothing on standard output; and once served, the job and
-// --wait following it to its end.
+// TestReplicaBackfillNotServed guards the way a command shows a method a
+// server (an older one) does not serve: one plain line saying so and that
+// nothing was changed, exit 1, nothing on standard output; and once served,
+// the job and --wait following it to its end.
 func TestReplicaBackfillNotServed(t *testing.T) {
 	r := replicaRig(t)
 	r.must("replica", "attach", "lab1", "copy", "--primary", "main")
+	r.fake.RefuseBackfill()
 	expect(t, r.run("replica", "backfill", "lab1", "copy"), 1, "",
 		"nopacs: replica backfill: not served: this server does not serve it yet; nothing was changed\n")
 	r.fake.ServeBackfill()

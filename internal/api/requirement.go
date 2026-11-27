@@ -632,6 +632,24 @@ var rules = map[string]rule{
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetPrimary(),
 			Details: map[string]string{detailValidateOnly: strconv.FormatBool(r.GetValidateOnly()), detailSkipVerification: strconv.FormatBool(r.GetSkipVerification())}}
 	}),
+	// BackfillReplica: operator, as copying is the server's own work, and
+	// refused to a masked key, since it fills the replica the request names
+	// with the archive's bytes (access.Requirement.ChoosesDestination).
+	// Recall: operator, since a recall costs the site money and is
+	// previewed first; days above a storage's recall_days are an admin's,
+	// judged by the handler once it knows the storages. VerifySample:
+	// operator, since it answers keys that hold UIDs.
+	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: byMessage(func(r *v1.BackfillReplicaRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator).ChoosesDestination(), access.Request{Object: r.GetReplica()}
+	}),
+	nopacsv1connect.ReplicaServiceRecallProcedure: byMessage(func(r *v1.RecallRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: labelPath(r.GetSubjectLabel(), r.GetSessionLabel(), r.GetScanLabel()),
+			Details: map[string]string{detailValidateOnly: strconv.FormatBool(r.GetValidateOnly())}}
+	}),
+	nopacsv1connect.ReplicaServiceVerifySampleProcedure: byMessage(func(r *v1.VerifySampleRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetStorage(),
+			Details: map[string]string{detailCount: strconv.Itoa(int(r.GetCount()))}}
+	}),
 	nopacsv1connect.RetentionServiceAddRetentionRuleProcedure: byMessage(func(r *v1.AddRetentionRuleRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetRule().GetName()}
 	}),
@@ -683,24 +701,7 @@ var rules = map[string]rule{
 // its method's contract and checked against its Role line now; the change
 // that serves a method moves its line into rules and its name off the
 // list, and the tests fail until both are done.
-//
-// BackfillReplica: operator, as copying is the server's own work, and
-// refused to a masked key, since it fills the replica the request names
-// with the archive's bytes (access.Requirement.ChoosesDestination). Recall:
-// operator, since a recall costs the site money and is previewed first.
-// VerifySample: operator, since it answers keys that hold UIDs.
-var pendingRules = map[string]rule{
-	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: byMessage(func(r *v1.BackfillReplicaRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator).ChoosesDestination(), access.Request{Object: r.GetReplica()}
-	}),
-	nopacsv1connect.ReplicaServiceRecallProcedure: byMessage(func(r *v1.RecallRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: labelPath(r.GetSubjectLabel(), r.GetSessionLabel(), r.GetScanLabel()),
-			Details: map[string]string{detailValidateOnly: strconv.FormatBool(r.GetValidateOnly())}}
-	}),
-	nopacsv1connect.ReplicaServiceVerifySampleProcedure: byMessage(func(r *v1.VerifySampleRequest) (access.Requirement, access.Request) {
-		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: r.GetStorage()}
-	}),
-}
+var pendingRules = map[string]rule{}
 
 // The keys of the details of the correction methods' entries.
 const (

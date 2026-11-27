@@ -391,26 +391,54 @@ func testReplicaFollowsRebuild(e *renv) {
 
 // testReplicaBackfill guards BackfillReplica: every scan of the primary is
 // owed to the backfill again, those in step pending to be verified again,
-// and the backfill is done once each is in step.
+// and the backfill is done once each is in step. The attach's backfill and
+// a person's are each followed by a replicate job that counts the scans
+// marked, is answered again to a repeated call, and ends done once the
+// replica owes its backfill nothing.
 func testReplicaBackfill(e *renv) {
 	e.replicaSetup()
 	e.attach("copy", "store", 10)
+	sched, open, err := e.p.ReplicateJob(e.ctx, "copy")
+	e.ok("ReplicateJob", err)
+	if !open || sched.ID != tenant.ReplicateJobID("copy", at(10)) || sched.Kind != tenant.JobReplicate || sched.State != tenant.JobRunning ||
+		sched.Replicate == nil || *sched.Replicate != (tenant.ReplicateJob{Replica: "copy", Primary: "store", Scheduled: true}) ||
+		sched.Counts.Scans != 2 || sched.Counts.ScansDone != 0 {
+		e.Errorf("the attach's replicate job is %+v (open %v), want the scheduled job of copy counting 2 scans", sched, open)
+	}
 	e.copyAll(20)
 	if st := e.status("copy"); !st.BackfillDone.Equal(at(21)) {
 		e.Errorf("the first backfill done is %v, want at 21 s", st.BackfillDone)
 	}
-	n, err := e.p.BackfillReplica(e.ctx, "copy", at(30), e.audit(), nil)
+	if j, err := e.p.Job(e.ctx, sched.ID); err != nil || j.State != tenant.JobDone || j.Counts.ScansDone != 2 {
+		e.Errorf("the attach's replicate job after the copy is %+v, %v; want done with 2 scans done", j, err)
+	}
+	if _, open, err := e.p.ReplicateJob(e.ctx, "copy"); err != nil || open {
+		e.Errorf("a replicate job is still open after the backfill (%v, %v)", open, err)
+	}
+	b := tenant.ReplicaBackfill{Replica: "copy", JobID: "J0000000000b1", Now: at(30)}
+	j, made, err := e.p.BackfillReplica(e.ctx, b, e.audit(), nil)
 	e.ok("BackfillReplica", err)
-	if n != 2 {
-		e.Errorf("a backfill marked %d scans, want 2", n)
+	if !made || j.ID != b.JobID || j.State != tenant.JobRunning || j.Counts.Scans != 2 || j.Replicate == nil || j.Replicate.Scheduled ||
+		j.Replicate.Primary != "store" {
+		e.Errorf("a backfill answered %+v (made %v), want a running job of 2 scans made by a person", j, made)
 	}
 	if st := e.status("copy"); st.Pending != 2 || st.BackfillPending != 2 || !st.BackfillDone.IsZero() {
 		e.Errorf("the status after a backfill is queued is %+v", st)
+	}
+	again, made, err := e.p.BackfillReplica(e.ctx, tenant.ReplicaBackfill{Replica: "copy", JobID: "J0000000000b2", Now: at(31)}, e.audit(), nil)
+	e.ok("BackfillReplica repeated", err)
+	if made || again.ID != b.JobID {
+		e.Errorf("a repeated backfill answered %s (made %v), want the running job %s", again.ID, made, b.JobID)
 	}
 	e.copyAll(40)
 	if st := e.status("copy"); st.InStep != 2 || st.BackfillPending != 0 || !st.BackfillDone.Equal(at(41)) {
 		e.Errorf("the status after the backfill is %+v", st)
 	}
-	_, err = e.p.BackfillReplica(e.ctx, "gone", at(50), e.audit(), nil)
+	if j, err := e.p.Job(e.ctx, b.JobID); err != nil || j.State != tenant.JobDone || j.Counts.ScansDone != 2 || !j.Ended.Equal(at(41)) {
+		e.Errorf("the backfill's job after the copy is %+v, %v; want done at 41 s with 2 scans done", j, err)
+	}
+	_, _, err = e.p.BackfillReplica(e.ctx, tenant.ReplicaBackfill{Replica: "gone", JobID: "J0000000000b3", Now: at(50)}, e.audit(), nil)
 	e.wantKind("BackfillReplica of a storage the tenant does not have", err, fault.NotFound)
+	_, _, err = e.p.BackfillReplica(e.ctx, tenant.ReplicaBackfill{Replica: "store", JobID: "J0000000000b4", Now: at(50)}, e.audit(), nil)
+	e.wantPrecondition("BackfillReplica of a storage that is not a replica", err)
 }

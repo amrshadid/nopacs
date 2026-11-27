@@ -70,7 +70,7 @@ echo "== tables"
 "$SQLITE3" -batch "$db" '.tables'
 tables_hold "$(q "SELECT group_concat(name, ' ') FROM (SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name)")" \
 	subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles tenant_secrets reception_steps \
-	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs repair_outcomes storage_switches \
+	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs replicate_jobs repair_outcomes storage_switches \
 	scrub_verified scan_sidecars \
 	correction_keys correction_objects correction_records_owed correction_copies_abandoned \
 	retention_rules retention_sessions retention_state holds hold_records dispose_jobs dispose_sessions

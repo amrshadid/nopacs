@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/core/label"
+	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
@@ -153,6 +154,9 @@ func (k Sending) DetachReplica(ctx context.Context, d tenant.ReplicaDetach, audi
 		if err := k.clearDamageFindings(ctx, tx, `replica = ?`, []any{d.Replica}, "", d.Now); err != nil {
 			return err
 		}
+		if err := k.cancelReplicateJobs(ctx, tx, d.Replica, d.Now); err != nil {
+			return err
+		}
 		for _, q := range []string{`DELETE FROM replica_damage WHERE replica = ?`, `DELETE FROM replica_scans WHERE replica = ?`,
 			`DELETE FROM replica_totals WHERE replica = ?`, `DELETE FROM correction_records_owed WHERE storage = ?`} {
 			if _, err := tx.Exec(ctx, q, d.Replica); err != nil {
@@ -177,51 +181,96 @@ func (k Sending) DetachReplica(ctx context.Context, d tenant.ReplicaDetach, audi
 }
 
 // BackfillReplica implements tenant.Replication.
-func (k Sending) BackfillReplica(ctx context.Context, replica string, now time.Time, audit master.AuditEntry, guard tenant.Guard) (int64, error) {
-	if err := tenant.ValidateName("storage", replica); err != nil {
-		return 0, err
-	}
-	if err := master.ValidateTime("time", now); err != nil {
-		return 0, err
+func (k Sending) BackfillReplica(ctx context.Context, b tenant.ReplicaBackfill, audit master.AuditEntry, guard tenant.Guard) (tenant.Job, bool, error) {
+	if err := b.Validate(); err != nil {
+		return tenant.Job{}, false, err
 	}
 	if err := audit.Validate(); err != nil {
-		return 0, err
+		return tenant.Job{}, false, err
 	}
-	var marked int64
+	replica, now := b.Replica, b.Now
+	var out tenant.Job
+	var made bool
 	err := k.Host.Write(ctx, "the replica's backfill cannot be queued", func(tx SendingTx) error {
-		marked = 0
+		made = false
 		r, err := replicaOf(ctx, tx, replica, k.D.Lock)
 		if err != nil {
 			return err
 		}
-		added, err := k.queueAll(ctx, tx, replica, r.ReplicaOf, now)
+		open, found, err := k.openReplicateJob(ctx, tx, replica, "")
 		if err != nil {
 			return err
 		}
-		again, err := tx.Exec(ctx, `UPDATE replica_scans SET state = 'pending', queued_at = ?, due = ?, seq = seq + 1, backfill = ?
-			WHERE replica = ? AND state = 'in_step'`, k.D.Time(now), k.D.Time(now), k.D.Bool(true), replica)
-		if err != nil {
+		if found {
+			out = open
+			a, err := AddDetails(audit, "job", open.ID)
+			if err != nil {
+				return err
+			}
+			return tx.Audited(ctx, a, guard)
+		}
+		if taken, err := exists(ctx, tx, `SELECT 1 FROM jobs WHERE id = ?`, b.JobID); err != nil || taken {
+			if err != nil {
+				return err
+			}
+			return fault.New(fault.Conflict, "a job with this id exists")
+		}
+		if _, err := k.queueAll(ctx, tx, replica, r.ReplicaOf, now); err != nil {
 			return err
 		}
-		owed, err := tx.Exec(ctx, `UPDATE replica_scans SET backfill = ? WHERE replica = ? AND backfill = ?`, k.D.Bool(true),
-			replica, k.D.Bool(false))
-		if err != nil {
+		// One statement marks every row owed and turns those in step to
+		// pending, judging each row's state once: on a database with
+		// several writers at read committed, a statement that waits for a
+		// copy ending a row in step reads the row as that copy left it, so
+		// the row is made pending and owed together. Two statements would
+		// let the copy commit between them and leave the row in step yet
+		// owed, which nothing claims, so the backfill would never end. A
+		// row being copied under a claim made before (not a backfill's, so
+		// its copy does not check again what the replica holds) has its
+		// change counted too: that copy then ends not in step, and the row
+		// is claimed again as the backfill's.
+		const inStep = `state = 'in_step'`
+		if _, err := tx.Exec(ctx, `UPDATE replica_scans SET
+			state = CASE WHEN `+inStep+` THEN 'pending' ELSE state END,
+			queued_at = CASE WHEN `+inStep+` THEN ? ELSE queued_at END,
+			due = CASE WHEN `+inStep+` THEN ? ELSE due END,
+			seq = CASE WHEN state IN ('in_step', 'copying') THEN seq + 1 ELSE seq END,
+			backfill = ?
+			WHERE replica = ? AND (`+inStep+` OR backfill = ?)`,
+			k.D.Time(now), k.D.Time(now), k.D.Bool(true), replica, k.D.Bool(false)); err != nil {
 			return err
 		}
-		marked = added + again + owed
+		// The job counts every scan the replica owes its backfill now,
+		// those a canceled job of it left owed among them.
+		var marked int64
+		if _, err := tx.QueryRow(ctx, `SELECT count(*) FROM replica_scans WHERE replica = ? AND backfill = ?`,
+			[]any{replica, k.D.Bool(true)}, &marked); err != nil {
+			return err
+		}
 		// The backfill is a new one: it is done when it owes nothing more.
 		if _, err := tx.Exec(ctx, `UPDATE replica_totals SET backfill_done_at = NULL WHERE replica = ?`, replica); err != nil {
 			return err
 		}
+		if err := k.insertReplicateJob(ctx, tx, b.JobID, audit.KeyID, tenant.ReplicateJob{Replica: replica, Primary: r.ReplicaOf},
+			marked, now); err != nil {
+			return err
+		}
+		// The count made again ends the job at once when the primary held
+		// nothing to mark.
 		if err := k.recountTotals(ctx, tx, replica, now); err != nil {
 			return err
 		}
+		j, err := jobInTx(ctx, tx, b.JobID, "")
+		if err != nil {
+			return err
+		}
+		out, made = j.job, true
 		return tx.Audited(ctx, audit, guard)
 	})
 	if err != nil {
-		return 0, err
+		return tenant.Job{}, false, err
 	}
-	return marked, nil
+	return out, made, nil
 }
 
 // replicaStatusColumns are a replica's status as ListReplicas reads it: the

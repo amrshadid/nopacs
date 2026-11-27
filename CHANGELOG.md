@@ -203,8 +203,7 @@ scan, keeps it whole, and serves it through an API with keys.
 
 - The API contract `nopacs.v1` in `api/proto/nopacs/v1`, served over gRPC,
   gRPC-web and Connect, every reply carrying a `Nopacs-Request-Id` header.
-  Defined and not yet served: replica backfill, recall and sample checks
-  (`api/not-served.txt`).
+  Every method of the contract is served (`api/not-served.txt` lists none).
 - The command line `nopacs` for every service, with `--json` output and named
   client contexts, and an interactive program (`nopacs` with no arguments).
 - `nopacs job scrub`, `job rebuild` (`--mode compare|replace`; a replace needs
@@ -376,6 +375,19 @@ scan, keeps it whole, and serves it through an API with keys.
   back, polls until it reads, and records the answer in the tenant's shared
   recall row (online until a time, or failed with a fixed reason, never the
   store's text).
+- `nopacs replica backfill` (ReplicaService.BackfillReplica) queues a
+  replicate job that copies to a replica every object of its primary it does
+  not hold verified, never one a purging delete withdraws; the job counts the
+  scans its backfill owes, ends done once each is in step, says "replica not
+  answering" while copies to the replica fail, and is answered again to a
+  repeated call. Attaching a replica makes the same job for what the primary
+  held. `nopacs recall` (ReplicaService.Recall) brings a subject's, session's
+  or scan's objects back from archive-tier storages after a preview and its
+  confirm token, joining recalls already asked for and asking nothing twice;
+  days above a storage's own need an admin. `nopacs replica verify`
+  (ReplicaService.VerifySample) lists a random sample of a storage's objects
+  (key, size, SHA-256), repeatable with a seed, for checks with tools outside
+  the server.
 - The storage switch runs a primary's move onto its replica on the server's
   own goroutine: a preview names its blockers (a clean scrub of the replica
   and an empty compare from it, each the newest of its kind) and gives a

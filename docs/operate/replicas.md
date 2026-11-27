@@ -21,8 +21,8 @@ machine, volume or account.
 | What | Role on the tenant |
 |---|---|
 | list replicas, read a storage's status | reader |
-| backfill a replica | operator |
-| attach, detach, repair | admin |
+| backfill a replica, recall from an archive tier, draw a verification sample | operator |
+| attach, detach, repair; a recall for more days than a storage's own | admin |
 
 ## Attach a replica
 
@@ -54,9 +54,17 @@ nopacs replica backfill lab1 copy2 --wait
 ```
 
 `replica backfill` and the attach queue a `replicate` job; a job of the replica that is
-queued or running is answered instead of a second one. At this tree, the server's method
-behind `replica backfill` is in the contract but not served yet, so the command is refused as
-unimplemented; the attach itself queues the same job.
+queued or running is answered instead of a second one. The job counts the scans its
+backfill marked: every scan of the primary, those the replica holds in step included,
+whose objects the copy verifies again against the replica's own verified manifest and puts
+only where they are missing or wrong. It ends done once the replica holds each of them
+verified, and `job show` and `job watch` follow it like any job. While the last copy to
+the replica failed (its `last fault` in `storage status`), the job, still running, gives
+the reason `replica not answering`. A scan archived after the
+backfill began is copied as it arrives but is not the job's. The copy never takes an
+instance that a delete being purged withdraws, nor the manifest that purge is replacing:
+the purge took its copies when it began. Canceling the job stops nothing (the scans stay
+owed to the replica until each is in step); detaching the replica cancels it.
 
 ## What "in step" means
 
@@ -207,12 +215,31 @@ send, a de-identification job, a repair) asks for the recall and waits, in a sta
 preview and its confirm token (days above the storage's own need an admin), and there is one
 recall per object however many requests wait for it.
 
-At this tree the recall worker runs, but `ReplicaService.Recall` is in the contract and not
-served yet, so there is no `nopacs recall` command: recalls start only from a job meeting a
-cold object. A recall that is not online within `recall.wait` (48 hours by default, from
-`1h` to `30d`, per tenant if you wish) is recorded as failed, and the server asks the store
-nothing more for it. A recall is proven against a stub of an S3 store only; try it on your
-own store before you rely on it.
+An operator's recall names a subject, a session of it or a scan of that:
+
+```
+nopacs recall lab1 sub-3f9a/ses-81c2 --dry-run
+nopacs recall lab1 sub-3f9a/ses-81c2
+nopacs recall lab1 sub-3f9a --storage cold --days 14 --yes
+```
+
+The command first shows the preview, which asks nothing of the store: the archive-tier
+storages that hold the target in step, the target's objects and bytes there, those online
+already, those being recalled already (by a job or an earlier request, which this recall
+joins), and those it would ask for. `--dry-run` stops there. Otherwise it asks for the
+target to be typed again on a terminal (or `--yes`), then sends the recall with the
+preview's token, so it asks for what was shown: when the objects to ask for changed since,
+or the token is more than an hour old, the recall is refused (exit 5) and the command is
+run again. A token sent again after its recall was made answers what that recall asked for
+and asks the store for nothing more. An object online or being recalled already is never
+asked for again. Without `--days` each storage's own recall days apply; days above them are
+refused to an operator. The audit entry names the target, the storages, the days and the
+objects and bytes asked for.
+
+A recall that is not online within `recall.wait` (48 hours by default, from `1h` to `30d`,
+per tenant if you wish) is recorded as failed, and the server asks the store nothing more
+for it. A recall is proven against a stub of an S3 store only; try it on your own store
+before you rely on it.
 
 ## What it costs
 

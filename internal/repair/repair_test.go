@@ -214,7 +214,7 @@ func TestNoReplicaInStep(t *testing.T) {
 	f := newFixture(t, synthetic(2, 4096))
 	f.remove(f.primary.Store, f.keys[0])
 	fd := f.find(0)
-	if _, err := f.p.BackfillReplica(f.ctx, "copy", f.clock.Now(), f.audit(), nil); err != nil {
+	if _, _, err := f.p.BackfillReplica(f.ctx, tenant.ReplicaBackfill{Replica: "copy", JobID: f.id("job"), Now: f.clock.Now()}, f.audit(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if f.inStep() {

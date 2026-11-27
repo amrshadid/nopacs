@@ -27,8 +27,9 @@ type replicas struct {
 	counted  map[string]int
 	blockers map[string][]string
 	status   map[string]func(*v1.StorageStatus)
-	// BackfillServed makes BackfillReplica answer; the server does not serve it yet.
-	backfillServed bool
+	// backfillNotServed makes BackfillReplica answer UNIMPLEMENTED, as a
+	// server older than the one that serves it.
+	backfillNotServed bool
 	// used is the confirm tokens a switch already took, so a token works once.
 	used map[string]bool
 	// drain is how long the copy of a primary takes to drain, by tenant and
@@ -108,11 +109,21 @@ func (s *Server) SetStorageStatus(tenant, storage string, fn func(*v1.StorageSta
 	s.repl.status[key(tenant, storage)] = fn
 }
 
-// ServeBackfill makes BackfillReplica answer, as a server that serves it.
+// ServeBackfill makes BackfillReplica answer, as the server does; it undoes
+// RefuseBackfill.
 func (s *Server) ServeBackfill() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.repl.backfillServed = true
+	s.repl.backfillNotServed = false
+}
+
+// RefuseBackfill makes BackfillReplica answer UNIMPLEMENTED, as a server
+// older than the one that serves it, for the commands' way of showing a
+// method not served.
+func (s *Server) RefuseBackfill() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.repl.backfillNotServed = true
 }
 
 // FailWithReason is FailWith for an answer that also carries the contract's
@@ -229,8 +240,8 @@ func (h replicaHandler) DetachReplica(_ context.Context, req *v1.DetachReplicaRe
 	return &v1.DetachReplicaResponse{Storage: withoutSecret(st, held)}, nil
 }
 
-// BackfillReplica queues a copy job when the fake serves it, and answers
-// UNIMPLEMENTED as the real server does until it does.
+// BackfillReplica queues a copy job, or answers UNIMPLEMENTED as an older
+// server does once RefuseBackfill was called.
 func (h replicaHandler) BackfillReplica(_ context.Context, req *v1.BackfillReplicaRequest) (*v1.BackfillReplicaResponse, error) {
 	s := h.s
 	err := s.begin(req.GetTenant())
@@ -238,7 +249,7 @@ func (h replicaHandler) BackfillReplica(_ context.Context, req *v1.BackfillRepli
 	if err != nil {
 		return nil, err
 	}
-	if !s.repl.backfillServed {
+	if s.repl.backfillNotServed {
 		return nil, errNotServed
 	}
 	st, err := s.arch.findStorage(req.GetTenant(), req.GetReplica())

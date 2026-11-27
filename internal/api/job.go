@@ -60,6 +60,9 @@ func (v *jobViews) message(ctx context.Context, j tenant.Job) *v1.Job {
 		}
 		return m
 	}
+	if j.Kind == tenant.JobReplicate {
+		return jobMessage(j, replicaHeld(ctx, v.p, j))
+	}
 	if j.State.Ended() || j.Reason != "" || j.Sender == "" {
 		return jobMessage(j, "")
 	}

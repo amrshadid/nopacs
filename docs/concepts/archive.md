@@ -91,6 +91,5 @@ or on the installation. A key with no grant on a tenant is refused there. See
 ## What is not here
 
 NoPACs does not keep a viewer, a worklist or a report. It stores, de-identifies,
-catalogs, serves and sends. Of replication to a second storage, only `replica backfill`,
-recall and the verified sample before a switch are not served yet
-([replicas](../operate/replicas.md)).
+catalogs, serves and sends. Replication goes to storages of the same installation only, never
+to another installation ([replicas](../operate/replicas.md)).

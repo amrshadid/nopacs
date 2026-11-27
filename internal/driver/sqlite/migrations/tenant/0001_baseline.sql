@@ -1883,6 +1883,19 @@ CREATE TABLE repair_jobs (
 
 CREATE INDEX repair_jobs_by_storage ON repair_jobs (storage);
 
+-- What a replicate job copies: the replica, its primary when the job was
+-- made, and whether the server made it when the replica was attached. A
+-- replica's job not ended is found by it, as each change of the replica's
+-- backfill count moves that job.
+CREATE TABLE replicate_jobs (
+    job_id       TEXT    NOT NULL PRIMARY KEY,
+    replica      TEXT    NOT NULL,
+    primary_name TEXT    NOT NULL,
+    scheduled    INTEGER NOT NULL CHECK (scheduled IN (0, 1))
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX replicate_jobs_by_replica ON replicate_jobs (replica);
+
 -- Each finding a repair job counted, with the outcome counted, so an
 -- attempt that walks the findings again counts none twice; one counted
 -- no_good_copy and repaired later moves from refused to sent.

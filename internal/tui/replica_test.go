@@ -89,10 +89,11 @@ func TestReplicaListAttachDetach(t *testing.T) {
 }
 
 // TestReplicaBackfillNotServed guards what a server that does not serve the
-// backfill yet shows: one plain line, not an internal error, and nothing sent
-// before the person said yes.
+// backfill (an older one) shows: one plain line, not an internal error, and
+// nothing sent before the person said yes.
 func TestReplicaBackfillNotServed(t *testing.T) {
 	r := newRig(t, 100, 24, replicaSetup)
+	r.fake.RefuseBackfill()
 	openReplicas(r)
 	r.key("b")
 	r.expect("Backfill replica copy")

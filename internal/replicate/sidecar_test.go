@@ -28,7 +28,7 @@ func TestSidecarIsPutAgainstTheCatalogsDigest(t *testing.T) {
 	f.wantSameTrees()
 
 	f.putPrimary(sk, []byte("a sidecar a reception put before its commit\n"))
-	if _, err := f.p.BackfillReplica(f.ctx, "copy", f.clock.Now(), f.audit(), nil); err != nil {
+	if _, _, err := f.p.BackfillReplica(f.ctx, tenant.ReplicaBackfill{Replica: "copy", JobID: f.id("job"), Now: f.clock.Now()}, f.audit(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if p := f.runOnce(w); p.InStep != 0 || p.Failed != 1 {

@@ -63,11 +63,7 @@ func (t Table) Requirement(procedure string, msg proto.Message) (access.Requirem
 // pendingMethods are the methods of services otherwise served that the
 // contract defines and no handler serves yet: the method lines of
 // api/not-served.txt, which a test compares with this list.
-var pendingMethods = []string{
-	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure,
-	nopacsv1connect.ReplicaServiceRecallProcedure,
-	nopacsv1connect.ReplicaServiceVerifySampleProcedure,
-}
+var pendingMethods = []string{}
 
 // Pending reports whether procedure is one of pendingMethods, so the server
 // leaves it out of its routes as the binary's server does
@@ -343,13 +339,16 @@ func Contract() Table {
 		nopacsv1connect.CorrectionServiceResolveInstancesProcedure:  onTenant(func() *nopacsv1.ResolveInstancesRequest { return &nopacsv1.ResolveInstancesRequest{} }, master.RoleReader),
 
 		// ReplicaService: "reader on the tenant." to list replicas, "admin on
-		// the tenant." to attach, detach, repair and switch. Its methods that
-		// copy, recall and sample (operator) are pending.
-		nopacsv1connect.ReplicaServiceListReplicasProcedure:  onTenant(func() *nopacsv1.ListReplicasRequest { return &nopacsv1.ListReplicasRequest{} }, master.RoleReader),
-		nopacsv1connect.ReplicaServiceAttachReplicaProcedure: onTenant(func() *nopacsv1.AttachReplicaRequest { return &nopacsv1.AttachReplicaRequest{} }, master.RoleAdmin),
-		nopacsv1connect.ReplicaServiceDetachReplicaProcedure: onTenant(func() *nopacsv1.DetachReplicaRequest { return &nopacsv1.DetachReplicaRequest{} }, master.RoleAdmin),
-		nopacsv1connect.ReplicaServiceRepairProcedure:        onTenant(func() *nopacsv1.RepairRequest { return &nopacsv1.RepairRequest{} }, master.RoleAdmin),
-		nopacsv1connect.ReplicaServiceSwitchStorageProcedure: onTenant(func() *nopacsv1.SwitchStorageRequest { return &nopacsv1.SwitchStorageRequest{} }, master.RoleAdmin),
+		// the tenant." to attach, detach, repair and switch, "operator on the
+		// tenant." to backfill, recall and sample.
+		nopacsv1connect.ReplicaServiceListReplicasProcedure:    onTenant(func() *nopacsv1.ListReplicasRequest { return &nopacsv1.ListReplicasRequest{} }, master.RoleReader),
+		nopacsv1connect.ReplicaServiceAttachReplicaProcedure:   onTenant(func() *nopacsv1.AttachReplicaRequest { return &nopacsv1.AttachReplicaRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReplicaServiceDetachReplicaProcedure:   onTenant(func() *nopacsv1.DetachReplicaRequest { return &nopacsv1.DetachReplicaRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: onTenant(func() *nopacsv1.BackfillReplicaRequest { return &nopacsv1.BackfillReplicaRequest{} }, master.RoleOperator),
+		nopacsv1connect.ReplicaServiceRepairProcedure:          onTenant(func() *nopacsv1.RepairRequest { return &nopacsv1.RepairRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReplicaServiceRecallProcedure:          onTenant(func() *nopacsv1.RecallRequest { return &nopacsv1.RecallRequest{} }, master.RoleOperator),
+		nopacsv1connect.ReplicaServiceSwitchStorageProcedure:   onTenant(func() *nopacsv1.SwitchStorageRequest { return &nopacsv1.SwitchStorageRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReplicaServiceVerifySampleProcedure:    onTenant(func() *nopacsv1.VerifySampleRequest { return &nopacsv1.VerifySampleRequest{} }, master.RoleOperator),
 
 		// RetentionService: "admin on the tenant." for rules, disposal and
 		// holds' placing and release; "reader on the tenant." for rules and

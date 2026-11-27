@@ -25,8 +25,18 @@ func (t *Tenant) DetachReplica(ctx context.Context, d tenant.ReplicaDetach, audi
 }
 
 // BackfillReplica implements tenant.Replication.
-func (t *Tenant) BackfillReplica(ctx context.Context, replica string, now time.Time, audit master.AuditEntry, guard tenant.Guard) (int64, error) {
-	return t.sending().BackfillReplica(ctx, replica, now, audit, guard)
+func (t *Tenant) BackfillReplica(ctx context.Context, b tenant.ReplicaBackfill, audit master.AuditEntry, guard tenant.Guard) (tenant.Job, bool, error) {
+	return t.sending().BackfillReplica(ctx, b, audit, guard)
+}
+
+// ReplicateJob implements tenant.Replication.
+func (t *Tenant) ReplicateJob(ctx context.Context, replica string) (tenant.Job, bool, error) {
+	return t.sending().ReplicateJob(ctx, replica)
+}
+
+// StorageObjects implements tenant.Replication.
+func (t *Tenant) StorageObjects(ctx context.Context, q tenant.StorageObjectQuery, page master.Page) ([]tenant.StoredObject, string, error) {
+	return t.sending().StorageObjects(ctx, q, page)
 }
 
 // ListReplicas implements tenant.Replication.
@@ -87,6 +97,11 @@ func (t *Tenant) RequestRecalls(ctx context.Context, a tenant.RecallAsk) (tenant
 // Recall implements tenant.Recalls.
 func (t *Tenant) Recall(ctx context.Context, storage, key string) (tenant.Recall, bool, error) {
 	return t.sending().Recall(ctx, storage, key)
+}
+
+// RecallsOf implements tenant.Recalls.
+func (t *Tenant) RecallsOf(ctx context.Context, storage string, keys []string) (map[string]tenant.Recall, error) {
+	return t.sending().RecallsOf(ctx, storage, keys)
 }
 
 // DueRecalls implements tenant.Recalls.

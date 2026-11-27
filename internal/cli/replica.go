@@ -29,10 +29,11 @@ attached here; it must hold nothing yet. A replica of the archive tier (an S3
 cold storage class) may hold objects that must be recalled before they read.
 
 Every command takes the tenant first. Listing needs the reader role on the
-tenant, backfilling the operator role, attaching and detaching the admin role.
-"repair" puts a primary's damaged objects back from a replica, and "switch"
-moves a tenant onto a replica.`,
-		a.newReplicaList(), a.newReplicaAttach(), a.newReplicaDetach(), a.newReplicaBackfill())
+tenant, backfilling and sampling the operator role, attaching and detaching the
+admin role. "repair" puts a primary's damaged objects back from a replica,
+"recall" brings objects back from an archive tier, and "switch" moves a tenant
+onto a replica.`,
+		a.newReplicaList(), a.newReplicaAttach(), a.newReplicaDetach(), a.newReplicaBackfill(), a.newReplicaVerify())
 }
 
 // replicaRow is one replica as a table row.
@@ -310,11 +311,9 @@ func (a *app) newReplicaBackfill() *cobra.Command {
 		Long: `Queue a job that copies to a replica every object of its primary that the replica
 does not hold verified: after the replica was restored from elsewhere, or to be
 sure before a switch. A copy job of the replica already queued or running is
-answered instead, so a repeated command starts nothing more.
-
-A server that does not serve this yet answers so, and the command says "not
-served" and exits 1; "replica attach" copies what the primary holds when a
-storage is attached.`,
+answered instead, so a repeated command starts nothing more. The job counts the
+scans it copies and ends done once the replica holds each of them verified; an
+object a delete being purged withdraws is never copied.`,
 		Example: `  nopacs replica backfill lab1 copy
   nopacs replica backfill lab1 copy --wait`,
 		Args: exactArgs(2),

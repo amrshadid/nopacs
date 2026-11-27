@@ -66,10 +66,11 @@ func jobMessage(j tenant.Job, held string) *v1.Job {
 		}
 		m.Kind = &v1.Job_Repair{Repair: r}
 	case tenant.JobReplicate:
-		// The store keeps no fields of its own for a replicate job yet: its
-		// kind is answered, so a listing never shows it as one it does not
-		// know.
-		m.Kind = &v1.Job_Replicate{Replicate: &v1.ReplicateJob{Mode: v1.ReplicateJobMode_REPLICATE_JOB_MODE_BACKFILL}}
+		r := &v1.ReplicateJob{Mode: v1.ReplicateJobMode_REPLICATE_JOB_MODE_BACKFILL}
+		if j.Replicate != nil {
+			r.Replica, r.Primary, r.Scheduled = j.Replicate.Replica, j.Replicate.Primary, j.Replicate.Scheduled
+		}
+		m.Kind = &v1.Job_Replicate{Replicate: r}
 	case tenant.JobDispose:
 		// Its rule and reason are the dispose job's own rows
 		// (disposeJobMessage), which a view reads.

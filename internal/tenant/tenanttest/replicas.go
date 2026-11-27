@@ -37,6 +37,10 @@ func runReplication(t *testing.T, open OpenEvents, scratch Scratch) {
 		{"ReplicaBackfill", testReplicaBackfill},
 		{"Recalls", testRecalls},
 		{"RecallsRefused", testRecallsRefused},
+		{"RecallsOf", testRecallsOf},
+		{"StorageObjects", testStorageObjects},
+		{"StorageObjectsAfterSwap", testStorageObjectsAfterSwap},
+		{"BackfillAfterCanceledJob", testBackfillAfterCanceledJob},
 		{"Repairs", testRepairs},
 		{"SwitchSwaps", testSwitchSwaps},
 		{"SwitchRefusals", testSwitchRefusals},
@@ -371,7 +375,7 @@ func testReplicaAttachDetach(e *renv) {
 	if st := e.status("copy"); !st.Attached.Equal(at(20)) || st.Pending != 2 {
 		e.Errorf("an attach repeated changed the replica's status: %+v", st)
 	}
-	_, err = e.p.BackfillReplica(e.ctx, "store", at(31), e.audit(), nil)
+	_, _, err = e.p.BackfillReplica(e.ctx, tenant.ReplicaBackfill{Replica: "store", JobID: "J0000000000c1", Now: at(31)}, e.audit(), nil)
 	e.wantPrecondition("BackfillReplica of a storage that is not a replica", err)
 	_, _, err = e.p.DetachReplica(e.ctx, tenant.ReplicaDetach{Replica: "copy", Abandon: true, Now: at(40)}, e.audit(), nil)
 	e.wantKind("DetachReplica abandoning with no reason", err, fault.Invalid)
@@ -381,6 +385,11 @@ func testReplicaAttachDetach(e *renv) {
 	e.ok("DetachReplica", err)
 	if d.ReplicaOf != "" || len(abandoned) != 0 {
 		e.Errorf("the detached storage is %+v, abandoned %v", d, abandoned)
+	}
+	// The attach's replicate job, which the copy never ended, is canceled
+	// with the detach: its replica's rows are gone.
+	if j, err := e.p.Job(e.ctx, tenant.ReplicateJobID("copy", at(20))); err != nil || j.State != tenant.JobCanceled {
+		e.Errorf("the attach's replicate job after the detach is %+v, %v; want canceled", j, err)
 	}
 	if st := e.rowState("copy", seriesA); st != "" {
 		e.Errorf("a detached replica keeps a row of a scan, %s", st)

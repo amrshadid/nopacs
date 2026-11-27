@@ -284,6 +284,15 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		"SwitchStorage": func(c clients) outcome {
 			return call(c.replicas.SwitchStorage, &v1.SwitchStorageRequest{Tenant: name, Primary: "main", Replica: "copy", ValidateOnly: true})
 		},
+		"BackfillReplica": func(c clients) outcome {
+			return call(c.replicas.BackfillReplica, &v1.BackfillReplicaRequest{Tenant: name, Replica: "copy"})
+		},
+		"Recall": func(c clients) outcome {
+			return call(c.replicas.Recall, &v1.RecallRequest{Tenant: name, SubjectLabel: "SUBJ"})
+		},
+		"VerifySample": func(c clients) outcome {
+			return call(c.replicas.VerifySample, &v1.VerifySampleRequest{Tenant: name, Storage: "main", Count: 1})
+		},
 		"AddRetentionRule": func(c clients) outcome {
 			return call(c.retention.AddRetentionRule, &v1.AddRetentionRuleRequest{Tenant: name, Rule: &v1.RetentionRule{Name: "r", KeepAtLeast: &v1.RetentionPeriod{Years: 1}}})
 		},

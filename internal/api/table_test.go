@@ -126,6 +126,9 @@ var methodTests = map[string]func(t *testing.T){
 	nopacsv1connect.ReplicaServiceDetachReplicaProcedure:         testDetachReplica,
 	nopacsv1connect.ReplicaServiceRepairProcedure:                testRepair,
 	nopacsv1connect.ReplicaServiceSwitchStorageProcedure:         testSwitchStorage,
+	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure:       testBackfillReplica,
+	nopacsv1connect.ReplicaServiceRecallProcedure:                testRecall,
+	nopacsv1connect.ReplicaServiceVerifySampleProcedure:          testVerifySample,
 	nopacsv1connect.RetentionServiceAddRetentionRuleProcedure:    testAddRetentionRule,
 	nopacsv1connect.RetentionServiceGetRetentionRuleProcedure:    testGetRetentionRule,
 	nopacsv1connect.RetentionServiceListRetentionRulesProcedure:  testListRetentionRules,
@@ -191,8 +194,8 @@ func contractMethods() map[string]protoreflect.MethodDescriptor {
 // here names a method the contract does not have.
 func TestEveryMethod(t *testing.T) {
 	methods := contractMethods()
-	if len(methods) != 112 {
-		t.Errorf("the contract has %d methods; this test was written for 112, so look at what changed", len(methods))
+	if len(methods) != 115 {
+		t.Errorf("the contract has %d methods; this test was written for 115, so look at what changed", len(methods))
 	}
 	var table api.Methods
 	for proc, md := range methods {

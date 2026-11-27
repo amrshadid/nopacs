@@ -61,15 +61,22 @@ ended. A scrub reads every byte, so for a large tenant it takes as long as copyi
 
 NoPACs checking its own copy is not proof enough for a move, so read a sample with tools
 that are not NoPACs: hash each object, parse it as DICOM, and compare with the size and
-SHA-256 the catalog holds. The method that draws the sample, `ReplicaService.VerifySample`,
-answers each sampled instance's key (relative to the storage's directory or prefix), size
-and SHA-256; a seed makes the sample repeatable. At this tree that method is in the contract
-and not served yet, and there is no `nopacs storage verify-sample`. When it is served the
-sample goes in a tab-separated file; until then the checks of steps 2 and 4 are the proof
-that NoPACs itself gives, and this step needs a list of keys, sizes and SHA-256 values from
-another source. The script below takes a file of `key`, `size`,
-`sha256` lines and needs pydicom (and boto3 for a bucket). It reads straight from the
-directory or the bucket, with no NoPACs code:
+SHA-256 the catalog holds. `nopacs replica verify` draws the sample
+(`ReplicaService.VerifySample`): a random sample of the instances the storage holds (for a
+replica, those of its scans in step), each with its key relative to the storage's directory
+or prefix, its size and its SHA-256, as a tab-separated table. The server reads no object
+for it. `--seed` makes the sample repeatable: the same seed over the same storage draws the
+same objects again.
+
+```
+nopacs replica verify lab1 newb --count 200 --seed 7 > sample.tsv
+```
+
+The table's keys hold UIDs as received: keep the file with the care the archive itself
+needs, and delete it after. The script below reads that file (lines starting with `#` and
+the header line are skipped; the first three columns are `key`, `size`, `sha256`) and needs
+pydicom (and boto3 for a bucket). It reads straight from the directory or the bucket, with
+no NoPACs code:
 
 ```python
 #!/usr/bin/env python3
@@ -78,7 +85,9 @@ directory or the bucket, with no NoPACs code:
 usage: check_sample.py sample.tsv --dir /srv/nopacs/lab1-new
        check_sample.py sample.tsv --bucket nopacs-lab1 --prefix nopacs/lab1/ --endpoint URL
 
-sample.tsv has one object per line: key, size, sha256, tab separated.
+sample.tsv is what "nopacs replica verify" writes: one object per line, its
+first columns key, size, sha256, tab separated; lines starting with "#" and the
+header line are skipped.
 """
 import argparse, csv, hashlib, io, os, sys
 import pydicom
@@ -107,7 +116,10 @@ def main():
         sys.exit("give --dir, or --bucket")
     read, bad, n = reader(args), 0, 0
     with open(args.sample, newline="") as f:
-        for key, size, sha in csv.reader(f, delimiter="\t"):
+        for row in csv.reader(f, delimiter="\t"):
+            if not row or row[0].startswith("#") or row[0] == "key":
+                continue
+            key, size, sha = row[:3]
             n += 1
             data = read(key)
             why = None

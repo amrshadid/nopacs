@@ -93,7 +93,10 @@ func (k Sending) addTotals(ctx context.Context, tx SendingTx, replica string, t 
 		backfill_done_at = CASE WHEN backfill + ? = 0 AND backfill > 0 THEN ? WHEN backfill + ? > 0 THEN NULL
 		ELSE backfill_done_at END WHERE replica = ?`,
 		t.pending, t.copying, t.inStep, t.damaged, t.objects, t.backfill, t.backfill, k.D.Time(now), t.backfill, replica)
-	return err
+	if err != nil || t.backfill == 0 {
+		return err
+	}
+	return k.followReplicateJobs(ctx, tx, replica, now)
 }
 
 // recountTotals counts the replica's counts again from its rows ("" for
@@ -112,8 +115,10 @@ func (k Sending) recountTotals(ctx context.Context, tx SendingTx, replica string
 		q += ` WHERE replica = ?`
 		args = append(args, replica)
 	}
-	_, err := tx.Exec(ctx, q, args...)
-	return err
+	if _, err := tx.Exec(ctx, q, args...); err != nil {
+		return err
+	}
+	return k.followReplicateJobs(ctx, tx, replica, now)
 }
 
 // beginReplica begins what replica holds as a replica of primary: its
@@ -138,6 +143,14 @@ func (k Sending) beginReplica(ctx context.Context, tx SendingTx, replica, primar
 	n, err := k.queueAll(ctx, tx, replica, primary, now)
 	if err != nil {
 		return 0, err
+	}
+	if n > 0 {
+		// The backfill followed as the server's own job, so a person sees
+		// when the copy of what the primary held is done.
+		if err := k.insertReplicateJob(ctx, tx, tenant.ReplicateJobID(replica, now), "", tenant.ReplicateJob{Replica: replica,
+			Primary: primary, Scheduled: true}, n, now); err != nil {
+			return 0, err
+		}
 	}
 	return n, k.recountTotals(ctx, tx, replica, now)
 }

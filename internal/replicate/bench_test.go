@@ -30,7 +30,7 @@ func BenchmarkReplicateScan(b *testing.B) {
 		b.StopTimer()
 		if i > 0 {
 			f.replica = &store{Store: openDir(b, filepath.Join(root, strconv.Itoa(i)))}
-			if _, err := f.p.BackfillReplica(f.ctx, "copy", f.clock.Now(), f.audit(), nil); err != nil {
+			if _, _, err := f.p.BackfillReplica(f.ctx, tenant.ReplicaBackfill{Replica: "copy", JobID: f.id("job"), Now: f.clock.Now()}, f.audit(), nil); err != nil {
 				b.Fatal(err)
 			}
 		}

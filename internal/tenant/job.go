@@ -254,6 +254,10 @@ type Job struct {
 	// Counts read: sent, the objects repaired or found good; refused, those
 	// no replica holds good; Instances and Bytes, both together.
 	Repair *RepairJob
+	// Replicate is what a replicate job copies; nil for every other kind.
+	// Its Counts read: Scans, the scans its backfill marked; ScansDone,
+	// those the replica no longer owes (BackfillCounts).
+	Replicate *ReplicateJob
 	// State is where it is.
 	State JobState
 	// Counts are its instances and bytes so far.

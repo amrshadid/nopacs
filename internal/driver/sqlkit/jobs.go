@@ -510,6 +510,9 @@ func (k Sending) RetryJob(ctx context.Context, id, newID string, now time.Time, 
 		if first.job.Kind == tenant.JobRepair {
 			return tenant.Precondition("a repair job is not retried; a new repair mends the findings that still hold")
 		}
+		if first.job.Kind == tenant.JobReplicate {
+			return tenant.Precondition("a replicate job is not retried; a new backfill of the replica copies what it still lacks")
+		}
 		has := true
 		if first.job.Kind == tenant.JobSend {
 			if has, err = k.lockSender(ctx, tx, first.job.Sender); err != nil {

@@ -93,7 +93,7 @@ func (r *replicaRig) addColdReplica(name string) *archiveStore {
 	if _, err := r.p.AddStorage(r.ctx, s, at, r.audit(), nil); err != nil {
 		r.t.Fatal(err)
 	}
-	if _, err := r.p.BackfillReplica(r.ctx, name, at, r.audit(), nil); err != nil {
+	if _, _, err := r.p.BackfillReplica(r.ctx, tenant.ReplicaBackfill{Replica: name, JobID: r.id("job"), Now: at}, r.audit(), nil); err != nil {
 		r.t.Fatal(err)
 	}
 	c := &archiveStore{Store: d, online: map[string]bool{}, sums: map[string][sha256.Size]byte{}, sizes: map[string]int64{}}

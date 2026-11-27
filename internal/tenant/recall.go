@@ -40,6 +40,10 @@ type Recalls interface {
 	// Recall answers the row of the object at key on storage, and whether
 	// there is one.
 	Recall(ctx context.Context, storage, key string) (Recall, bool, error)
+	// RecallsOf answers the rows of the objects at keys (at most
+	// MaxRecallBatch) on storage, by key; a key with no row is absent. What
+	// an operator's preview reads, a page of a target's objects at a time.
+	RecallsOf(ctx context.Context, storage string, keys []string) (map[string]Recall, error)
 	// DueRecalls answers up to limit (1 to MaxRecallBatch) rows requested or
 	// in progress whose due time is at or before now, earliest first: the
 	// worker's next asks and polls.

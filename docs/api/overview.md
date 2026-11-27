@@ -120,11 +120,9 @@ tenant, a key, a storage, a receiver, a sender, a job) is not repeated plainly.
 
 ## What is served
 
-Every method of the contract is served except the few `api/not-served.txt` in the
-repository lists (at this writing `ReplicaService`'s `BackfillReplica`, `Recall` and
-`VerifySample`). Calling one of
-those, as an authenticated caller, answers `UNIMPLEMENTED`, and the tests keep the list
-true.
+Every method of the contract is served but those `api/not-served.txt` in the repository
+lists (at this writing, none). Calling one of those, as an authenticated caller, answers
+`UNIMPLEMENTED`, and the tests keep the list true.
 
 The services: access (keys and grants), audit and audit seal, backup (a backup of
 the installation while it runs, and a tenant's export), catalog, correction, data (the files of a scan), deid, job, metadata,

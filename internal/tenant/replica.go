@@ -94,9 +94,25 @@ type Replication interface {
 	// BackfillReplica makes every scan of the replica's primary pending for
 	// it, marked as its backfill: those with no row, and those in step,
 	// whose objects the replicator verifies again (a replica restored from
-	// elsewhere). It answers the scans it marked. A storage that is not a
-	// replica is a precondition failure.
-	BackfillReplica(ctx context.Context, replica string, now time.Time, audit master.AuditEntry, guard Guard) (int64, error)
+	// elsewhere); and makes a replicate job of b.JobID that counts the scans
+	// marked (ReplicateJob), running, or done at once when it marked none,
+	// in one transaction with its audit entry. A replicate job of the
+	// replica queued or running is answered instead, marking nothing, its
+	// audit entry written all the same with that job's id as its detail
+	// "job". It answers the job and whether this call made it. A storage
+	// that is not a replica is a precondition failure. The copy never takes
+	// an object a correction in state purging hides (ClaimReplicaScans).
+	BackfillReplica(ctx context.Context, b ReplicaBackfill, audit master.AuditEntry, guard Guard) (Job, bool, error)
+	// ReplicateJob answers the replica's replicate job queued or running,
+	// and whether there is one. An attach that queued scans makes one
+	// (ReplicateJobID), in its transaction.
+	ReplicateJob(ctx context.Context, replica string) (Job, bool, error)
+	// StorageObjects answers a page of the objects q names, by scan then
+	// SOP Instance UID: an instance's object on a primary, or on a replica
+	// for a scan in step on it at the catalog's manifest digest. A storage
+	// the tenant does not have is NotFound; a path the catalog does not hold
+	// answers none.
+	StorageObjects(ctx context.Context, q StorageObjectQuery, page master.Page) ([]StoredObject, string, error)
 	// ListReplicas answers a page of the tenant's replicas with their
 	// counts, by primary then replica name; primary, when not empty, keeps
 	// those of that primary.
