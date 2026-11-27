@@ -70,6 +70,64 @@ def test_a_wrong_key_is_unauthenticated(server):
     assert caught.value.code == grpc.StatusCode.UNAUTHENTICATED
     assert caught.value.message
     assert caught.value.request_id
+    # Refused before the call is routed, the answer still carries its reason.
+    assert caught.value.reason == "UNAUTHENTICATED"
+    assert caught.value.metadata == {}
+    assert caught.value.retry_delay is None
+
+
+def test_an_error_carries_the_reason_of_its_error_info(client, server):
+    """Every answer carries a google.rpc.ErrorInfo; the Error exposes its reason and metadata."""
+    with pytest.raises(nopacs.Error) as caught:
+        client.tenants.GetTenant(tenant_pb2.GetTenantRequest(name="no-such-tenant"))
+    assert caught.value.code == grpc.StatusCode.NOT_FOUND
+    assert caught.value.reason == "NOT_FOUND"
+    assert caught.value.metadata == {}
+    assert caught.value.retry_delay is None
+    key = server.make_key("nobody")
+    with nopacs.Client(f"127.0.0.1:{server.port}", key, tls=False) as c:
+        with pytest.raises(nopacs.Error) as caught:
+            c.tenants.CreateTenant(tenant_pb2.CreateTenantRequest(name="nope", database_type=tenant_pb2.DATABASE_TYPE_SQLITE))
+    assert caught.value.reason == "PERMISSION_DENIED"
+
+
+def _field(num: int, payload: bytes) -> bytes:
+    """Encode one length-delimited protobuf field (num below 16, payload below 128 bytes)."""
+    assert num < 16 and len(payload) < 128
+    return bytes([num << 3 | 2, len(payload)]) + payload
+
+
+def _status(*details: bytes) -> bytes:
+    """Encode a google.rpc.Status of code 9 holding each detail as it is (already an Any)."""
+    return bytes([0x08, 9]) + _field(2, b"m") + b"".join(_field(3, d) for d in details)
+
+
+def _any(type_name: str, value: bytes) -> bytes:
+    """Encode a google.protobuf.Any of a google.rpc message."""
+    return _field(1, b"type.googleapis.com/google.rpc." + type_name.encode()) + _field(2, value)
+
+
+# google.rpc.ErrorInfo(reason "HELD", domain "nopacs", metadata {hold: 01jh, b: x}) and
+# google.rpc.RetryInfo(retry_delay 30s 500ns), as googleapis-common-protos serializes them.
+HELD = bytes.fromhex("0a0448454c4412066e6f706163731a060a01621201781a0c0a04686f6c64120430316a68")
+RETRY_30S = bytes.fromhex("0a05081e10f403")
+
+
+def test_the_details_are_read_from_the_status_trailer():
+    """grpc-status-details-bin gives the reason, the metadata and the retry delay; a foreign domain, a malformed
+    message and an absurd delay are ignored."""
+    import datetime
+
+    status = _status(_any("ErrorInfo", HELD), _any("RetryInfo", RETRY_30S))
+    err = nopacs.Error.from_rpc_error(_RpcError(trailing=(("grpc-status-details-bin", status),)))
+    assert (err.reason, err.metadata) == ("HELD", {"hold": "01jh", "b": "x"})
+    assert err.retry_delay == datetime.timedelta(seconds=30)
+    foreign = _field(1, b"HELD") + _field(2, b"example.com")
+    assert nopacs.Error.from_rpc_error(_RpcError(trailing=(("grpc-status-details-bin", _status(_any("ErrorInfo", foreign))),))).reason == ""
+    assert nopacs.Error.from_rpc_error(_RpcError(trailing=(("grpc-status-details-bin", b"\x1a\x7f\x0a"),))).reason == ""
+    years = _field(1, bytes([0x08, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01]))
+    assert nopacs.Error.from_rpc_error(_RpcError(trailing=(("grpc-status-details-bin", _status(_any("RetryInfo", years))),))).retry_delay is None
+    assert nopacs.Error.from_rpc_error(_RpcError()).reason == ""
 
 
 def test_a_refused_stream_carries_the_request_id(server):

@@ -115,11 +115,13 @@ func (s *Server) now() time.Time {
 
 // FailWith makes every call of a procedure (such as
 // nopacsv1connect.TenantServiceCreateTenantProcedure) answer with an API
-// error of the given code and message, after the request id is set.
+// error of the given code and message, after the request id is set. The
+// error carries the code's general google.rpc.ErrorInfo, as every answer of
+// the real server does.
 func (s *Server) FailWith(procedure string, code connect.Code, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.fail[procedure] = connect.NewError(code, message)
+	s.fail[procedure] = codes.Ensure(connect.NewError(code, message))
 }
 
 // FailAfter is FailWith for the calls of a procedure after the first n,
@@ -128,7 +130,7 @@ func (s *Server) FailWith(procedure string, code connect.Code, message string) {
 func (s *Server) FailAfter(procedure string, n int, code connect.Code, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.fail[procedure] = connect.NewError(code, message)
+	s.fail[procedure] = codes.Ensure(connect.NewError(code, message))
 	s.failSkip[procedure] = n
 }
 

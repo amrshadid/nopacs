@@ -12,6 +12,7 @@ import (
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
 	"github.com/amrshadid/nopacs/internal/access"
+	"github.com/amrshadid/nopacs/internal/api/codes"
 	"github.com/amrshadid/nopacs/internal/blob"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -76,7 +77,7 @@ func storageTier(field string, tier v1.StorageTier, directory bool) error {
 // it UNIMPLEMENTED with msg.
 func (c *core) refuseNotServed(d access.Decision, st tenant.Store, msg string) error {
 	c.record(d, st, master.OutcomeFailed, msg, access.Facts{})
-	return connect.NewError(connect.CodeUnimplemented, msg)
+	return codes.Ensure(connect.NewError(connect.CodeUnimplemented, msg))
 }
 
 // recallSpeedOf returns the recall speed an S3 storage's recall_tier names:

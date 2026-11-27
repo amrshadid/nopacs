@@ -260,12 +260,13 @@ var ErrCursorExpired = errors.New("the feed can no longer answer from this curso
 var ErrHistoryChanged = fmt.Errorf("the cursor belongs to another history of the feed: %w", ErrCursorExpired)
 
 // The reasons the contract names for a cursor the feed can no longer answer
-// from, written at the start of the refusal's message.
+// from, written at the start of the refusal's message; fault's table of
+// reasons holds the words.
 const (
 	// ReasonCursorExpired is a cursor before the oldest event kept.
-	ReasonCursorExpired = "CURSOR_EXPIRED"
+	ReasonCursorExpired = fault.ReasonCursorExpired
 	// ReasonHistoryChanged is a cursor of another history of the feed.
-	ReasonHistoryChanged = "EVENT_HISTORY_CHANGED"
+	ReasonHistoryChanged = fault.ReasonHistoryChanged
 )
 
 // CursorExpired returns the refusal of a read whose cursor points before

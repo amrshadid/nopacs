@@ -56,7 +56,17 @@ with nopacs.Client("nopacs.example.org:8443", key) as client:
   looping.
 - A failed call raises `nopacs.Error`, with `code` (a `grpc.StatusCode`),
   `message` and `request_id` (the id to look for in the audit log; empty when
-  the server sent none, for example when the connection failed).
+  the server sent none, for example when the connection failed), and what the
+  answer's error details say: `reason`, the fixed word of its
+  `google.rpc.ErrorInfo` (a case such as `HELD`, `NOT_ONLINE` or
+  `STORAGE_SWITCHING`, or the code's general reason such as `NOT_FOUND`; empty
+  when there was no answer), `metadata`, the case's facts as a dict (such as
+  `{"hold": "..."}`), and `retry_delay`, a `datetime.timedelta` from its
+  `google.rpc.RetryInfo`, or `None` when waiting alone does not help. They are
+  decoded from the `grpc-status-details-bin` trailer with no package beyond
+  `grpcio` and `protobuf`. A reason the client does not know is one added
+  later: treat it as its code alone. The reasons are listed in
+  `docs/reference/errors.md` and explained in `docs/api/errors.md`.
 - Requests and responses are the classes in `nopacs.v1` (`tenant_pb2`,
   `catalog_pb2`, ...). The contract's comments say what each method needs and
   answers.

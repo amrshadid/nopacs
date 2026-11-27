@@ -200,7 +200,9 @@ scan, keeps it whole, and serves it through an API with keys.
   read scrub and rebuild jobs; `job show`, `list` and `watch` follow them in
   their own words (read good / with a finding; cataloged / left out).
 - Generated clients for Python (`nopacs`, `clients/python`) and TypeScript
-  (`nopacs`, `clients/typescript`), tested against a real server.
+  (`nopacs`, `clients/typescript`), tested against a real server; their one
+  error type carries the reason, metadata and retry delay of the answer's
+  error details.
 - Documentation regrouped by what a reader comes to do (start, concepts,
   operate, use, api, reference, develop); the reference pages for settings,
   commands, errors, events, metrics and environment variables are generated
@@ -432,9 +434,13 @@ scan, keeps it whole, and serves it through an API with keys.
   tenants it left paused, hold reads); storages take a replica, the archive
   tier, recall settings and a directory's declared encryption; storage status
   shows tier, replica, switching, encryption at rest and scrub coverage;
-  corrections show their dispositions on every copy. Every reason the
-  contract names travels as google.rpc.ErrorInfo, with RetryInfo where a
-  retry is meant (`STORAGE_SWITCHING`).
+  corrections show their dispositions on every copy. Every error the API
+  answers carries a google.rpc.ErrorInfo (domain `nopacs`): the contract's
+  reason with its metadata where a case names one (`TENANT_MOVED`, `HELD`,
+  `NOT_ONLINE` with `recall_state`, `RELABELED` with the new labels, ...),
+  else the code's general reason (`NOT_FOUND`, `UNAVAILABLE`, ...), in every
+  protocol and in plain HTTP answers, with RetryInfo where a retry is meant
+  (`STORAGE_SWITCHING`, `NOT_ONLINE` while a recall runs).
 - A tenant's admin sets, changes and removes reader, writer and operator
   grants on its tenant and lists its keys; never an admin's grant (the
   tenant's or the installation's), never its own; the bounds are checked in
@@ -445,7 +451,9 @@ scan, keeps it whole, and serves it through an API with keys.
   due sessions, disposal, clock), `hold` and `storage status`; storages take
   tier, recall and declared-encryption flags; a delete takes a retention
   override; `key list --tenant` serves a tenant's admin; errors show the
-  server's reason and when to try again. The interactive program builds its
+  server's reason and when to try again, and with `--json` are one JSON
+  object on standard error with the reason, its metadata and the retry delay.
+  The interactive program builds its
   menu and a tenant's keys from the caller's grants and gains screens for
   replicas, repair, switch, retention, holds, corrections, scrub findings,
   profiles, routes and the audit seal's verification, each destructive step

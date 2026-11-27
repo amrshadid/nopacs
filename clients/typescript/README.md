@@ -99,6 +99,17 @@ try {
   the server sent none, for example when the connection failed). A handshake
   that fails certificate checks has the code `Internal` and the TLS library's
   message.
+- A `NopacsError` also says what the answer's error details say, over every
+  protocol: `reason`, the fixed word of its `google.rpc.ErrorInfo` (a case such
+  as `HELD`, `NOT_ONLINE` or `STORAGE_SWITCHING`, or the code's general reason
+  such as `NOT_FOUND`; an empty string when there was no answer),
+  `reasonMetadata`, the case's facts (such as `{ hold: "..." }`), and
+  `retryDelayMs`, the delay of its `google.rpc.RetryInfo` in milliseconds, or
+  `undefined` when waiting alone does not help (`metadata` stays the Connect
+  error's headers). `errorDetailsOf(err)` reads the same from any
+  `ConnectError`. A reason the client does not know is one added later: treat
+  it as its code alone. The reasons are listed in `docs/reference/errors.md`
+  and explained in `docs/api/errors.md`.
 - To bring your own transport, build it with `nopacsInterceptors(key)` among
   its interceptors and pass it as `transport`.
 - Messages, enums and service descriptors are in the generated modules, for

@@ -13,8 +13,9 @@ import (
 // ReasonStorageSwitching is the reason a write refused while its storage
 // is switched to its replica carries (access.proto, the unavailable kind):
 // the message starts with it, so a client that reads only the message can
-// tell it from a storage that does not answer.
-const ReasonStorageSwitching = "STORAGE_SWITCHING"
+// tell it from a storage that does not answer. fault's table of reasons
+// holds the word.
+const ReasonStorageSwitching = fault.ReasonStorageSwitching
 
 // ErrStorageSwitching is the case, inside the unavailable kind, of a write
 // refused because its storage is being switched to its replica: the API

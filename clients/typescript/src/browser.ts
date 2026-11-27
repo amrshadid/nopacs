@@ -3,7 +3,8 @@ import type { Transport } from "@connectrpc/connect";
 
 import { assertSecure, nopacsInterceptors, createClients, type NopacsClients } from "./core.js";
 
-export { NopacsError, REQUEST_ID_HEADER } from "./errors.js";
+export { ERROR_DOMAIN, errorDetailsOf, NopacsError, REQUEST_ID_HEADER } from "./errors.js";
+export type { ErrorDetails } from "./errors.js";
 export { pages } from "./pages.js";
 export { nopacsInterceptors, createClients, errorInterceptor, keyInterceptor } from "./core.js";
 export type { NopacsClients } from "./core.js";

@@ -2,20 +2,28 @@
 
 [Documentation index](../README.md) · [The API: an overview](overview.md#errors) · [Error kinds and codes](../reference/errors.md) · [The clients](clients.md) · [Troubleshooting](../operate/troubleshooting.md)
 
-An error's **code** says the kind of failure and whether to try again. Some failures carry
-more: a **reason**, a fixed word that says which of the cases of that kind it is, and for the
-ones that pass by themselves, a **retry delay**. A program should read both, because the
-right action differs: `STORAGE_SWITCHING` should be retried in half a minute, `HELD` should
-not be retried at all. A client that reads neither still has the code and the message.
+An error's **code** says the kind of failure and whether to try again. Every error also
+carries a **reason**, a fixed word that says which case of that kind it is, and the ones
+that pass by themselves a **retry delay**. A program should read both, because the right
+action differs: `STORAGE_SWITCHING` should be retried in half a minute, `HELD` should not be
+retried at all. A client that reads neither still has the code and the message.
 
 ## Where they travel
 
-The reason is a `google.rpc.ErrorInfo` detail of the error, with the domain `nopacs`, the
-reason, and a few metadata pairs. The delay is a `google.rpc.RetryInfo` detail
-(`retry_delay`). The same two messages are used by Google's APIs, so most gRPC libraries
-already know them. The server never sends a delay without a reason. A plain HTTP answer
-that has a delay (a STOW-RS store, a download) also carries it in the `Retry-After` header
-in seconds.
+Every error the server answers, whatever the protocol and wherever it was refused (before a
+call is routed, by the access check, by a handler), carries a `google.rpc.ErrorInfo` detail
+with the domain `nopacs`, the reason, and the metadata pairs its case names. A failure that
+is one of the cases in the table below carries that case's reason. Any other failure carries
+its code's **general reason**, the code's name in capitals (`NOT_FOUND`, `UNAVAILABLE`,
+`INVALID_ARGUMENT`, `PERMISSION_DENIED`, ...): it says no more than the code, so a program
+can branch on the reason alone. No case is spelled like a general reason.
+
+The delay is a `google.rpc.RetryInfo` detail (`retry_delay`). The same two messages are
+used by Google's APIs (the gRPC richer error model), so most gRPC libraries already know
+them. The server never sends a delay without a case reason. A plain HTTP answer carries the
+same details in its JSON body, and when it has a delay (a STOW-RS store, a download) also
+the `Retry-After` header in seconds. The full list of reasons, generated from the code, is
+in [error kinds and codes](../reference/errors.md#reasons).
 
 | Reason | Code (HTTP) | When | Metadata | Retry delay |
 |---|---|---|---|---|
@@ -73,9 +81,26 @@ $ echo $?
 1
 ```
 
+A general reason is not written into the line: the exit status already says the code.
+
 The delay is capped at 24 hours, and a negative or absurd one is ignored, so a hostile
 answer cannot park a client or make it retry at once. `nopacs` does not retry by itself; a
-script should read the exit status and the text.
+script should read the exit status and, better, the reason.
+
+With `--json` the error is one JSON object on one line of standard error (standard output
+stays empty), so a script reads the reason without parsing the sentence:
+
+```
+$ nopacs --json switch lab1 main newb --confirm sw1_4Zq8fN2k
+{"schemaVersion":1,"error":{"message":"switch: STORAGE_SWITCHING: another switch is running (try again in 30s) (request id 8f1c...)","exitCode":1,"code":"unavailable","reason":"STORAGE_SWITCHING","domain":"nopacs","retryAfterSeconds":30,"requestId":"8f1c..."}}
+```
+
+`message` is the line `nopacs` writes without `--json`; `code` is the API code the server
+answered; `metadata` holds the case's facts (`{"hold":"..."}` for `HELD`) and is left out
+when there are none; `retryAfterSeconds` (rounded up) and `requestId` are left out when
+there is no delay or no answer. A failure before any answer (a usage mistake, a server that
+cannot be reached) has the general reason of its kind: `INVALID_ARGUMENT` for a usage
+mistake (exit 2), `UNAVAILABLE` for a server that does not answer.
 
 ## Reading them from another language
 
@@ -101,9 +126,19 @@ def reason_and_delay(err: grpc.RpcError):
     return reason, delay
 ```
 
-The generated client of this repository turns a failure into one `nopacs.Error` that keeps
-the code, the message and the request id but not the details; to read them, call the stub
-(`client.replicas`) and catch `grpc.RpcError` as above, or read the message's first word.
+The Python client of this repository does this for you: the one `nopacs.Error` it raises
+has `reason`, `metadata` (a dict) and `retry_delay` (a `datetime.timedelta`, or `None`) beside
+`code`, `message` and `request_id`, decoded without `googleapis-common-protos`:
+
+```python
+try:
+    client.corrections.Delete(request)
+except nopacs.Error as err:
+    if err.reason == "HELD":
+        print("held by", err.metadata["hold"])
+    elif err.retry_delay is not None:
+        time.sleep(err.retry_delay.total_seconds())
+```
 
 **Connect and plain JSON.** The error is JSON with `code`, `message` and a `details` list.
 Each entry has `type` (`google.rpc.ErrorInfo` or `google.rpc.RetryInfo`) and `value`, the
@@ -118,8 +153,20 @@ curl -s https://archive.example.org:8443/nopacs.v1.CorrectionService/Delete \
 #  "details":[{"type":"google.rpc.ErrorInfo","value":"..."}]}
 ```
 
-In TypeScript, `ConnectError.findDetails` of `@connectrpc/connect` decodes details given the
-message's schema, from a package that has the `google.rpc` error details.
+In TypeScript, the client of this repository throws one `NopacsError` with `reason`,
+`reasonMetadata` and `retryDelayMs` (milliseconds, or `undefined`), over Connect, gRPC and
+gRPC-web alike; `errorDetailsOf(err)` reads the same from any `ConnectError`. Without it,
+`ConnectError.findDetails` of `@connectrpc/connect` decodes details given the message's
+schema, from a package that has the `google.rpc` error details.
+
+```ts
+try {
+  await nopacs.corrections.delete(request);
+} catch (err) {
+  if (err instanceof NopacsError && err.reason === "HELD") console.log("held by", err.reasonMetadata.hold);
+  else throw err;
+}
+```
 
 Reasons are fixed words, and a reason added later is one your client does not know. Treat
 an unknown reason as its code alone, and never fail on one.

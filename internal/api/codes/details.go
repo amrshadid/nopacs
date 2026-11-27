@@ -1,188 +1,125 @@
 package codes
 
 import (
-	"maps"
-	"slices"
 	"time"
 
 	connect "connectrpc.com/connect/v2"
-	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // Domain is the domain of every google.rpc.ErrorInfo this server answers
-// (access.proto, "Where a kind above names a reason").
+// (access.proto, "Every error carries a google.rpc.ErrorInfo detail").
 const Domain = "nopacs"
 
 // The full names of the two error details the contract names
-// (google/rpc/error_details.proto). A connect.ErrorDetail is a message's
-// type name and its encoded bytes, so the server writes both messages with
-// the protobuf wire encoding itself (protowire, part of the protobuf module
-// it already takes) rather than take the generated Go package that holds
-// them, a dependency of its own. A client decodes them with its own copy
-// of google/rpc/error_details.proto, as for any server.
+// (google/rpc/error_details.proto). The messages are Google's own generated
+// Go types, so the bytes are those every gRPC library reads, and the types
+// are registered under these names for any code that decodes a detail by
+// its name (connectproto.UnmarshalErrorDetail).
 const (
 	ErrorInfoType = "google.rpc.ErrorInfo"
 	RetryInfoType = "google.rpc.RetryInfo"
 )
 
-// errorInfo returns a google.rpc.ErrorInfo detail: reason (field 1),
-// Domain (field 2) and each metadata pair (field 3, a map<string, string>,
-// whose entries are messages of key 1 and value 2), in order of key so the
-// bytes are the same each time.
+// deterministic writes a message's map entries in order of key, so the
+// bytes of a detail are the same each time.
+var deterministic = proto.MarshalOptions{Deterministic: true}
+
+// errorInfo returns a google.rpc.ErrorInfo detail of reason, Domain and
+// metadata.
 func errorInfo(reason string, metadata map[string]string) *connect.ErrorDetail {
-	var b []byte
-	b = protowire.AppendTag(b, 1, protowire.BytesType)
-	b = protowire.AppendString(b, reason)
-	b = protowire.AppendTag(b, 2, protowire.BytesType)
-	b = protowire.AppendString(b, Domain)
-	for _, k := range slices.Sorted(maps.Keys(metadata)) {
-		var entry []byte
-		entry = protowire.AppendTag(entry, 1, protowire.BytesType)
-		entry = protowire.AppendString(entry, k)
-		entry = protowire.AppendTag(entry, 2, protowire.BytesType)
-		entry = protowire.AppendString(entry, metadata[k])
-		b = protowire.AppendTag(b, 3, protowire.BytesType)
-		b = protowire.AppendBytes(b, entry)
-	}
-	return &connect.ErrorDetail{Type: ErrorInfoType, Value: b}
+	return detail(ErrorInfoType, &errdetails.ErrorInfo{Reason: reason, Domain: Domain, Metadata: metadata})
 }
 
-// retryInfo returns a google.rpc.RetryInfo detail: retry_delay (field 1),
-// a google.protobuf.Duration of whole seconds (field 1) and nanoseconds
-// (field 2).
+// retryInfo returns a google.rpc.RetryInfo detail of the delay d.
 func retryInfo(d time.Duration) *connect.ErrorDetail {
-	var dur []byte
-	if s := int64(d / time.Second); s != 0 {
-		dur = protowire.AppendTag(dur, 1, protowire.VarintType)
-		dur = protowire.AppendVarint(dur, uint64(s)) //nolint:gosec // G115: a retry delay is positive.
+	return detail(RetryInfoType, &errdetails.RetryInfo{RetryDelay: durationpb.New(d)})
+}
+
+// detail encodes m as the error detail of the type name typ. The messages
+// are made here of strings and a duration, which always encode, so an
+// error is a broken library: the detail is then left out rather than sent
+// half written.
+func detail(typ string, m proto.Message) *connect.ErrorDetail {
+	b, err := deterministic.Marshal(m)
+	if err != nil {
+		return nil
 	}
-	if n := int64(d % time.Second); n != 0 {
-		dur = protowire.AppendTag(dur, 2, protowire.VarintType)
-		dur = protowire.AppendVarint(dur, uint64(n)) //nolint:gosec // G115: a retry delay is positive.
+	return &connect.ErrorDetail{Type: typ, Value: b}
+}
+
+// StatusBytes returns e as an encoded google.rpc.Status, its details as
+// google.protobuf.Any: the value of the gRPC trailer grpc-status-details-bin
+// before its base64. The server writes it itself only for the answers it
+// builds without the RPC library (a refusal before a call is routed); the
+// library writes it for every other.
+func StatusBytes(e *connect.Error) []byte {
+	st := &status.Status{Code: int32(e.Code()), Message: e.Message()} //nolint:gosec // G115: a code is 0 to 16.
+	for _, d := range e.Details() {
+		st.Details = append(st.Details, &anypb.Any{TypeUrl: "type.googleapis.com/" + d.Type, Value: d.Value})
 	}
-	var b []byte
-	b = protowire.AppendTag(b, 1, protowire.BytesType)
-	b = protowire.AppendBytes(b, dur)
-	return &connect.ErrorDetail{Type: RetryInfoType, Value: b}
+	b, err := deterministic.Marshal(st)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // Reason is what a google.rpc.ErrorInfo detail of an API error says.
 type Reason struct {
-	// Reason and Domain are the detail's; Metadata its pairs.
+	// Reason and Domain are the detail's; Metadata its pairs, never nil.
 	Reason, Domain string
 	Metadata       map[string]string
 }
 
 // ReasonOfError returns the google.rpc.ErrorInfo detail of an API error,
-// and false when it has none, or none this package can read.
+// and false when it has none, or none that decodes.
 func ReasonOfError(e *connect.Error) (Reason, bool) {
 	for _, d := range e.Details() {
 		if d.Type != ErrorInfoType {
 			continue
 		}
-		out := Reason{Metadata: map[string]string{}}
-		b := d.Value
-		for len(b) > 0 {
-			num, typ, n := protowire.ConsumeTag(b)
-			if n < 0 || typ != protowire.BytesType {
-				return Reason{}, false
-			}
-			b = b[n:]
-			v, m := protowire.ConsumeBytes(b)
-			if m < 0 {
-				return Reason{}, false
-			}
-			b = b[m:]
-			switch num {
-			case 1:
-				out.Reason = string(v)
-			case 2:
-				out.Domain = string(v)
-			case 3:
-				k, val, ok := mapEntry(v)
-				if !ok {
-					return Reason{}, false
-				}
-				out.Metadata[k] = val
-			}
+		var info errdetails.ErrorInfo
+		if err := proto.Unmarshal(d.Value, &info); err != nil {
+			return Reason{}, false
+		}
+		out := Reason{Reason: info.GetReason(), Domain: info.GetDomain(), Metadata: info.GetMetadata()}
+		if out.Metadata == nil {
+			out.Metadata = map[string]string{}
 		}
 		return out, true
 	}
 	return Reason{}, false
 }
 
-// mapEntry reads one map<string, string> entry: key 1, value 2.
-func mapEntry(b []byte) (string, string, bool) {
-	var k, v string
-	for len(b) > 0 {
-		num, typ, n := protowire.ConsumeTag(b)
-		if n < 0 || typ != protowire.BytesType {
-			return "", "", false
-		}
-		b = b[n:]
-		s, m := protowire.ConsumeBytes(b)
-		if m < 0 {
-			return "", "", false
-		}
-		b = b[m:]
-		switch num {
-		case 1:
-			k = string(s)
-		case 2:
-			v = string(s)
-		}
-	}
-	return k, v, true
-}
-
 // maxRetryDelay is the longest retry delay a client believes: a server that
-// names more, or a negative or overflowing value, is ignored, so a hostile
-// answer cannot park a client for days or make it retry at once.
+// names more, or a negative value, is ignored, so a hostile answer cannot
+// park a client for days or make it retry at once.
 const maxRetryDelay = 24 * time.Hour
 
 // RetryOfError returns the delay of the google.rpc.RetryInfo detail of an
-// API error, and false when it has none, or none this package can read.
+// API error, and false when it has none, none that decodes, or one outside
+// 0 to 24 hours.
 func RetryOfError(e *connect.Error) (time.Duration, bool) {
 	for _, d := range e.Details() {
 		if d.Type != RetryInfoType {
 			continue
 		}
-		num, typ, n := protowire.ConsumeTag(d.Value)
-		if n < 0 || num != 1 || typ != protowire.BytesType {
+		var info errdetails.RetryInfo
+		if err := proto.Unmarshal(d.Value, &info); err != nil || info.GetRetryDelay() == nil {
 			return 0, false
 		}
-		dur, m := protowire.ConsumeBytes(d.Value[n:])
-		if m < 0 {
+		// Seconds and nanoseconds are checked before they are scaled: a huge
+		// value would wrap and turn a hostile delay into no wait at all.
+		s, n := info.GetRetryDelay().GetSeconds(), info.GetRetryDelay().GetNanos()
+		if s < 0 || s > int64(maxRetryDelay/time.Second) || n < 0 || n >= int32(time.Second) {
 			return 0, false
 		}
-		var out time.Duration
-		for len(dur) > 0 {
-			f, t, k := protowire.ConsumeTag(dur)
-			if k < 0 || t != protowire.VarintType {
-				return 0, false
-			}
-			dur = dur[k:]
-			v, j := protowire.ConsumeVarint(dur)
-			if j < 0 {
-				return 0, false
-			}
-			dur = dur[j:]
-			switch f {
-			case 1:
-				// A value above the cap would wrap when scaled to nanoseconds
-				// (a huge or "negative" varint) and could turn a hostile delay
-				// into no wait or a wait of years.
-				if v > uint64(maxRetryDelay/time.Second) {
-					return 0, false
-				}
-				out += time.Duration(v) * time.Second //nolint:gosec // G115: v is at most 24 hours in seconds.
-			case 2:
-				if v >= uint64(time.Second) {
-					return 0, false
-				}
-				out += time.Duration(v) //nolint:gosec // G115: v is below a second.
-			}
-		}
+		out := time.Duration(s)*time.Second + time.Duration(n)
 		if out > maxRetryDelay {
 			return 0, false
 		}

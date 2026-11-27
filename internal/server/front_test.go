@@ -698,7 +698,7 @@ func TestAuthenticatedNotServed(t *testing.T) {
 							t.Errorf("%s: %s", label, a)
 						}
 					case "connect-stream", "connect-stream+json":
-						if a.status != http.StatusOK || !strings.Contains(text, `{"error":{"code":"unimplemented","message":"no such method"}}`) {
+						if a.status != http.StatusOK || !strings.Contains(text, `{"error":{"code":"unimplemented","message":"no such method","details":[{"type":"google.rpc.ErrorInfo","value":"Cg1VTklNUExFTUVOVEVEEgZub3BhY3M"}]}}`) {
 							t.Errorf("%s: %s", label, a)
 						}
 					case "grpc-web", "grpc-web+json":

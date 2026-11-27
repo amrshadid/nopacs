@@ -160,14 +160,15 @@ func FencedReadError(name, why string) error {
 }
 
 // The reasons a change refused by a read-only tenant carries, as the API
-// contract names them (access.proto, "precondition").
+// contract names them (access.proto, "precondition"); fault's table of
+// reasons holds the words.
 const (
 	// ReasonTenantMoved is the reason of a change refused by a moved
 	// tenant.
-	ReasonTenantMoved = "TENANT_MOVED"
+	ReasonTenantMoved = fault.ReasonTenantMoved
 	// ReasonTenantFenced is the reason of a change refused by a fenced
 	// tenant.
-	ReasonTenantFenced = "TENANT_FENCED"
+	ReasonTenantFenced = fault.ReasonTenantFenced
 )
 
 // ReadOnlyReason returns the reason a change refused by a tenant in state s

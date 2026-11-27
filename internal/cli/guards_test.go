@@ -35,34 +35,34 @@ func parseRFC3339(s string) (*timestamppb.Timestamp, error) {
 // each code the contract names, answered by the server for a real command
 // over the socket, gives the exit code of its kind and exactly one line on
 // standard error with the message and the request id, and nothing on standard
-// output, in the table form and with --json.
+// output; with --json that line is the error document, with the code's
+// general reason (UNKNOWN for a code past the protocol's sixteen, which the
+// RPC library receives as UNKNOWN).
 func TestEveryErrorKindHasItsExitCode(t *testing.T) {
 	cases := []struct {
-		code connect.Code
-		exit int
+		code   connect.Code
+		exit   int
+		reason string
 	}{
-		{connect.CodeInvalidArgument, 2},
-		{connect.CodeUnauthenticated, 3},
-		{connect.CodePermissionDenied, 3},
-		{connect.CodeNotFound, 4},
-		{connect.CodeAlreadyExists, 1},
-		{connect.CodeUnavailable, 1},
-		{connect.CodeInternal, 1},
-		{connect.CodeFailedPrecondition, 5},
-		{connect.CodeOutOfRange, 6},
-		{connect.CodeResourceExhausted, 7},
-		{connect.CodeUnimplemented, 1},
-		{connect.CodeUnknown, 1},
-		{connect.Code(99), 1},
+		{connect.CodeInvalidArgument, 2, "INVALID_ARGUMENT"},
+		{connect.CodeUnauthenticated, 3, "UNAUTHENTICATED"},
+		{connect.CodePermissionDenied, 3, "PERMISSION_DENIED"},
+		{connect.CodeNotFound, 4, "NOT_FOUND"},
+		{connect.CodeAlreadyExists, 1, "ALREADY_EXISTS"},
+		{connect.CodeUnavailable, 1, "UNAVAILABLE"},
+		{connect.CodeInternal, 1, "INTERNAL"},
+		{connect.CodeFailedPrecondition, 5, "FAILED_PRECONDITION"},
+		{connect.CodeOutOfRange, 6, "OUT_OF_RANGE"},
+		{connect.CodeResourceExhausted, 7, "RESOURCE_EXHAUSTED"},
+		{connect.CodeUnimplemented, 1, "UNIMPLEMENTED"},
+		{connect.CodeUnknown, 1, "UNKNOWN"},
+		{connect.Code(99), 1, "UNKNOWN"},
 	}
 	for _, c := range cases {
-		for _, extra := range [][]string{nil, {"--json"}} {
-			r := newRig(t)
-			r.fake.FailWith(nopacsv1connect.TenantServiceGetTenantProcedure, c.code, "what the server said")
-			res := r.run(append([]string{"tenant", "show", "lab1"}, extra...)...)
-			want := "nopacs: tenant show: what the server said (request id req-000001)\n"
-			expect(t, res, c.exit, "", want)
-		}
+		r := newRig(t)
+		r.fake.FailWith(nopacsv1connect.TenantServiceGetTenantProcedure, c.code, "what the server said")
+		expect(t, r.run("tenant", "show", "lab1"), c.exit, "", "nopacs: tenant show: what the server said (request id req-000001)\n")
+		expectJSONError(t, r.run("tenant", "show", "lab1", "--json"), c.exit, "tenant show: what the server said (request id req-000002)", c.reason)
 	}
 }
 

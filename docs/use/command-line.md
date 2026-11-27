@@ -120,7 +120,11 @@ DONE, OK, NOT OK, REMAINING and CREATED.
   request id. Exit codes: 0 done, 1 failed, 2 wrong usage, 3 refused
   (unauthenticated or denied), 4 not found, 5 a state that forbids the change (a
   storage that holds files, a port not allotted), 6 a position that can no longer
-  be answered (an event cursor too old), 7 a bound of the server reached.
+  be answered (an event cursor too old), 7 a bound of the server reached. With
+  `--json` the line is one JSON object, `{"schemaVersion":1,"error":{...}}`, with
+  the message, the exit code, the API code, the `reason` to branch on (`HELD`,
+  `NOT_ONLINE`, `NOT_FOUND`, ...), its `metadata`, `retryAfterSeconds` and the
+  request id ([reasons and retry delays](../api/errors.md#how-the-command-line-shows-them)).
 - **Lists** fetch up to `--limit` (100) items and say when more exist; `--all`
   fetches every item.
 - **The catalog** serves only the combinations of filter and order an index

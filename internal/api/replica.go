@@ -13,6 +13,7 @@ import (
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/gen/nopacs/v1/nopacsv1connect"
 	"github.com/amrshadid/nopacs/internal/access"
+	"github.com/amrshadid/nopacs/internal/api/codes"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/storageswitch"
@@ -453,8 +454,8 @@ func (s replicaService) SwitchStorage(ctx context.Context, req *v1.SwitchStorage
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			// The switch runs on whatever becomes of the call: its outcome
 			// is in the storage's status and its event.
-			return nil, connect.NewError(connect.CodeDeadlineExceeded,
-				"the switch was accepted and runs on; its outcome is in the storage's status (switching, last_switch_time) and the storage_switched event")
+			return nil, codes.Ensure(connect.NewError(connect.CodeDeadlineExceeded,
+				"the switch was accepted and runs on; its outcome is in the storage's status (switching, last_switch_time) and the storage_switched event"))
 		}
 		return nil, c.toAPI(d, err)
 	}

@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/amrshadid/nopacs/internal/access"
+	"github.com/amrshadid/nopacs/internal/api/codes"
 	"github.com/amrshadid/nopacs/internal/obs/redact"
 )
 
@@ -229,17 +230,45 @@ var httpStatus = map[connect.Code]int{
 	connect.CodeUnauthenticated:    http.StatusUnauthorized,
 }
 
+// wireDetail is one error detail in the Connect protocol's JSON: the
+// message's full type name and its protobuf bytes in base64 without padding
+// (the Connect protocol, "Error Details").
+type wireDetail struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// wireDetails returns the details of ce in the Connect protocol's JSON
+// form, or nil for none.
+func wireDetails(ce *connect.Error) []wireDetail {
+	var out []wireDetail
+	for _, d := range ce.Details() {
+		out = append(out, wireDetail{Type: d.Type, Value: connect.EncodeBinaryHeader(d.Value)})
+	}
+	return out
+}
+
 // writeHTTPError writes a Connect-shaped error, {"code": ..., "message":
-// ...}, with its HTTP status (the Connect protocol, "Unary-Error-Response").
+// ..., "details": [...]}, with its HTTP status (the Connect protocol,
+// "Unary-Error-Response"). The details are ce's after codes.Ensure, so a
+// plain HTTP answer carries the same google.rpc.ErrorInfo an RPC does.
 func writeHTTPError(w http.ResponseWriter, ce *connect.Error) {
 	status, ok := httpStatus[ce.Code()]
 	if !ok {
 		status = http.StatusInternalServerError
 	}
+	writeHTTPErrorStatus(w, ce, status)
+}
+
+// writeHTTPErrorStatus is writeHTTPError with the HTTP status given, for an
+// answer whose status the RPC library chose (withErrorInfo).
+func writeHTTPErrorStatus(w http.ResponseWriter, ce *connect.Error, status int) {
+	ce = codes.Ensure(ce)
 	body, err := json.Marshal(struct {
-		Code    string `json:"code"`
-		Message string `json:"message,omitempty"`
-	}{ce.Code().String(), ce.Message()})
+		Code    string       `json:"code"`
+		Message string       `json:"message,omitempty"`
+		Details []wireDetail `json:"details,omitempty"`
+	}{ce.Code().String(), ce.Message(), wireDetails(ce)})
 	if err != nil {
 		body = []byte(`{"code":"internal"}`)
 	}
@@ -266,6 +295,7 @@ var errorWriter = connecthttp.NewErrorWriter()
 // request that is not an RPC. A 401 names the Bearer scheme (RFC 9110
 // 15.5.2) in either form.
 func (s *Server) writeAnyError(w http.ResponseWriter, r *http.Request, ce *connect.Error) {
+	ce = codes.Ensure(ce)
 	if ce.Code() == connect.CodeUnauthenticated {
 		w.Header().Set("Www-Authenticate", "Bearer")
 	}

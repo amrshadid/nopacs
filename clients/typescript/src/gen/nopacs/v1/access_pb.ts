@@ -136,11 +136,15 @@
 //     server's log. Sending it again fails again until the
 //     file is mended from another copy.
 //
-// Where a kind above names a reason, it travels as a google.rpc.ErrorInfo
-// detail (google/rpc/error_details.proto) of the error, with the domain
-// "nopacs", that reason, and the metadata the kind names. A client that does
-// not read details still has the code and the message; the reasons are
-// fixed words, and a reason added later is one a client does not know.
+// Every error carries a google.rpc.ErrorInfo detail
+// (google/rpc/error_details.proto), with the domain "nopacs" and a reason.
+// Where a kind above names a reason, it is that reason, with the metadata the
+// kind names; the reason also begins the message. Any other error carries
+// its code's general reason, the code's name in capitals (NOT_FOUND,
+// UNAVAILABLE, INVALID_ARGUMENT, ...), which says no more than the code; no
+// reason a kind names is spelled like one. A client that does not read
+// details still has the code and the message; the reasons are fixed words,
+// and a reason added later is one a client does not know.
 //
 // Any method can also answer INTERNAL (HTTP 500) for a fault of the server,
 // RESOURCE_EXHAUSTED for a message over the size limit (and for too many

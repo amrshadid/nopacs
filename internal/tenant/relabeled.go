@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/amrshadid/nopacs/internal/core/label"
+	"github.com/amrshadid/nopacs/internal/fault"
 )
 
 // ReasonRelabeled is the reason a lookup by labels a committed relabel
 // moved carries, as the API contract names it (access.proto, "not found"):
 // a client that holds the old labels is told where the data is now, rather
-// than that it is gone.
-const ReasonRelabeled = "RELABELED"
+// than that it is gone. fault's table of reasons holds the word.
+const ReasonRelabeled = fault.ReasonRelabeled
 
 // MaxRelabelSteps bounds how many relabels one lookup follows, one after
 // another (a subject relabeled, then relabeled again).

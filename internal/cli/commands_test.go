@@ -177,10 +177,9 @@ func TestTenantRemoveNeedsYes(t *testing.T) {
 	r := newRig(t)
 	r.must("tenant", "create", "lab1")
 	before := r.fake.Requests()
-	for _, args := range [][]string{{"tenant", "remove", "lab1"}, {"tenant", "remove", "lab1", "--json"}} {
-		expect(t, r.run(args...), 2, "",
-			"nopacs: tenant remove: nothing was removed: this would unregister tenant \"lab1\"; its database and files stay where they are; run it again with --yes to do it\n")
-	}
+	const refusal = "tenant remove: nothing was removed: this would unregister tenant \"lab1\"; its database and files stay where they are; run it again with --yes to do it"
+	expect(t, r.run("tenant", "remove", "lab1"), 2, "", "nopacs: "+refusal+"\n")
+	expectJSONError(t, r.run("tenant", "remove", "lab1", "--json"), 2, refusal, "INVALID_ARGUMENT")
 	if got := r.fake.Requests(); got != before {
 		t.Errorf("a removal without --yes sent %d requests", got-before)
 	}

@@ -47,3 +47,25 @@ caller's mistake.
 | `UNAVAILABLE` | 503 | unavailable | 1 |
 | `DATA_LOSS` | 500 | data loss | 1 |
 | `UNAUTHENTICATED` | 401 | unauthenticated | 3 |
+
+## Reasons
+
+Every error the server answers carries a `google.rpc.ErrorInfo` detail with the domain `nopacs` and a
+reason, a fixed word a program branches on. A failure that is one of the cases below carries that case's reason,
+which also begins its message, and the metadata the case names when it knows them. Any other failure carries
+its code's general reason, the code's name above (`NOT_FOUND`, `UNAVAILABLE`, ...), which says no more than the
+code. A reason a client does not know is one added later: it treats it as its code alone. How to read them, and
+the retry delays some carry: [Reasons and retry delays](../api/errors.md).
+
+| Reason | Kind | API code | Metadata | When |
+|---|---|---|---|---|
+| `TENANT_MOVED` | precondition | `FAILED_PRECONDITION` | none | A change to a tenant an export handed to another installation; it is read only here. |
+| `TENANT_FENCED` | precondition | `FAILED_PRECONDITION` | none | A change to, or a read of the data of, a tenant whose storages name another installation or a later generation; it serves no data here. |
+| `HELD` | precondition | `FAILED_PRECONDITION` | `hold` | A delete of data a hold covers. |
+| `RETENTION_MINIMUM` | precondition | `FAILED_PRECONDITION` | `keep_until` | A person's delete of data a retention rule keeps at least until a time to come. |
+| `RELABELED` | not found | `NOT_FOUND` | `correction`, `to_label` | A subject, session or scan asked for by a label a relabel moved, asked by a caller who may read the tenant's corrections. |
+| `TENANT_RESTORING` | unavailable | `UNAVAILABLE` | none | The tenant is being reconciled after a restore; retry with a backoff. |
+| `NOT_ONLINE` | unavailable | `UNAVAILABLE` | `recall_state` | The storage holds the object in a tier it cannot read at once, and no copy in step on another storage is online. A retry delay comes only while a recall runs. |
+| `STORAGE_SWITCHING` | unavailable | `UNAVAILABLE` | none | A write to a storage being switched to its replica waits for the swap; it carries a retry delay. |
+| `CURSOR_EXPIRED` | out of range | `OUT_OF_RANGE` | none | An event cursor before the oldest event kept; start over from a status. |
+| `EVENT_HISTORY_CHANGED` | out of range | `OUT_OF_RANGE` | none | An event cursor of another history of the tenant's feed, or past its newest event; start over from a status. |

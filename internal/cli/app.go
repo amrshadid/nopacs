@@ -72,6 +72,9 @@ func (e Env) withDefaults() Env {
 // command shares, and the client the first call makes.
 type app struct {
 	env Env
+	// args are the arguments Run was given, for an error cobra makes
+	// before it has read --json (jsonAsked).
+	args []string
 	// picked caches the context this run uses, found once.
 	picked *pick
 	opts   struct {
@@ -116,7 +119,7 @@ func (a *app) run(fn func(ctx context.Context, cmd *cobra.Command, args []string
 // ones in env, so nothing here touches the process's own.
 func Run(ctx context.Context, args []string, env Env) int {
 	env = env.withDefaults()
-	a := &app{env: env}
+	a := &app{env: env, args: args}
 	root := a.newRoot()
 	root.SetArgs(args)
 	cmd, err := root.ExecuteContextC(ctx)
@@ -134,9 +137,9 @@ func Command(env Env) *cobra.Command {
 	return (&app{env: env.withDefaults()}).newRoot()
 }
 
-// report writes the one line for an error and returns the exit code of its
-// kind. A usage error says how to get help; a failure of a call already holds
-// the request id.
+// report writes the one line for an error (fail: one JSON object with
+// --json) and returns the exit code of its kind. A usage error says how to
+// get help; a failure of a call already holds the request id.
 func (a *app) report(cmd *cobra.Command, err error) int {
 	var re *runError
 	if !errors.As(err, &re) {
@@ -146,7 +149,9 @@ func (a *app) report(cmd *cobra.Command, err error) int {
 		if cmd != nil {
 			help = cmd.CommandPath() + " --help"
 		}
-		a.line(fmt.Sprintf("%s; try \"%s\"", fault.Message(err), help))
+		// cobra may have refused the arguments before it read --json.
+		a.opts.json = a.opts.json || jsonAsked(a.args)
+		a.fail(fmt.Sprintf("%s; try \"%s\"", fault.Message(err), help), err)
 		return fault.Invalid.ExitCode()
 	}
 	err = re.err
@@ -160,15 +165,15 @@ func (a *app) report(cmd *cobra.Command, err error) int {
 	var ce *client.CallError
 	switch {
 	case errors.As(err, &ce):
-		a.line(ce.Error())
+		a.fail(ce.Error(), err)
 	case kind == fault.Invalid && cmd != nil:
-		a.line(fmt.Sprintf("%s: %s", strings.TrimPrefix(cmd.CommandPath(), "nopacs "), fault.Message(err)))
+		a.fail(fmt.Sprintf("%s: %s", strings.TrimPrefix(cmd.CommandPath(), "nopacs "), fault.Message(err)), err)
 	case kind == fault.Internal:
 		// A failure of ours with no kind of its own: its text was written for
 		// a person at this terminal, not taken from the network.
-		a.line(err.Error())
+		a.fail(err.Error(), err)
 	default:
-		a.line(fault.Message(err))
+		a.fail(fault.Message(err), err)
 	}
 	return kind.ExitCode()
 }
@@ -279,7 +284,8 @@ context (nopacs context --help) saves a server with its key file and TLS files
 under a name: --context NAME, NOPACS_CONTEXT, or the current context.
 
 Output is a table for a person. With --json it is one JSON document with a
-"schemaVersion" field, for a program. An error is one line on standard error.
+"schemaVersion" field, for a program. An error is one line on standard error;
+with --json that line is a JSON object whose "reason" is a fixed word.
 
 Exit codes: 0 done, 1 failed, 2 wrong usage, 3 refused (not authenticated, or
 not allowed), 4 not found, 5 a state that forbids the change, 6 a position

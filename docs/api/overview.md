@@ -60,13 +60,15 @@ the command line. The codes and the HTTP status each travels with are in
 [error kinds and codes](../reference/errors.md). A JSON error is:
 
 ```json
-{"code":"not_found","message":"no tenant has this name"}
+{"code":"not_found","message":"no tenant has this name",
+ "details":[{"type":"google.rpc.ErrorInfo","value":"CglOT1RfRk9VTkQSBm5vcGFjcw"}]}
 ```
 
-Where a kind names a *reason* (a relabeled label, a moved tenant, a held delete, a
-cursor that expired), it travels as a `google.rpc.ErrorInfo` detail with the domain
-`nopacs` and a fixed word; a client that does not read details still has the code
-and the message. A refusal that passes by itself (a storage being switched, an object
+Every error carries a *reason* as a `google.rpc.ErrorInfo` detail with the domain
+`nopacs` and a fixed word: the case's own where a kind names one (a relabeled label, a
+moved tenant, a held delete, a cursor that expired), else the code's general reason
+(`NOT_FOUND` above); a client that does not read details still has the code and the
+message. A refusal that passes by itself (a storage being switched, an object
 being recalled) may add a `google.rpc.RetryInfo` delay. The reasons, the delays and how to
 read them in code are on [one page](errors.md). The message of an `INTERNAL` answer says nothing of the cause; the
 cause is in the server's log under the request id.

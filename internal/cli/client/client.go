@@ -372,11 +372,13 @@ func (c *Client) classify(ctx context.Context, err error) error {
 // RETENTION_MINIMUM, ...) when the message does not start with it, and how long
 // to wait before trying again when the server gave a delay. A person who reads
 // only the line then knows whether to wait, to change something, or to stop.
+// A code's general reason (NOT_FOUND, ...) is not written: it says no more
+// than the code, which the exit status already tells.
 func remoteError(ce *connect.Error) error {
 	err := codes.FromConnect(ce)
 	msg := fault.Message(err)
 	reason, retry := ReasonOf(ce)
-	if reason != "" && !strings.HasPrefix(msg, reason) {
+	if reason != "" && !codes.IsGeneral(reason) && !strings.HasPrefix(msg, reason) {
 		msg = reason + ": " + msg
 	}
 	if retry > 0 {
@@ -424,6 +426,38 @@ func ReasonOf(err error) (reason string, retry time.Duration) {
 		retry = d
 	}
 	return reason, retry
+}
+
+// Detail is what an API error found in the chain of an error says beyond
+// its message: the code it was answered with, its google.rpc.ErrorInfo and
+// its retry delay.
+type Detail struct {
+	// Code is the API code the server answered.
+	Code connect.Code
+	// Reason and Metadata are the ErrorInfo's, when it is of the server's
+	// domain; Reason is empty and Metadata nil otherwise.
+	Reason   string
+	Metadata map[string]string
+	// Retry is the RetryInfo's delay, zero for none.
+	Retry time.Duration
+}
+
+// DetailOf returns the Detail of the API error found anywhere in the chain
+// of err, and false when err holds no API error (a failure before an
+// answer came: a connection, a certificate, a deadline of this program).
+func DetailOf(err error) (Detail, bool) {
+	var ce *connect.Error
+	if !errors.As(err, &ce) {
+		return Detail{}, false
+	}
+	d := Detail{Code: ce.Code()}
+	if r, ok := codes.ReasonOfError(ce); ok && r.Domain == codes.Domain {
+		d.Reason, d.Metadata = r.Reason, r.Metadata
+	}
+	if retry, ok := codes.RetryOfError(ce); ok {
+		d.Retry = retry
+	}
+	return d, true
 }
 
 // tlsReason is the short text of a certificate failure, without the long

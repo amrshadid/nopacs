@@ -71,7 +71,10 @@ const (
 	guideJSON = `With --json every command writes one JSON object on standard output: ` +
 		`"schemaVersion" first, then the fields of the API's answer (package nopacs.v1) under their protobuf JSON names (lowerCamelCase); ` +
 		`a list writes its items under the plural name the API gives them and "more", true when the server held more than were fetched. ` +
-		`An error is one line on standard error and the exit code below; nothing is written to standard output.`
+		`An error is one line on standard error and the exit code below; nothing is written to standard output. ` +
+		`With --json that line is one JSON object: {"schemaVersion":1,"error":{"message","exitCode","code","reason","domain","metadata","retryAfterSeconds","requestId"}}; ` +
+		`"reason" is a fixed word to branch on: a case the server names (HELD, NOT_ONLINE, STORAGE_SWITCHING, TENANT_MOVED, RELABELED, ...) with its facts in "metadata", ` +
+		`or the code's general reason (NOT_FOUND, UNAVAILABLE, INVALID_ARGUMENT, ...); "retryAfterSeconds" is present only when waiting helps.`
 	guideValues = `Previews and trials (profile try, quarantine show --header) show no value of a file unless --show-values asks, ` +
 		`which the server records in its audit log. A masked key (key create --masked), the key an agent should hold, ` +
 		`is never answered an original value: --show-values, profile try and explain --record, quarantine show --header, deid code, ` +

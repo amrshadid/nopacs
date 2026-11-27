@@ -4,7 +4,10 @@
 
 Two clients are in the repository, both **generated from the contract** in
 `api/proto`, so each has every service and message the API has. A thin layer on top
-opens the connection, sends the key, and turns every failure into one error type.
+opens the connection, sends the key, and turns every failure into one error type
+that carries the code, the message, the request id and what the error details say:
+the reason of its `google.rpc.ErrorInfo`, the case's metadata and the retry delay
+([reasons and retry delays](errors.md)).
 Neither is published to a package index yet: you install them from the checkout.
 
 | | Python | TypeScript |

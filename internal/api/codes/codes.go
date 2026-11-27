@@ -68,60 +68,111 @@ func Kind(code connect.Code) fault.Kind {
 // ToConnect turns an error into the API error a server answers: the code of
 // its kind and only the message that is safe to show the caller, never the
 // text of what it wraps. An error with no fault kind is INTERNAL with the
-// fixed message "internal error". An error WithReason marked starts its
-// message with its reason and carries a google.rpc.ErrorInfo detail and,
-// with a retry delay, a google.rpc.RetryInfo detail (details.go).
+// fixed message "internal error". Every answer carries a google.rpc.ErrorInfo
+// detail (details.go), the gRPC richer error model's statement of which case
+// of its code it is:
+//
+//   - an error WithReason marked carries its reason and metadata, starts its
+//     message with the reason (unless it is a general one, which says no
+//     more than the code) and, with a retry delay, also carries a
+//     google.rpc.RetryInfo detail, provided the reason fits the error's kind
+//     (fitsKind);
+//   - an error whose message begins with a reason of fault's table for its
+//     kind, "REASON: ...", carries that reason (the refusals the master's and
+//     the tenant's ports make, which cannot import this package);
+//   - any other error carries its code's general reason (General).
 func ToConnect(err error) *connect.Error {
+	kind := fault.KindOf(err)
 	msg := fault.Message(err)
 	var r *reasoned
-	if !errors.As(err, &r) {
-		kind := fault.KindOf(err)
-		e := connect.NewError(Code(kind), msg)
-		if reason, ok := prefixedReason(kind, msg); ok {
-			e = e.WithDetail(errorInfo(reason, nil))
+	if !errors.As(err, &r) || !fitsKind(r.reason, kind) {
+		reason, ok := prefixedReason(kind, msg)
+		if !ok {
+			reason = General(Code(kind))
 		}
-		return e
+		return connect.NewError(Code(kind), msg).WithDetail(errorInfo(reason, nil))
 	}
-	if !strings.HasPrefix(msg, r.reason) {
+	if !IsGeneral(r.reason) && !strings.HasPrefix(msg, r.reason) {
 		msg = r.reason + ": " + msg
 	}
-	e := connect.NewError(Code(fault.KindOf(err)), msg).WithDetail(errorInfo(r.reason, r.metadata))
+	e := connect.NewError(Code(kind), msg).WithDetail(errorInfo(r.reason, r.metadata))
 	if r.retry > 0 {
 		e = e.WithDetail(retryInfo(r.retry))
 	}
 	return e
 }
 
-// prefixed is each reason of the contract (access.proto, "Where a kind above
-// names a reason") that carries no metadata and whose refusal is made where
-// this package cannot be imported (the master's and the tenant's ports),
-// with the kind it belongs to. Such a refusal writes its reason at the start
-// of its message, "REASON: ..."; ToConnect gives it the same
-// google.rpc.ErrorInfo a WithReason mark would, so a client that reads
-// details reads every reason the contract names, not only those the API
-// marks itself.
-var prefixed = [...]struct {
-	kind   fault.Kind
-	reason string
-}{
-	{fault.Precondition, "TENANT_MOVED"},
-	{fault.Precondition, "TENANT_FENCED"},
-	{fault.Unavailable, "TENANT_RESTORING"},
-	{fault.OutOfRange, "CURSOR_EXPIRED"},
-	{fault.OutOfRange, "EVENT_HISTORY_CHANGED"},
+// fitsKind reports whether a reason WithReason marked may be answered for
+// an error of kind: a case of fault's table of that very kind, or the
+// general reason of kind's code. A mark that fits neither (a case of
+// another kind, as when a lower layer wrapped the marked error with a new
+// kind, or a word the table does not hold) is not answered: the error is
+// then answered as an unmarked one, with no case metadata and no retry
+// delay, so a client never reads HELD on an INTERNAL answer.
+func fitsKind(reason string, kind fault.Kind) bool {
+	if c, ok := fault.CaseOf(reason); ok {
+		return c.Kind == kind
+	}
+	return reason == General(Code(kind))
 }
 
-// prefixedReason returns the reason of the table above a message of kind
+// prefixedReason returns the reason of fault's table that a message of kind
 // begins with, followed by ": ", and false when it begins with none. Both
 // the kind and the prefix must match: a message of another kind that
 // happens to start with the same word is not given the reason.
 func prefixedReason(kind fault.Kind, msg string) (string, bool) {
-	for _, p := range prefixed {
-		if p.kind == kind && strings.HasPrefix(msg, p.reason+": ") {
-			return p.reason, true
+	for _, c := range fault.Cases() {
+		if c.Kind == kind && strings.HasPrefix(msg, c.Reason+": ") {
+			return c.Reason, true
 		}
 	}
 	return "", false
+}
+
+// General returns the general reason of an API code: its name as the
+// Connect protocol writes it, in capitals (NOT_FOUND, UNAVAILABLE,
+// INVALID_ARGUMENT, ...). An error with no case of its own carries it, so a
+// client that reads ErrorInfo finds one on every answer; it says no more
+// than the code. No reason of fault's table has the same spelling as a
+// general one, so a client tells the two apart by the word alone.
+//
+// A code past the protocol's sixteen is UNKNOWN, as the RPC library reads
+// such a code on the wire.
+func General(code connect.Code) string {
+	if code < connect.CodeCanceled || code > connect.CodeUnauthenticated {
+		code = connect.CodeUnknown
+	}
+	return strings.ToUpper(code.String())
+}
+
+// IsGeneral reports whether reason is the general reason of some API code,
+// as opposed to a case of fault's table or a reason this build does not
+// know.
+func IsGeneral(reason string) bool {
+	for c := connect.CodeCanceled; c <= connect.CodeUnauthenticated; c++ {
+		if General(c) == reason {
+			return true
+		}
+	}
+	return false
+}
+
+// Ensure returns e with a google.rpc.ErrorInfo detail: e itself when it
+// carries one already, else a copy with its code's general reason. The
+// server passes every answer through it, those the RPC library or the
+// server's own front step made without a fault kind among them (a malformed
+// message, a method nothing serves, a deadline), so no answer leaves without
+// the detail the contract promises.
+func Ensure(e *connect.Error) *connect.Error {
+	if e == nil {
+		return nil
+	}
+	for _, d := range e.Details() {
+		if d.Type == ErrorInfoType {
+			return e
+		}
+	}
+	return e.WithDetail(errorInfo(General(e.Code()), nil))
 }
 
 // reasoned is an error marked with the contract's reason, its metadata and

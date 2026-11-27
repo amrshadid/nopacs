@@ -481,7 +481,7 @@ func (c *core) decision(ctx context.Context, procedure string) (access.Decision,
 	}
 	c.log.Error("api: a request reached its handler without an access decision and was refused",
 		"method", procedure, "request_id", requestID)
-	return access.Decision{}, connect.NewError(connect.CodeInternal, internalMessage)
+	return access.Decision{}, codes.Ensure(connect.NewError(connect.CodeInternal, internalMessage))
 }
 
 // changing returns the Decision of a request that changes something, after
@@ -514,7 +514,7 @@ func (c *core) toAPI(d access.Decision, err error) error {
 	case fault.Internal:
 		e := d.Entry(master.OutcomeFailed, "", access.Facts{})
 		c.log.Error("api: internal error", "request_id", e.RequestID, "method", e.Method, "error", err.Error())
-		return connect.NewError(connect.CodeInternal, internalMessage)
+		return codes.Ensure(connect.NewError(connect.CodeInternal, internalMessage))
 	case fault.Unavailable:
 		e := d.Entry(master.OutcomeFailed, "", access.Facts{})
 		c.log.Warn("api: unavailable", "request_id", e.RequestID, "method", e.Method, "error", err.Error())
@@ -551,10 +551,10 @@ func withReason(err error) error {
 }
 
 // The reasons of the precondition kind a delete is refused with
-// (access.proto).
+// (access.proto), from fault's table of reasons.
 const (
-	reasonHeld             = "HELD"
-	reasonRetentionMinimum = "RETENTION_MINIMUM"
+	reasonHeld             = fault.ReasonHeld
+	reasonRetentionMinimum = fault.ReasonRetentionMinimum
 )
 
 // outcomeOf returns the outcome and the reason an audit entry records for a

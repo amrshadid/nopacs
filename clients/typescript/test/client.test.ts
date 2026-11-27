@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
-import { Code, NopacsError, nopacsInterceptors, createNopacsClient as createBrowserClient, pages } from "../src/browser.js";
+import { ConnectError } from "@connectrpc/connect";
+
+import { Code, errorDetailsOf, NopacsError, nopacsInterceptors, createNopacsClient as createBrowserClient, pages } from "../src/browser.js";
 import { createNopacsClient as createNodeClient } from "../src/node.js";
 import { file_nopacs_v1_access, Role } from "../src/gen/nopacs/v1/access_pb.js";
 import { file_nopacs_v1_audit } from "../src/gen/nopacs/v1/audit_pb.js";
@@ -142,7 +144,43 @@ describe("failures", () => {
       const err = await failure(() => make().access.whoAmI({}));
       expect(err.code, name).toBe(Code.Unauthenticated);
       expect(err.requestId, name).toMatch(/\S/);
+      // Refused before the call is routed, the answer still carries its reason.
+      expect(err.reason, name).toBe("UNAUTHENTICATED");
+      expect(err.reasonMetadata, name).toEqual({});
+      expect(err.retryDelayMs, name).toBeUndefined();
     }
+  });
+
+  it("every answer's google.rpc.ErrorInfo gives its reason over every transport", async () => {
+    for (const protocol of ["connect", "grpc", "grpc-web"] as const) {
+      const c = createNodeClient({ baseUrl, key: server.key, protocol });
+      const err = await failure(() => c.tenants.getTenant({ name: "no-such-tenant" }));
+      expect(err.reason, protocol).toBe("NOT_FOUND");
+      expect(err.reasonMetadata, protocol).toEqual({});
+      const nobody = createNodeClient({ baseUrl, key: server.makeKey(`nobody-${protocol}`), protocol });
+      const denied = await failure(() => nobody.tenants.createTenant({ name: "nope", databaseType: DatabaseType.SQLITE }));
+      expect(denied.reason, protocol).toBe("PERMISSION_DENIED");
+    }
+  });
+
+  it("the reason, metadata and retry delay are read from the details; foreign and absurd ones are not", () => {
+    const hex = (s: string) => Uint8Array.from(s.match(/../g)!.map((b) => parseInt(b, 16)));
+    // google.rpc.ErrorInfo(reason "HELD", domain "nopacs", metadata {hold: 01jh, b: x}) and
+    // google.rpc.RetryInfo(retry_delay 30s 500ns), as googleapis-common-protos serializes them.
+    const held = { type: "google.rpc.ErrorInfo", value: hex("0a0448454c4412066e6f706163731a060a01621201781a0c0a04686f6c64120430316a68") };
+    const retry = { type: "google.rpc.RetryInfo", value: hex("0a05081e10f403") };
+    const err = NopacsError.wrap(new ConnectError("HELD: a hold covers it", Code.FailedPrecondition, undefined, undefined));
+    err.details.push(held, retry);
+    let d = errorDetailsOf(err);
+    expect(d).toEqual({ reason: "HELD", metadata: { hold: "01jh", b: "x" }, retryDelayMs: 30000 });
+    const wrapped = NopacsError.wrap(Object.assign(new ConnectError("m", Code.FailedPrecondition), { details: [held, retry] }));
+    expect([wrapped.reason, wrapped.reasonMetadata, wrapped.retryDelayMs]).toEqual(["HELD", { hold: "01jh", b: "x" }, 30000]);
+    // reason "HELD", domain "example.com"; a delay of 2^35 seconds; a truncated message.
+    const foreign = { type: "google.rpc.ErrorInfo", value: hex("0a0448454c44120b6578616d706c652e636f6d") };
+    const years = { type: "google.rpc.RetryInfo", value: hex("0a0708808080808001") };
+    const broken = { type: "google.rpc.ErrorInfo", value: hex("0a7f48") };
+    d = errorDetailsOf(Object.assign(new ConnectError("m", Code.Unavailable), { details: [foreign, years, broken] }));
+    expect(d).toEqual({ reason: "", metadata: {}, retryDelayMs: undefined });
   });
 
   it("a refused server stream carries the request id", async () => {

@@ -656,7 +656,7 @@ func (e *env) as(c caller) clients {
 			return next(ctx, spec)
 		}
 	}
-	cl := connect.NewClient(connecthttp.NewTransport(e.client, e.url), set)
+	cl := connect.NewClient(connecthttp.NewTransport(e.client, e.url), set, errorInfoChecked(e.t))
 	return clients{
 		tenants:    nopacsv1connect.NewTenantServiceClient(cl),
 		access:     nopacsv1connect.NewAccessServiceClient(cl),

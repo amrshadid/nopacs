@@ -440,8 +440,8 @@ func instanceFailure(err error, path label.Path) error {
 // it cannot read at once (access.proto, the unavailable kind): the
 // message starts with it, so a client that reads only the message, a
 // plain HTTP download's among them, can tell it from a storage that does
-// not answer.
-const reasonNotOnline = "NOT_ONLINE"
+// not answer. fault's table of reasons holds the word.
+const reasonNotOnline = fault.ReasonNotOnline
 
 // notOnline is a read of an object its storage cannot read at once (an S3
 // object in an archive storage class, blob.ErrNotOnline): unavailable,

@@ -406,20 +406,21 @@ func codeName(c connect.Code) string {
 // message, an unknown method) keeps its code and message. A deadline or a
 // cancellation is DEADLINE_EXCEEDED or CANCELED. Any other error is mapped
 // by its fault kind through codes.ToConnect, which shows the caller only
-// the error's message for the caller (fault.Message) and never its cause,
-// and gives a refusal that names one of the contract's reasons its
-// google.rpc.ErrorInfo detail, whether a handler marked it or the reason
-// begins its message. A plain HTTP route's JSON body carries the code and
-// the message alone (writeHTTPError); its reason is the message's start.
+// the error's message for the caller (fault.Message) and never its cause.
+// Every answer carries a google.rpc.ErrorInfo detail (codes.Ensure): the
+// contract's reason when a handler marked one or the reason begins the
+// message, and the code's general reason otherwise, the library's own
+// errors among them. A plain HTTP route's JSON body carries the same
+// details (writeHTTPError).
 func (s *Server) answer(err error) *connect.Error {
 	var ce *connect.Error
 	switch {
 	case errors.As(err, &ce):
-		return ce
+		return codes.Ensure(ce)
 	case errors.Is(err, context.DeadlineExceeded):
-		return connect.NewError(connect.CodeDeadlineExceeded, "the request's deadline passed")
+		return codes.Ensure(connect.NewError(connect.CodeDeadlineExceeded, "the request's deadline passed"))
 	case errors.Is(err, context.Canceled):
-		return connect.NewError(connect.CodeCanceled, "the request was canceled")
+		return codes.Ensure(connect.NewError(connect.CodeCanceled, "the request was canceled"))
 	}
 	return codes.ToConnect(err)
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"connectrpc.com/connect/v2"
+
+	"github.com/amrshadid/nopacs/internal/api/codes"
 )
 
 // wireFamily is the protocol a request speaks, as far as the server's own
@@ -121,6 +123,10 @@ func (w wire) contentType() string {
 // writeWireError writes an error answer in the protocol w, all of it built
 // here from code and msg, so its status, headers, trailers and body depend on
 // w, code and msg and on nothing else. It never reads the request's body.
+// Every form carries the code's general google.rpc.ErrorInfo detail
+// (codes.Ensure), as every other answer of the server does: in
+// grpc-status-details-bin (a google.rpc.Status, base64 without padding) for
+// gRPC and gRPC-Web, and in "details" for the Connect forms.
 // Every form carries X-Content-Type-Options: nosniff and, for
 // UNAUTHENTICATED, WWW-Authenticate: Bearer (RFC 9110 15.5.2, RFC 6750 3).
 // The headers the envelope set before (the request id among them) go out in
@@ -134,24 +140,27 @@ func (w wire) contentType() string {
 //     then Trailers), with no message between. Not Trailers-Only: a client
 //     such as grpcio surfaces a Trailers-Only block as trailing metadata
 //     only, and the request id must reach a refused caller as initial
-//     metadata like any other header. The Trailer header names the two in
-//     a fixed order. Over HTTP/1.1 the trailers go after an empty chunked
-//     body.
+//     metadata like any other header. The Trailer header names the three,
+//     with grpc-status-details-bin, in a fixed order. Over HTTP/1.1 the
+//     trailers go after an empty chunked body.
 //   - gRPC-Web: HTTP 200 and the Content-Type in the header block, then one
 //     trailer frame as the body (the gRPC-Web protocol, "Message framing"):
 //     flag 0x80, the length as four bytes big-endian, then
-//     "grpc-status: N\r\ngrpc-message: ...\r\n".
+//     "grpc-status: N\r\ngrpc-message: ...\r\ngrpc-status-details-bin: ...\r\n".
 //   - Connect streaming: HTTP 200 and one end-of-stream message (the
 //     Connect protocol, "Streaming-Response"): flags 0x02, the length as
-//     four bytes big-endian, then {"error":{"code":...,"message":...}} in
-//     JSON whatever the codec.
+//     four bytes big-endian, then
+//     {"error":{"code":...,"message":...,"details":[...]}} in JSON whatever
+//     the codec.
 //   - Connect unary and anything else: the HTTP status the Connect protocol
-//     gives the code ("Error Codes") and {"code":...,"message":...} as
-//     application/json (writeHTTPError).
+//     gives the code ("Error Codes") and
+//     {"code":...,"message":...,"details":[...]} as application/json
+//     (writeHTTPError).
 //
 // Every form but gRPC's carries an explicit Content-Length, so its framing
 // does not depend on the HTTP version.
 func writeWireError(w http.ResponseWriter, p wire, code connect.Code, msg string) {
+	ce := codes.Ensure(connect.NewError(code, msg))
 	h := w.Header()
 	common := func() {
 		h.Set("Content-Type", p.contentType())
@@ -163,50 +172,55 @@ func writeWireError(w http.ResponseWriter, p wire, code connect.Code, msg string
 	switch p.family {
 	case familyGRPC:
 		common()
-		h.Set("Trailer", "Grpc-Status, Grpc-Message")
+		h.Set("Trailer", "Grpc-Status, Grpc-Message, Grpc-Status-Details-Bin")
 		w.WriteHeader(http.StatusOK)
 		// Declared trailers, set after the header block is written: net/http
 		// sends them when the handler returns.
 		h.Set("Grpc-Status", strconv.Itoa(int(code)))
 		h.Set("Grpc-Message", grpcPercentEncode(msg))
+		h.Set("Grpc-Status-Details-Bin", connect.EncodeBinaryHeader(codes.StatusBytes(ce)))
 	case familyGRPCWeb:
-		body := grpcWebTrailers(code, msg)
+		body := grpcWebTrailers(ce)
 		common()
 		h.Set("Content-Length", strconv.Itoa(len(body)))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(body) //nolint:gosec // G705: a gRPC-Web trailer frame built here from a code and a fixed message, never HTML.
 	case familyConnectStream:
-		body := connectEndStream(code, msg)
+		body := connectEndStream(ce)
 		common()
 		h.Set("Content-Length", strconv.Itoa(len(body)))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(body) //nolint:gosec // G705: an application/connect+ envelope built here from a code and a fixed message, never HTML.
 	default:
-		writeHTTPError(w, connect.NewError(code, msg))
+		writeHTTPError(w, ce)
 	}
 }
 
-// grpcWebTrailers returns the gRPC-Web trailer frame carrying code and msg:
-// flag 0x80, the length, then the trailers as an HTTP/1 header block with
-// lowercase names, in a fixed order.
-func grpcWebTrailers(code connect.Code, msg string) []byte {
-	block := "grpc-status: " + strconv.Itoa(int(code)) + "\r\ngrpc-message: " + grpcPercentEncode(msg) + "\r\n"
+// grpcWebTrailers returns the gRPC-Web trailer frame carrying ce's code,
+// message and details: flag 0x80, the length, then the trailers as an
+// HTTP/1 header block with lowercase names, in a fixed order. The details
+// are a google.rpc.Status in grpc-status-details-bin, as gRPC sends them.
+func grpcWebTrailers(ce *connect.Error) []byte {
+	block := "grpc-status: " + strconv.Itoa(int(ce.Code())) + "\r\ngrpc-message: " + grpcPercentEncode(ce.Message()) +
+		"\r\ngrpc-status-details-bin: " + connect.EncodeBinaryHeader(codes.StatusBytes(ce)) + "\r\n"
 	out := make([]byte, 5, 5+len(block))
 	out[0] = 0x80
-	binary.BigEndian.PutUint32(out[1:], uint32(len(block))) //nolint:gosec // G115: a fixed block of a few dozen bytes.
+	binary.BigEndian.PutUint32(out[1:], uint32(len(block))) //nolint:gosec // G115: a fixed block of a few hundred bytes.
 	return append(out, block...)
 }
 
 // connectEndStream returns the Connect protocol's end-of-stream message
-// carrying an error: the envelope (flag 0x02, end of stream) around its JSON.
-func connectEndStream(code connect.Code, msg string) []byte {
+// carrying an error: the envelope (flag 0x02, end of stream) around its JSON,
+// with the details in the same form as a unary error's.
+func connectEndStream(ce *connect.Error) []byte {
 	type wireErr struct {
-		Code    string `json:"code"`
-		Message string `json:"message,omitempty"`
+		Code    string       `json:"code"`
+		Message string       `json:"message,omitempty"`
+		Details []wireDetail `json:"details,omitempty"`
 	}
 	payload, err := json.Marshal(struct {
 		Error wireErr `json:"error"`
-	}{wireErr{code.String(), msg}})
+	}{wireErr{ce.Code().String(), ce.Message(), wireDetails(ce)}})
 	if err != nil {
 		payload = []byte(`{"error":{"code":"internal"}}`)
 	}

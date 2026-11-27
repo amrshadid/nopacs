@@ -24,7 +24,8 @@ context (nopacs context --help) saves a server with its key file and TLS files
 under a name: --context NAME, NOPACS_CONTEXT, or the current context.
 
 Output is a table for a person. With --json it is one JSON document with a
-"schemaVersion" field, for a program. An error is one line on standard error.
+"schemaVersion" field, for a program. An error is one line on standard error;
+with --json that line is a JSON object whose "reason" is a fixed word.
 
 Exit codes: 0 done, 1 failed, 2 wrong usage, 3 refused (not authenticated, or
 not allowed), 4 not found, 5 a state that forbids the change, 6 a position

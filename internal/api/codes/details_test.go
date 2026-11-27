@@ -36,7 +36,8 @@ func TestDetailsEncoding(t *testing.T) {
 // TestWithReason guards what ToConnect makes of an error WithReason
 // marked: the code of its kind, its message starting with the reason once,
 // an ErrorInfo detail with the reason, the domain and the metadata, and a
-// RetryInfo detail only with a delay; an error not marked carries neither.
+// RetryInfo detail only with a delay; an error not marked carries its
+// code's general reason and no RetryInfo.
 func TestWithReason(t *testing.T) {
 	base := fault.Wrap(fault.Unavailable, errors.New("cause"), "STORAGE_SWITCHING: the storage main is being switched")
 	e := ToConnect(WithReason(base, "STORAGE_SWITCHING", nil, 30*time.Second))
@@ -66,8 +67,11 @@ func TestWithReason(t *testing.T) {
 	}
 
 	plain := ToConnect(fault.New(fault.Unavailable, "down"))
-	if len(plain.Details()) != 0 {
-		t.Errorf("an error not marked carries details %v", plain.Details())
+	if r, ok := ReasonOfError(plain); !ok || r.Reason != "UNAVAILABLE" || r.Domain != Domain || len(r.Metadata) != 0 || len(plain.Details()) != 1 {
+		t.Errorf("an error not marked: error info %+v %v, details %v; want the general UNAVAILABLE alone", r, ok, plain.Details())
+	}
+	if plain.Message() != "down" {
+		t.Errorf("an error not marked has the message %q, want it unchanged", plain.Message())
 	}
 	if WithReason(nil, "X", nil, 0) != nil {
 		t.Error("WithReason of nil is not nil")
@@ -79,7 +83,7 @@ func TestWithReason(t *testing.T) {
 // master's and the tenant's ports make with its reason at the start of its
 // message decodes to that reason, with the code of its kind; the table's
 // words are the ports' own; a message of another kind that starts with the
-// same word carries no detail. The bytes of one are those the
+// same word carries only that kind's general reason. The bytes of one are those the
 // googleapis-common-protos Python package writes for
 // ErrorInfo(reason "TENANT_MOVED", domain "nopacs").
 func TestPrefixedReasons(t *testing.T) {
@@ -106,8 +110,117 @@ func TestPrefixedReasons(t *testing.T) {
 	if d := e.Details(); len(d) != 1 || d[0].Type != ErrorInfoType || hex.EncodeToString(d[0].Value) != "0a0c54454e414e545f4d4f56454412066e6f70616373" {
 		t.Errorf("TENANT_MOVED's details %v, want one ErrorInfo of 0a0c54454e414e545f4d4f56454412066e6f70616373", d)
 	}
-	if e := ToConnect(fault.New(fault.Invalid, "TENANT_MOVED: a name a caller wrote")); len(e.Details()) != 0 {
-		t.Errorf("a message of another kind carries details %v", e.Details())
+	if r, _ := ReasonOfError(ToConnect(fault.New(fault.Invalid, "TENANT_MOVED: a name a caller wrote"))); r.Reason != "INVALID_ARGUMENT" {
+		t.Errorf("a message of another kind carries the reason %q, want INVALID_ARGUMENT", r.Reason)
+	}
+}
+
+// TestEveryKindCarriesErrorInfo guards the promise that every answer
+// carries a google.rpc.ErrorInfo: each kind ToConnect maps, an error with
+// no kind and an API error made without a fault (Ensure) carry the general
+// reason of their code, in the domain, with no metadata; Ensure leaves an
+// error that has one as it is.
+func TestEveryKindCarriesErrorInfo(t *testing.T) {
+	want := map[fault.Kind]string{
+		fault.Internal: "INTERNAL", fault.Invalid: "INVALID_ARGUMENT", fault.Unauthenticated: "UNAUTHENTICATED",
+		fault.Denied: "PERMISSION_DENIED", fault.NotFound: "NOT_FOUND", fault.Conflict: "ALREADY_EXISTS",
+		fault.Unavailable: "UNAVAILABLE", fault.Precondition: "FAILED_PRECONDITION", fault.OutOfRange: "OUT_OF_RANGE",
+		fault.Exhausted: "RESOURCE_EXHAUSTED", fault.DataLoss: "DATA_LOSS",
+	}
+	for _, p := range pairs {
+		r, ok := ReasonOfError(ToConnect(fault.New(p.kind, "x")))
+		if !ok || r.Reason != want[p.kind] || r.Domain != Domain || len(r.Metadata) != 0 {
+			t.Errorf("%v: error info %+v %v, want %s", p.kind, r, ok, want[p.kind])
+		}
+	}
+	if r, _ := ReasonOfError(ToConnect(errors.New("cause"))); r.Reason != "INTERNAL" {
+		t.Errorf("an error with no kind: reason %q, want INTERNAL", r.Reason)
+	}
+	for c, reason := range map[connect.Code]string{
+		connect.CodeUnimplemented: "UNIMPLEMENTED", connect.CodeDeadlineExceeded: "DEADLINE_EXCEEDED",
+		connect.CodeCanceled: "CANCELED", connect.CodeUnknown: "UNKNOWN", connect.CodeAborted: "ABORTED",
+	} {
+		e := Ensure(connect.NewError(c, "m"))
+		if r, ok := ReasonOfError(e); !ok || r.Reason != reason || r.Domain != Domain || e.Code() != c || e.Message() != "m" {
+			t.Errorf("Ensure of %v: %v %q, error info %+v %v; want %s", c, e.Code(), e.Message(), r, ok, reason)
+		}
+	}
+	held := ToConnect(WithReason(fault.New(fault.Precondition, "a hold covers it"), fault.ReasonHeld, map[string]string{"hold": "h1"}, 0))
+	if again := Ensure(held); len(again.Details()) != 1 {
+		t.Errorf("Ensure added a second detail to an error that had one: %v", again.Details())
+	}
+	if Ensure(nil) != nil {
+		t.Error("Ensure of nil is not nil")
+	}
+	if e := ToConnect(WithReason(fault.New(fault.NotFound, "no such tenant"), "NOT_FOUND", nil, 0)); e.Message() != "no such tenant" {
+		t.Errorf("a general reason marked is written into the message: %q", e.Message())
+	}
+}
+
+// TestAMarkOfAnotherKindIsNotAnswered guards that a reason is answered only
+// on the code of its kind: an error marked HELD whose kind is Internal (a
+// layer above wrapped it so) is answered INTERNAL with the fixed message,
+// the general reason, no hold metadata and no RetryInfo; a word the table
+// does not hold is answered the same way; a case of the right kind still
+// carries its metadata.
+func TestAMarkOfAnotherKindIsNotAnswered(t *testing.T) {
+	marked := WithReason(fault.New(fault.Precondition, "a hold covers it"), fault.ReasonHeld, map[string]string{"hold": "h1"}, 30*time.Second)
+	for name, err := range map[string]error{
+		"wrapped as internal": fault.Wrap(fault.Internal, marked, "internal error"),
+		"marked on internal":  WithReason(errors.New("boom"), fault.ReasonHeld, map[string]string{"hold": "h1"}, time.Second),
+		"unknown word":        WithReason(fault.New(fault.Internal, "boom"), "NOT_A_REASON", map[string]string{"k": "v"}, time.Second),
+	} {
+		e := ToConnect(err)
+		r, ok := ReasonOfError(e)
+		if e.Code() != connect.CodeInternal || e.Message() != "internal error" && e.Message() != "boom" ||
+			!ok || r.Reason != "INTERNAL" || len(r.Metadata) != 0 || len(e.Details()) != 1 {
+			t.Errorf("%s: %v %q, error info %+v %v, %d details; want INTERNAL alone", name, e.Code(), e.Message(), r, ok, len(e.Details()))
+		}
+		if _, has := RetryOfError(e); has {
+			t.Errorf("%s: a retry delay on a mark that was not answered", name)
+		}
+	}
+	if r, _ := ReasonOfError(ToConnect(marked)); r.Reason != fault.ReasonHeld || r.Metadata["hold"] != "h1" {
+		t.Errorf("a case of its own kind: %+v", r)
+	}
+}
+
+// TestGeneralReasonsAreNotCases guards that a client can tell a general
+// reason from a case by the word alone: no reason of fault's table is any
+// code's general reason, IsGeneral says so for every code's and for none
+// of the table's, and every case's kind is one the table of codes maps.
+func TestGeneralReasonsAreNotCases(t *testing.T) {
+	for c := connect.CodeCanceled; c <= connect.CodeUnauthenticated; c++ {
+		if !IsGeneral(General(c)) {
+			t.Errorf("IsGeneral(%s) is false", General(c))
+		}
+	}
+	for _, c := range fault.Cases() {
+		if IsGeneral(c.Reason) {
+			t.Errorf("the case %s is spelled as a general reason", c.Reason)
+		}
+		if Code(c.Kind) == connect.CodeInternal {
+			t.Errorf("the case %s is of a kind answered as INTERNAL", c.Reason)
+		}
+	}
+	if General(connect.Code(99)) != "UNKNOWN" || General(0) != "UNKNOWN" {
+		t.Errorf("a code past the sixteen is %s, %s; want UNKNOWN", General(connect.Code(99)), General(0))
+	}
+	if IsGeneral("") || IsGeneral("not_found") {
+		t.Error("IsGeneral accepts a word that is no code's general reason")
+	}
+}
+
+// TestStatusBytes guards the google.rpc.Status the server writes into
+// grpc-status-details-bin for an answer it builds itself, against the bytes
+// the googleapis-common-protos Python package writes for
+// Status(code 16, message "no key", details [Any(ErrorInfo(reason
+// "UNAUTHENTICATED", domain "nopacs"))]).
+func TestStatusBytes(t *testing.T) {
+	e := Ensure(connect.NewError(connect.CodeUnauthenticated, "no key"))
+	const want = "081012066e6f206b65791a450a28747970652e676f6f676c65617069732e636f6d2f676f6f676c652e7270632e4572726f72496e666f12190a0f554e41555448454e5449434154454412066e6f70616373"
+	if got := hex.EncodeToString(StatusBytes(e)); got != want {
+		t.Errorf("Status bytes\n got %s\nwant %s", got, want)
 	}
 }
 

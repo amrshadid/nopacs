@@ -26,6 +26,22 @@ var kindMeanings = map[fault.Kind]string{
 	fault.DataLoss:        "Archived data is missing or damaged: a file gone from its storage, or bytes that do not match the SHA-256 recorded when they were archived. The message names the scan to mend.",
 }
 
+// reasonMeanings says in a sentence when each reason of fault's table is
+// answered. renderErrors walks the table and refuses a reason with no
+// sentence.
+var reasonMeanings = map[string]string{
+	fault.ReasonTenantMoved:      "A change to a tenant an export handed to another installation; it is read only here.",
+	fault.ReasonTenantFenced:     "A change to, or a read of the data of, a tenant whose storages name another installation or a later generation; it serves no data here.",
+	fault.ReasonHeld:             "A delete of data a hold covers.",
+	fault.ReasonRetentionMinimum: "A person's delete of data a retention rule keeps at least until a time to come.",
+	fault.ReasonRelabeled:        "A subject, session or scan asked for by a label a relabel moved, asked by a caller who may read the tenant's corrections.",
+	fault.ReasonTenantRestoring:  "The tenant is being reconciled after a restore; retry with a backoff.",
+	fault.ReasonNotOnline:        "The storage holds the object in a tier it cannot read at once, and no copy in step on another storage is online. A retry delay comes only while a recall runs.",
+	fault.ReasonStorageSwitching: "A write to a storage being switched to its replica waits for the swap; it carries a retry delay.",
+	fault.ReasonCursorExpired:    "An event cursor before the oldest event kept; start over from a status.",
+	fault.ReasonHistoryChanged:   "An event cursor of another history of the tenant's feed, or past its newest event; start over from a status.",
+}
+
 // httpStatus is the HTTP status the Connect protocol carries each code with
 // (connectrpc.com/docs/protocol, "Error codes"). The codes package maps kinds
 // to codes; the HTTP status of a code is the protocol's, not NoPACs'.
@@ -83,6 +99,25 @@ func renderErrors(string) (string, error) {
 		}
 		k := codes.Kind(c)
 		fmt.Fprintf(&b, "| `%s` | %d | %s | %d |\n", strings.ToUpper(c.String()), status, k, k.ExitCode())
+	}
+	b.WriteString("\n## Reasons\n\n" +
+		"Every error the server answers carries a `google.rpc.ErrorInfo` detail with the domain `" + codes.Domain + "` and a\n" +
+		"reason, a fixed word a program branches on. A failure that is one of the cases below carries that case's reason,\n" +
+		"which also begins its message, and the metadata the case names when it knows them. Any other failure carries\n" +
+		"its code's general reason, the code's name above (`NOT_FOUND`, `UNAVAILABLE`, ...), which says no more than the\n" +
+		"code. A reason a client does not know is one added later: it treats it as its code alone. How to read them, and\n" +
+		"the retry delays some carry: [Reasons and retry delays](../api/errors.md).\n\n")
+	b.WriteString("| Reason | Kind | API code | Metadata | When |\n|---|---|---|---|---|\n")
+	for _, c := range fault.Cases() {
+		meaning, ok := reasonMeanings[c.Reason]
+		if !ok {
+			return "", fmt.Errorf("the reason %s has no sentence in reasonMeanings", c.Reason)
+		}
+		meta := "none"
+		if len(c.Metadata) > 0 {
+			meta = "`" + strings.Join(c.Metadata, "`, `") + "`"
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | `%s` | %s | %s |\n", c.Reason, c.Kind, codes.General(codes.Code(c.Kind)), meta, cell(meaning))
 	}
 	return b.String(), nil
 }

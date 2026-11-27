@@ -427,8 +427,10 @@ func (s *Server) uncompressedLong(spec connect.Spec) []connecthttp.Option {
 }
 
 // procedureMux is what connecthttp.Mount registers on. It keeps each
-// procedure's handler for the router and records its pattern, and drops the
-// handler Mount adds for each service's subtree ("/package.Service/"): that
+// procedure's handler for the router, wrapped in withErrorInfo so the
+// answers the library writes itself carry the google.rpc.ErrorInfo every
+// answer does, and records its pattern; it drops the handler Mount adds for
+// each service's subtree ("/package.Service/"): that
 // is the RPC library's handler of unknown procedures, which would dispatch a
 // path that is not exactly a procedure (a percent-encoded one, say) to a
 // served handler with the request's stream shape instead of the method's,
@@ -443,6 +445,7 @@ func (m procedureMux) Handle(pattern string, h http.Handler) {
 	if strings.HasSuffix(pattern, "/") || m.s.pending(pattern) {
 		return
 	}
+	h = withErrorInfo(h)
 	m.s.procs[pattern] = h
 	m.s.mux.Handle(pattern, h)
 }
