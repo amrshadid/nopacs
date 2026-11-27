@@ -51,7 +51,7 @@ This table says what each command is for. Every command and every flag, with its
 | `nopacs-server backup` | `create --out FILE [--master-env VAR]`, `verify FILE [--key-file PATH]`, `restore FILE [--key-file PATH] [--master-env VAR] [--scratch-schema NAME] [--take-over]`: commands of `nopacs-server` that take `--data-dir`; create and restore need the server stopped. `nopacs tenant export <name> --out FILE --key-out FILE` (admin, `nopacs`), `nopacs-server tenant import FILE --transfer-key FILE [--db-env VAR] [--master-env VAR] [--scratch-schema NAME] [--take-over]` (on the server's machine, server stopped) and `nopacs tenant reclaim <name>` (local operator only, `nopacs`) move a tenant. See [Backup, restore and moving a tenant](../operate/backup.md) |
 | `nopacs catalog` | `subjects <tenant>`, `sessions <tenant> [<subject>]`, `scans <tenant> [<subject> [<session>]]`, with filters and `--order` |
 | `nopacs scan show` | `<tenant> <subject>/<session>/<scan> [--metadata]`: a scan, and the DICOM header of every instance as JSON |
-| `nopacs download` | `<tenant> <subject>[/<session>[/<scan>]] --to DIR [--quiet]` |
+| `nopacs download` | `<tenant> [<subject>[/<session>[/<scan>]]...] --to DIR [--refs-file FILE] [--modality M] [--description-prefix P] [--receiver R] [--archived-since T] [--archived-until T] [--parallel N] [--limit-rate RATE] [--selection FILE] [--layout plain\|bagit] [--progress auto\|text\|json\|none] [--quiet]`: a chosen set, several files at a time, checked as they arrive. See [Downloading a set](#downloading-a-set) |
 
 A command that removes or discards something says what it would do and exits
 2 until it is given `--yes`.
@@ -132,6 +132,84 @@ DONE, OK, NOT OK, REMAINING and CREATED.
   each written as `.part` and renamed only once its SHA-256 matches the one the
   server announced. Run again, a download skips what is complete and resumes a
   `.part` by range ([internal/cli/download](../../internal/cli/download/doc.go)).
+  A set of many scans is described under [Downloading a set](#downloading-a-set).
+
+## Downloading a set
+
+`nopacs download` fetches a chosen set, not only one subject. The set is any
+mix of these, and a file two of them name is fetched once:
+
+- References after the tenant: a subject, `subject/session` or
+  `subject/session/scan`.
+- `--refs-file FILE` (`-` for standard input): one reference a line; blank lines
+  and lines starting with `#` are ignored; a line that is not a reference
+  stops the command, naming its number. This is the one form every way of
+  choosing a set ends in, so another way of choosing (a search) will produce
+  the same list.
+- The scans a filter of `catalog scans` selects, over the whole tenant:
+  `--modality`, `--description-prefix`, `--receiver`, `--archived-since`,
+  `--archived-until`. A filter and references together are refused (exit 2); a
+  filter that matches nothing exits 4.
+- With `--selection FILE`, no reference at all: the set the file was made for.
+
+The command lists what each reference holds (announcements only, no file
+bytes), skips the files already whole, and fetches the rest with
+`--parallel N` streams (default 4, at most 16), each stream a run of
+consecutive files of one scan, so one large scan is spread over several. A set
+is what the archive held when the listing ran; run the command again for what
+was archived since.
+
+**The server's bound.** The server lets one caller hold a limited number of
+open reads (the setting `read.per-caller`, 16 by default) and refuses one past
+it, with exit 7 for a command that does not wait; it never queues. `download`
+treats that refusal as "too many", not as a failure: it waits (half a second,
+doubling to 30 seconds, or the `Retry-After` the server names), holds one fewer
+stream, tries one more after 30 quiet seconds, and gives up only after ten
+minutes of refusals without a byte of progress. `--limit-rate 10MiB` bounds
+the bytes per second of all streams together (`MiB/s` is also read).
+
+**Resuming.** Run the same command again after a stop. With
+`--selection FILE`, every file that is whole and checked is recorded in `FILE`
+(name, length, SHA-256 and modification time, in JSON; replaced atomically, so a
+stop leaves the old file or the new one, at least every five seconds and at
+the end). A rerun skips a recorded file without reading it while its size and
+modification time are as recorded; a file that differs is read and checked
+as it would be without the record, so the record saves time and never
+vouches for a file that changed in the usual ways. A file changed with its size and
+modification time put back is not noticed; run without `--selection` to
+check every file by its bytes. The file's `format` is
+`nopacs-download-selection/1`; one made for another tenant or layout is
+refused, never overwritten.
+
+**Progress.** On a terminal, standard error shows one line: files settled of
+the total, bytes of the total, the rate over the last ten seconds and the time
+left at that rate. `--progress text` shows it anywhere, `--progress none` or
+`--quiet` never. `--progress json` writes one JSON document per line to
+standard error, at most one a second and one at each change of phase; the
+result stays on standard output, as `--json` writes it (`--json` alone writes
+nothing to standard error). A line has `schemaVersion` (1) and `event`:
+
+| `event` | Fields |
+|---|---|
+| `progress` | `phase` (`listing`, `downloading`, `done`); `files`: `done` (fetched, skipped and failed together, so it reaches `total`), `total`, `fetched`, `skipped`, `failed`; `bytes`: `received` (this run), `total` (what this run has to receive for the files that were not whole, less what partial copies hold); `rateBytesPerSecond` (over ten seconds); `remainingSeconds` (absent while unknown); `elapsedSeconds` |
+| `throttled` | `waitSeconds`, `streams`: the server refused a stream; the download waits that long and holds at most that many streams afterward |
+| `failed` | `message`: a file was removed because it did not match what the server announced |
+
+A field may be added in a later version; none is renamed or removed within
+`schemaVersion` 1. The result document of `--json` gains `total`, `seconds`,
+and, when given, `selection` and `layout`.
+
+**BagIt.** `--layout bagit` makes `--to` a bag of
+[RFC 8493](https://www.rfc-editor.org/rfc/rfc8493): the files under `data/`
+(`data/<subject>/<session>/<scan>/<instance>.dcm`), `bagit.txt`,
+`bag-info.txt` (`Bagging-Date`, `Payload-Oxum`, `Bag-Software-Agent`,
+`External-Description`), `manifest-sha256.txt` (the SHA-256 the server
+announced and the command checked, a line each) and
+`tagmanifest-sha256.txt`. They are written only when every file of the set is
+whole, so a bag is complete exactly when its tag manifest is there; a download
+with a failed file writes none. Validate it with any BagIt tool, for example
+`bagit.py --validate DIR` from the Python `bagit` package. A selection file kept
+beside the bag is not part of it: leave it out when handing the bag on.
 
 ## Contexts
 

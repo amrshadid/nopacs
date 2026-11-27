@@ -469,6 +469,21 @@ scan, keeps it whole, and serves it through an API with keys.
   header and a trial answer no values unless `--show-values`, which is
   audited. `nopacs agent-guide` describes the commands and their JSON for an
   agent.
+- `nopacs download` fetches a chosen set: references after the tenant, a file of
+  references (`--refs-file`, one `subject[/session[/scan]]` a line), or the scans
+  a catalog filter selects (`--modality`, `--description-prefix`, `--receiver`,
+  `--archived-since`, `--archived-until`). It holds `--parallel` streams open
+  (default 4, at most 16), each a run of consecutive files of one scan, and
+  treats the server's refusal past its per-caller read bound as a cue to wait,
+  hold fewer streams and try again, not as a failure. `--limit-rate` bounds the
+  bytes per second of all streams together. One overall progress (files, bytes,
+  rate, time left) shows on a terminal, and `--progress json` writes it as one
+  JSON document per line on standard error. `--selection FILE` records the
+  files that are whole and checked, replaced atomically, so a stopped download
+  of thousands of scans resumes with the same command and skips them without
+  reading them again. `--layout bagit` writes a BagIt bag (RFC 8493) with a
+  SHA-256 manifest and tag manifest. The interactive program's download screen
+  shows the same overall progress.
 - Quarantine warnings: tenant status and the status screen warn when the
   oldest held file passes `quarantine.warn-age` or the bytes held pass
   `quarantine.warn-bytes`, with gauges and an event when a warning starts and

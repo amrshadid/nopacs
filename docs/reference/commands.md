@@ -377,13 +377,24 @@ Usage: `nopacs deid dry-run <tenant> (<profile>[@<version>] | --own) [<subject>[
 
 ### `nopacs download`
 
-Download a subject's, a session's or a scan's files, checked as they arrive
+Download chosen subjects, sessions or scans, checked as they arrive
 
-Usage: `nopacs download <tenant> <subject>[/<session>[/<scan>]] --to <dir> [--quiet] [flags]`
+Usage: `nopacs download <tenant> [<subject>[/<session>[/<scan>]]...] --to <dir> [--refs-file F | scan filters] [--parallel N] [--limit-rate R] [--selection F] [--layout bagit] [flags]`
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
-| `--quiet` | bool |  | show no progress on standard error |
+| `--archived-since` | string |  | download only scans first archived at or after this time: a date, a time with its offset, or an age such as 7d (with a scan filter) |
+| `--archived-until` | string |  | download only scans first archived before this time, written like --archived-since (with a scan filter) |
+| `--description-prefix` | string |  | download every scan whose series description starts with this, ignoring case (the filter of catalog scans; names no reference) |
+| `--layout` | string | `plain` | plain: <subject>/<session>/<scan>/<id>.dcm under --to; bagit: a BagIt bag (RFC 8493) in --to |
+| `--limit-rate` | string |  | the most bytes per second all streams receive together, such as 10MiB (default: no bound) |
+| `--modality` | string |  | download every scan of this modality in the tenant, such as MR (the filter of catalog scans; names no reference) |
+| `--parallel` | int | `4` | how many streams to hold open at once, from 1 to 16; lowered by itself when the server refuses one |
+| `--progress` | string | `auto` | auto (a line on a terminal), text, json (one JSON document per line on standard error) or none |
+| `--quiet` | bool |  | show no progress on standard error (the same as --progress none) |
+| `--receiver` | string |  | download every scan first archived through the receiver of this name (the filter of catalog scans; names no reference) |
+| `--refs-file` | string |  | a file of references to download, one <subject>[/<session>[/<scan>]] per line, blank lines and lines starting with # ignored; - reads standard input |
+| `--selection` | string |  | the file that records which files are whole and checked, written as the download goes; the same command with the same file skips them without reading them again |
 | `--to` | string |  | the directory to download into (made when missing) |
 
 ### `nopacs grant`

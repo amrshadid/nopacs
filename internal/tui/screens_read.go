@@ -314,6 +314,24 @@ func (s downloadScreen) update(c *ctx, msg tea.Msg) (screen, tea.Cmd) {
 // title names the screen.
 func (s downloadScreen) title(*ctx) string { return "Download " + clean(strings.Join(s.ref, "/")) }
 
+// overallProgress is the one line of the whole download's progress: the files
+// settled of those the set holds, the bytes, the rate over the last ten
+// seconds and the time left at that rate, the same numbers the command's line
+// shows.
+func overallProgress(p download.Progress) string {
+	if p.Phase == download.PhaseListing {
+		return fmt.Sprintf("listing the files: %d found", p.FilesTotal)
+	}
+	text := fmt.Sprintf("%d of %d files, %s of %s", p.Finished(), p.FilesTotal, output.Human(p.Bytes), output.Human(p.BytesTotal))
+	if p.Rate > 0 {
+		text += ", " + output.Human(int64(p.Rate)) + "/s"
+		if p.Remaining >= 0 {
+			text += ", " + p.Remaining.Round(time.Second).String() + " left"
+		}
+	}
+	return text
+}
+
 // editing is false.
 func (s downloadScreen) editing() bool { return false }
 
@@ -338,6 +356,9 @@ func (s downloadScreen) view(c *ctx) []string {
 	}
 	lines = append(lines, "",
 		fmt.Sprintf("%d files fetched, %d already complete, %s received", files, skipped, output.Human(bytes)))
+	if !s.done && p.FilesTotal > 0 {
+		lines = append(lines, overallProgress(p))
+	}
 	switch {
 	case !s.done:
 		if p.Current != "" {

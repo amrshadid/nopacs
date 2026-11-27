@@ -255,8 +255,8 @@ func TestDownload(t *testing.T) {
 		t.Errorf("a rerun: %v", doc)
 	}
 	reqs := r.fake.ReadFilesRequests()[before:]
-	if len(reqs) != 2 || !reqs[0].GetAnnounceOnly() || reqs[1].GetStartAfter().GetInstanceId() != "1.2.3.3.1" || reqs[1].GetStartAfter().GetSessionLabel() != "ses-2" {
-		t.Errorf("a rerun asked for %v, want the announcements and then a stream after the last file", reqs)
+	if len(reqs) != 1 || !reqs[0].GetAnnounceOnly() {
+		t.Errorf("a rerun asked for %v, want the announcements alone: every file is whole, so no stream of bytes opens", reqs)
 	}
 
 	one := filepath.Join(t.TempDir(), "one")
@@ -391,7 +391,10 @@ func TestDownloadResumesTheFirstFileByRangeAlone(t *testing.T) {
 		t.Errorf("the resumed file has SHA-256 %s, want %s", sum(got), sum(first.Data))
 	}
 	for _, req := range r.fake.ReadFilesRequests() {
-		if !req.GetAnnounceOnly() && req.GetStartAfter().GetInstanceId() == "" {
+		// The other scans of the subject are fetched by streams of their own
+		// from their start; only the scan whose first file is partial must
+		// not open one there.
+		if !req.GetAnnounceOnly() && req.GetSessionLabel() == "ses-1" && req.GetScanLabel() == "scan-1" && req.GetStartAfter().GetInstanceId() == "" {
 			t.Errorf("a stream of file bytes opened at the start, at the file continued by range: %v", req)
 		}
 	}
