@@ -22,7 +22,8 @@ wire are the file's own after its meta group.
 import time
 
 from pydicom import dcmread
-from pynetdicom import AE
+from pynetdicom import AE, evt
+from pynetdicom.pdu import A_ASSOCIATE_RJ
 
 VERIFICATION = "1.2.840.10008.1.1"
 IMPLICIT_LITTLE_ENDIAN = "1.2.840.10008.1.2"
@@ -30,27 +31,44 @@ IMPLICIT_LITTLE_ENDIAN = "1.2.840.10008.1.2"
 
 def associate(host, port, calling, called, contexts):
     """Requests an association with the (abstract syntax, transfer syntax)
-    pairs in contexts and returns it, established or not."""
+    pairs in contexts and returns it, established or not, with the result,
+    source and diagnostic of the A-ASSOCIATE-RJ PDU the listener sent, None
+    when it sent none.
+
+    The A-ASSOCIATE-RJ is taken from the PDU as it is decoded off the wire,
+    not from what the association reports after. pynetdicom (2.1) answers an
+    A-ASSOCIATE-RJ by closing its socket from its reactor thread (PS3.8 9.2,
+    AE-4), while the thread that sent the request then looks at the socket to
+    learn whether it connected: when the rejection arrives first, that thread
+    finds the socket closed, takes it for a failed connection and aborts, and
+    the association reports aborted although the RJ was received whole. What
+    reached the caller is the PDU, so the PDU is what is reported."""
     ae = AE(ae_title=calling)
     ae.acse_timeout = 10
     ae.dimse_timeout = 60
     ae.network_timeout = 60
     for sop, ts in contexts:
         ae.add_requested_context(sop, ts)
-    return ae.associate(host, int(port), ae_title=called)
+    received = []
+
+    def on_pdu(event):
+        if isinstance(event.pdu, A_ASSOCIATE_RJ):
+            received.append([event.pdu.result, event.pdu.source, event.pdu.reason_diagnostic])
+
+    assoc = ae.associate(host, int(port), ae_title=called, evt_handlers=[(evt.EVT_PDU_RECV, on_pdu)])
+    return assoc, (received[0] if received else None)
 
 
-def outcome(assoc):
+def outcome(assoc, rj):
     """Returns how the association request ended: "assoc" is accepted,
-    rejected (with "rj", the result, source and diagnostic), aborted or
-    failed."""
+    rejected (with "rj", the result, source and diagnostic of the
+    A-ASSOCIATE-RJ received, as associate returns it), aborted or failed."""
     out = {}
     if assoc.is_established:
         out["assoc"] = "accepted"
-    elif assoc.is_rejected:
+    elif rj is not None:
         out["assoc"] = "rejected"
-        out["rj"] = [assoc.acceptor.primitive.result, assoc.acceptor.primitive.result_source,
-                     assoc.acceptor.primitive.diagnostic]
+        out["rj"] = rj
     elif assoc.is_aborted:
         out["assoc"] = "aborted"
     else:
@@ -68,8 +86,8 @@ def run(action, host, port, calling, called, rest):
     dict of what the caller can print as JSON. An unknown action raises
     ValueError."""
     if action == "echo":
-        assoc = associate(host, port, calling, called, [(VERIFICATION, IMPLICIT_LITTLE_ENDIAN)])
-        out = outcome(assoc)
+        assoc, rj = associate(host, port, calling, called, [(VERIFICATION, IMPLICIT_LITTLE_ENDIAN)])
+        out = outcome(assoc, rj)
         if assoc.is_established:
             out["statuses"] = [status_of(assoc.send_c_echo())]
             assoc.release()
@@ -80,22 +98,22 @@ def run(action, host, port, calling, called, rest):
             pair = (str(meta.SOPClassUID), str(meta.file_meta.TransferSyntaxUID))
             if pair not in contexts:
                 contexts.append(pair)
-        assoc = associate(host, port, calling, called, contexts)
-        out = outcome(assoc)
+        assoc, rj = associate(host, port, calling, called, contexts)
+        out = outcome(assoc, rj)
         if assoc.is_established:
             out["statuses"] = [status_of(assoc.send_c_store(path)) for path in rest]
             assoc.release()
     elif action == "propose":
         sop, ts = rest
-        assoc = associate(host, port, calling, called, [(sop, ts)])
-        out = outcome(assoc)
+        assoc, rj = associate(host, port, calling, called, [(sop, ts)])
+        out = outcome(assoc, rj)
         if assoc.is_established:
             out["accepted_contexts"] = [cx.abstract_syntax for cx in assoc.accepted_contexts]
             out["rejected_contexts"] = [cx.abstract_syntax for cx in assoc.rejected_contexts]
             assoc.release()
     elif action == "garbage":
-        assoc = associate(host, port, calling, called, [(VERIFICATION, IMPLICIT_LITTLE_ENDIAN)])
-        out = outcome(assoc)
+        assoc, rj = associate(host, port, calling, called, [(VERIFICATION, IMPLICIT_LITTLE_ENDIAN)])
+        out = outcome(assoc, rj)
         if assoc.is_established:
             # Type 0x7F, length four, four bytes.
             assoc.dul.socket.send(bytes([0x7F, 0, 0, 0, 0, 4, 0, 0, 0, 0]))
