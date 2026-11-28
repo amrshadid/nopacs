@@ -355,7 +355,7 @@ func randomChange(ctx context.Context, p *Tenant, qids *[]string, i int, next fu
 			batch = append(batch, fixtureFile(r, study, study*1000+next(20)+k))
 		}
 		for range next(2) + 1 {
-			err := retry(func() error { _, err := p.AddReceivedFiles(ctx, batch, fixtureAt(i)); return err })
+			err := retry(func() error { _, err := p.AddReceivedFiles(ctx, batch, fixtureAt(i), nil); return err })
 			if err != nil && !strings.Contains(err.Error(), "no longer receiving") {
 				return fmt.Errorf("received: %w", err)
 			}
@@ -380,7 +380,7 @@ func randomChange(ctx context.Context, p *Tenant, qids *[]string, i int, next fu
 			q.SOPInstanceUID, q.SeriesUID, q.StudyUID, q.SOPClassUID, q.TransferSyntaxUID = f.SOPInstanceUID, f.SeriesUID, f.StudyUID,
 				f.SOPClassUID, f.TransferSyntaxUID
 		}
-		if err := retry(func() error { _, err := p.HoldFiles(ctx, []tenant.QuarantinedFile{q}); return err }); err != nil {
+		if err := retry(func() error { _, err := p.HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); return err }); err != nil {
 			return fmt.Errorf("hold: %w", err)
 		}
 		*qids = append(*qids, id)

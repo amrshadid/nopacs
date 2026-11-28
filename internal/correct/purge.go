@@ -248,7 +248,7 @@ func (e *Engine) finish(ctx context.Context, c tenant.Correction, manifestSum, b
 		// by the reception pipeline's start, which removes what no row
 		// keeps.
 		if len(paths) > 0 && e.cfg.RemoveIncoming != nil {
-			if err := e.cfg.RemoveIncoming(ctx, paths); err != nil {
+			if err := e.cfg.RemoveIncoming(ctx, c.ID, paths); err != nil {
 				e.cfg.Log.Warn("a purged delete's held files are removed at the next start", "correction", c.ID,
 					"error", fault.Message(err))
 			}

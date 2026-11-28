@@ -123,7 +123,7 @@ func (e *renv) arrive(series string, n, s int) *arrival {
 	e.ok("OpenReception", err)
 	f := file(r, 1, n)
 	f.SeriesUID = series
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(s))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(s), nil)
 	e.ok("AddReceivedFiles", err)
 	for _, st := range []struct {
 		from reception.State

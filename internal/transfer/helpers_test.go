@@ -180,7 +180,7 @@ func (f *fixture) archive(session string, asReceived bool, scans ...scanFiles) {
 				Caller: tenant.Caller{CallingAETitle: "SCANNER1", CalledAETitle: "ARCHIVE", Address: "192.0.2.7:51234"}, Association: "assoc1"})
 		}
 	}
-	if _, err := f.p.AddReceivedFiles(f.ctx, files, at); err != nil {
+	if _, err := f.p.AddReceivedFiles(f.ctx, files, at, nil); err != nil {
 		t.Fatal(err)
 	}
 	step := func(from reception.State, ev reception.Event) {

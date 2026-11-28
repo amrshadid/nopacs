@@ -158,18 +158,6 @@ func (r Release) Validate() error {
 	return nil
 }
 
-// FencedFiles records files under a worker's lease.
-type FencedFiles interface {
-	// AddReceivedFilesFenced is AddReceivedFiles made only while fence,
-	// when not nil, holds: a worker whose lease was taken over records
-	// nothing and is answered ErrLeaseLost. The fence is checked first in
-	// the batch's transaction, before any reception is read.
-	AddReceivedFilesFenced(ctx context.Context, files []ReceivedFile, at time.Time, fence *WorkFence) (int, error)
-	// HoldFilesFenced is HoldFiles made only while fence, when not nil,
-	// holds, as AddReceivedFilesFenced.
-	HoldFilesFenced(ctx context.Context, files []QuarantinedFile, fence *WorkFence) (int, error)
-}
-
 // WorkClaims claims work and says what the claim did on the way.
 type WorkClaims interface {
 	// ClaimNextWork is ClaimWork that also says which units it held as
@@ -354,7 +342,6 @@ type PipelineParts interface {
 	StorageSecrets
 	Secrets
 	QuarantineReleases
-	FencedFiles
 	WorkClaims
 	WorkReclaim
 	ScanContents

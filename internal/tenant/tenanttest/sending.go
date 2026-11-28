@@ -157,7 +157,7 @@ func (e *senv) archiveRouted(receiver string, study, scans, per, base int, when 
 			files = append(files, f)
 		}
 	}
-	_, err = e.p.AddReceivedFiles(e.ctx, files, when)
+	_, err = e.p.AddReceivedFiles(e.ctx, files, when, nil)
 	e.ok("AddReceivedFiles", err)
 	if session == "" {
 		session = "ses-" + r.ID

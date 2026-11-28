@@ -48,12 +48,21 @@ const (
 type pools struct {
 	write *sql.DB
 	read  *sql.DB
+	// idle is how long a connection may stand unused before it is closed
+	// (0 never), kept because database/sql has no getter for it.
+	idle time.Duration
 }
 
 // openPools opens the write and read pools on the file at path, creating it
 // when it does not exist, and checks that it is in write-ahead mode. name is
 // the database's name in the messages of its errors.
-func openPools(ctx context.Context, path string, name dbName) (*pools, error) {
+//
+// idle is how long a connection that nothing uses may stay open before it is
+// closed, 0 for never. A closed connection is opened again, with its pragmas,
+// the next time a pool is asked for one; database/sql never closes a
+// connection in use, and the statements the stores prepare on a pool are
+// prepared again on a new connection by database/sql itself.
+func openPools(ctx context.Context, path string, name dbName, idle time.Duration) (*pools, error) {
 	if err := checkPath(path); err != nil {
 		return nil, err
 	}
@@ -113,11 +122,12 @@ func openPools(ctx context.Context, path string, name dbName) (*pools, error) {
 		return nil, fault.Wrap(fault.Internal, err, "the SQLite driver cannot be set up")
 	}
 	// One connection writes; database/sql queues the others for it. It is
-	// kept open forever, so its prepared statements are never lost.
+	// closed only when idle (see idle), never while a transaction or a
+	// statement runs on it.
 	write.SetMaxOpenConns(1)
 	write.SetMaxIdleConns(1)
 	write.SetConnMaxLifetime(0)
-	write.SetConnMaxIdleTime(0)
+	write.SetConnMaxIdleTime(idle)
 
 	mode, err := journalMode(ctx, write)
 	if err != nil {
@@ -137,13 +147,13 @@ func openPools(ctx context.Context, path string, name dbName) (*pools, error) {
 	read.SetMaxOpenConns(readConnections)
 	read.SetMaxIdleConns(readConnections)
 	read.SetConnMaxLifetime(0)
-	read.SetConnMaxIdleTime(0)
+	read.SetConnMaxIdleTime(idle)
 	if err := read.PingContext(ctx); err != nil {
 		_ = write.Close() // The ping failure is the one reported.
 		_ = read.Close()
 		return nil, classify(err, name, "the "+string(name)+" cannot be opened")
 	}
-	return &pools{write: write, read: read}, nil
+	return &pools{write: write, read: read, idle: idle}, nil
 }
 
 // journalMode opens the first write connection, which switches the file to

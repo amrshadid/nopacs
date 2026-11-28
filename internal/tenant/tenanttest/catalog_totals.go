@@ -131,7 +131,7 @@ func testCatalogTotals(e *penv) {
 	}
 	extra := files[0]
 	extra.SOPInstanceUID, extra.SHA256, extra.Incoming = instanceOf(1, 0, 50), sum(4242), r.ID+"/extra"
-	_, err = e.p.AddReceivedFiles(e.ctx, append(append([]tenant.ReceivedFile{}, files...), extra), at(161))
+	_, err = e.p.AddReceivedFiles(e.ctx, append(append([]tenant.ReceivedFile{}, files...), extra), at(161), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.stepTo(r, reception.Identified, "store")
 	claims := []tenant.InstanceClaim{claimOf(extra)}
@@ -169,7 +169,7 @@ func testCatalogTotals(e *penv) {
 		f := file(r, 99, 10000+k)
 		parts = append(parts, f)
 	}
-	_, err = e.p.AddReceivedFiles(e.ctx, parts, at(301))
+	_, err = e.p.AddReceivedFiles(e.ctx, parts, at(301), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.stepTo(r, reception.Identified, "store")
 	retryPath := label.Path{Subject: "sub-01", Session: "ses-" + r.ID, Scan: "scan-retry"}
@@ -209,13 +209,13 @@ func (e *penv) releasedFile() tenant.QuarantinedFile {
 	e.Helper()
 	r := e.openReception("recv-a", 9, at(200))
 	f := file(r, 9, 9001)
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(201))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(201), nil)
 	e.ok("AddReceivedFiles", err)
 	q := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineBadLabel,
 		Details: map[string]string{"label": "subject", "fault": tenant.FaultEmpty}, Receiver: "recv-a", ReceptionID: r.ID,
 		SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 		TransferSyntaxUID: f.TransferSyntaxUID, SHA256: f.SHA256, Size: f.Size, Incoming: f.Incoming, ContentKept: true, Quarantined: at(202)}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	e.stepTo(r, reception.Done, "store")
 	return q

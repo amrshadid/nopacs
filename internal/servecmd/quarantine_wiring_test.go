@@ -26,7 +26,7 @@ func TestQuarantineWarningIsReportedAndMeasured(t *testing.T) {
 		StudyUID: "2.25.1234567890", SeriesUID: "2.25.222", TransferSyntaxUID: "1.2.840.10008.1.2.1",
 		Incoming: "q/id-held", ContentKept: true, Quarantined: time.Now().Add(-60 * 24 * time.Hour),
 	}
-	if _, err := r.db.HoldFiles(r.ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := r.db.HoldFiles(r.ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		t.Fatal(err)
 	}
 	r.start()

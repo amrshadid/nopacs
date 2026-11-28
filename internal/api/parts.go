@@ -114,10 +114,11 @@ type Incoming interface {
 	// discard recorded. An error is logged, never answered: the discard is
 	// already recorded.
 	RemoveDiscarded(ctx context.Context, tenantName, receptionID string) error
-	// RemoveRejected removes the bytes of a rejected quarantined file, held
-	// at incoming in the incoming area, after the store has recorded the
-	// rejection; as RemoveDiscarded, it may finish later.
-	RemoveRejected(ctx context.Context, tenantName, incoming string) error
+	// RemoveRejected removes the bytes of the rejected quarantined file
+	// record recordID, held at incoming in the incoming area, after the
+	// store has recorded the rejection; as RemoveDiscarded, it may finish
+	// later.
+	RemoveRejected(ctx context.Context, tenantName, recordID, incoming string) error
 }
 
 // leaveForPipeline is the Incoming of a server that runs no reception
@@ -142,7 +143,7 @@ func (leaveForPipeline) Retry(ctx context.Context, _ string, store tenant.Pipeli
 func (leaveForPipeline) RemoveDiscarded(context.Context, string, string) error { return nil }
 
 // RemoveRejected removes nothing.
-func (leaveForPipeline) RemoveRejected(context.Context, string, string) error { return nil }
+func (leaveForPipeline) RemoveRejected(context.Context, string, string, string) error { return nil }
 
 // MaxHeaderBytes is the longest header a quarantined file's answer holds,
 // the contract's 1 MiB; a longer one is left out, never cut.

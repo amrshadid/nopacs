@@ -44,7 +44,7 @@ func TestBatchAnswersFirstRefusalInBatchOrder(t *testing.T) {
 		{"another study first, closed second (sorts first)", []tenant.ReceivedFile{otherStudy, cFile(closed, 0, 1)},
 			func(err error) bool { return fault.KindOf(err) == fault.Invalid }, "Invalid"},
 	} {
-		_, err := e.p().AddReceivedFiles(e.ctx, c.batch, cT0)
+		_, err := e.p().AddReceivedFiles(e.ctx, c.batch, cT0, nil)
 		if !c.want(err) {
 			t.Errorf("%s: AddReceivedFiles = %v (kind %v); want %s", c.name, err, fault.KindOf(err), c.what)
 		}

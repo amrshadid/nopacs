@@ -186,7 +186,7 @@ func testDeleteHoldsItsLabels(e *cenv) {
 	e.ok("OpenReception", err)
 	f := file(r, 1, 90000)
 	f.SeriesUID = uidOf(2, 100)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(610))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(610), nil)
 	e.ok("AddReceivedFiles", err)
 	for _, st := range []tenant.ReceptionStep{{ID: r.ID, From: reception.Receiving, Event: reception.Quiet, At: at(611)},
 		{ID: r.ID, From: reception.Complete, Event: reception.Identify, At: at(611), SubjectLabel: "sub-01", SessionLabel: "ses-1",
@@ -265,7 +265,7 @@ func testClockAndPurgeTargets(e *cenv) {
 	q := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineWasDeleted, Receiver: "recv", Size: 5, SHA256: sum(31),
 		SOPClassUID: "1.2.3", SOPInstanceUID: uidOf(3, 777), StudyUID: uidOf(1, 2), SeriesUID: uidOf(2, 200), TransferSyntaxUID: "1.2.840.10008.1.2.1",
 		Incoming: "quarantine/qx", ContentKept: true, Quarantined: at(300), Details: map[string]string{"correction": e.newID(1)}}
-	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	p, err := e.p.PreviewDelete(e.ctx, target, at(400))
 	e.ok("PreviewDelete", err)
@@ -362,7 +362,7 @@ func testReplace(e *cenv) {
 		Size: 777, SHA256: sum(4242), KeptSHA256: sum(4243), SOPClassUID: in.SOPClassUID, SOPInstanceUID: in.SOPInstanceUID,
 		StudyUID: in.StudyUID, SeriesUID: in.SeriesUID, TransferSyntaxUID: in.TransferSyntaxUID, Incoming: "quarantine/q1",
 		ContentKept: true, Quarantined: at(400)}
-	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	prep := func(s int) (tenant.Correction, bool, error) {
 		return e.p.PrepareCorrection(e.ctx, tenant.CorrectionPrepare{ID: e.newID(s), Kind: record.KindReplace, Quarantine: q.ID,

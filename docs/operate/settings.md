@@ -87,6 +87,14 @@ it.
   shares one copy of their automata, and the least recently used version's are dropped
   past it, built again when next needed.
 - `receiver.header-limit` bounds the header a file may have before it is quarantined.
+- `receiver.start-limit` bounds how long a tenant's reception pipeline may take to
+  start (15 minutes by default, 1 minute to 24 hours). A start reads every file the
+  database names in the incoming area and every file on disk, so a large leftover
+  after a crash takes long. A start that passes the limit is cut and tried again from
+  its beginning; the tenant's receivers refuse files as a temporary failure meanwhile
+  and nothing is lost. Raise it for a tenant whose start is cut in the log
+  (`the tenant's reception pipeline could not start`); the installation's admin sets a
+  tenant's own value.
 - `receiver.allow-as-received` is `false` by default: every receiver de-identifies. A
   tenant that had receivers before receivers could de-identify was given `true` when
   its database was upgraded.
@@ -240,6 +248,7 @@ when it starts do not change until it is started again.
 | `quota.bytes`, `quota.instances` | Within a second, for the next file received; within a minute for the warning, the event and the metrics |
 | `quota.warn` | Within a minute, at the next measure of the tenant's use |
 | `receiver.header-limit` | Within a second, for the next file read |
+| `receiver.start-limit` | At the next start of the tenant's reception pipeline, including the next try of a start that was cut |
 | `deid.pixel-limit` | Within a second, for the next file de-identified; a file held as `pixels_too_large` is archived by its release once the setting is raised |
 | `deid.memory` | Within a second, for the next file checked or tried; work that waits for room reads it again each second, and a file held as `check_too_large` is archived by its release once the setting is raised |
 | `deid.list-cache-bytes` | Within ten seconds: the server reads it again on that interval, and drops the least recently used lists at once when it is lowered |

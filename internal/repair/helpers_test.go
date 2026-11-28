@@ -204,7 +204,7 @@ func (f *fixture) archive() {
 			Incoming: r.ID + "/" + e.uid + ".dcm", Association: "assoc1",
 			Caller: tenant.Caller{CallingAETitle: "SCANNER1", CalledAETitle: "ARCHIVE", Address: "192.0.2.7:51234"}})
 	}
-	if _, err := f.p.AddReceivedFiles(f.ctx, received, at); err != nil {
+	if _, err := f.p.AddReceivedFiles(f.ctx, received, at, nil); err != nil {
 		t.Fatal(err)
 	}
 	step := func(from reception.State, ev reception.Event) {

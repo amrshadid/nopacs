@@ -16,13 +16,13 @@ func testReleaseIntoSameReception(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
 	f := file(r, 1, 1)
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	q := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineBadLabel,
 		Details: map[string]string{"label": "subject", "attribute": "PatientID", "fault": tenant.FaultEmpty}, Receiver: "a", ReceptionID: r.ID,
 		SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 		TransferSyntaxUID: f.TransferSyntaxUID, SHA256: f.SHA256, Size: f.Size, Incoming: f.Incoming, ContentKept: true, Quarantined: at(3)}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	rel, err := e.p.ReleaseQuarantined(e.ctx, q.ID, tenant.ReleaseAsIs, "", e.id("rc"), at(4), e.audit(), nil)
 	e.ok("ReleaseQuarantined", err)
@@ -51,14 +51,14 @@ func testDiscardKeepsQuarantined(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
 	kept, gone := file(r, 1, 1), file(r, 1, 2)
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{kept, gone}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{kept, gone}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.stepTo(r, reception.Complete, "store")
 	q := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineBadLabel,
 		Details: map[string]string{"label": "subject", "fault": tenant.FaultEmpty}, Receiver: "a", ReceptionID: r.ID,
 		SOPInstanceUID: kept.SOPInstanceUID, StudyUID: kept.StudyUID, SeriesUID: kept.SeriesUID, SHA256: kept.SHA256,
 		Size: kept.Size, Incoming: kept.Incoming, ContentKept: true, Quarantined: at(3)}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	r = e.failReception(r)
 	_, _, err = e.p.DiscardedFiles(e.ctx, r.ID, master.Page{Limit: 10})
@@ -102,7 +102,7 @@ func testDiscardLeavesLivePlaces(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	failed := e.openReception("a", 1, at(1))
 	shared, own := file(failed, 1, 1), file(failed, 1, 2)
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{shared, own}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{shared, own}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	failed = e.stepTo(failed, reception.Complete, "store")
 	q := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineBadLabel,
@@ -110,7 +110,7 @@ func testDiscardLeavesLivePlaces(e *penv) {
 		SOPInstanceUID: shared.SOPInstanceUID, StudyUID: shared.StudyUID, SeriesUID: shared.SeriesUID, SOPClassUID: shared.SOPClassUID,
 		TransferSyntaxUID: shared.TransferSyntaxUID, SHA256: shared.SHA256, Size: shared.Size, Incoming: shared.Incoming,
 		ContentKept: true, Quarantined: at(3)}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	failed = e.failReception(failed)
 	audit := e.audit()

@@ -215,7 +215,7 @@ func (f *fixture) stage(n int, scan string, count int) (commit func()) {
 			SHA256: tenant.SHA256(sha256.Sum256(b)), Incoming: r.ID + "/" + uidOf(n, k) + ".dcm", Association: "assoc1",
 			Caller: tenant.Caller{CallingAETitle: "SCANNER1", CalledAETitle: "ARCHIVE", Address: "192.0.2.7:51234"}})
 	}
-	if _, err := f.p.AddReceivedFiles(f.ctx, received, at); err != nil {
+	if _, err := f.p.AddReceivedFiles(f.ctx, received, at, nil); err != nil {
 		t.Fatal(err)
 	}
 	step := func(from reception.State, ev reception.Event) {

@@ -21,12 +21,12 @@ func testHoldCountsReceived(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
 	f := file(r, 1, 1)
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	large := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineTooLarge, Details: map[string]string{"limit": "4294967296"},
 		Receiver: "a", ReceptionID: r.ID, Size: 4096, StudyUID: r.StudyUID, Quarantined: at(3)}
 	for range 2 {
-		_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{large})
+		_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{large}, nil)
 		e.ok("HoldFiles", err)
 	}
 	r = e.stepTo(r, reception.Identified, "store")
@@ -108,7 +108,7 @@ func testCountIdentity(e *penv) {
 		}
 		e.confirm(r, todo, answers)
 		if len(holds) > 0 {
-			_, err := e.p.HoldFiles(e.ctx, holds)
+			_, err := e.p.HoldFiles(e.ctx, holds, nil)
 			e.ok("HoldFiles", err)
 			held = append(held, holds...)
 		}
@@ -131,14 +131,14 @@ func testCountIdentity(e *penv) {
 			}
 			batch = append(batch, f)
 		}
-		_, err := e.p.AddReceivedFiles(e.ctx, batch, tick())
+		_, err := e.p.AddReceivedFiles(e.ctx, batch, tick(), nil)
 		e.ok("AddReceivedFiles", err)
 		if next(3) == 0 {
 			// A file that could not be recorded as a received file.
 			q := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineNotDICOM, Details: map[string]string{"offset": "0"},
 				Receiver: recv, ReceptionID: r.ID, Size: int64(next(500) + 1), SHA256: sum(round), Incoming: "quarantine/" + e.id("x"),
 				ContentKept: true, Quarantined: tick()}
-			_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+			_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 			e.ok("HoldFiles", err)
 			held = append(held, q)
 		}
@@ -149,7 +149,7 @@ func testCountIdentity(e *penv) {
 				Details: map[string]string{"label": "subject", "fault": tenant.FaultEmpty}, Receiver: recv, ReceptionID: r.ID,
 				SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 				TransferSyntaxUID: f.TransferSyntaxUID, SHA256: f.SHA256, Size: f.Size, Incoming: f.Incoming, ContentKept: true, Quarantined: tick()}
-			n, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+			n, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 			e.ok("HoldFiles", err)
 			if n == 1 {
 				quarantinedNow[f.SOPInstanceUID+f.SHA256.String()] = true

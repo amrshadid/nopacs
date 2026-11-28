@@ -162,7 +162,7 @@ func testDeidentifiedRows(e *penv) {
 	r := e.openReception("plain", 1, at(1))
 	f := file(r, 1, 1)
 	f.Deidentified = true
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f, file(r, 1, 2)}, at(2))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f, file(r, 1, 2)}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	files, _, err := e.p.ReceivedFiles(e.ctx, r.ID, master.Page{Limit: 10})
 	e.ok("ReceivedFiles", err)
@@ -178,7 +178,7 @@ func testDeidentifiedRows(e *penv) {
 
 	plainRecord, deidRecord := e.differentFile("plain", "", 7), e.differentFile("deid", "", 8)
 	deidRecord.Deidentified = true
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{plainRecord, deidRecord})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{plainRecord, deidRecord}, nil)
 	e.ok("HoldFiles", err)
 	if got, _ := e.p.QuarantinedFile(e.ctx, deidRecord.ID); !got.Deidentified {
 		e.Error("a record made de-identified reads back as received")

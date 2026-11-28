@@ -72,6 +72,21 @@ scan, keeps it whole, and serves it through an API with keys.
   sidecars that record each instance's syntax and each frame's place. A
   crash at any step loses no file a sender was told was received; what
   cannot be archived is quarantined with its reason, and can be released.
+  A tenant's reception pipeline may take as long to start after a crash as
+  the setting `receiver.start-limit` allows (15 minutes by default, 1 minute
+  to 24 hours; the installation's admin sets a tenant's own value); a start
+  that passes it is tried again, and the tenant's receivers refuse files as
+  a temporary failure meanwhile, losing nothing. The removal of bytes from
+  the incoming area after a rejection, a discard or a purged delete is
+  queued as work in the tenant's database, so it is owed across a stop or a
+  restart however many there are. The pipeline reads the decision back
+  before it deletes: a rejected file's bytes go only from the place its
+  record kept, when the record's size and plain checksum match, and a purged
+  delete's bytes only when no record still names them. Writes of received
+  and held files take the work fence of the unit that writes, so a holder
+  whose lease was taken over records nothing. A SQLite tenant's database
+  connections that stand unused for a minute are closed and opened again
+  when needed.
 - Routing of each study per receiver, a status and a live event stream per
   tenant (`MonitorService`, `nopacs watch`), and metrics (`nopacs_*`).
 - Routing rule sets: each receiver runs an immutable, numbered rule set version

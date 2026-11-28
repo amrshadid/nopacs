@@ -142,7 +142,7 @@ func (e *tenv) archiveScansOf(subject, storage, receiver string, study int, seri
 		}
 		files = append(files, f)
 	}
-	_, err = e.p.AddReceivedFiles(e.ctx, files, when)
+	_, err = e.p.AddReceivedFiles(e.ctx, files, when, nil)
 	e.ok("AddReceivedFiles", err)
 	step := func(from reception.State, ev reception.Event) {
 		e.Helper()
@@ -549,7 +549,7 @@ func testQuarantineAging(e *tenv) {
 		e.Fatalf("an empty quarantine ages %+v (%v)", a, err)
 	}
 	old, young := e.heldFile("recv", 300, 10), e.heldFile("recv", 200, 20)
-	if _, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{young, old}); err != nil {
+	if _, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{young, old}, nil); err != nil {
 		e.Fatalf("HoldFiles: %v", err)
 	}
 	a, err := e.p.QuarantineAging(e.ctx)

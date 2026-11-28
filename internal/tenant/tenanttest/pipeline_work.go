@@ -281,19 +281,19 @@ func testPipelineBounds(e *penv) {
 		queries = append(queries, tenant.DuplicateQuery{SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SHA256: f.SHA256})
 		held = append(held, e.heldFile("a", 1, i))
 	}
-	n, err := e.p.AddReceivedFiles(e.ctx, batch, at(2))
+	n, err := e.p.AddReceivedFiles(e.ctx, batch, at(2), nil)
 	if err != nil || n != tenant.MaxReceivedBatch {
 		e.Errorf("AddReceivedFiles of a batch at its bound = %d, %v", n, err)
 	}
-	_, err = e.p.AddReceivedFiles(e.ctx, append(batch, file(r, 1, 5000)), at(2))
+	_, err = e.p.AddReceivedFiles(e.ctx, append(batch, file(r, 1, 5000)), at(2), nil)
 	e.wantKind("AddReceivedFiles one over", err, fault.Invalid)
 	_, err = e.p.CheckDuplicates(e.ctx, queries)
 	e.ok("CheckDuplicates at its bound", err)
 	_, err = e.p.CheckDuplicates(e.ctx, append(queries, queries[0]))
 	e.wantKind("CheckDuplicates one over", err, fault.Invalid)
-	_, err = e.p.HoldFiles(e.ctx, held)
+	_, err = e.p.HoldFiles(e.ctx, held, nil)
 	e.ok("HoldFiles at its bound", err)
-	_, err = e.p.HoldFiles(e.ctx, append(held, e.heldFile("a", 1, 1)))
+	_, err = e.p.HoldFiles(e.ctx, append(held, e.heldFile("a", 1, 1)), nil)
 	e.wantKind("HoldFiles one over", err, fault.Invalid)
 	for _, limit := range []int{0, master.MaxPageLimit + 1} {
 		p := master.Page{Limit: limit}
@@ -420,9 +420,9 @@ func testBatchShared(e *penv, other tenant.Pipeline) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
 	batch := []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}
-	_, err := e.p.AddReceivedFiles(e.ctx, batch, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, batch, at(2), nil)
 	e.ok("AddReceivedFiles", err)
-	n, err := other.AddReceivedFiles(e.ctx, batch, at(3))
+	n, err := other.AddReceivedFiles(e.ctx, batch, at(3), nil)
 	e.ok("AddReceivedFiles on the other instance", err)
 	got, _, _ := other.Reception(e.ctx, r.ID)
 	if n != 0 || got.Counts.FilesReceived != 2 {

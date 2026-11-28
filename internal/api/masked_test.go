@@ -282,7 +282,7 @@ func TestMaskedKeyReadsRecordsWithoutOriginals(t *testing.T) {
 		Size:    10, SOPClassUID: "1.2.840.10008.5.1.4.1.1.4", SOPInstanceUID: "2.25.4444", StudyUID: "2.25.4545", SeriesUID: "2.25.4646",
 		TransferSyntaxUID: "1.2.840.10008.1.2.1", Incoming: "q/" + id, ContentKept: true, Quarantined: f.now(),
 	}
-	if _, err := f.pipelineOf("lab1").HoldFiles(ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := f.pipelineOf("lab1").HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		t.Fatal(err)
 	}
 	masked, _ := f.maskedKey(f.onTenant("lab1", master.RoleOperator))

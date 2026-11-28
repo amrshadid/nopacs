@@ -65,11 +65,11 @@ func (w *mworker) receive() (tenant.Reception, bool) {
 		seen[f.SOPInstanceUID+f.SHA256.String()] = true
 		files = append(files, f)
 	}
-	if _, err := w.store.AddReceivedFiles(w.e.ctx, files, clock); !w.answer("add", err) {
+	if _, err := w.store.AddReceivedFiles(w.e.ctx, files, clock, nil); !w.answer("add", err) {
 		return r, false
 	}
 	if w.rng.IntN(3) == 0 {
-		_, err := w.e.stores[w.rng.IntN(len(w.e.stores))].AddReceivedFiles(w.e.ctx, files, clock)
+		_, err := w.e.stores[w.rng.IntN(len(w.e.stores))].AddReceivedFiles(w.e.ctx, files, clock, nil)
 		w.answer("add again", err)
 	}
 	if !opened {
@@ -84,7 +84,7 @@ func (w *mworker) receive() (tenant.Reception, bool) {
 			Details: map[string]string{"label": "subject", "fault": tenant.FaultEmpty}, Receiver: r.Receiver, ReceptionID: r.ID,
 			SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 			TransferSyntaxUID: f.TransferSyntaxUID, SHA256: f.SHA256, Size: f.Size, Incoming: f.Incoming, ContentKept: true, Quarantined: clock}
-		_, err := w.store.HoldFiles(w.e.ctx, []tenant.QuarantinedFile{q})
+		_, err := w.store.HoldFiles(w.e.ctx, []tenant.QuarantinedFile{q}, nil)
 		w.answer("hold a received file", err)
 	}
 	return r, true
@@ -201,7 +201,7 @@ func (w *mworker) run() {
 			}
 		}
 		if len(holds) > 0 {
-			if _, err := w.store.HoldFiles(w.e.ctx, holds); !w.answer("hold", err) {
+			if _, err := w.store.HoldFiles(w.e.ctx, holds, nil); !w.answer("hold", err) {
 				return
 			}
 		}

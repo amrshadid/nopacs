@@ -337,7 +337,7 @@ func testCatalogInstances(e *penv) {
 			Incoming: r.ID + "/" + uid + ".dcm", Association: "assoc2"}
 	}
 	held, claimed := more(7), more(8)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{held, claimed}, at(91))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{held, claimed}, at(91), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.stepTo(r, "identified", "store")
 	e.claim(r, claimOf(claimed))
@@ -402,7 +402,7 @@ func testCatalogValuesKept(e *penv) {
 			Incoming: r.ID + "/" + uid + ".dcm", Association: "assoc3"}
 	}
 	sr, dwi := f(0, 50), f(1, 50)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{sr, dwi}, at(101))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{sr, dwi}, at(101), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.stepTo(r, "identified", "store")
 	e.commitValues(r, label.Path{Subject: "Sub-B", Session: "Ses-X", Scan: "scan-sr"}, 110,

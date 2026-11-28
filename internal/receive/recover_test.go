@@ -46,7 +46,7 @@ func TestRecoverReconcilesEachState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.store.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{*d.received, *d2.received}, e.p.now()); err != nil {
+	if _, err := e.store.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{*d.received, *d2.received}, e.p.now(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.p.area.Remove(gone.Path); err != nil {
@@ -337,7 +337,7 @@ func TestAFailedStartReleasesTheIncomingArea(t *testing.T) {
 	if out := p.Accept(e.ctx, Arrival{Receiver: "dimse", Body: bytesReader([]byte("x"))}); out.Status != Refused {
 		t.Fatalf("a file offered after a failed start: %+v", out)
 	}
-	if err := p.RemoveRejected(path); fault.KindOf(err) != fault.Unavailable {
+	if _, err := p.Release(e.ctx, tenant.Release{ID: "q1", Mode: tenant.ReleaseAsIs}, e.audit(), nil); fault.KindOf(err) != fault.Unavailable {
 		t.Fatalf("a decision after a failed start: %v", err)
 	}
 	if _, err := p.Start(e.ctx); err == nil {

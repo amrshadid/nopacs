@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -158,18 +157,6 @@ type pipeline struct {
 	gates   supervise.Gates
 	// duringStop, when set, runs inside Stop, before it returns.
 	duringStop func()
-
-	mu sync.Mutex
-	// removed lists the removals handed to it, in order: "rejected:<path>"
-	// and "discarded:<reception>".
-	removed []string
-}
-
-// removals returns the removals handed to the fake.
-func (p *pipeline) removals() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return slices.Clone(p.removed)
 }
 
 func (p *pipeline) Accept(context.Context, receive.Arrival) receive.Outcome {
@@ -189,18 +176,6 @@ func (p *pipeline) Release(context.Context, tenant.Release, master.AuditEntry, t
 }
 func (p *pipeline) Retry(context.Context, string, string, string, master.AuditEntry, tenant.Guard) (tenant.Reception, tenant.Reception, error) {
 	return tenant.Reception{}, tenant.Reception{}, nil
-}
-func (p *pipeline) RemoveRejected(path string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.removed = append(p.removed, "rejected:"+path)
-	return nil
-}
-func (p *pipeline) RemoveDiscarded(_ context.Context, id string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.removed = append(p.removed, "discarded:"+id)
-	return nil
 }
 
 // rig is a supervisor over one tenant with fake listeners and pipelines.

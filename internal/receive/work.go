@@ -21,10 +21,10 @@ const (
 	kindVerify   = "receive-verify"
 )
 
-// claimOrder is the order a worker asks for work: the steps nearest the end
-// first, so receptions finish before new ones start and the incoming area
-// empties.
-var claimOrder = []string{kindVerify, kindArchive, kindIdentify, kindQuiet}
+// claimOrder is the order a worker asks for work: the removal of bytes a
+// decision let go first, then the steps nearest the end, so receptions
+// finish before new ones start and the incoming area empties.
+var claimOrder = []string{kindRemoval, kindVerify, kindArchive, kindIdentify, kindQuiet}
 
 // kindFor returns the kind of unit a reception in state s needs, or "" for
 // one that has ended.
@@ -217,6 +217,8 @@ func (p *Pipeline) runStep(ctx context.Context, w tenant.Work) error {
 		return p.archive(ctx, w)
 	case kindVerify:
 		return p.verify(ctx, w)
+	case kindRemoval:
+		return p.removal(ctx, w)
 	}
 	return fault.New(fault.Internal, "a unit of an unknown kind was claimed")
 }

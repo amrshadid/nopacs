@@ -49,7 +49,7 @@ func (f *fixture) replace(scan, uid string, file []byte) {
 		Size: int64(len(file)), SHA256: sum, KeptSHA256: tenant.SHA256(sha256.Sum256(f.files[uid])),
 		SOPClassUID: "1.2.840.10008.5.1.4.1.1.4", SOPInstanceUID: uid, StudyUID: f.study, SeriesUID: f.series[scan],
 		TransferSyntaxUID: "1.2.840.10008.1.2.1", Incoming: "quarantine/" + uid, ContentKept: true, Quarantined: now}
-	if _, err := f.p.HoldFiles(f.ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := f.p.HoldFiles(f.ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		f.t.Error("HoldFiles:", err)
 		return
 	}

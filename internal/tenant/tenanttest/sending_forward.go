@@ -87,7 +87,7 @@ func testForwardNothingArchived(e *senv) {
 	e.ok("OpenReception", err)
 	again := file(r, 1, 0)
 	again.SeriesUID = uidOf(2, 100)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{again}, at(600))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{again}, at(600), nil)
 	e.ok("AddReceivedFiles", err)
 	for _, s := range []struct {
 		from reception.State

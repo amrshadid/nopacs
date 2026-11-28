@@ -24,7 +24,7 @@ func testReleasedProfile(e *penv) {
 
 	a, b, plain := e.differentFile("deid", "", 21), e.differentFile("deid", "", 22), e.differentFile("plain", "", 23)
 	a.Deidentified, b.Deidentified = true, true
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{a, b, plain})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{a, b, plain}, nil)
 	e.ok("HoldFiles", err)
 	pp := e.parts()
 	got, err := pp.ReleaseFile(e.ctx, tenant.Release{ID: a.ID, Mode: tenant.ReleaseAsIs, ReceptionID: e.id("rc"), Profile: fixed, Now: at(10)}, e.audit(), nil)
@@ -56,7 +56,7 @@ func testReleasedProfile(e *penv) {
 	r := e.openReception("deid", 2, at(14))
 	f := file(r, 2, 31)
 	f.Released, f.ReleasedProfile, f.Deidentified = true, other, true
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(15))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(15), nil)
 	e.ok("AddReceivedFiles of a landed release naming a version", err)
 	landed, _, err := e.p.Reception(e.ctx, r.ID)
 	e.ok("Reception", err)

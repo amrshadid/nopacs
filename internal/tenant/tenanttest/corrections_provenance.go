@@ -51,7 +51,7 @@ func testReplaceProvenance(e *cenv) {
 			Size: 777, SHA256: sum(4242 + i), KeptSHA256: sum(4300 + i), SOPClassUID: in.SOPClassUID, SOPInstanceUID: in.SOPInstanceUID,
 			StudyUID: in.StudyUID, SeriesUID: in.SeriesUID, TransferSyntaxUID: in.TransferSyntaxUID, Incoming: "quarantine/q" + in.SOPInstanceUID,
 			ContentKept: true, Quarantined: at(s - 10)}
-		_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+		_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 		e.ok("HoldFiles", err)
 		c, made, err := e.p.PrepareCorrection(e.ctx, tenant.CorrectionPrepare{ID: e.newID(s), Kind: record.KindReplace, Quarantine: q.ID,
 			NewSHA256: sum(5000 + i), NewSize: 780, RestoreLine: []byte(`{"line":1}`), Reason: "corrected re-send", Now: at(s)}, e.audit(), nil)

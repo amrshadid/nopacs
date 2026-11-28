@@ -144,7 +144,7 @@ func testImportCrashResumes(e *ienv) {
 		e.Errorf("ReclaimWorkOfKinds = %d, want 1", n)
 	}
 	plain := file(r, 7, 9)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{plain, importFile(r, 7, 3, w, "p/3.dcm")}, at(21))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{plain, importFile(r, 7, 3, w, "p/3.dcm")}, at(21), nil)
 	e.wantIs("a hand-off of a lost lease", err, tenant.ErrLeaseLost, fault.Conflict)
 	_, err = e.p.RecordImportSkip(e.ctx, tenant.ImportSkip{Fence: w.Fence(), Path: "p/4.txt", Code: tenant.SkipNotPart10, Now: at(21)})
 	e.wantIs("a skip of a lost lease", err, tenant.ErrLeaseLost, fault.Conflict)
@@ -350,7 +350,7 @@ func testImportHeldAtArrival(e *ienv) {
 	_, err = e.p.ReclaimWorkOfKinds(e.ctx, []string{tenant.ImportWorkKind}, at(20))
 	e.ok("ReclaimWorkOfKinds", err)
 	q.ID, q.Import = "h2", &tenant.ImportArrival{Fence: w.Fence(), Path: "p/y.bin", Size: 300}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.wantIs("a hold of a lost lease", err, tenant.ErrLeaseLost, fault.Conflict)
 	if _, err := e.p.QuarantinedFile(e.ctx, "h2"); fault.KindOf(err) != fault.NotFound {
 		e.Errorf("a refused hold left its record: %v", err)

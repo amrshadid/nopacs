@@ -312,10 +312,10 @@ func runModel(t *testing.T, seed int64, shared bool) {
 			used[key] = true
 			files = append(files, f)
 		}
-		_, err = p.AddReceivedFiles(e.ctx, files, tick())
+		_, err = p.AddReceivedFiles(e.ctx, files, tick(), nil)
 		e.must("add", err)
 		if rng.IntN(3) == 0 { // the batch again after a crash
-			_, err = pick().AddReceivedFiles(e.ctx, files, tick())
+			_, err = pick().AddReceivedFiles(e.ctx, files, tick(), nil)
 			e.must("add again", err)
 		}
 		r, _, _ = p.Reception(e.ctx, r.ID)
@@ -421,7 +421,7 @@ func runModel(t *testing.T, seed int64, shared bool) {
 					if d.Kind == tenant.DifferentFile {
 						q.Reason, q.Details, q.KeptSHA256 = tenant.QuarantineDifferentFile, nil, d.HeldSHA256
 					}
-					_, err := pick().HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+					_, err := pick().HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 					e.must("hold", err)
 					f.state = "quar"
 				}

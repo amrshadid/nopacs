@@ -79,7 +79,7 @@ func (p *testParts) RemoveDiscarded(_ context.Context, tenantName, id string) er
 }
 
 // RemoveRejected records the place, as "<tenant>/<incoming>".
-func (p *testParts) RemoveRejected(_ context.Context, tenantName, incoming string) error {
+func (p *testParts) RemoveRejected(_ context.Context, tenantName, _, incoming string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.rejected = append(p.rejected, tenantName+"/"+incoming)
@@ -285,7 +285,7 @@ func (f *placeFixture) heldFile(t *testing.T, receiver string, tooLarge bool) st
 		q.Reason, q.Details = tenant.QuarantineTooLarge, map[string]string{"limit": "1024"}
 		q.Incoming, q.ContentKept, q.SHA256 = "", false, tenant.SHA256{}
 	}
-	if _, err := f.pipelineOf("lab1").HoldFiles(ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := f.pipelineOf("lab1").HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		t.Fatal(err)
 	}
 	return id

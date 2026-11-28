@@ -64,7 +64,7 @@ func (e *penv) archiveStudy(s studySpec) tenant.Reception {
 			})
 		}
 	}
-	_, err = e.p.AddReceivedFiles(e.ctx, files, at(s.at-4))
+	_, err = e.p.AddReceivedFiles(e.ctx, files, at(s.at-4), nil)
 	e.ok("AddReceivedFiles", err)
 	r, err = e.p.StepReception(e.ctx, tenant.ReceptionStep{ID: r.ID, From: r.State, Event: reception.Quiet, At: at(s.at - 3)}, nil)
 	e.ok("StepReception quiet", err)

@@ -2,7 +2,6 @@ package supervise
 
 import (
 	"context"
-	"sync"
 
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
@@ -14,19 +13,17 @@ import (
 // Decisions is what a tenant's running pipeline does for a person's
 // decision on its quarantine and its failed receptions: the release and the
 // retry run through it whole, so the bytes in the incoming area and the work
-// queue follow the record in the order that survives a crash; after a
-// rejection or a discard the store recorded, it removes the bytes. The
-// reception pipeline (receive.Pipeline) is one.
+// queue follow the record in the order that survives a crash. The removal of
+// bytes after a rejection or a discard the store recorded is not one of
+// them: it is queued as work in the tenant's database (RemoveRejected,
+// RemoveDiscarded, RemoveWithdrawn). The reception pipeline
+// (receive.Pipeline) is one.
 type Decisions interface {
 	// Release releases a held file (receive.Pipeline.Release).
 	Release(ctx context.Context, rel tenant.Release, audit master.AuditEntry, guard tenant.Guard) (tenant.QuarantinedFile, error)
 	// Retry makes a new reception of a failed one's files and queues its
 	// first unit (receive.Pipeline.Retry).
 	Retry(ctx context.Context, id, newReceptionID, receiver string, audit master.AuditEntry, guard tenant.Guard) (failed, retry tenant.Reception, err error)
-	// RemoveRejected removes a rejected file's bytes at path.
-	RemoveRejected(path string) error
-	// RemoveDiscarded removes the bytes of a discarded reception's files.
-	RemoveDiscarded(ctx context.Context, receptionID string) error
 }
 
 // The reception pipeline takes decisions.
@@ -35,9 +32,7 @@ var _ Decisions = (*receive.Pipeline)(nil)
 // Decisions returns the running pipeline of the tenant named name, for a
 // decision, and whether one runs. It reads memory only: the pipeline the
 // tenant's worker published, which it withdraws before it stops one and
-// replaces as soon as the next has started. The removal of bytes after a
-// rejection or a discard goes through RemoveRejected and RemoveDiscarded
-// instead, which keep it while no pipeline runs.
+// replaces as soon as the next has started.
 func (s *Supervisor) Decisions(name string) (Decisions, bool) {
 	t := s.tenant(name)
 	if t == nil {
@@ -76,107 +71,62 @@ func (t *tenantRun) decisions() (Decisions, bool) {
 	return d, ok
 }
 
-// RemoveRejected removes the bytes of a file whose rejection the store
-// recorded, at path in the tenant's incoming area, through the tenant's
-// running pipeline. While none runs (one stopping, one starting, one that
-// could not start) the removal is kept and done by the next pipeline once it
-// has started. Without that, a rejection recorded after a starting
-// pipeline's Recover had read the database kept the rejected bytes on disk,
-// held by no row, until the start after, which could be weeks later. A
-// tenant this supervisor does not run, or a removal past maxDeferred, is
-// left to the next start's Recover, which reads the decision recorded.
-func (s *Supervisor) RemoveRejected(ctx context.Context, name, path string) error {
-	return s.remove(ctx, name, removal{rejected: path})
+// RemoveRejected queues the removal of the bytes of the quarantined file
+// record recordID, whose rejection the store recorded, at path in the
+// tenant's incoming area. The removal is a unit of work in the tenant's
+// database (receive.QueueRemoval), so it is owed across a stop, a restart or
+// a pipeline that cannot start, however many there are, and the tenant's
+// pipeline runs it once it runs, reading the decision back first. A tenant
+// the installation does not have is left alone.
+func (s *Supervisor) RemoveRejected(ctx context.Context, name, recordID, path string) error {
+	return s.remove(ctx, name, receive.RejectedRemoval(recordID, path))
 }
 
-// RemoveDiscarded removes the bytes of the files of a reception whose
-// discard the store recorded, as RemoveRejected does for one file.
+// RemoveDiscarded queues the removal of the bytes of the files of a
+// reception whose discard the store recorded, as RemoveRejected does for
+// one file.
 func (s *Supervisor) RemoveDiscarded(ctx context.Context, name, receptionID string) error {
-	return s.remove(ctx, name, removal{discarded: receptionID})
+	return s.remove(ctx, name, receive.DiscardedRemoval(receptionID))
 }
 
-// removal is one removal of bytes after a recorded decision: of a rejected
-// file at its incoming path, or of a discarded reception's files.
-type removal struct {
-	rejected, discarded string
+// RemoveWithdrawn queues the removal of the bytes at path of a held file
+// whose record the purging delete correction correctionID cleared, as
+// RemoveRejected does for a rejected one.
+func (s *Supervisor) RemoveWithdrawn(ctx context.Context, name, correctionID, path string) error {
+	return s.remove(ctx, name, receive.WithdrawnRemoval(correctionID, path))
 }
 
-// do hands the removal to a running pipeline.
-func (r removal) do(ctx context.Context, d Decisions) error {
-	if r.rejected != "" {
-		return d.RemoveRejected(r.rejected)
-	}
-	return d.RemoveDiscarded(ctx, r.discarded)
-}
+// waker is what a running pipeline offers to run queued work now
+// (receive.Pipeline.WakeWork).
+type waker interface{ WakeWork() }
 
-// maxDeferred bounds the removals a tenant keeps while no pipeline runs. A
-// removal past it is left to the next start's Recover: nothing is lost,
-// the bytes only stay longer.
-const maxDeferred = 4096
-
-// deferredRemovals are the removals handed over while no pipeline ran.
-type deferredRemovals struct {
-	mu   sync.Mutex
-	list []removal
-}
-
-// removeTries bounds how many pipelines one removal is handed to: one
-// withdrawn while the removal reached it is followed by none or the next.
-// A removal still not done after that is left to the next start's Recover.
-const removeTries = 3
-
-// remove hands r to the tenant's running pipeline, or keeps it for the next
-// one. The worker publishes a new pipeline before it takes the kept
-// removals (runDeferred), and a removal is kept only under the lock and
-// after it saw no pipeline published, so none is kept after the last take.
-func (s *Supervisor) remove(ctx context.Context, name string, r removal) error {
-	t := s.tenant(name)
-	if t == nil {
+// remove queues r in the tenant's database and wakes the tenant's pipeline,
+// if one runs, to do it now.
+func (s *Supervisor) remove(ctx context.Context, name string, r receive.Removal) error {
+	st, err := s.cfg.Tenants.Store(name)
+	if fault.KindOf(err) == fault.NotFound {
 		return nil
 	}
-	for range removeTries {
-		t.deferred.mu.Lock()
-		d, ok := t.decisions()
-		if !ok {
-			if len(t.deferred.list) < maxDeferred {
-				t.deferred.list = append(t.deferred.list, r)
-			} else {
-				t.log.Warn("receivers: too many removals wait for the tenant's pipeline; this one is left to the next start")
+	if err != nil {
+		return err
+	}
+	p, ok := st.(tenant.Pipeline)
+	if !ok {
+		return nil
+	}
+	if _, err := receive.QueueRemoval(ctx, p, r, s.cfg.Now()); err != nil {
+		return err
+	}
+	// Asked of the tenant's worker, which may not have started yet, since
+	// the unit is in the database whatever the supervisor has begun.
+	if t := s.tenant(name); t != nil {
+		if v := t.view.Load(); v != nil {
+			if w, ok := v.pipeline.(waker); ok {
+				w.WakeWork()
 			}
-			t.deferred.mu.Unlock()
-			return nil
 		}
-		t.deferred.mu.Unlock()
-		err := r.do(ctx, d)
-		if err == nil {
-			return nil
-		}
-		if now, ok := t.decisions(); ok && now == d {
-			return err
-		}
-		// The pipeline was withdrawn while the removal reached it: it
-		// refused as stopping, or removed nothing for certain. Hand it to
-		// the next, or keep it.
 	}
 	return nil
-}
-
-// runDeferred hands the removals kept while no pipeline ran to d, the
-// pipeline just published. One that fails is logged and left to the next
-// start's Recover.
-func (t *tenantRun) runDeferred(d Decisions) {
-	t.deferred.mu.Lock()
-	list := t.deferred.list
-	t.deferred.list = nil
-	t.deferred.mu.Unlock()
-	for _, r := range list {
-		ctx, cancel := context.WithTimeout(t.sup.ctx, opTimeout)
-		err := r.do(ctx, d)
-		cancel()
-		if err != nil {
-			t.log.Warn("receivers: the bytes of a recorded rejection or discard could not be removed; the next start removes them", "reason", fault.Message(err))
-		}
-	}
 }
 
 // Held reads the header of a file held in the incoming area, through the

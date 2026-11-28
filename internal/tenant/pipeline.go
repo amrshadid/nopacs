@@ -288,7 +288,14 @@ type Pipeline interface {
 	// checked one reception at a time, in the order the batch first names
 	// them, and the first failure met is the answer (a file of another
 	// study is Invalid when its reception is reached).
-	AddReceivedFiles(ctx context.Context, files []ReceivedFile, at time.Time) (int, error)
+	//
+	// fence, when not nil, is the lease of the worker writing, checked first
+	// in the batch's transaction, before any reception is read: a worker
+	// whose lease was taken over (a claim that made a new attempt) records
+	// nothing, even an empty batch's check, and is answered ErrLeaseLost,
+	// so a holder that wakes late cannot write after another took over. nil
+	// is a write no lease holds, such as a file's arrival at a receiver.
+	AddReceivedFiles(ctx context.Context, files []ReceivedFile, at time.Time, fence *WorkFence) (int, error)
 	// ReceivedFiles returns a page of a reception's received files in order
 	// of SOP Instance UID, then checksum. A reception that ended done or
 	// quarantined has none: the step that ends it removes them
@@ -364,8 +371,9 @@ type Pipeline interface {
 	// the reception has no received file of that UID and checksum (a file
 	// that arrived and could not be recorded as one), in the same
 	// transaction. A reception named that is not there is a precondition
-	// failure.
-	HoldFiles(ctx context.Context, files []QuarantinedFile) (int, error)
+	// failure. fence is as AddReceivedFiles': a holder whose lease was taken
+	// over holds nothing and is answered ErrLeaseLost.
+	HoldFiles(ctx context.Context, files []QuarantinedFile, fence *WorkFence) (int, error)
 	// QuarantinedFile returns the record of that id, or NotFound.
 	QuarantinedFile(ctx context.Context, id string) (QuarantinedFile, error)
 	// ListQuarantined returns a page of the records the filter keeps,
@@ -398,6 +406,11 @@ type Pipeline interface {
 	// them, running totals kept in the transaction of every change, so
 	// they equal a count over the records after every commit.
 	QuarantineTotals(ctx context.Context) (files, bytes int64, err error)
+	// IncomingNamed reports whether a row still keeps the bytes at the
+	// incoming path: a received file's row, or a quarantine record that
+	// holds its content. Bytes a row keeps belong to it, whatever asked for
+	// their removal.
+	IncomingNamed(ctx context.Context, path string) (bool, error)
 
 	// EnqueueWork queues a unit of work, due at w.Due, and returns it with
 	// created true; or, when w.UniqueKey is set and a unit with that key is

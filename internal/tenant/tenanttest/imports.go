@@ -144,7 +144,7 @@ func importFile(r tenant.Reception, study, n int, w tenant.Work, path string) te
 // handIn records the files, failing the test on an error.
 func (e *ienv) handIn(files ...tenant.ReceivedFile) {
 	e.Helper()
-	_, err := e.p.AddReceivedFiles(e.ctx, files, at(12))
+	_, err := e.p.AddReceivedFiles(e.ctx, files, at(12), nil)
 	e.ok("AddReceivedFiles", err)
 }
 
@@ -166,7 +166,7 @@ var badLabel = map[string]string{"label": "subject", "fault": "empty"}
 // hold records the records, failing the test on an error.
 func (e *ienv) hold(files ...tenant.QuarantinedFile) {
 	e.Helper()
-	_, err := e.p.HoldFiles(e.ctx, files)
+	_, err := e.p.HoldFiles(e.ctx, files, nil)
 	e.ok("HoldFiles", err)
 }
 
@@ -363,9 +363,9 @@ func testImportWalk(e *ienv) {
 	e.reconciled("a file handed in", "j")
 	e.handIn(f2, f3)
 	e.wantImport("three handed in", e.reconciled("three handed in", "j"), 4, 3, 0, 0, 3)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{importFile(r, 1, 4, w1, "proj/s1/a")}, at(12))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{importFile(r, 1, 4, w1, "proj/s1/a")}, at(12), nil)
 	e.wantPrecondition("a path before the cursor", err)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{importFile(r, 1, 4, w1, "proj/s2/x.dcm")}, at(12))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{importFile(r, 1, 4, w1, "proj/s2/x.dcm")}, at(12), nil)
 	e.wantPrecondition("a path outside the unit's folder", err)
 	e.handIn(f3)
 	e.wantImport("a resend at the cursor", e.reconciled("a resend at the cursor", "j"), 4, 3, 0, 0, 3)
@@ -495,7 +495,7 @@ func testImportUnitsShared(e *ienv, other EventStore) {
 			defer wg.Done()
 			for k := range n {
 				f := importFile(r, 100+i, 1000*(i+1)+k, ws[folder], folder+"/f"+string(rune('a'+k)))
-				if _, err := stores[i].AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(12)); err != nil {
+				if _, err := stores[i].AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(12), nil); err != nil {
 					errs[i] = err
 					return
 				}

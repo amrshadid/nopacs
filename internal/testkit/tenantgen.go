@@ -389,7 +389,7 @@ func (g gen) study(ctx context.Context, k int, plan studyPlan) (int64, error) {
 	}
 	last := opened.Add(time.Second)
 	for start := 0; start < len(files); start += tenant.MaxReceivedBatch {
-		if _, err := g.p.AddReceivedFiles(ctx, files[start:min(start+tenant.MaxReceivedBatch, len(files))], last); err != nil {
+		if _, err := g.p.AddReceivedFiles(ctx, files[start:min(start+tenant.MaxReceivedBatch, len(files))], last, nil); err != nil {
 			return 0, err
 		}
 	}

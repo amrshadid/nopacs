@@ -37,6 +37,7 @@ func TestBuiltin(t *testing.T) {
 		IncomingLimit:           {SetByInstallation, "0", false},
 		EventsRetention:         {Ordinary, "90d", false},
 		ReceiverHeaderLimit:     {InstallationOnly, "64MiB", false},
+		ReceiverStartLimit:      {SetByInstallation, "15m", false},
 		ReceiverAllowAsReceived: {SetByInstallation, "false", false},
 		DeidPixelLimit:          {SetByInstallation, "1GiB", false},
 		DeidMemory:              {InstallationOnly, "2GiB", false},

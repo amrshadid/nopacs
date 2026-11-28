@@ -92,14 +92,9 @@ const insertQuarantineSQL = `INSERT INTO quarantine (` + quarantineColumns + `)
 // name FOR NO KEY UPDATE, in order of id,
 // as a received batch does, so a file counted received here and a batch of
 // the same file are ordered; then writes the records as one set, in order of
-// id, and adds to each reception's counts and to the totals last.
-func (t *Tenant) HoldFiles(ctx context.Context, files []tenant.QuarantinedFile) (int, error) {
-	return t.HoldFilesFenced(ctx, files, nil)
-}
-
-// HoldFilesFenced implements tenant.FencedFiles, the unit's row locked
-// first as AddReceivedFilesFenced locks it.
-func (t *Tenant) HoldFilesFenced(ctx context.Context, files []tenant.QuarantinedFile, fence *tenant.WorkFence) (int, error) {
+// id, and adds to each reception's counts and to the totals last. The unit's
+// row, when a fence is given, is locked first as AddReceivedFiles locks it.
+func (t *Tenant) HoldFiles(ctx context.Context, files []tenant.QuarantinedFile, fence *tenant.WorkFence) (int, error) {
 	if err := tenant.ValidateQuarantineBatch(files); err != nil {
 		return 0, err
 	}
@@ -356,6 +351,18 @@ func (t *Tenant) QuarantineTotals(ctx context.Context) (int64, int64, error) {
 			return v, err
 		})
 	return v.files, v.bytes, err
+}
+
+// IncomingNamed implements tenant.Pipeline.
+func (t *Tenant) IncomingNamed(ctx context.Context, path string) (bool, error) {
+	return readOne(ctx, t, "the incoming path has no answer", "the incoming path cannot be looked up",
+		`SELECT EXISTS (SELECT 1 FROM quarantine WHERE incoming = $1 AND content_kept)
+		     OR EXISTS (SELECT 1 FROM received_files WHERE incoming = $1)`, []any{path},
+		func(row scanner) (bool, error) {
+			var b bool
+			err := row.Scan(&b)
+			return b, err
+		})
 }
 
 // quarantineQuery returns the statement and arguments of one page of

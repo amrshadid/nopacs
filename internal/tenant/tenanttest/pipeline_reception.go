@@ -163,7 +163,7 @@ func testOpenReceptionConcurrent(e *penv) {
 func testReceptionSteps(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	r, _, err = e.p.Reception(e.ctx, r.ID)
 	e.ok("Reception", err)
@@ -204,7 +204,7 @@ func testReceptionSteps(e *penv) {
 func testReceptionStepRefusals(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1)}, at(5))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1)}, at(5), nil)
 	e.ok("AddReceivedFiles", err)
 	_, err = e.p.StepReception(e.ctx, tenant.ReceptionStep{ID: r.ID, From: reception.Receiving, Event: reception.Quiet, At: at(70), LastFile: at(1)}, nil)
 	e.wantIs("a quiet step decided before the last file", err, tenant.ErrStateChanged, fault.Conflict)
@@ -414,7 +414,7 @@ func testRetryReception(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	e.addReceiver("b", "store", 11113)
 	r := e.openReception("a", 1, at(1))
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.failReception(e.stepTo(r, reception.Identified, "store"))
 	audit := e.audit()
@@ -496,7 +496,7 @@ func testRetryReception(e *penv) {
 func testDiscardReception(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.failReception(r)
 	audit := e.audit()

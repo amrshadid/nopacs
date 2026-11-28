@@ -345,11 +345,11 @@ func (s importStore) QuotaUse(ctx context.Context) (tenant.QuotaUse, error) {
 }
 
 // AddReceivedFiles writes the files without the import's arrival.
-func (s importStore) AddReceivedFiles(ctx context.Context, fs []tenant.ReceivedFile, now time.Time) (int, error) {
+func (s importStore) AddReceivedFiles(ctx context.Context, fs []tenant.ReceivedFile, now time.Time, fence *tenant.WorkFence) (int, error) {
 	for i := range fs {
 		fs[i].Import = nil
 	}
-	return s.Pipeline.AddReceivedFiles(ctx, fs, now)
+	return s.Pipeline.AddReceivedFiles(ctx, fs, now, fence)
 }
 
 // TestQuotaImportsKeepCountingAfterTheirRow guards the files an import

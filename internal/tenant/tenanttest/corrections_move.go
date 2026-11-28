@@ -422,7 +422,7 @@ func (e *cenv) archiveUnder(subject, session string, study, series, n, s int) {
 	e.ok("OpenReception", err)
 	f := file(r, study, n)
 	f.SeriesUID = uidOf(2, series)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(s))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(s), nil)
 	e.ok("AddReceivedFiles", err)
 	r, err = e.p.StepReception(e.ctx, tenant.ReceptionStep{ID: r.ID, From: r.State, Event: reception.Quiet, At: at(s + 1)}, nil)
 	e.ok("StepReception quiet", err)

@@ -72,7 +72,7 @@ func (p *Pipeline) intakeImport(ctx context.Context, l landed, imp tenant.Import
 func (p *Pipeline) recordImport(ctx context.Context, l landed, f tenant.ReceivedFile) (Outcome, bool) {
 	early := p.batch.earlyDuplicates(ctx, []batchItem{{l: l, d: decision{received: &f}}})
 	p.at("import.before-add")
-	added, err := p.store.AddReceivedFiles(ctx, []tenant.ReceivedFile{f}, p.now())
+	added, err := p.store.AddReceivedFiles(ctx, []tenant.ReceivedFile{f}, p.now(), nil)
 	if errors.Is(err, tenant.ErrReceptionClosed) {
 		return Outcome{}, true
 	}
@@ -99,7 +99,7 @@ func (p *Pipeline) recordImport(ctx context.Context, l landed, f tenant.Received
 // arrived (not DICOM, a placing UID missing...), with its arrival.
 func (p *Pipeline) holdImport(ctx context.Context, l landed, q tenant.QuarantinedFile) Outcome {
 	p.at("import.before-hold")
-	written, err := p.store.HoldFiles(ctx, []tenant.QuarantinedFile{q})
+	written, err := p.store.HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil)
 	if err != nil {
 		return p.importRefusal(l, err)
 	}

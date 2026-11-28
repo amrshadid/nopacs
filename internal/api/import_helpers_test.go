@@ -43,7 +43,7 @@ func (s holdingSink) Accept(ctx context.Context, a receive.Arrival) receive.Outc
 	q := tenant.QuarantinedFile{ID: s.e.newID(), Reason: tenant.QuarantineBadLabel,
 		Details: map[string]string{"label": "subject", "fault": "empty"}, Receiver: a.Receiver, Size: n,
 		Quarantined: time.Now().UTC(), Import: &imp}
-	if _, err := p.HoldFiles(ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := p.HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		return receive.Outcome{Status: receive.Refused, Reason: "test: the file could not be held"}
 	}
 	return receive.Outcome{Status: receive.Received}

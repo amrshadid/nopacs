@@ -176,7 +176,7 @@ func (p *Pipeline) holdTooLarge(ctx context.Context, a Arrival, tl *incoming.Too
 			q.SOPInstanceUID = ""
 		}
 	}
-	if _, err := p.store.HoldFiles(ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := p.store.HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		p.log.Warn("a file too large could not be recorded in quarantine", "reason", safe(err))
 		return
 	}

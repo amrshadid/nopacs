@@ -102,7 +102,7 @@ func (e *renv) archiveWithoutDigest(study int, at time.Time, session string) str
 		f.SeriesUID = series
 		files = append(files, f)
 	}
-	_, err = e.p.AddReceivedFiles(e.ctx, files, at)
+	_, err = e.p.AddReceivedFiles(e.ctx, files, at, nil)
 	e.ok("AddReceivedFiles", err)
 	step := func(from reception.State, ev reception.Event) {
 		e.Helper()

@@ -149,7 +149,7 @@ func (f *fixture) archive(first, n, size int) {
 		}
 		confirmed = append(confirmed, tenant.ConfirmedInstance{SOPInstanceUID: uid, Key: key, Length: int64(size), Size: int64(size), ArchivedSHA256: sum})
 	}
-	if _, err := f.p.AddReceivedFiles(f.ctx, received, at); err != nil {
+	if _, err := f.p.AddReceivedFiles(f.ctx, received, at, nil); err != nil {
 		t.Fatal(err)
 	}
 	step := func(from reception.State, ev reception.Event) {

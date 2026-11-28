@@ -353,7 +353,7 @@ func (r *rig) holdDifferent(s tenant.CatalogScan, in tenant.ScanInstance, b []by
 		Size: int64(len(b)), SHA256: tenant.SHA256(sha256.Sum256(b)), KeptSHA256: in.SHA256, SOPClassUID: "1.2.840.10008.5.1.4.1.1.2",
 		SOPInstanceUID: in.SOPInstanceUID, StudyUID: recv.StudyUID, SeriesUID: s.SeriesUID, TransferSyntaxUID: "1.2.840.10008.1.2.1",
 		Incoming: "quarantine/qreplace0001", ContentKept: true, Quarantined: time.Now().UTC().Truncate(time.Microsecond)}
-	if _, err := r.p.HoldFiles(r.ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := r.p.HoldFiles(r.ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		r.t.Fatal(err)
 	}
 	return q.ID

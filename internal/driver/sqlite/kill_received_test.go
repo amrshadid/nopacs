@@ -214,7 +214,7 @@ func killReceivedChild(path string) {
 						TransferSyntaxUID: "1.2.840.10008.1.2.1", Size: 1000, SHA256: killSum(uid), Incoming: "recv/" + uid,
 						Association: "assoc"}
 				}
-				if _, err := s.AddReceivedFiles(ctx, files, time.Now()); err != nil {
+				if _, err := s.AddReceivedFiles(ctx, files, time.Now(), nil); err != nil {
 					fmt.Fprintln(os.Stderr, "batch", g, n, err)
 					os.Exit(3)
 				}

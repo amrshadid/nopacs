@@ -245,7 +245,7 @@ func (f *fixture) reception(scan, study, series string, files []entry) (tenant.R
 			Caller: tenant.Caller{CallingAETitle: "SCANNER1", CalledAETitle: "ARCHIVE", Address: "192.0.2.7:51234"}, Association: "assoc1"})
 	}
 	for start := 0; start < len(received); start += 500 {
-		if _, err := f.p.AddReceivedFiles(f.ctx, received[start:min(start+500, len(received))], at); err != nil {
+		if _, err := f.p.AddReceivedFiles(f.ctx, received[start:min(start+500, len(received))], at, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

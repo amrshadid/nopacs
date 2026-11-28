@@ -177,9 +177,9 @@ func newCorrections(d Deps, reg *registry.Registry, sup *supervise.Supervisor, l
 				Grace:       values.OnTenant(src).DeleteGrace,
 				ConfirmKey:  key,
 				LockScan:    locks.of(name).Lock,
-				RemoveIncoming: func(ctx context.Context, paths []string) error {
+				RemoveIncoming: func(ctx context.Context, correctionID string, paths []string) error {
 					for _, path := range paths {
-						if err := sup.RemoveRejected(ctx, name, path); err != nil {
+						if err := sup.RemoveWithdrawn(ctx, name, correctionID, path); err != nil {
 							return err
 						}
 					}

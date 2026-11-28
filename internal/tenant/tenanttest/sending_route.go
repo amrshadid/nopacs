@@ -312,13 +312,13 @@ func testReleaseNamesStorage(e *senv) {
 	e.addStorage("other")
 	r := e.openReception("a", 1, at(1))
 	f := file(r, 1, 1)
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	q := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineUnrouted,
 		Details: map[string]string{"cause": "no_match"}, Receiver: "a", ReceptionID: r.ID,
 		SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 		TransferSyntaxUID: f.TransferSyntaxUID, SHA256: f.SHA256, Size: f.Size, Incoming: f.Incoming, ContentKept: true, Quarantined: at(3)}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	r = e.stepTo(r, reception.Complete, "store")
 	r, err = e.p.StepReception(e.ctx, tenant.ReceptionStep{ID: r.ID, From: reception.Complete, Event: reception.Quarantine,
@@ -340,7 +340,7 @@ func testReleaseNamesStorage(e *senv) {
 		Details: map[string]string{"cause": "no_match"}, Receiver: "a", ReceptionID: r.ID,
 		SOPInstanceUID: uidOf(3, 2), StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 		TransferSyntaxUID: f.TransferSyntaxUID, SHA256: sum(2), Size: f.Size, Incoming: f.Incoming + "2", ContentKept: true, Quarantined: at(3)}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{second})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{second}, nil)
 	e.ok("HoldFiles", err)
 	other := tenant.Release{ID: second.ID, Mode: tenant.ReleaseAsIs, ReceptionID: e.id("rc"), Storage: "store", Now: at(7)}
 	if _, err := e.p.ReleaseFile(e.ctx, other, e.audit(), nil); fault.KindOf(err) != fault.Precondition {
@@ -387,7 +387,7 @@ func testRetryKeepsRoute(e *senv) {
 	e.addStorage("other")
 	r := e.openReception("recv", 1, at(1))
 	f := file(r, 1, 1)
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.stepTo(r, reception.Complete, "store")
 	chosen := tenant.ReceptionRoute{RuleSet: 1, Route: "lab-a"}
@@ -438,9 +438,9 @@ func testReleasedStorageKept(e *senv) {
 	f.Released, f.ReleasedStorage = true, "other"
 	g := file(r, 1, 2)
 	g.Released, g.ReleasedStorage = true, "store"
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{g}, at(3))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{g}, at(3), nil)
 	e.ok("AddReceivedFiles", err)
 	got, _, err := e.p.Reception(e.ctx, r.ID)
 	e.ok("Reception", err)

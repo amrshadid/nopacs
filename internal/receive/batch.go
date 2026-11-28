@@ -184,7 +184,7 @@ func (b *batcher) writeHolds(ctx context.Context, items []batchItem) {
 		records[i] = *it.d.hold
 	}
 	b.p.at("batch.before-hold")
-	written, err := b.p.store.HoldFiles(ctx, records)
+	written, err := b.p.store.HoldFiles(ctx, records, nil)
 	if err != nil {
 		b.p.log.Warn("received files could not be held; they are kept and tried again", "files", len(items), "reason", safe(err))
 		for _, it := range items {
@@ -236,7 +236,7 @@ func (b *batcher) writeReceived(ctx context.Context, items []batchItem) {
 		files[i] = *it.d.received
 	}
 	b.p.at("batch.before-add")
-	added, err := b.p.store.AddReceivedFiles(ctx, files, b.p.now())
+	added, err := b.p.store.AddReceivedFiles(ctx, files, b.p.now(), nil)
 	if errors.Is(err, tenant.ErrReceptionClosed) && len(items) > 1 {
 		byReception := map[string][]batchItem{}
 		var order []string

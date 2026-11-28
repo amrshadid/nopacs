@@ -90,6 +90,7 @@ func runPipeline(t *testing.T, open OpenPipeline) {
 		{"Secrets", testTenantSecrets},
 		{"ReleaseReason", testReleaseReason},
 		{"FencedFiles", testFencedFiles},
+		{"IncomingNamed", testIncomingNamed},
 		{"ClaimNextWork", testClaimNextWork},
 		{"ReclaimWorkOfKinds", testReclaimWorkOfKinds},
 		{"ScanInstances", testScanInstances},

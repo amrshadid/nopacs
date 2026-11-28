@@ -533,7 +533,7 @@ func (r *corrRig) replace(e *correct.Engine, s tenant.CatalogScan, in tenant.Sca
 		SOPClassUID: "1.2.840.10008.5.1.4.1.1.2", SOPInstanceUID: in.SOPInstanceUID, StudyUID: recv.StudyUID, SeriesUID: s.SeriesUID,
 		TransferSyntaxUID: "1.2.840.10008.1.2.1", Incoming: "quarantine/" + id, ContentKept: true,
 		Quarantined: r.clock.Now().UTC().Truncate(time.Microsecond)}
-	if _, err := r.p.HoldFiles(r.ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := r.p.HoldFiles(r.ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		r.t.Fatal(err)
 	}
 	p := pathOf(s)

@@ -64,7 +64,7 @@ func (e *penv) identifiedWith(receiver string, study int, make func(tenant.Recep
 	r := e.openReception(receiver, study, at(10))
 	files := make(r)
 	if len(files) > 0 {
-		_, err := e.p.AddReceivedFiles(e.ctx, files, at(11))
+		_, err := e.p.AddReceivedFiles(e.ctx, files, at(11), nil)
 		e.ok("AddReceivedFiles", err)
 	}
 	return e.stepTo(r, reception.Identified, "store"), files

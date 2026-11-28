@@ -22,9 +22,9 @@ import (
 // that the bytes are given their landed name before the store records a
 // release and a retry's first unit is queued at once. It records a
 // rejection or a discard through the store itself and then hands the
-// removal of the bytes here (RemoveRejected, RemoveDiscarded); a removal
-// that does not happen is done by Recover at the next start, which finds
-// the decision recorded. A pipeline that stops between a step and the next
+// removal of the bytes as a unit of work (QueueRemoval), which a worker runs
+// and which survives a restart; bytes no unit removed are removed by
+// Recover at the next start, which finds the decision recorded. A pipeline that stops between a step and the next
 // loses nothing either: a released file that joined nothing is landed, and
 // Recover checks it again as a release of its record; a reception with no
 // unit gets one from the repair.
@@ -120,24 +120,6 @@ func (p *Pipeline) afterRelease(ctx context.Context, before, after tenant.Quaran
 	return nil
 }
 
-// RemoveRejected removes the bytes of a held file at path in the incoming
-// area, after the store recorded its rejection.
-// A pipeline stopping removes nothing: Recover at the next start does.
-func (p *Pipeline) RemoveRejected(path string) error {
-	leave, err := p.enterDecision()
-	if err != nil {
-		return err
-	}
-	defer leave()
-	return p.removeRejected(path)
-}
-
-// removeRejected removes a rejected file's bytes, inside a decision.
-func (p *Pipeline) removeRejected(path string) error {
-	p.at("reject.before-remove")
-	return p.area.Remove(path)
-}
-
 // Retry makes a new reception of a failed one's files
 // (tenant.Pipeline.RetryReception) and queues its first unit. A crash
 // between the two leaves a reception past receiving with no unit, which
@@ -160,19 +142,7 @@ func (p *Pipeline) Retry(ctx context.Context, id, newReceptionID, receiver strin
 	return failed, retry, p.ensureNext(ctx, retry)
 }
 
-// RemoveDiscarded removes the bytes the store lists for a reception whose
-// discard it recorded (tenant.Pipeline.DiscardedFiles).
-// A pipeline stopping removes nothing: Recover at the next start does.
-func (p *Pipeline) RemoveDiscarded(ctx context.Context, receptionID string) error {
-	leave, err := p.enterDecision()
-	if err != nil {
-		return err
-	}
-	defer leave()
-	return p.removeDiscarded(ctx, receptionID)
-}
-
-// removeDiscarded removes a discarded reception's bytes, inside a decision.
+// removeDiscarded removes a discarded reception's bytes.
 func (p *Pipeline) removeDiscarded(ctx context.Context, receptionID string) error {
 	page := master.Page{Limit: master.MaxPageLimit}
 	for {

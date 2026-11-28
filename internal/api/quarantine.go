@@ -404,7 +404,7 @@ func (s quarantineService) RejectQuarantinedFile(ctx context.Context, req *v1.Re
 		return nil, c.failIn(d, st, err)
 	}
 	if before.State == tenant.QuarantineHeld && before.Incoming != "" {
-		if err := c.incoming.RemoveRejected(ctx, req.GetTenant(), before.Incoming); err != nil {
+		if err := c.incoming.RemoveRejected(ctx, req.GetTenant(), before.ID, before.Incoming); err != nil {
 			e := d.Entry(master.OutcomeDone, "", access.Facts{})
 			c.log.Warn("api: a rejected file's bytes were not removed yet", "request_id", e.RequestID, "file", f.ID, "error", fault.Message(err))
 		}

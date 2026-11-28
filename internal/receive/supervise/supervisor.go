@@ -184,9 +184,15 @@ type Config struct {
 	MinBackoff, MaxBackoff time.Duration
 	// StopTimeout bounds a pipeline's stop; 0 is DefaultStopTimeout.
 	StopTimeout time.Duration
-	// StartTimeout bounds a pipeline's start; 0 is DefaultStartTimeout. A
-	// start also ends when the supervisor stops or the tenant goes.
+	// StartTimeout bounds a pipeline's start when StartLimit is nil or
+	// cannot be read; 0 is DefaultStartTimeout. A start also ends when the
+	// supervisor stops or the tenant goes.
 	StartTimeout time.Duration
+	// StartLimit returns the bound of the start of the tenant named name,
+	// read at each start (the setting receiver.start-limit), so a value
+	// changed while a tenant's receivers are down applies to the next try.
+	// Nil, or an error, leaves StartTimeout.
+	StartLimit func(ctx context.Context, name string, st tenant.Pipeline) (time.Duration, error)
 	// Logger receives the supervisor's lines: names, reasons and counts.
 	// Nil discards them.
 	Logger *slog.Logger

@@ -132,7 +132,7 @@ func TestWithdrawnSubjectLeavesNothing(t *testing.T) {
 	subject := r.scanWith(2).SubjectLabel
 	var removed atomic.Int64
 	e := r.engineWith(func(c *Config) {
-		c.RemoveIncoming = func(_ context.Context, paths []string) error {
+		c.RemoveIncoming = func(_ context.Context, _ string, paths []string) error {
 			for _, p := range paths {
 				if err := os.Remove(filepath.Join(r.dataDir, "incoming", filepath.FromSlash(p))); err == nil {
 					removed.Add(1)

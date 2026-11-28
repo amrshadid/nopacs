@@ -68,12 +68,7 @@ func addTotals(ctx context.Context, tx *sql.Tx, files, bytes int64) error {
 }
 
 // HoldFiles implements tenant.Pipeline.
-func (t *Tenant) HoldFiles(ctx context.Context, files []tenant.QuarantinedFile) (int, error) {
-	return t.HoldFilesFenced(ctx, files, nil)
-}
-
-// HoldFilesFenced implements tenant.FencedFiles.
-func (t *Tenant) HoldFilesFenced(ctx context.Context, files []tenant.QuarantinedFile, fence *tenant.WorkFence) (int, error) {
+func (t *Tenant) HoldFiles(ctx context.Context, files []tenant.QuarantinedFile, fence *tenant.WorkFence) (int, error) {
 	if err := tenant.ValidateQuarantineBatch(files); err != nil {
 		return 0, err
 	}
@@ -258,6 +253,18 @@ func (t *Tenant) QuarantineTotals(ctx context.Context) (int64, int64, error) {
 			return v, err
 		})
 	return v.files, v.bytes, err
+}
+
+// IncomingNamed implements tenant.Pipeline.
+func (t *Tenant) IncomingNamed(ctx context.Context, path string) (bool, error) {
+	return readOne(ctx, t, "the incoming path has no answer", "the incoming path cannot be looked up",
+		`SELECT EXISTS (SELECT 1 FROM quarantine WHERE incoming = ? AND content_kept = 1)
+		     OR EXISTS (SELECT 1 FROM received_files WHERE incoming = ?)`, []any{path, path},
+		func(row interface{ Scan(...any) error }) (bool, error) {
+			var n int
+			err := row.Scan(&n)
+			return n == 1, err
+		})
 }
 
 // quarantineQuery returns the statement and arguments of one page of

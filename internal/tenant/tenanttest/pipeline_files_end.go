@@ -19,7 +19,7 @@ func testReceivedFilesAtEnd(e *penv) {
 	}
 	for i, c := range []end{{reception.Done, false}, {reception.Quarantined, false}, {reception.Failed, true}, {reception.Identified, true}} {
 		r := e.openReception("a", 10+i, at(1))
-		_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 10+i, 1), file(r, 10+i, 2)}, at(2))
+		_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 10+i, 1), file(r, 10+i, 2)}, at(2), nil)
 		e.ok("AddReceivedFiles", err)
 		switch c.state {
 		case reception.Quarantined, reception.Failed:

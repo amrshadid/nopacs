@@ -55,7 +55,7 @@ func BenchCommitScan(b *testing.B, p tenant.Pipeline, withSearch bool, seed uint
 		f := tenant.ReceivedFile{ReceptionID: rid, SOPInstanceUID: sop, SeriesUID: seriesUID, StudyUID: studyUID,
 			SOPClassUID: "1.2.840.10008.5.1.4.1.1.4", TransferSyntaxUID: "1.2.840.10008.1.2.1", Size: 524288,
 			SHA256: tenant.SHA256(sha256.Sum256([]byte(sop))), Incoming: GenReceiver + "/" + rid[:2] + "/" + rid, Caller: caller, Association: rid}
-		if _, err := p.AddReceivedFiles(ctx, []tenant.ReceivedFile{f}, at); err != nil {
+		if _, err := p.AddReceivedFiles(ctx, []tenant.ReceivedFile{f}, at, nil); err != nil {
 			b.Fatal(err)
 		}
 		for _, ev := range []reception.Event{reception.Quiet, reception.Identify} {

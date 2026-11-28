@@ -311,7 +311,7 @@ func TestBatchRacesQuietStep(t *testing.T) {
 		var batch, step error
 		atOnce(2, func(i int) {
 			if i == 0 {
-				_, batch = e.stores[0].AddReceivedFiles(e.ctx, []tenant.ReceivedFile{cFile(r, round, round)}, cT0.Add(time.Second))
+				_, batch = e.stores[0].AddReceivedFiles(e.ctx, []tenant.ReceivedFile{cFile(r, round, round)}, cT0.Add(time.Second), nil)
 			} else {
 				_, step = e.stores[1].StepReception(e.ctx, tenant.ReceptionStep{ID: r.ID, From: reception.Receiving, Event: reception.Quiet,
 					At: cT0.Add(time.Minute), LastFile: r.LastFile}, nil)

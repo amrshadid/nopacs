@@ -336,7 +336,7 @@ func (e *cenv) identified(receiver, studyUID, storage, subject, session string, 
 	e.ok("OpenReception", err)
 	fs := files(r)
 	for i := 0; i < len(fs); i += tenant.MaxReceivedBatch {
-		_, err = e.p().AddReceivedFiles(e.ctx, fs[i:min(i+tenant.MaxReceivedBatch, len(fs))], cT0)
+		_, err = e.p().AddReceivedFiles(e.ctx, fs[i:min(i+tenant.MaxReceivedBatch, len(fs))], cT0, nil)
 		e.ok("AddReceivedFiles", err)
 	}
 	r, err = e.p().StepReception(e.ctx, tenant.ReceptionStep{ID: r.ID, From: reception.Receiving, Event: reception.Quiet, At: cT0.Add(time.Minute)}, nil)

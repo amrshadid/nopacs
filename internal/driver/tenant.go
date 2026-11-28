@@ -79,9 +79,14 @@ func (d SQLiteTenants) Location(name, address string) (string, error) {
 // SQLiteFilesPerTenant is the most files one SQLite tenant's store holds open:
 // its database file and its write-ahead log for each of its five connections
 // (one writer and four readers), and its shared-memory file, which SQLite
-// opens once per database in a process (unix VFS, os_unix.c). An idle store,
-// as measured with 1,000 tenants, holds five; this is the most, so the
-// registry's warning comes before the limit is met under load, not after.
+// opens once per database in a process (unix VFS, os_unix.c). A connection
+// that has stood unused for sqlite.DefaultIdleConnection is closed and
+// opened again when a call needs one. A tenant that is served keeps its
+// write connection, since its reception pipeline looks at the database every
+// second, and one read connection with it: only the extra read connections of
+// a burst, and a tenant nothing looks at, shrink. This is the most, so the
+// registry's warning comes before the limit is met with every tenant busy,
+// not after.
 const SQLiteFilesPerTenant = 11
 
 // FilesPerTenant says how many files one tenant's store can hold open at
@@ -139,6 +144,11 @@ func windowsDevice(name string) bool {
 // in the schema the URL's search_path names; one tenant to a database and
 // schema, which the store checks (postgres.OpenTenant). It is what package
 // registry calls a Driver.
+//
+// Nothing here closes an idle store: a tenant's pool already gives its
+// connections back after postgres.TenantIdleTime and holds sockets, not
+// files, against the server's limit on connections rather than the
+// process's limit on open files.
 type PostgresTenants struct{}
 
 // Location implements registry.Driver: host:port/database, or for a Unix

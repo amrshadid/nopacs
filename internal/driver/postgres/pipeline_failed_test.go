@@ -26,14 +26,14 @@ func TestDiscardedFilesLeaveOutPlacesInUse(t *testing.T) {
 	r, _, err := e.p().OpenReception(e.ctx, "a", cUID(1, 0), "rc-1", cT0)
 	e.ok("open", err)
 	kept, other := cFile(r, 0, 1), cFile(r, 0, 2)
-	_, err = e.p().AddReceivedFiles(e.ctx, []tenant.ReceivedFile{kept, other}, cT0)
+	_, err = e.p().AddReceivedFiles(e.ctx, []tenant.ReceivedFile{kept, other}, cT0, nil)
 	e.ok("add", err)
 	q := tenant.QuarantinedFile{ID: "q1", Reason: tenant.QuarantineBadLabel,
 		Details: map[string]string{"label": "subject", "fault": tenant.FaultEmpty}, Receiver: "a", ReceptionID: r.ID,
 		SOPInstanceUID: kept.SOPInstanceUID, StudyUID: kept.StudyUID, SeriesUID: kept.SeriesUID, SOPClassUID: kept.SOPClassUID,
 		TransferSyntaxUID: kept.TransferSyntaxUID, SHA256: kept.SHA256, Size: kept.Size, Incoming: kept.Incoming,
 		ContentKept: true, Quarantined: cT0}
-	_, err = e.p().HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p().HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("hold", err)
 	_, err = e.p().StepReception(e.ctx, tenant.ReceptionStep{ID: r.ID, From: reception.Receiving, Event: reception.Fail,
 		At: cT0.Add(time.Minute), Failure: "storage unreachable"}, nil)

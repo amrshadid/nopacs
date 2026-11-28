@@ -116,7 +116,7 @@ func testReleaseReason(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
 	joins, alone, plain := e.differentFile("a", r.ID, 7), e.heldFile("a", 40, 2), e.heldFile("a", 41, 3)
-	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{joins, alone, plain})
+	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{joins, alone, plain}, nil)
 	e.ok("HoldFiles", err)
 	for _, reason := range []string{"   ", strings.Repeat("x", tenant.MaxDecisionReasonLength+1)} {
 		_, err := pp.ReleaseFile(e.ctx, tenant.Release{ID: joins.ID, Mode: tenant.ReleaseAsIs, ReceptionID: "rel-0", Reason: reason, Now: at(5)}, e.audit(), nil)
@@ -174,10 +174,9 @@ func testReleaseReason(e *penv) {
 
 // testFencedFiles guards the fence of the file writes: a worker whose lease
 // was taken over records no received file and holds no file, and is told
-// ErrLeaseLost; the worker that holds the lease records both; no fence is
-// the unfenced write.
+// ErrLeaseLost, even with an empty batch; the worker that holds the lease
+// records both; a nil fence writes under no lease, as a file's arrival does.
 func testFencedFiles(e *penv) {
-	pp := e.parts()
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
 	e.enqueue("w1", at(0))
@@ -186,29 +185,61 @@ func testFencedFiles(e *penv) {
 	second, err := e.p.ClaimWork(e.ctx, "reception", "worker-2", at(120), time.Minute)
 	e.ok("ClaimWork after the first lease ended", err)
 	stale, held := first.Fence(), second.Fence()
-	_, err = pp.AddReceivedFilesFenced(e.ctx, []tenant.ReceivedFile{file(r, 1, 1)}, at(121), &stale)
-	e.wantIs("AddReceivedFilesFenced under a lease taken over", err, tenant.ErrLeaseLost, fault.Conflict)
-	_, err = pp.HoldFilesFenced(e.ctx, []tenant.QuarantinedFile{e.heldFile("a", 10, 1)}, &stale)
-	e.wantIs("HoldFilesFenced under a lease taken over", err, tenant.ErrLeaseLost, fault.Conflict)
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1)}, at(121), &stale)
+	e.wantIs("AddReceivedFiles under a lease taken over", err, tenant.ErrLeaseLost, fault.Conflict)
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{e.heldFile("a", 10, 1)}, &stale)
+	e.wantIs("HoldFiles under a lease taken over", err, tenant.ErrLeaseLost, fault.Conflict)
 	if got, _, _ := e.p.Reception(e.ctx, r.ID); got.Counts.FilesReceived != 0 {
 		e.Errorf("a write under a lost lease recorded %d files", got.Counts.FilesReceived)
 	}
 	if files, _, _ := e.p.QuarantineTotals(e.ctx); files != 0 {
 		e.Errorf("a hold under a lost lease recorded %d files", files)
 	}
-	n, err := pp.AddReceivedFilesFenced(e.ctx, []tenant.ReceivedFile{file(r, 1, 1)}, at(122), &held)
-	e.ok("AddReceivedFilesFenced under the lease", err)
-	m, err := pp.HoldFilesFenced(e.ctx, []tenant.QuarantinedFile{e.heldFile("a", 10, 2)}, &held)
-	e.ok("HoldFilesFenced under the lease", err)
-	k, err := pp.AddReceivedFilesFenced(e.ctx, []tenant.ReceivedFile{file(r, 1, 2)}, at(123), nil)
-	e.ok("AddReceivedFilesFenced with no fence", err)
+	n, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1)}, at(122), &held)
+	e.ok("AddReceivedFiles under the lease", err)
+	m, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{e.heldFile("a", 10, 2)}, &held)
+	e.ok("HoldFiles under the lease", err)
+	k, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 2)}, at(123), nil)
+	e.ok("AddReceivedFiles with no fence", err)
 	if n != 1 || m != 1 || k != 1 {
 		e.Errorf("writes under the lease and with none recorded %d, %d, %d; want 1 each", n, m, k)
 	}
-	_, err = pp.AddReceivedFilesFenced(e.ctx, nil, at(124), &stale)
+	_, err = e.p.AddReceivedFiles(e.ctx, nil, at(124), &stale)
 	e.wantIs("an empty batch under a lease taken over", err, tenant.ErrLeaseLost, fault.Conflict)
-	_, err = pp.HoldFilesFenced(e.ctx, nil, &tenant.WorkFence{ID: "w1"})
-	e.wantKind("HoldFilesFenced with a malformed fence", err, fault.Invalid)
+	_, err = e.p.HoldFiles(e.ctx, nil, &stale)
+	e.wantIs("an empty hold under a lease taken over", err, tenant.ErrLeaseLost, fault.Conflict)
+	_, err = e.p.HoldFiles(e.ctx, nil, &tenant.WorkFence{ID: "w1"})
+	e.wantKind("HoldFiles with a malformed fence", err, fault.Invalid)
+}
+
+// testIncomingNamed guards IncomingNamed: a path a received file's row or a
+// held quarantine record keeps is named, a path nothing keeps is not, and a
+// record whose bytes were let go by its rejection no longer names its place.
+func testIncomingNamed(e *penv) {
+	e.addReceiver("a", "store", 11112)
+	r := e.openReception("a", 1, at(1))
+	f := file(r, 1, 1)
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(2), nil)
+	e.ok("AddReceivedFiles", err)
+	q := e.heldFile("a", 10, 3)
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
+	e.ok("HoldFiles", err)
+	for path, want := range map[string]bool{f.Incoming: true, q.Incoming: true, "a/zz/none": false} {
+		got, err := e.p.IncomingNamed(e.ctx, path)
+		e.ok("IncomingNamed", err)
+		if got != want {
+			e.Errorf("IncomingNamed(%q) = %v, want %v", path, got, want)
+		}
+	}
+	_, err = e.p.RejectQuarantined(e.ctx, q.ID, "a stray file", at(4), e.audit(), nil)
+	e.ok("RejectQuarantined", err)
+	if got, err := e.p.IncomingNamed(e.ctx, q.Incoming); err != nil || got {
+		e.Errorf("a rejected record still names its place: %v %v", got, err)
+	}
+	// The record keeps where its bytes were, for the removal that follows.
+	if got, err := e.p.QuarantinedFile(e.ctx, q.ID); err != nil || got.Incoming != q.Incoming || got.ContentKept {
+		e.Errorf("a rejected record keeps place %q (kept %v), want %q, not kept: %v", got.Incoming, got.ContentKept, q.Incoming, err)
+	}
 }
 
 // testClaimNextWork guards that a claim says what it gave up on the way:
@@ -323,7 +354,7 @@ func testNewQuarantineReasons(e *penv) {
 	header.Reason, header.Details = tenant.QuarantineHeaderTooLarge, map[string]string{"limit": "65536"}
 	lost := tenant.QuarantinedFile{ID: e.id("q"), Reason: tenant.QuarantineIncomingLost, Receiver: "a", Size: 900, SHA256: sum(5),
 		SOPInstanceUID: uidOf(3, 5), StudyUID: uidOf(1, 1), SeriesUID: uidOf(2, 1), Quarantined: at(2)}
-	n, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{header, lost})
+	n, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{header, lost}, nil)
 	e.ok("HoldFiles", err)
 	if n != 2 {
 		e.Errorf("HoldFiles = %d, want 2", n)
@@ -343,7 +374,7 @@ func testNewQuarantineReasons(e *penv) {
 	kept := e.heldFile("a", 1, 4)
 	kept.Reason, kept.Details = tenant.QuarantineIncomingLost, nil
 	for _, q := range []tenant.QuarantinedFile{unkept, kept} {
-		_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+		_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 		e.wantKind("HoldFiles of "+string(q.Reason)+" with its bytes kept the wrong way", err, fault.Invalid)
 	}
 	_, err = e.p.RejectQuarantined(e.ctx, header.ID, "not readable", at(10), e.audit(), nil)

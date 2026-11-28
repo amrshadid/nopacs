@@ -228,7 +228,7 @@ func testStorageInUse(e *penv) {
 
 	r = e.openReception("dimse-a", 2, at(30))
 	f := file(r, 2, 1)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(31))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, at(31), nil)
 	e.ok("AddReceivedFiles", err)
 	r = e.stepTo(r, "identified", "store-c")
 	e.commit(r, f)
@@ -449,7 +449,7 @@ func testReceiverNameHeld(e *penv) {
 	e.openReception("by-reception", 1, at(1))
 	e.addReceiver("by-quarantine", "store", 11113)
 	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{{ID: e.id("q"), Reason: tenant.QuarantineNotDICOM,
-		Receiver: "by-quarantine", Quarantined: at(1)}})
+		Receiver: "by-quarantine", Quarantined: at(1)}}, nil)
 	e.ok("HoldFiles", err)
 	e.addReceiver("unused", "store", 11114)
 	for _, n := range []string{"by-reception", "by-quarantine", "unused"} {
@@ -478,7 +478,7 @@ func testChangeGuards(e *penv) {
 	retried := e.failReception(e.openReception("decisions", 1, at(1)))
 	discarded := e.failReception(e.openReception("decisions", 2, at(1)))
 	released, rejected := e.heldFile("decisions", 10, 1), e.heldFile("decisions", 20, 2)
-	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{released, rejected})
+	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{released, rejected}, nil)
 	e.ok("HoldFiles", err)
 	type op struct {
 		name string

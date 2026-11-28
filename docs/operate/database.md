@@ -25,6 +25,15 @@ The archived DICOM files are in none of them: they are in the tenant's storages
 | A tenant is | one file in `<data-dir>/tenants/` | a database or schema of its own |
 | Size | the ceiling has not been measured and published; a tenant of ten million instances has been tried and its file was about 2 GB | tried to ten million instances per tenant |
 
+A process may hold only so many files open (`ulimit -n`), and a SQLite tenant holds two
+for each connection it has open (its database and its write-ahead log). A tenant's
+connections that stand unused for a minute are closed and opened again when the
+tenant is next used. A served tenant keeps its write connection (its reception
+pipeline looks at the database every second), so it is the extra read connections of
+a burst that are given back; at start the server warns when every
+tenant busy at once would pass the limit. A Postgres tenant holds sockets in a pool
+that gives its connections back when idle.
+
 SQLite is the default so that a first trial needs nothing. Anything that holds data
 others depend on uses Postgres. Both pass the same contract tests on every change,
 so no behavior is meant to differ; the drivers are chosen when a database is opened

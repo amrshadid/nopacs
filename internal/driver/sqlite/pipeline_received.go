@@ -41,12 +41,7 @@ func scanReceived(row interface{ Scan(...any) error }) (tenant.ReceivedFile, err
 }
 
 // AddReceivedFiles implements tenant.Pipeline.
-func (t *Tenant) AddReceivedFiles(ctx context.Context, files []tenant.ReceivedFile, at time.Time) (int, error) {
-	return t.AddReceivedFilesFenced(ctx, files, at, nil)
-}
-
-// AddReceivedFilesFenced implements tenant.FencedFiles.
-func (t *Tenant) AddReceivedFilesFenced(ctx context.Context, files []tenant.ReceivedFile, at time.Time, fence *tenant.WorkFence) (int, error) {
+func (t *Tenant) AddReceivedFiles(ctx context.Context, files []tenant.ReceivedFile, at time.Time, fence *tenant.WorkFence) (int, error) {
 	if err := tenant.ValidateReceivedBatch(files, at); err != nil {
 		return 0, err
 	}

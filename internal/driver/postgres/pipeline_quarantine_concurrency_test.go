@@ -39,9 +39,9 @@ func TestHoldRacesReceivedBatch(t *testing.T) {
 		var errs [2]error
 		atOnce(2, func(i int) {
 			if i == 0 {
-				_, errs[0] = e.stores[0].AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, cT0)
+				_, errs[0] = e.stores[0].AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f}, cT0, nil)
 			} else {
-				_, errs[1] = e.stores[1].HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+				_, errs[1] = e.stores[1].HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 			}
 		})
 		e.ok("AddReceivedFiles", errs[0])
@@ -75,7 +75,7 @@ func TestReleaseRacesQuietStep(t *testing.T) {
 			SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 			TransferSyntaxUID: f.TransferSyntaxUID, SHA256: f.SHA256, Size: f.Size, Incoming: "quarantine/" + f.SOPInstanceUID,
 			ContentKept: true, Quarantined: cT0}
-		_, err = e.p().HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+		_, err = e.p().HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 		e.ok("HoldFiles", err)
 		var released tenant.QuarantinedFile
 		var release, step error
@@ -121,7 +121,7 @@ func TestDecisionsOnOneRecordAtOnce(t *testing.T) {
 			Details: map[string]string{"label": "subject", "fault": tenant.FaultEmpty}, Receiver: "a",
 			SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 			TransferSyntaxUID: f.TransferSyntaxUID, SHA256: f.SHA256, Size: f.Size, Incoming: f.Incoming, ContentKept: true, Quarantined: cT0}
-		_, err = e.p().HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+		_, err = e.p().HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 		e.ok("hold", err)
 
 		decide := func(store *Tenant, what string, guard tenant.Guard) (tenant.QuarantinedFile, error) {

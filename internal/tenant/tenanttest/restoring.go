@@ -60,7 +60,7 @@ func testQuarantineLostButKept(e *xenv) {
 			TransferSyntaxUID: "1.2.840.10008.1.2.1", Incoming: "quarantine/q" + string(rune('a'+i)), ContentKept: true, Quarantined: at(300),
 			Details: map[string]string{"correction": e.newID(1)}})
 	}
-	_, err := e.p.HoldFiles(e.ctx, files)
+	_, err := e.p.HoldFiles(e.ctx, files, nil)
 	e.ok("HoldFiles", err)
 	n, err := e.rs.MarkQuarantineLost(e.ctx, []string{files[1].ID})
 	e.ok("MarkQuarantineLost", err)

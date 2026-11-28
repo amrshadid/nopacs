@@ -45,7 +45,7 @@ func OpenMaster(ctx context.Context, path string) (*Master, error) {
 	if masterMigrationsErr != nil {
 		return nil, fault.Wrap(fault.Internal, masterMigrationsErr, "the master's migrations cannot be read")
 	}
-	p, err := openPools(ctx, path, masterDB)
+	p, err := openPools(ctx, path, masterDB, 0)
 	if err != nil {
 		return nil, err
 	}

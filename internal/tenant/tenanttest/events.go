@@ -185,7 +185,7 @@ func testEventsWithTheirChanges(e *eenv) {
 	e.addReceiver("a", "store", 11112)
 	start := e.now()
 	r := e.openReception("a", 1, at(10))
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}, at(11))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2)}, at(11), nil)
 	e.ok("AddReceivedFiles", err)
 	r, err = e.p.StepReception(e.ctx, tenant.ReceptionStep{ID: r.ID, From: reception.Receiving, Event: reception.Quiet, At: at(70)},
 		func(context.Context, tenant.Reception, tenant.Reception) error { return nil })
@@ -199,9 +199,9 @@ func testEventsWithTheirChanges(e *eenv) {
 
 	q1, q2 := e.heldFile("a", 100, 100), e.heldFile("a", 200, 101)
 	q2.ReceptionID = r.ID
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q1, q2})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q1, q2}, nil)
 	e.ok("HoldFiles", err)
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q1})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q1}, nil)
 	e.ok("HoldFiles again", err)
 	_, err = e.p.RejectQuarantined(e.ctx, q1.ID, "not ours", at(110), e.audit(), nil)
 	e.ok("RejectQuarantined", err)
@@ -209,7 +209,7 @@ func testEventsWithTheirChanges(e *eenv) {
 	e.ok("RejectQuarantined again", err)
 	d := e.differentFile("a", "", 7)
 	d.SOPInstanceUID = uidOf(3, 900) // no instance holds it, so it may be released
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{d})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{d}, nil)
 	e.ok("HoldFiles", err)
 	released, err := e.p.ReleaseQuarantined(e.ctx, d.ID, tenant.ReleaseAsIs, "", e.id("rc"), at(120), e.audit(), nil)
 	e.ok("ReleaseQuarantined", err)
@@ -328,7 +328,7 @@ func testEventPayloadsHoldNoUID(e *eenv) {
 		Failure: "storage unreachable"}, nil)
 	e.ok("StepReception", err)
 	q := e.differentFile("a", r.ID, 1)
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	events, _ := e.readAll(start, 100)
 	if len(events) == 0 {

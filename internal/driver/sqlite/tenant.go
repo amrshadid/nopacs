@@ -6,6 +6,7 @@ import (
 	"embed"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/amrshadid/nopacs/internal/driver/sqlkit"
 	"github.com/amrshadid/nopacs/internal/fault"
@@ -73,13 +74,34 @@ var _ tenant.Store = (*Tenant)(nil)
 // registry) calls Migrate, so that opening a database never changes it
 // unasked.
 func OpenTenant(ctx context.Context, path, tenantID string) (*Tenant, error) {
+	return OpenTenantIdle(ctx, path, tenantID, DefaultIdleConnection)
+}
+
+// DefaultIdleConnection is how long a connection of a tenant's database may
+// stand unused before it is closed. A server with many SQLite tenants holds
+// two files for each connection of each tenant (the database and its
+// write-ahead log), against a limit on open files; a burst of reads opens up
+// to four connections and, left open, they hold their files for as long as
+// the tenant is served. A minute is far longer than the reopening costs (a
+// connection is opened in about a millisecond and its statements are
+// prepared again when used) and shorter than anything a tenant's workers
+// wait between looks at the database, so a tenant at work keeps its
+// connections and a quiet one drops to the one or two that its look at the
+// database in each interval uses.
+const DefaultIdleConnection = time.Minute
+
+// OpenTenantIdle is OpenTenant with the time a connection may stand unused
+// before it is closed (0 never closes one): a closed connection is opened
+// again when the store next needs one, with no change to what a caller
+// sees, and one in use is never closed.
+func OpenTenantIdle(ctx context.Context, path, tenantID string, idle time.Duration) (*Tenant, error) {
 	if err := master.ValidateID("tenant id", tenantID); err != nil {
 		return nil, err
 	}
 	if tenantMigrationsErr != nil {
 		return nil, fault.Wrap(fault.Internal, tenantMigrationsErr, "a tenant's migrations cannot be read")
 	}
-	p, err := openPools(ctx, path, tenantDB)
+	p, err := openPools(ctx, path, tenantDB, idle)
 	if err != nil {
 		return nil, err
 	}

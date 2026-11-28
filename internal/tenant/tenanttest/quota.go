@@ -54,7 +54,7 @@ func testQuotaCounts(e *cenv) {
 	// Recorded and not archived: counted as receiving from the record on.
 	r := e.openReception("recv", 3, at(200))
 	late := []tenant.ReceivedFile{file(r, 3, 30000), file(r, 3, 30001)}
-	_, err := e.p.AddReceivedFiles(e.ctx, late, at(200))
+	_, err := e.p.AddReceivedFiles(e.ctx, late, at(200), nil)
 	e.ok("AddReceivedFiles", err)
 	e.wantUse("with two files received", use.Plus(2, sizes(late...)))
 	// One of them quarantined by its reception stops counting.
@@ -62,7 +62,7 @@ func testQuotaCounts(e *cenv) {
 		Size: late[1].Size, SHA256: late[1].SHA256, KeptSHA256: sum(31001), SOPClassUID: late[1].SOPClassUID, SOPInstanceUID: late[1].SOPInstanceUID,
 		StudyUID: late[1].StudyUID, SeriesUID: late[1].SeriesUID, TransferSyntaxUID: late[1].TransferSyntaxUID, Incoming: late[1].Incoming,
 		ContentKept: true, Quarantined: at(210)}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("HoldFiles", err)
 	e.wantUse("with one of them quarantined", use.Plus(1, late[0].Size))
 	use = use.Plus(1, late[0].Size)
@@ -73,7 +73,7 @@ func testQuotaCounts(e *cenv) {
 		Size: 777, SHA256: sum(4242), KeptSHA256: sum(4243), SOPClassUID: in.SOPClassUID, SOPInstanceUID: in.SOPInstanceUID,
 		StudyUID: in.StudyUID, SeriesUID: in.SeriesUID, TransferSyntaxUID: in.TransferSyntaxUID, Incoming: "quarantine/q1",
 		ContentKept: true, Quarantined: at(400)}
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{rq})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{rq}, nil)
 	e.ok("HoldFiles", err)
 	rep, _, err := e.p.PrepareCorrection(e.ctx, tenant.CorrectionPrepare{ID: e.newID(500), Kind: record.KindReplace, Quarantine: rq.ID,
 		NewSHA256: sum(5000), NewSize: 780, RestoreLine: []byte(`{"line":1}`), Reason: "corrected re-send", Now: at(500)}, e.audit(), nil)

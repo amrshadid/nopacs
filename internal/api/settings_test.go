@@ -265,7 +265,7 @@ func testListSettings(t *testing.T) {
 					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN,quarantine.warn-age=30d@/BUILT_IN,quarantine.warn-bytes=0@/BUILT_IN," +
 					"quota.bytes=@/BUILT_IN,quota.instances=@/BUILT_IN,quota.warn=90%@/BUILT_IN," +
 					"read.per-caller=16@/BUILT_IN,read.per-server=256@/BUILT_IN,recall.wait=48h@/BUILT_IN,receiver.allow-as-received=false@/BUILT_IN," +
-					"receiver.bind-addresses=@/BUILT_IN,receiver.header-limit=64MiB@/BUILT_IN,receiver.ports=@/BUILT_IN," +
+					"receiver.bind-addresses=@/BUILT_IN,receiver.header-limit=64MiB@/BUILT_IN,receiver.ports=@/BUILT_IN,receiver.start-limit=15m@/BUILT_IN," +
 					"replica.lag-alert=1h@/BUILT_IN,replica.rate=0@/BUILT_IN," +
 					"replica.repair=manual@/BUILT_IN,replica.repair-lease=1m@/BUILT_IN,retention.max-clock-step=2d@/BUILT_IN,retention.max-per-pass=1000@/BUILT_IN," +
 					"retention.shorten-notice=30d@/BUILT_IN,scrub.archive-sample=0%@/BUILT_IN,scrub.interval=30d@/BUILT_IN,scrub.rate=64MiB@/BUILT_IN,search.facet-rows=1000000@/BUILT_IN,sender.allow-plain-http=false@/BUILT_IN," +

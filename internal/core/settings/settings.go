@@ -278,7 +278,7 @@ func Builtin() []Definition {
 		Validate:       func(v string) error { _, err := ParseRetention(v); return err },
 	}}, append(append(append(append(accessDefinitions(), senderDefinitions()...), auditDefinitions()...), readDefinitions()...),
 		append(append(append(append(scrubDefinitions(), importDefinitions()...), correctionDefinitions()...), backupDefinitions()...),
-			append(append(append(append(replicaDefinitions(), quotaDefinitions()...), searchDefinitions()...), transferDefinitions()...), append(deidDefinitions(), deidTrialDefinitions()...)...)...)...)...)
+			append(append(append(append(replicaDefinitions(), quotaDefinitions()...), searchDefinitions()...), transferDefinitions()...), append(deidDefinitions(), append(deidTrialDefinitions(), startDefinitions()...)...)...)...)...)...)
 }
 
 // New returns a table of defs. It refuses a name that is not valid or given

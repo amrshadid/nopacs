@@ -24,13 +24,13 @@ func testStatusSnapshot(e *eenv) {
 		e.Errorf("an empty tenant's snapshot = %+v", empty)
 	}
 	r1 := e.openReception("a", 1, at(1))
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r1, 1, 1)}, at(2))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r1, 1, 1)}, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	r2, _ := e.identified("a", 2, 2, 3)
 	e.commit(r2, file(r2, 2, 2))
 	done := e.stepTo(e.openReception("a", 3, at(3)), reception.Done, "store")
 	failed := e.failReception(e.openReception("a", 4, at(4)))
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{e.heldFile("a", 40, 5)})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{e.heldFile("a", 40, 5)}, nil)
 	e.ok("HoldFiles", err)
 	s, err := e.ev.StatusSnapshot(e.ctx)
 	e.ok("StatusSnapshot", err)
@@ -183,7 +183,7 @@ func testSnapshotDividesTheFeed(e *eenv) {
 					}
 				}
 				q := e.heldFile("a", int64(10+i), i)
-				if _, err := e.p.HoldFiles(ctx, []tenant.QuarantinedFile{q}); err != nil {
+				if _, err := e.p.HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 					done <- err
 					return
 				}

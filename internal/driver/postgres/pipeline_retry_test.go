@@ -91,7 +91,7 @@ func TestPipeRunsAnAuditedChangeAgain(t *testing.T) {
 		Details: map[string]string{"label": "subject", "fault": tenant.FaultEmpty}, Receiver: "a",
 		SOPInstanceUID: f.SOPInstanceUID, StudyUID: f.StudyUID, SeriesUID: f.SeriesUID, SOPClassUID: f.SOPClassUID,
 		TransferSyntaxUID: f.TransferSyntaxUID, SHA256: f.SHA256, Size: f.Size, Incoming: f.Incoming, ContentKept: true, Quarantined: cT0}
-	_, err = e.p().HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+	_, err = e.p().HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 	e.ok("hold", err)
 	attempts, guards := 0, 0
 	e.p().failAttempts(failOn(sqlstateDeadlock, &attempts, func(a int) bool { return a == 1 }))

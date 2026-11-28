@@ -119,7 +119,7 @@ func BenchmarkReceivedBatch(b *testing.B) {
 					for i := range batch {
 						batch[i] = benchFile(recs[c], n*size+i)
 					}
-					_, err := s.AddReceivedFiles(ctx, batch, benchTime)
+					_, err := s.AddReceivedFiles(ctx, batch, benchTime, nil)
 					return err
 				})
 				b.ReportMetric(float64(b.N*size)/b.Elapsed().Seconds(), "rows/s")

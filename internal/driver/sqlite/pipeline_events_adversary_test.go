@@ -136,7 +136,7 @@ func TestEventFeedUnderAdversaries(t *testing.T) {
 				case 0:
 					r, _, err := p.OpenReception(ctx, recv, fmt.Sprintf("2.25.1.%d", study+1), fixtureID("rc"), fixtureAt(i))
 					if err == nil {
-						_, _ = p.AddReceivedFiles(ctx, []tenant.ReceivedFile{fixtureFile(r, study, study*1000+rng.IntN(20))}, fixtureAt(i))
+						_, _ = p.AddReceivedFiles(ctx, []tenant.ReceivedFile{fixtureFile(r, study, study*1000+rng.IntN(20))}, fixtureAt(i), nil)
 					}
 				case 1:
 					r, _, err := p.OpenReception(ctx, recv, fmt.Sprintf("2.25.1.%d", study+1), fixtureID("rc"), fixtureAt(i))
@@ -146,7 +146,7 @@ func TestEventFeedUnderAdversaries(t *testing.T) {
 					id := fixtureID("q")
 					q := tenant.QuarantinedFile{ID: id, Reason: tenant.QuarantineNotDICOM, Receiver: recv, ReceptionID: r.ID,
 						Size: int64(rng.IntN(1000)), SHA256: fixtureSum(rng.IntN(1000)), Incoming: "quarantine/" + id, ContentKept: true, Quarantined: fixtureAt(i)}
-					if _, err := p.HoldFiles(ctx, []tenant.QuarantinedFile{q}); err == nil {
+					if _, err := p.HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); err == nil {
 						qids = append(qids, id)
 					}
 				case 2:

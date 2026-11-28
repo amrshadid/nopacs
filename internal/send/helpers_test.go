@@ -309,7 +309,7 @@ func (f *fixture) archive(session string, scans ...scanFiles) {
 		}
 	}
 	for i := 0; i < len(files); i += 500 {
-		if _, err := f.p.AddReceivedFiles(f.ctx, files[i:min(i+500, len(files))], at); err != nil {
+		if _, err := f.p.AddReceivedFiles(f.ctx, files[i:min(i+500, len(files))], at, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -83,7 +83,7 @@ func BenchmarkReceivedBatch(b *testing.B) {
 					batch[i] = benchFile(r, n)
 					n++
 				}
-				if _, err := s.AddReceivedFiles(ctx, batch, benchTime); err != nil {
+				if _, err := s.AddReceivedFiles(ctx, batch, benchTime, nil); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -261,7 +261,7 @@ func BenchmarkCommitScan(b *testing.B) {
 						TransferSyntaxUID: "1.2.840.10008.1.2.1", Size: 524288, SHA256: tenant.SHA256{2},
 						Incoming: fmt.Sprintf("%s/%d.dcm", r.ID, i)}
 				}
-				if _, err := s.AddReceivedFiles(ctx, files, benchTime); err != nil {
+				if _, err := s.AddReceivedFiles(ctx, files, benchTime, nil); err != nil {
 					b.Fatal(err)
 				}
 				for _, ev := range []reception.Event{reception.Quiet, reception.Identify} {

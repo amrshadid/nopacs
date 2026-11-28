@@ -485,7 +485,8 @@ var installationSet = map[string]bool{"receiver.ports": true, "incoming.limit": 
 	"receiver.allow-as-received": true, "deid.pixel-limit": true,
 	"import.allowed-roots": true, "import.max-units": true,
 	"retention.shorten-notice": true, "retention.max-per-pass": true,
-	"correction.batch-max": true, "quota.bytes": true, "quota.instances": true}
+	"correction.batch-max": true, "quota.bytes": true, "quota.instances": true,
+	"receiver.start-limit": true}
 
 // settingChange is the requirement of a change of the setting named name
 // on scope.

@@ -503,7 +503,7 @@ func holdSized(t *testing.T, f *placeFixture, tenantName string, size int64) str
 		Size:    size, SHA256: sha256.Sum256([]byte(id)), SOPClassUID: "1.2.840.10008.5.1.4.1.1.2",
 		Incoming: "q/" + id, ContentKept: true, Quarantined: f.now(),
 	}
-	if _, err := f.pipelineOf(tenantName).HoldFiles(ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := f.pipelineOf(tenantName).HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		t.Fatal(err)
 	}
 	return id

@@ -22,7 +22,7 @@ func testReceivedFiles(e *penv) {
 	f1, f2, f3 := file(r, 1, 1), file(r, 1, 2), file(r, 1, 3)
 	f2.Association, f2.Caller.CallingAETitle = "assoc2", "SCANNER2"
 	f3.Association, f3.Caller = "", tenant.Caller{}
-	n, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f1, f2, f3}, at(9))
+	n, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{f1, f2, f3}, at(9), nil)
 	e.ok("AddReceivedFiles", err)
 	if n != 3 {
 		e.Errorf("AddReceivedFiles = %d new, want 3", n)
@@ -33,7 +33,7 @@ func testReceivedFiles(e *penv) {
 		!slices.Equal(got.CallingAETitles, []string{"SCANNER1", "SCANNER2"}) || got.CallingAETitlesTruncated {
 		e.Errorf("the reception after a batch: %+v", got)
 	}
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 4)}, at(5))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 4)}, at(5), nil)
 	e.ok("AddReceivedFiles, an earlier time", err)
 	got, _, _ = e.p.Reception(e.ctx, r.ID)
 	if !got.LastFile.Equal(at(9)) {
@@ -54,7 +54,7 @@ func testReceivedFiles(e *penv) {
 		f.Association, f.Caller.CallingAETitle = fmt.Sprintf("x%02d", i), fmt.Sprintf("AE%02d", i)
 		batch = append(batch, f)
 	}
-	_, err = e.p.AddReceivedFiles(e.ctx, batch, at(10))
+	_, err = e.p.AddReceivedFiles(e.ctx, batch, at(10), nil)
 	e.ok("AddReceivedFiles", err)
 	got, _, _ = e.p.Reception(e.ctx, r.ID)
 	if len(got.CallingAETitles) != tenant.MaxCallingAETitles || !got.CallingAETitlesTruncated || got.Associations != 22 ||
@@ -71,16 +71,16 @@ func testReceivedBatchRepeated(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	r := e.openReception("a", 1, at(1))
 	batch := []tenant.ReceivedFile{file(r, 1, 1), file(r, 1, 2), file(r, 1, 3)}
-	_, err := e.p.AddReceivedFiles(e.ctx, batch, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, batch, at(2), nil)
 	e.ok("AddReceivedFiles", err)
 	before, _, _ := e.p.Reception(e.ctx, r.ID)
-	n, err := e.p.AddReceivedFiles(e.ctx, batch, at(3))
+	n, err := e.p.AddReceivedFiles(e.ctx, batch, at(3), nil)
 	e.ok("AddReceivedFiles again", err)
 	after, _, _ := e.p.Reception(e.ctx, r.ID)
 	if n != 0 || after.Counts != before.Counts || after.Associations != before.Associations || !after.LastFile.Equal(before.LastFile) {
 		e.Errorf("a batch written again: %d new, %+v -> %+v", n, before, after)
 	}
-	n, err = e.p.AddReceivedFiles(e.ctx, append(batch, file(r, 1, 4)), at(4))
+	n, err = e.p.AddReceivedFiles(e.ctx, append(batch, file(r, 1, 4)), at(4), nil)
 	e.ok("AddReceivedFiles overlapping", err)
 	got, _, _ := e.p.Reception(e.ctx, r.ID)
 	if n != 1 || got.Counts.FilesReceived != 4 {
@@ -88,14 +88,14 @@ func testReceivedBatchRepeated(e *penv) {
 	}
 	changed := file(r, 1, 1)
 	changed.SHA256 = sum(999)
-	n, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{changed}, at(5))
+	n, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{changed}, at(5), nil)
 	e.ok("AddReceivedFiles of a UID again with another checksum", err)
 	if n != 1 {
 		e.Errorf("a UID received again with another checksum is %d new files, want 1: it is another file", n)
 	}
 	missing := file(r, 1, 50)
 	missing.ReceptionID = "missing"
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 5), missing}, at(6))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 5), missing}, at(6), nil)
 	e.wantKind("AddReceivedFiles naming a reception not there", err, fault.NotFound)
 	if files, _, _ := e.p.ReceivedFiles(e.ctx, r.ID, master.Page{Limit: 100}); len(files) != 5 {
 		e.Errorf("a batch that failed left %d files, want the 5 before it", len(files))
@@ -111,10 +111,10 @@ func testReceivedFilesClosed(e *penv) {
 	r := e.openReception("a", 1, at(1))
 	other := file(r, 1, 2)
 	other.StudyUID = uidOf(1, 99)
-	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{other}, at(2))
+	_, err := e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{other}, at(2), nil)
 	e.wantKind("AddReceivedFiles of another study's file", err, fault.Invalid)
 	e.stepTo(r, reception.Complete, "store")
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1)}, at(3))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{file(r, 1, 1)}, at(3), nil)
 	e.wantIs("AddReceivedFiles into a complete reception", err, tenant.ErrReceptionClosed, fault.Precondition)
 }
 
@@ -143,7 +143,7 @@ func testReceivedBatchOrder(e *penv) {
 		{"another study's file, then a closed reception", []tenant.ReceivedFile{other, file(closed, 2, 1)}, fault.Invalid},
 		{"a closed reception, then another study's file", []tenant.ReceivedFile{file(closed, 2, 1), other}, fault.Precondition},
 	} {
-		_, err := e.p.AddReceivedFiles(e.ctx, c.batch, at(3))
+		_, err := e.p.AddReceivedFiles(e.ctx, c.batch, at(3), nil)
 		e.wantKind("AddReceivedFiles naming "+c.what, err, c.kind)
 		if c.kind == fault.Precondition {
 			e.wantIs("AddReceivedFiles naming "+c.what, err, tenant.ErrReceptionClosed, fault.Precondition)
@@ -184,7 +184,7 @@ func testQuarantineHold(e *penv) {
 		Receiver: "a", ReceptionID: r.ID, Size: 4096, StudyUID: r.StudyUID, Quarantined: at(2)}
 	diff := e.differentFile("a", r.ID, 7)
 	batch := []tenant.QuarantinedFile{kept, large, diff}
-	n, err := e.p.HoldFiles(e.ctx, batch)
+	n, err := e.p.HoldFiles(e.ctx, batch, nil)
 	e.ok("HoldFiles", err)
 	if n != 3 {
 		e.Errorf("HoldFiles = %d new, want 3", n)
@@ -205,7 +205,7 @@ func testQuarantineHold(e *penv) {
 	if rc.Counts.FilesQuarantined != 2 || rc.Counts.BytesQuarantined != 4596 {
 		e.Errorf("the reception's quarantined counts = %d, %d; want 2, 4596", rc.Counts.FilesQuarantined, rc.Counts.BytesQuarantined)
 	}
-	n, err = e.p.HoldFiles(e.ctx, batch)
+	n, err = e.p.HoldFiles(e.ctx, batch, nil)
 	e.ok("HoldFiles again", err)
 	files2, bytes2, _ := e.p.QuarantineTotals(e.ctx)
 	rc2, _, _ := e.p.Reception(e.ctx, r.ID)
@@ -214,7 +214,7 @@ func testQuarantineHold(e *penv) {
 	}
 	orphan := e.heldFile("a", 1, 3)
 	orphan.ReceptionID = "missing"
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{e.heldFile("a", 1, 4), orphan})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{e.heldFile("a", 1, 4), orphan}, nil)
 	e.wantPrecondition("HoldFiles naming a reception not there", err)
 	if f, _, _ := e.p.QuarantineTotals(e.ctx); f != 3 {
 		e.Errorf("a batch that failed moved the totals to %d", f)
@@ -250,12 +250,12 @@ func testQuarantineDetails(e *penv) {
 	} {
 		q := e.heldFile("a", 10, 1)
 		c.change(&q)
-		_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+		_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 		e.wantKind("HoldFiles with "+c.what, err, fault.Invalid)
 	}
 	ok := e.heldFile("a", 10, 1)
 	ok.Reason, ok.Details = tenant.QuarantineBadLabel, map[string]string{"label": "session", "attribute": "(0010,4000)", "fault": "no_match"}
-	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{ok})
+	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{ok}, nil)
 	e.ok("HoldFiles with a bad label's details", err)
 }
 
@@ -273,7 +273,7 @@ func testQuarantineRelease(e *penv) {
 	r := e.openReception("a", 1, at(1))
 	diff, notDICOM, large := e.differentFile("a", r.ID, 7), e.heldFile("a", 50, 2), tenant.QuarantinedFile{ID: e.id("q"),
 		Reason: tenant.QuarantineTooLarge, Receiver: "a", Size: 9000, Quarantined: at(3)}
-	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{diff, notDICOM, large})
+	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{diff, notDICOM, large}, nil)
 	e.ok("HoldFiles", err)
 	e.stepTo(r, reception.Complete, "store")
 
@@ -300,7 +300,7 @@ func testQuarantineRelease(e *penv) {
 	holder, hf := e.identified("a", 1, 8)
 	e.commit(holder, hf...)
 	held := e.differentFile("a", "", 8)
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{held})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{held}, nil)
 	e.ok("HoldFiles", err)
 	_, err = e.p.ReleaseQuarantined(e.ctx, held.ID, tenant.ReleaseAsIs, "", "released-3", at(200), e.audit(), nil)
 	e.wantPrecondition("ReleaseQuarantined of a different file whose UID an instance holds", err)
@@ -316,7 +316,7 @@ func testQuarantineRelease(e *penv) {
 	_, err = e.p.ReleaseQuarantined(e.ctx, large.ID, tenant.ReleaseAsIs, "", "released-5", at(200), e.audit(), nil)
 	e.wantPrecondition("ReleaseQuarantined of a file never kept", err)
 	gone := e.heldFile("b", 5, 4)
-	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{gone})
+	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{gone}, nil)
 	e.ok("HoldFiles", err)
 	_, err = e.p.RemoveReceiver(e.ctx, "b", e.audit(), nil)
 	e.ok("RemoveReceiver", err)
@@ -335,7 +335,7 @@ func testQuarantineRelease(e *penv) {
 func testQuarantineReject(e *penv) {
 	e.addReceiver("a", "store", 11112)
 	q, released := e.heldFile("a", 70, 1), e.heldFile("a", 80, 2)
-	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q, released})
+	_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q, released}, nil)
 	e.ok("HoldFiles", err)
 	audit := e.audit()
 	got, err := e.p.RejectQuarantined(e.ctx, q.ID, "a test pattern, not a study", at(50), audit, nil)
@@ -395,10 +395,10 @@ func testQuarantineTotals(e *penv) {
 			batch = append(batch, q)
 			ids = append(ids, q.ID)
 		}
-		_, err := e.p.HoldFiles(e.ctx, batch)
+		_, err := e.p.HoldFiles(e.ctx, batch, nil)
 		e.ok("HoldFiles", err)
 		check("after a batch")
-		_, err = e.p.HoldFiles(e.ctx, batch)
+		_, err = e.p.HoldFiles(e.ctx, batch, nil)
 		e.ok("HoldFiles again", err)
 		check("after a batch written again")
 	}
@@ -432,7 +432,7 @@ func testQuarantineList(e *penv) {
 			q = e.heldFile([]string{"a", "b"}[i%2], int64(i), i)
 		}
 		q.Quarantined = at(i / 2)
-		_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q})
+		_, err := e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{q}, nil)
 		e.ok("HoldFiles", err)
 		if i%5 == 0 {
 			var err error

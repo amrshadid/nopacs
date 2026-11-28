@@ -266,6 +266,13 @@ func (t Tenant) PixelLimit(ctx context.Context) (int64, error) {
 	return typed(settings.DeidPixelLimit, v, err, settings.ParsePixelLimit)
 }
 
+// StartLimit returns receiver.start-limit as it applies on the tenant: the
+// longest its reception pipeline may take to start.
+func (t Tenant) StartLimit(ctx context.Context) (time.Duration, error) {
+	v, err := t.r.Tenant(ctx, t.st, settings.ReceiverStartLimit)
+	return typed(settings.ReceiverStartLimit, v, err, settings.ParseStartLimit)
+}
+
 // Networks returns the installation's value of a setting that lists
 // networks (access.trusted-proxies, access.allowed-networks,
 // access.denied-networks).

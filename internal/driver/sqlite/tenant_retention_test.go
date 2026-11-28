@@ -27,7 +27,7 @@ func TestPersonDeleteReadsTheRulesAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := fixtureFile(r, 0, 0)
-	if _, err := p.AddReceivedFiles(ctx, []tenant.ReceivedFile{f}, fixtureAt(1)); err != nil {
+	if _, err := p.AddReceivedFiles(ctx, []tenant.ReceivedFile{f}, fixtureAt(1), nil); err != nil {
 		t.Fatal(err)
 	}
 	step := func(from reception.State, ev reception.Event, s int) {

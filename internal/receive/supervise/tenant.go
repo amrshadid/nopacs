@@ -48,9 +48,6 @@ type tenantRun struct {
 	space    spaceState
 	// view is what the worker last published for View.
 	view atomic.Pointer[viewState]
-	// deferred are the removals handed over while no pipeline was
-	// published, done by the next one (runDeferred).
-	deferred deferredRemovals
 
 	failures *failureGroups
 	// stopping is set while stopPipeline waits for a pipeline to stop, and
@@ -251,7 +248,7 @@ func (t *tenantRun) restartPipeline(st tenant.Store, p tenant.Pipeline) {
 		return
 	}
 	t.store = st
-	ctx, cancel := context.WithTimeout(t.sup.ctx, t.sup.cfg.StartTimeout)
+	ctx, cancel := context.WithTimeout(t.sup.ctx, t.startLimit(p))
 	defer cancel()
 	go func() {
 		// A long start holds this worker; its retirement (the supervisor's
@@ -274,12 +271,27 @@ func (t *tenantRun) restartPipeline(st tenant.Store, p tenant.Pipeline) {
 	t.pipeline = pl
 	t.sink.set(pl)
 	// Decisions reach the new pipeline at once, not after the rest of the
-	// reconcile: a removal handed to a pipeline that has stopped is put off
-	// to the next start. Then the removals kept while none ran.
+	// reconcile. The removals owed while none ran are units of work in the
+	// tenant's database, which its workers run now that they run.
 	t.publish()
-	if d, ok := pl.(Decisions); ok {
-		t.runDeferred(d)
+}
+
+// startLimit returns how long a start of the tenant's pipeline may take:
+// the tenant's receiver.start-limit, or StartTimeout when it cannot be read
+// (the start is then bounded as it was before the setting, never left
+// unbounded).
+func (t *tenantRun) startLimit(p tenant.Pipeline) time.Duration {
+	if t.sup.cfg.StartLimit == nil {
+		return t.sup.cfg.StartTimeout
 	}
+	ctx, cancel := context.WithTimeout(t.sup.ctx, opTimeout)
+	defer cancel()
+	d, err := t.sup.cfg.StartLimit(ctx, t.name, p)
+	if err != nil || d <= 0 {
+		t.log.Warn("receivers: the tenant's start limit could not be read; the default applies", "reason", fault.Message(err))
+		return t.sup.cfg.StartTimeout
+	}
+	return d
 }
 
 // stopPipeline stops the running pipeline, if any, within StopTimeout.

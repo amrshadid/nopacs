@@ -85,7 +85,7 @@ func testImportPathBound(e *ienv) {
 	e.reconciled("at the bound", id)
 
 	long := boundPath("b", "f", bound+1, "long")
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{importFile(r, 21, 2, lw, long)}, at(12))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{importFile(r, 21, 2, lw, long)}, at(12), nil)
 	e.wantKind("a file past the bound", err, fault.Invalid)
 	_, err = e.p.RecordImportSkip(e.ctx, tenant.ImportSkip{Fence: lw.Fence(), Path: long, Code: tenant.SkipNotPart10, Now: at(12)})
 	e.wantKind("a skip past the bound not as too long", err, fault.Invalid)
@@ -145,7 +145,7 @@ func testImportArrivalAfterCancel(e *ienv) {
 	_, err := e.p.CancelJob(e.ctx, "j", at(11), e.audit(), nil)
 	e.ok("CancelJob", err)
 	plain := file(r, 22, 9)
-	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{plain, importFile(r, 22, 2, w, "p/b.dcm")}, at(12))
+	_, err = e.p.AddReceivedFiles(e.ctx, []tenant.ReceivedFile{plain, importFile(r, 22, 2, w, "p/b.dcm")}, at(12), nil)
 	e.wantIs("a file handed in after the cancel", err, tenant.ErrImportEnded, fault.Precondition)
 	files, _, err := e.p.ReceivedFiles(e.ctx, r.ID, master.Page{Limit: 10})
 	e.ok("ReceivedFiles", err)
@@ -154,7 +154,7 @@ func testImportArrivalAfterCancel(e *ienv) {
 	}
 	_, err = e.p.HoldFiles(e.ctx, []tenant.QuarantinedFile{{ID: "h1", Reason: tenant.QuarantineNotDICOM,
 		Details: map[string]string{"offset": "0"}, Receiver: importReceiver, Size: 300, Quarantined: at(12),
-		Import: &tenant.ImportArrival{Fence: w.Fence(), Path: "p/c.bin", Size: 300}}})
+		Import: &tenant.ImportArrival{Fence: w.Fence(), Path: "p/c.bin", Size: 300}}}, nil)
 	e.wantIs("a file held as it arrived after the cancel", err, tenant.ErrImportEnded, fault.Precondition)
 	if _, err := e.p.QuarantinedFile(e.ctx, "h1"); fault.KindOf(err) != fault.NotFound {
 		e.Errorf("a refused hold left its record: %v", err)

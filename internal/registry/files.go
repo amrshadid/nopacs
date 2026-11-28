@@ -40,6 +40,6 @@ func (r *Registry) warnFileLimit(entries []*entry) {
 	if limit < 0 || need <= limit {
 		return
 	}
-	r.log.Warn("the limit on open files may be too low for every tenant's database: raise it (ulimit -n, LimitNOFILE)",
+	r.log.Warn("the limit on open files may be too low for every tenant's database if they are all busy at once: raise it (ulimit -n, LimitNOFILE); a SQLite tenant's read connections that stand unused are closed after a minute and opened again when needed, but a served tenant keeps its write connection",
 		"tenants", len(entries), "files_needed", need, "files_per_tenant", most, "limit", limit)
 }

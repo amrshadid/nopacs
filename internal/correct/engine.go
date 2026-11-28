@@ -61,7 +61,7 @@ type Config struct {
 	// files a delete's purge cleared (tenant.Corrections.ClearWithdrawn);
 	// nil leaves them to the reception pipeline's start, which removes
 	// every file no row keeps.
-	RemoveIncoming func(ctx context.Context, paths []string) error
+	RemoveIncoming func(ctx context.Context, correctionID string, paths []string) error
 	// Fence, when not nil, is asked before each step that writes to the
 	// tenant's storages (a delete's, a relabel's and a replace's start, a
 	// relabel's copy, a purge): an error stops the step before it writes,

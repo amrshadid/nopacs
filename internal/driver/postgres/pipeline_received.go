@@ -147,14 +147,9 @@ func lockBatchReceptions(ctx context.Context, tx pgx.Tx, ids []string) (map[stri
 // the answer is the first that refuses it in the order the batch names
 // them, not in the order they were locked. Each reception's files are then
 // written as one set, and its counts added by one UPDATE on the row it holds.
-func (t *Tenant) AddReceivedFiles(ctx context.Context, files []tenant.ReceivedFile, at time.Time) (int, error) {
-	return t.AddReceivedFilesFenced(ctx, files, at, nil)
-}
-
-// AddReceivedFilesFenced implements tenant.FencedFiles. The unit's row is
-// locked first (checkFence), before any reception's, as every fenced write
-// of the package locks it.
-func (t *Tenant) AddReceivedFilesFenced(ctx context.Context, files []tenant.ReceivedFile, at time.Time, fence *tenant.WorkFence) (int, error) {
+// The unit's row, when a fence is given, is locked first (checkFence), before
+// any reception's, as every fenced write of the package locks it.
+func (t *Tenant) AddReceivedFiles(ctx context.Context, files []tenant.ReceivedFile, at time.Time, fence *tenant.WorkFence) (int, error) {
 	if err := tenant.ValidateReceivedBatch(files, at); err != nil {
 		return 0, err
 	}

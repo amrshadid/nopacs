@@ -62,7 +62,7 @@ func TestScaleSubjectDelete(t *testing.T) {
 	start := time.Now()
 	for _, s := range scans {
 		for b := 0; b < len(s.files); b += tenant.MaxReceivedBatch {
-			if _, err := r.p.AddReceivedFiles(r.ctx, s.files[b:min(b+tenant.MaxReceivedBatch, len(s.files))], opened); err != nil {
+			if _, err := r.p.AddReceivedFiles(r.ctx, s.files[b:min(b+tenant.MaxReceivedBatch, len(s.files))], opened, nil); err != nil {
 				t.Fatal(err)
 			}
 		}

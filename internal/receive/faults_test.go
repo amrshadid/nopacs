@@ -170,7 +170,7 @@ func seedIdentified(t *testing.T, e *env) tenant.Reception {
 		}
 		files = append(files, *d.received)
 	}
-	if _, err := e.store.AddReceivedFiles(e.ctx, files, e.p.now()); err != nil {
+	if _, err := e.store.AddReceivedFiles(e.ctx, files, e.p.now(), nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range files {
@@ -374,9 +374,12 @@ func TestDiscardRemovesTheBytesAfterTheReason(t *testing.T) {
 	if _, err := e.store.DiscardReception(e.ctx, r.ID, "the study was sent to the wrong archive", e.p.now(), e.audit(), nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.p.RemoveDiscarded(e.ctx, r.ID); err != nil {
+	w, err := QueueRemoval(e.ctx, e.store, DiscardedRemoval(r.ID), e.p.now())
+	if err != nil {
 		t.Fatal(err)
 	}
+	e.p.WakeWork()
+	e.waitFor("the removal", time.Second, e.removalDone(w))
 	got, _, _ := e.store.Reception(e.ctx, r.ID)
 	if got.DiscardTime.IsZero() || e.incomingFiles() != 0 {
 		t.Fatalf("after discard: %+v, %d incoming", got, e.incomingFiles())
@@ -394,9 +397,12 @@ func TestRejectRemovesTheBytesAfterTheReason(t *testing.T) {
 	if err != nil || out.State != tenant.QuarantineRejected || out.ContentKept {
 		t.Fatalf("reject %+v %v", out, err)
 	}
-	if err := e.p.RemoveRejected(q.Incoming); err != nil {
+	w, err := QueueRemoval(e.ctx, e.store, RejectedRemoval(q.ID, q.Incoming), e.p.now())
+	if err != nil {
 		t.Fatal(err)
 	}
+	e.p.WakeWork()
+	e.waitFor("the removal", time.Second, e.removalDone(w))
 	if n := e.incomingFiles(); n != 0 {
 		t.Fatalf("%d incoming files after the rejection", n)
 	}

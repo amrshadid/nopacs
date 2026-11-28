@@ -47,7 +47,7 @@ func TestReleaseThroughAProfileVersion(t *testing.T) {
 	}
 	// A record made de-identified, held again under a new id.
 	q.ID, q.Deidentified, q.Incoming = f.newID(), true, "q/"+q.ID+"-d"
-	if _, err := f.pipelineOf("lab1").HoldFiles(ctx, []tenant.QuarantinedFile{q}); err != nil {
+	if _, err := f.pipelineOf("lab1").HoldFiles(ctx, []tenant.QuarantinedFile{q}, nil); err != nil {
 		t.Fatal(err)
 	}
 	release := func(id, receiver string, ref *v1.ProfileVersionRef) func(clients) outcome {

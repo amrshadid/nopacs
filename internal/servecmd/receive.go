@@ -77,6 +77,16 @@ func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantNam
 	return supervise.New(supervise.Config{
 		Tenants:      registryTenants{master: d.Master, registry: reg},
 		Installation: d.Master,
+		// receiver.start-limit as it applies on the tenant, read at each
+		// start so a raised value reaches the next try of a start that
+		// was cut.
+		StartLimit: func(ctx context.Context, _ string, st tenant.Pipeline) (time.Duration, error) {
+			src, ok := st.(settingvalue.Source)
+			if !ok {
+				return 0, fault.New(fault.Internal, "the tenant's database keeps no settings")
+			}
+			return values.OnTenant(src).StartLimit(ctx)
+		},
 		StartPipeline: func(ctx context.Context, name string, st tenant.Pipeline, g supervise.Gates) (supervise.Pipeline, error) {
 			// The tenant's keyed hash for its naming rules: without it a
 			// default rule names nothing, so the pipeline does not start
@@ -292,7 +302,7 @@ func (h receiverHealth) TenantLive(tenantName string) (api.TenantLive, bool) {
 // discarded file's bytes is handed to it too. With no pipeline running (the
 // tenant's database not ready), a release or a retry is refused as
 // unavailable, so nothing is recorded that the bytes do not follow, and a
-// removal is kept and done by the next pipeline once it has started.
+// removal is queued as work of the tenant, which its next pipeline runs.
 type pipelineDecisions struct{ s *supervise.Supervisor }
 
 var _ api.Incoming = pipelineDecisions{}
@@ -319,16 +329,14 @@ func (d pipelineDecisions) Retry(ctx context.Context, tenantName string, _ tenan
 	return p.Retry(ctx, id, newReceptionID, receiver, audit, guard)
 }
 
-// RemoveDiscarded hands the removal to the tenant's pipeline, which
-// keeps it while none runs and does it once the next has started.
+// RemoveDiscarded queues the removal as work of the tenant.
 func (d pipelineDecisions) RemoveDiscarded(ctx context.Context, tenantName, receptionID string) error {
 	return d.s.RemoveDiscarded(ctx, tenantName, receptionID)
 }
 
-// RemoveRejected hands the removal to the tenant's pipeline, which
-// keeps it while none runs and does it once the next has started.
-func (d pipelineDecisions) RemoveRejected(ctx context.Context, tenantName, incoming string) error {
-	return d.s.RemoveRejected(ctx, tenantName, incoming)
+// RemoveRejected queues the removal as work of the tenant.
+func (d pipelineDecisions) RemoveRejected(ctx context.Context, tenantName, recordID, incoming string) error {
+	return d.s.RemoveRejected(ctx, tenantName, recordID, incoming)
 }
 
 // heldHeaders reads a quarantined file's header through the tenant's running

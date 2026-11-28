@@ -311,7 +311,7 @@ func (p *Pipeline) hold(ctx context.Context, w tenant.Work, records []tenant.Qua
 	for start := 0; start < len(records); start += tenant.MaxQuarantineBatch {
 		part := records[start:min(start+tenant.MaxQuarantineBatch, len(records))]
 		p.at("step.before-hold")
-		if _, err := p.store.HoldFilesFenced(ctx, part, &fence); err != nil {
+		if _, err := p.store.HoldFiles(ctx, part, &fence); err != nil {
 			return err
 		}
 		p.wake()
