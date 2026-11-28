@@ -301,6 +301,7 @@ erDiagram
         text incoming "path in the incoming area"
         int released
         int deidentified
+        int must_deidentify "the source required it de-identified"
     }
     instance_claims {
         text sop_instance_uid PK
@@ -337,6 +338,10 @@ opens at once make one, in either database. On SQLite, three triggers on `recept
 `reception_steps` (the receptions in each step) in the transaction that writes the state,
 so a status reads one row per step instead of counting. The state of a reception and the
 reason of a quarantine record have no CHECK, because a later version adds to each.
+`received_files.deidentified` says the file was recorded at a receiver that de-identifies, and
+`must_deidentify` that its source (a transfer) required it de-identified: the archive step holds
+a file with the second flag whose receiver no longer de-identifies, and its quarantine record is
+marked de-identified, so it is released only through a receiver that does.
 `instance_claims` holds an instance a reception claims before it writes the file, in flight only:
 a SOP Instance UID is claimed or held, never both. `quarantine_totals` is a single-row running
 total of the files held and their bytes.
@@ -363,6 +368,7 @@ erDiagram
         text study_date
         text receiver
         int scan_count
+        int as_received "a scan holds an instance archived as received"
     }
     scans {
         int id PK
@@ -374,6 +380,7 @@ erDiagram
         blob manifest_sha256
         text modality
         text series_description
+        int as_received "an instance was archived as received"
     }
     session_modalities {
         int session_id PK
@@ -428,7 +435,12 @@ sessions, and unique indexes on `(subject_folded, folded)` and
 `(subject_folded, session_folded, folded)` so a session or scan is found by its labels. A
 SOP Instance UID is unique across the whole tenant (the unique index `instances_by_uid`).
 The counts on a subject, session and scan are columns, and `catalog_totals` is a single-row
-total. A delete moves these rows to [the hidden tables](#rows-a-delete-hides).
+total. `as_received` on a scan is set when an instance it holds records no profile version
+(it was archived as received), and on a session when one of its scans is: the commit that adds
+such an instance sets it, and every write that removes, replaces or changes the profile of an
+instance, and a rebuild, works it out again from the rows beneath, in the same transaction.
+The catalog's lists for a key that may not learn original values filter and mark by this column
+and read no instance. A delete moves these rows to [the hidden tables](#rows-a-delete-hides).
 
 ### Work and events
 

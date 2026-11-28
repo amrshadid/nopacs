@@ -91,7 +91,10 @@ const (
 // a lookup with no code, a value not of its VR, sequences too deep, a data
 // set too large, the engine's own fault), and those of the pipeline around
 // it: the file landed under a receiver that de-identifies and now names no
-// profile (no_profile), the file was recorded as received and its receiver
+// profile, or its source required it de-identified (a transfer's copy of an
+// instance archived as received) and its receiver archives as received
+// (no_profile; its record is protected, so it is released only through a
+// receiver that de-identifies), the file was recorded as received and its receiver
 // de-identifies now (recorded_as_received), the profile version cannot run in this build
 // (profile_unusable), the data set cannot be read or written for
 // de-identification (unreadable, unwritable), and a profile that leaves a

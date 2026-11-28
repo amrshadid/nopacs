@@ -37,6 +37,7 @@ func runCorrections(t *testing.T, open OpenEvents) {
 		{"RelabeledToChains", testRelabeledToChains},
 		{"Replace", testReplace},
 		{"ReplaceProvenance", testReplaceProvenance},
+		{"AsReceivedFlag", testAsReceivedFlag},
 		{"Edit", testEdit},
 		{"KeepRolledBack", testKeepRolledBack},
 		{"AbandonEditUndo", testAbandonEditUndo},

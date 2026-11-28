@@ -16,14 +16,14 @@ import (
 
 // receivedInsertColumns are the columns a batch of received files recorded
 // as received is written with: those of every schema since the
-// pipeline's, so a database not yet migrated to the column deidentified
-// takes it (a batch with a file recorded de-identified is written by
-// insertDeidentifiedReceivedSQL).
+// pipeline's, so a database not yet migrated to the columns deidentified
+// and must_deidentify takes it (a batch with a file recorded de-identified,
+// or that must be, is written by insertFlaggedReceivedSQL).
 const receivedInsertColumns = `reception_id, sop_instance_uid, sha256, series_uid, study_uid, sop_class_uid, transfer_syntax_uid,
 	size, incoming, calling_ae, called_ae, remote_addr, association, released, received`
 
 // receivedColumns are the columns a received file is read with.
-const receivedColumns = receivedInsertColumns + `, deidentified`
+const receivedColumns = receivedInsertColumns + `, deidentified, must_deidentify`
 
 // scanReceived reads one row of receivedColumns.
 func scanReceived(row scanner) (tenant.ReceivedFile, error) {
@@ -32,7 +32,7 @@ func scanReceived(row scanner) (tenant.ReceivedFile, error) {
 	var received time.Time
 	err := row.Scan(&f.ReceptionID, &f.SOPInstanceUID, &sum, &f.SeriesUID, &f.StudyUID, &f.SOPClassUID, &f.TransferSyntaxUID,
 		&f.Size, &f.Incoming, &f.Caller.CallingAETitle, &f.Caller.CalledAETitle, &f.Caller.Address, &f.Association,
-		&f.Released, &received, &f.Deidentified)
+		&f.Released, &received, &f.Deidentified, &f.MustDeidentify)
 	f.SHA256, f.Received = sqlkit.ToSHA256(sum), received.UTC()
 	return f, err
 }
@@ -52,11 +52,11 @@ const insertReceivedSQL = `INSERT INTO received_files (` + receivedInsertColumns
 		$9::text[], $10::text[], $11::text[], $12::text[], $13::text[], $14::boolean[], $15::timestamptz[])
 	ON CONFLICT DO NOTHING RETURNING sop_instance_uid, sha256`
 
-// insertDeidentifiedReceivedSQL is insertReceivedSQL with each file's flag
-// deidentified, a sixteenth array.
-const insertDeidentifiedReceivedSQL = `INSERT INTO received_files (` + receivedColumns + `)
+// insertFlaggedReceivedSQL is insertReceivedSQL with each file's flags
+// deidentified and must_deidentify, a sixteenth and a seventeenth array.
+const insertFlaggedReceivedSQL = `INSERT INTO received_files (` + receivedColumns + `)
 	SELECT * FROM unnest($1::text[], $2::text[], $3::bytea[], $4::text[], $5::text[], $6::text[], $7::text[], $8::bigint[],
-		$9::text[], $10::text[], $11::text[], $12::text[], $13::text[], $14::boolean[], $15::timestamptz[], $16::boolean[])
+		$9::text[], $10::text[], $11::text[], $12::text[], $13::text[], $14::boolean[], $15::timestamptz[], $16::boolean[], $17::boolean[])
 	ON CONFLICT DO NOTHING RETURNING sop_instance_uid, sha256`
 
 // insertReceived writes files (all of one reception, no key twice) with
@@ -69,7 +69,7 @@ func insertReceived(ctx context.Context, tx pgx.Tx, files []tenant.ReceivedFile,
 		text(), text(), text(), text(), text(), text(), text(), text(), text(), text(), text()
 	sums := make([][]byte, 0, n)
 	sizes := make([]int64, 0, n)
-	released, deidentified := make([]bool, 0, n), make([]bool, 0, n)
+	released, deidentified, must := make([]bool, 0, n), make([]bool, 0, n), make([]bool, 0, n)
 	times := make([]time.Time, 0, n)
 	for _, f := range files {
 		rids, uids, sums = append(rids, f.ReceptionID), append(uids, f.SOPInstanceUID), append(sums, sumBytes(f.SHA256))
@@ -77,12 +77,12 @@ func insertReceived(ctx context.Context, tx pgx.Tx, files []tenant.ReceivedFile,
 		syntaxes, sizes, incoming = append(syntaxes, f.TransferSyntaxUID), append(sizes, f.Size), append(incoming, f.Incoming)
 		calling, called, addrs = append(calling, f.Caller.CallingAETitle), append(called, f.Caller.CalledAETitle), append(addrs, f.Caller.Address)
 		assocs, released, times = append(assocs, f.Association), append(released, f.Released), append(times, micros(at))
-		deidentified = append(deidentified, f.Deidentified)
+		deidentified, must = append(deidentified, f.Deidentified), append(must, f.MustDeidentify)
 	}
 	args := []any{rids, uids, sums, series, studies, classes, syntaxes, sizes, incoming, calling, called, addrs, assocs, released, times}
 	query := insertReceivedSQL
-	if slices.Contains(deidentified, true) {
-		query, args = insertDeidentifiedReceivedSQL, append(args, deidentified)
+	if slices.Contains(deidentified, true) || slices.Contains(must, true) {
+		query, args = insertFlaggedReceivedSQL, append(args, deidentified, must)
 	}
 	rows, err := tx.Query(ctx, query, args...)
 	keys, err := collect(rows, err, func(row scanner) (fileKey, error) {

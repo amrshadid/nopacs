@@ -154,9 +154,9 @@ func TestScalePipelinePlans(t *testing.T) {
 		`INSERT INTO instance_claims SELECT '2.25.5.' || i, 'busy' || (i % 900), '2.25.1.' || (i % 900), '2.25.2.' || (i % 900),
 		   sha256(i::text::bytea), now() FROM generate_series(1, 900000) i`,
 		`INSERT INTO received_files SELECT 'rc' || (i / 1000 + 1), '2.25.3.' || i, sha256(i::text::bytea), '2.25.2.1', '2.25.1.1',
-		   '1.2.840.10008.5.1.4.1.1.4', '1.2.840.10008.1.2.1', 1000, 'in/' || i, '', '', '', '', false, now(), false FROM generate_series(0, 999999) i`,
+		   '1.2.840.10008.5.1.4.1.1.4', '1.2.840.10008.1.2.1', 1000, 'in/' || i, '', '', '', '', false, now(), false, false FROM generate_series(0, 999999) i`,
 		`INSERT INTO received_files SELECT 'claimer', '2.25.4.' || i, sha256(i::text::bytea), '2.25.2.900000000', '2.25.1.900000000',
-		   '1.2.840.10008.5.1.4.1.1.4', '1.2.840.10008.1.2.1', 1000, 'claim/' || i, '', '', '', '', false, now(), false FROM generate_series(1, 100000) i`,
+		   '1.2.840.10008.5.1.4.1.1.4', '1.2.840.10008.1.2.1', 1000, 'claim/' || i, '', '', '', '', false, now(), false, false FROM generate_series(1, 100000) i`,
 		`INSERT INTO work SELECT 'done' || i, 'archive', '', 'rc' || i, NULL, 'done', timestamptz 'epoch' + i * interval '1 second', 1, 10, '', '', now(), now()
 		 FROM generate_series(1, 1000000) i`,
 		`INSERT INTO work SELECT 'q' || i, 'archive', '', '', 'key' || i, 'queued', timestamptz 'epoch' + i * interval '1 second', 0, 10, '', '', now(), now()

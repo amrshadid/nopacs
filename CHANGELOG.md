@@ -676,7 +676,7 @@ scan, keeps it whole, and serves it through an API with keys.
   progress finishes; an unreadable count refuses. `quota.warn` (90%) writes one
   `QUOTA` event per crossing and keeps the gauges `nopacs_quota_*`; `nopacs
   tenant show`, `tenant status`, `GetTenant` and `GetStatus` show use and bound.
-- The catalog answers a masked key a session or scan archived as received without the values read from its files (UIDs, dates, modality, descriptions), with `values_withheld` set; a filter or order on such a value never matches or leads with those rows, and a DICOMweb search never finds them. The server's log carries no request or answer content at any level. A test starts a real server, receives synthetic files with unmistakable identifiers and drives the API, the DICOMweb and download routes and the command line as masked keys of every grant level, and requires that no original value appears in any answer, error, log, audit entry, event or command output.
+- The catalog answers a masked key a session or scan archived as received without the values read from its files (UIDs, dates, modality, descriptions), with `values_withheld` set; a filter or order on such a value never matches or leads with those rows, and a DICOMweb search never finds them. Each scan and session row keeps whether it was archived as received: the commit that adds such an instance sets it, and every delete, undo, replace, edit and rebuild works it out again from the rows beneath in the same transaction, so these lists, the withheld marks and the search read no instance. The server's log carries no request or answer content at any level. A test starts a real server, receives synthetic files with unmistakable identifiers and drives the API, the DICOMweb and download routes and the command line as masked keys of every grant level, and requires that no original value appears in any answer, error, log, audit entry, event or command output.
 - Copy or move a subject or a session to another tenant (`TransferService`,
   `nopacs transfer`): a job in the source tenant reads the archived bytes
   through the checked read and hands them to the target's receiver of type
@@ -687,7 +687,13 @@ scan, keeps it whole, and serves it through an API with keys.
   move deletes the source by the ordinary delete once every instance is
   confirmed, the target is checked again and the delete covers exactly what was
   copied; a hold ends it partial with the copy kept; `transfer.wait` bounds
-  waiting on a busy target.
+  waiting on a busy target. A file a transfer hands in for an instance that must be
+  de-identified keeps that on its received-file record: if its receiver
+  archives as received by the time the file is recorded or archived, even
+  after a restart, it is held in quarantine (`deid_failed`, cause
+  `no_profile`) with its bytes kept and its record marked de-identified, so it
+  is released only through a receiver that de-identifies and is never archived
+  as received.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

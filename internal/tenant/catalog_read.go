@@ -473,6 +473,12 @@ type CatalogSession struct {
 	Modalities []string
 	// Scans, Instances and Bytes are its running totals.
 	Scans, Instances, Bytes int64
+	// AsReceived says a scan of it holds an instance archived as received
+	// (no profile version de-identified it): the values read from its files
+	// are then the sender's originals. Kept on the row, in the transaction
+	// of every write that changes it, so a reader never reads the instances
+	// to learn it.
+	AsReceived bool
 	// Storage is the storage its files are on.
 	Storage string
 	// Receiver is the receiver whose reception first archived into it.
@@ -494,6 +500,13 @@ type CatalogScan struct {
 	Values ScanValues
 	// Instances and Bytes are its running totals.
 	Instances, Bytes int64
+	// AsReceived says an instance it holds was archived as received (no
+	// profile version de-identified it): the values read from its files are
+	// then the sender's originals, and one mixed scan counts, since its
+	// values come from whichever file was read first. Kept on the row, in
+	// the transaction of every write that changes it, so a reader never
+	// reads the instances to learn it.
+	AsReceived bool
 	// Storage is its session's storage.
 	Storage string
 	// ManifestSHA256 is the checksum of its manifest as last written.

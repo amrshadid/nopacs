@@ -1,10 +1,12 @@
 package api_test
 
 import (
+	"database/sql"
 	"strings"
 	"testing"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
+	"github.com/amrshadid/nopacs/internal/driver"
 	"github.com/amrshadid/nopacs/internal/master"
 )
 
@@ -135,6 +137,83 @@ func TestMaskedKeyFiltersMatchNoAsReceivedRow(t *testing.T) {
 		}
 		if got := c.count(f.lab1Reader); got != c.plain {
 			t.Errorf("%s, plain reader: %d rows, want %d", name, got, c.plain)
+		}
+	}
+}
+
+// TestMaskedCatalogListsReadNoInstances guards that a masked key's pages of
+// the catalog say which scans and sessions were archived as received from
+// the rows themselves and read no instance: with the instances table set
+// aside in the tenant's database, so that any statement reading it fails,
+// ListScans (unfiltered, by modality, by description), GetScan, ListSessions
+// and GetSession still answer, withholding the values of every scan, and a
+// plain reader's lists answer with them.
+func TestMaskedCatalogListsReadNoInstances(t *testing.T) {
+	f := newPlaceFixture(t)
+	a := receiveArchive(t, f, [][]byte{corpusFile(t, "ct5n-2062.dcm"), corpusFile(t, "MR_small.dcm"), corpusFile(t, "ct2n-6293.dcm")})
+	paths := a.scans(t)
+	if len(paths) < 2 {
+		t.Fatalf("the archive holds %d scans, want several", len(paths))
+	}
+	file, err := driver.SQLiteTenants{DataDir: f.data}.Path("lab1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	db.SetMaxOpenConns(1)
+	for _, stmt := range []string{`PRAGMA busy_timeout = 10000`, `PRAGMA legacy_alter_table = ON`, `ALTER TABLE instances RENAME TO instances_set_aside`} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer func() {
+		if _, err := db.Exec(`ALTER TABLE instances_set_aside RENAME TO instances`); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	masked, _ := f.maskedKey(f.onTenant("lab1", master.RoleReader))
+	mc := f.as(masked)
+	scans := mustCall[*v1.ListScansResponse](t, "ListScans", call(mc.catalog.ListScans, &v1.ListScansRequest{Tenant: "lab1"})).GetScans()
+	if len(scans) != len(paths) {
+		t.Fatalf("a masked key's ListScans answers %d scans, want %d", len(scans), len(paths))
+	}
+	for _, m := range scans {
+		if !m.GetValuesWithheld() || m.GetModality() != "" {
+			t.Errorf("a masked key's scan is not withheld: %v", m)
+		}
+	}
+	for name, req := range map[string]*v1.ListScansRequest{
+		"by modality":    {Tenant: "lab1", Modality: "CT"},
+		"by description": {Tenant: "lab1", Order: v1.CatalogOrder_CATALOG_ORDER_SERIES_DESCRIPTION},
+	} {
+		mustCall[*v1.ListScansResponse](t, "ListScans "+name, call(mc.catalog.ListScans, req))
+	}
+	sessions := mustCall[*v1.ListSessionsResponse](t, "ListSessions", call(mc.catalog.ListSessions, &v1.ListSessionsRequest{Tenant: "lab1"})).GetSessions()
+	if len(sessions) == 0 {
+		t.Fatal("a masked key's ListSessions answers none")
+	}
+	for _, m := range sessions {
+		if !m.GetValuesWithheld() || m.GetStudyInstanceUid() != "" {
+			t.Errorf("a masked key's session is not withheld: %v", m)
+		}
+	}
+	p := paths[0]
+	if m := mustCall[*v1.GetScanResponse](t, "GetScan", call(mc.catalog.GetScan, &v1.GetScanRequest{Tenant: "lab1", SubjectLabel: p.Subject,
+		SessionLabel: p.Session, ScanLabel: p.Scan})).GetScan(); !m.GetValuesWithheld() {
+		t.Errorf("a masked key's GetScan is not withheld: %v", m)
+	}
+	if m := mustCall[*v1.GetSessionResponse](t, "GetSession", call(mc.catalog.GetSession, &v1.GetSessionRequest{Tenant: "lab1", SubjectLabel: p.Subject,
+		SessionLabel: p.Session})).GetSession(); !m.GetValuesWithheld() {
+		t.Errorf("a masked key's GetSession is not withheld: %v", m)
+	}
+	for _, m := range mustCall[*v1.ListScansResponse](t, "ListScans", call(f.as(f.lab1Reader).catalog.ListScans, &v1.ListScansRequest{Tenant: "lab1"})).GetScans() {
+		if m.GetValuesWithheld() || m.GetSeriesInstanceUid() == "" {
+			t.Errorf("a plain reader's scan: %v", m)
 		}
 	}
 }

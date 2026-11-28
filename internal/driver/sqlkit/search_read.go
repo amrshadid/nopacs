@@ -86,7 +86,8 @@ func (r SearchReader[T]) notReady(ctx context.Context) (map[string]bool, error) 
 // Hidden is the condition, in fixed text, that a row at a level was not
 // archived as received, written for the table under alias: a scan with no
 // instance that records no profile version, a session with no such scan
-// (the catalog's own rule of the rows archived as received). A subject is
+// (the catalog's own rule of the rows archived as received, read from the
+// rows' as_received columns, never from the instances). A subject is
 // archived under a label the archive gave, never a value read from a
 // file, and is never hidden.
 func Hidden(level query.Level, alias string) string {

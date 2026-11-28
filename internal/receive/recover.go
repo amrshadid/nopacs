@@ -43,6 +43,18 @@ type RecoverReport struct {
 // copy without its arrival, named without its path's parts, so the caller
 // keeps the copy for the next start instead.
 func (p *Pipeline) importReceiver(ctx context.Context, name string) (bool, error) {
+	return p.receiverOfType(ctx, name, tenant.ReceiverImport)
+}
+
+// jobReceiver reports whether the receiver named name is a receiver of type
+// job, as importReceiver does for an import receiver: an error when it
+// cannot be read now, so the file is kept for the next start.
+func (p *Pipeline) jobReceiver(ctx context.Context, name string) (bool, error) {
+	return p.receiverOfType(ctx, name, tenant.ReceiverJob)
+}
+
+// receiverOfType reports whether the receiver named name is of type typ.
+func (p *Pipeline) receiverOfType(ctx context.Context, name string, typ tenant.ReceiverType) (bool, error) {
 	rcv, err := p.receivers.get(ctx, name)
 	switch {
 	case fault.KindOf(err) == fault.NotFound:
@@ -50,7 +62,7 @@ func (p *Pipeline) importReceiver(ctx context.Context, name string) (bool, error
 	case err != nil:
 		return false, err
 	}
-	return rcv.Type == tenant.ReceiverImport, nil
+	return rcv.Type == typ, nil
 }
 
 // owed is what the database says of one file in the incoming area.
@@ -233,7 +245,23 @@ func (p *Pipeline) Recover(ctx context.Context) (RecoverReport, error) {
 			}
 			continue
 		}
-		p.intakeNow(ctx, landed{file: f, receiver: via, releasedFrom: from})
+		l := landed{file: f, receiver: via, releasedFrom: from}
+		if from == "" {
+			// What a transfer's source required of the file (de-identified,
+			// Arrival.RequireDeidentified) was in memory only: a file of a
+			// transfer job that landed and was never recorded is judged as
+			// one that must be de-identified, so a receiver that archives as
+			// received holds it for a person where it would archive it, and
+			// the transfer's confirmation reports the copy as not found. Its
+			// record is protected (check), so a release through a receiver
+			// that de-identifies is the way out for a file held here that
+			// was in fact a legitimate as-received copy; through one that
+			// archives as received the store refuses it.
+			if l.told.RequireDeidentified, err = p.jobReceiver(ctx, e.Receiver); err != nil {
+				return rep, err
+			}
+		}
+		p.intakeNow(ctx, l)
 	}
 	return rep, nil
 }

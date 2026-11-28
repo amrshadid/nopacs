@@ -49,6 +49,13 @@ type ReceivedFile struct {
 	// was recorded as received and is archived as received; at a receiver
 	// that de-identifies now it is held instead.
 	Deidentified bool
+	// MustDeidentify says the file's source required it not be archived as
+	// received (Arrival.RequireDeidentified: a transfer's copy of an
+	// instance the source archived as received). It is kept on the record,
+	// so the archive step holds the file when its receiver no longer
+	// de-identifies, whatever the receiver said when the file was accepted
+	// or checked, and whether the file waited on a retry list in between.
+	MustDeidentify bool
 	// Import, when not nil, is the import unit that handed the file in and
 	// its path (Importing): the store writes the arrival, the unit's
 	// cursor and its counts with the file's row. Written only; a read

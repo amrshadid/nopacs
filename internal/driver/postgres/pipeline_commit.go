@@ -316,6 +316,9 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		// the key of the received file an import's arrival names.
 		var confirmed []sqlkit.ArchivedFile
 		var newBytes int64
+		// newPlain counts the new instances recording no profile version: the
+		// scan and its session are then archived as received (as_received).
+		var newPlain int64
 		for _, in := range c.Instances {
 			h, found := byUID[in.SOPInstanceUID]
 			if found && h.held && h.mine && h.archived == in.ArchivedSHA256 {
@@ -329,6 +332,9 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 			offs, lens, sizes = append(offs, in.Offset), append(lens, in.Length), append(sizes, in.Size)
 			sums = append(sums, sumBytes(in.ArchivedSHA256))
 			pvs = append(pvs, profiles[in.Profile])
+			if profiles[in.Profile] == 0 {
+				newPlain++
+			}
 			risks = append(risks, in.PixelRiskAccepted)
 			newBytes += in.Size
 		}
@@ -370,7 +376,7 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		if err != nil {
 			return err
 		}
-		if err := addToCatalog(ctx, tx, c, session, scanID, newScan, newInstances, newBytes); err != nil {
+		if err := addToCatalog(ctx, tx, c, session, scanID, newScan, newInstances, newBytes, newPlain); err != nil {
 			return err
 		}
 		// Looked for once the scan's row is locked (addToCatalog updated it):
@@ -462,7 +468,7 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 // the first needs. A row's update time moves only when instances are
 // added.
 func addToCatalog(ctx context.Context, tx pgx.Tx, c tenant.ScanCommit, session sessionRow, scanID int64, newScan bool,
-	newInstances, newBytes int64) error {
+	newInstances, newBytes, newPlain int64) error {
 	v := c.Values
 	var modality string
 	if err := tx.QueryRow(ctx, `UPDATE scans SET instances = instances + $1, bytes = bytes + $2,
@@ -470,10 +476,11 @@ func addToCatalog(ctx context.Context, tx pgx.Tx, c tenant.ScanCommit, session s
 		modality = CASE WHEN modality = '' THEN $5 ELSE modality END,
 		description_folded = CASE WHEN series_description = '' THEN $6 ELSE description_folded END,
 		series_description = CASE WHEN series_description = '' THEN $7 ELSE series_description END,
-		series_number = coalesce(series_number, $8)
-		WHERE id = $9 RETURNING modality`,
+		series_number = coalesce(series_number, $8),
+		as_received = as_received OR $9 > 0
+		WHERE id = $10 RETURNING modality`,
 		newInstances, newBytes, nullSum(c.ManifestSHA256), micros(c.At), v.Modality, tenant.FoldDescription(v.SeriesDescription),
-		v.SeriesDescription, seriesNumber(v), scanID).Scan(&modality); err != nil {
+		v.SeriesDescription, seriesNumber(v), newPlain, scanID).Scan(&modality); err != nil {
 		return err
 	}
 	newScans := int64(0)
@@ -482,8 +489,9 @@ func addToCatalog(ctx context.Context, tx pgx.Tx, c tenant.ScanCommit, session s
 	}
 	if _, err := tx.Exec(ctx, `UPDATE sessions SET scan_count = scan_count + $1, instance_count = instance_count + $2,
 		bytes = bytes + $3, updated = CASE WHEN $2 > 0 THEN greatest(updated, $4) ELSE updated END,
-		study_date = CASE WHEN study_date = '' THEN $5 ELSE study_date END WHERE id = $6`,
-		newScans, newInstances, newBytes, micros(c.At), v.StudyDate, session.id); err != nil {
+		study_date = CASE WHEN study_date = '' THEN $5 ELSE study_date END,
+		as_received = as_received OR $6 > 0 WHERE id = $7`,
+		newScans, newInstances, newBytes, micros(c.At), v.StudyDate, newPlain, session.id); err != nil {
 		return err
 	}
 	if modality != "" {
@@ -517,7 +525,7 @@ func (t *Tenant) FillScanValues(ctx context.Context, seriesUID string, v tenant.
 		if !found {
 			return fault.New(fault.NotFound, "no scan holds the series")
 		}
-		return addToCatalog(ctx, tx, tenant.ScanCommit{Values: v}, session, scanID, false, 0, 0)
+		return addToCatalog(ctx, tx, tenant.ScanCommit{Values: v}, session, scanID, false, 0, 0, 0)
 	})
 }
 

@@ -201,7 +201,7 @@ func BenchmarkClaimInstances(b *testing.B) {
 		}
 		for _, c := range claims {
 			if _, err := tx.Exec(`INSERT INTO received_files VALUES ('claimer', ?, ?, ?, ?, '1.2.840.10008.5.1.4.1.1.4',
-				'1.2.840.10008.1.2.1', 524288, 'x', '', '', '', '', 0, 0, 0) ON CONFLICT DO NOTHING`,
+				'1.2.840.10008.1.2.1', 524288, 'x', '', '', '', '', 0, 0, 0, 0) ON CONFLICT DO NOTHING`,
 				c.SOPInstanceUID, c.SHA256[:], c.SeriesUID, c.StudyUID); err != nil {
 				b.Fatal(err)
 			}

@@ -256,7 +256,9 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		if err != nil {
 			return err
 		}
-		var newInstances, newBytes int64
+		// newPlain counts the new instances recording no profile version: the
+		// scan and its session are then archived as received (as_received).
+		var newInstances, newBytes, newPlain int64
 		var confirmed []sqlkit.ArchivedFile
 		for _, in := range c.Instances {
 			var by string
@@ -292,6 +294,8 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 				in.Offset, in.Length, in.Size, micros(c.At)}
 			if id, ok := profiles[in.Profile]; ok {
 				query, args = insertDeidentifiedSQL, append(args, id, boolInt(in.PixelRiskAccepted))
+			} else {
+				newPlain++
 			}
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return err
@@ -325,7 +329,7 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		if !c.ManifestSHA256.IsZero() {
 			manifest = c.ManifestSHA256[:]
 		}
-		if err := addToCatalog(ctx, tx, c, session, scanID, newScan, newInstances, newBytes, manifest); err != nil {
+		if err := addToCatalog(ctx, tx, c, session, scanID, newScan, newInstances, newBytes, newPlain, manifest); err != nil {
 			return err
 		}
 		// A repair holding the scan puts an object of it meanwhile, maybe its
@@ -408,7 +412,7 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 // totals), so two commits never wait for each other in a cycle. A row's
 // update time moves only when instances are added.
 func addToCatalog(ctx context.Context, tx *sql.Tx, c tenant.ScanCommit, session sessionRow, scanID int64, newScan bool,
-	newInstances, newBytes int64, manifest any) error {
+	newInstances, newBytes, newPlain int64, manifest any) error {
 	v := c.Values
 	var modality string
 	if err := tx.QueryRowContext(ctx, `UPDATE scans SET instances = instances + ?, bytes = bytes + ?,
@@ -416,16 +420,18 @@ func addToCatalog(ctx context.Context, tx *sql.Tx, c tenant.ScanCommit, session 
 		modality = CASE WHEN modality = '' THEN ? ELSE modality END,
 		description_folded = CASE WHEN series_description = '' THEN ? ELSE description_folded END,
 		series_description = CASE WHEN series_description = '' THEN ? ELSE series_description END,
-		series_number = coalesce(series_number, ?)
+		series_number = coalesce(series_number, ?),
+		as_received = CASE WHEN ? > 0 THEN 1 ELSE as_received END
 		WHERE id = ? RETURNING modality`,
 		newInstances, newBytes, manifest, newInstances, micros(c.At), v.Modality, tenant.FoldDescription(v.SeriesDescription), v.SeriesDescription,
-		seriesNumber(v), scanID).Scan(&modality); err != nil {
+		seriesNumber(v), newPlain, scanID).Scan(&modality); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET scan_count = scan_count + ?, instance_count = instance_count + ?,
 		bytes = bytes + ?, updated = CASE WHEN ? > 0 THEN max(updated, ?) ELSE updated END,
-		study_date = CASE WHEN study_date = '' THEN ? ELSE study_date END WHERE id = ?`,
-		boolInt(newScan), newInstances, newBytes, newInstances, micros(c.At), v.StudyDate, session.id); err != nil {
+		study_date = CASE WHEN study_date = '' THEN ? ELSE study_date END,
+		as_received = CASE WHEN ? > 0 THEN 1 ELSE as_received END WHERE id = ?`,
+		boolInt(newScan), newInstances, newBytes, newInstances, micros(c.At), v.StudyDate, newPlain, session.id); err != nil {
 		return err
 	}
 	if modality != "" {
@@ -459,7 +465,7 @@ func (t *Tenant) FillScanValues(ctx context.Context, seriesUID string, v tenant.
 		if !found {
 			return fault.New(fault.NotFound, "no scan holds the series")
 		}
-		return addToCatalog(ctx, tx, tenant.ScanCommit{Values: v}, session, scanID, false, 0, 0, nil)
+		return addToCatalog(ctx, tx, tenant.ScanCommit{Values: v}, session, scanID, false, 0, 0, 0, nil)
 	})
 }
 

@@ -15,18 +15,19 @@ import (
 
 // receivedInsertColumns are the columns a received file recorded as
 // received is written with: those of every schema since the pipeline's,
-// so a database not yet migrated to the column deidentified takes it (a
-// file recorded de-identified is written by insertDeidentifiedReceivedSQL).
+// so a database not yet migrated to the columns deidentified and
+// must_deidentify takes it (a file recorded de-identified, or that must
+// be, is written by insertFlaggedReceivedSQL).
 const receivedInsertColumns = `reception_id, sop_instance_uid, sha256, series_uid, study_uid, sop_class_uid, transfer_syntax_uid,
 	size, incoming, calling_ae, called_ae, remote_addr, association, released, received`
 
 // receivedColumns are the columns a received file is read with.
-const receivedColumns = receivedInsertColumns + `, deidentified`
+const receivedColumns = receivedInsertColumns + `, deidentified, must_deidentify`
 
-// insertDeidentifiedReceivedSQL writes a received file recorded
-// de-identified, with its flag.
-const insertDeidentifiedReceivedSQL = `INSERT INTO received_files (` + receivedColumns + `)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) ON CONFLICT DO NOTHING`
+// insertFlaggedReceivedSQL writes a received file recorded de-identified,
+// or that its source said must be, with its two flags.
+const insertFlaggedReceivedSQL = `INSERT INTO received_files (` + receivedColumns + `)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`
 
 // scanReceived reads one row of receivedColumns.
 func scanReceived(row interface{ Scan(...any) error }) (tenant.ReceivedFile, error) {
@@ -35,7 +36,7 @@ func scanReceived(row interface{ Scan(...any) error }) (tenant.ReceivedFile, err
 	var received int64
 	err := row.Scan(&f.ReceptionID, &f.SOPInstanceUID, &sum, &f.SeriesUID, &f.StudyUID, &f.SOPClassUID, &f.TransferSyntaxUID,
 		&f.Size, &f.Incoming, &f.Caller.CallingAETitle, &f.Caller.CalledAETitle, &f.Caller.Address, &f.Association,
-		&f.Released, &received, &f.Deidentified)
+		&f.Released, &received, &f.Deidentified, &f.MustDeidentify)
 	f.SHA256, f.Received = sqlkit.ToSHA256(sum), fromMicros(received)
 	return f, err
 }
@@ -105,8 +106,8 @@ func (t *Tenant) AddReceivedFiles(ctx context.Context, files []tenant.ReceivedFi
 					f.SOPClassUID, f.TransferSyntaxUID, f.Size, f.Incoming, f.Caller.CallingAETitle, f.Caller.CalledAETitle,
 					f.Caller.Address, f.Association, boolInt(f.Released), micros(at)}
 				var res sql.Result
-				if f.Deidentified {
-					res, err = tx.ExecContext(ctx, insertDeidentifiedReceivedSQL, args...)
+				if f.Deidentified || f.MustDeidentify {
+					res, err = tx.ExecContext(ctx, insertFlaggedReceivedSQL, append(args, boolInt(f.Deidentified), boolInt(f.MustDeidentify))...)
 				} else {
 					res, err = insert.ExecContext(ctx, args...)
 				}

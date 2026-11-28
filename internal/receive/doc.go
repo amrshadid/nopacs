@@ -56,7 +56,13 @@
 // release of such a record through a receiver that de-identifies lands it
 // again, so it is recorded remapped and keyed and goes through the engine
 // and the check; one recorded de-identified at a receiver that no longer
-// names a profile is held (no_profile). A record made de-identified is
+// names a profile is held (no_profile), and so is one its source required
+// de-identified (tenant.ReceivedFile.MustDeidentify, set by a transfer) at a
+// receiver that archives as received, whenever the check or the archive
+// step meets it; that hold's record is made de-identified (its placing UIDs
+// remapped, its checksum keyed), so a release through a receiver that
+// archives as received cannot archive it identified. A record made
+// de-identified is
 // released only through a receiver that de-identifies (the store's rule),
 // and one that lands again at a receiver changed meanwhile to archive as
 // received is held (no_profile), never archived identified. A placing UID

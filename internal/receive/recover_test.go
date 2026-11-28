@@ -347,3 +347,37 @@ func TestAFailedStartReleasesTheIncomingArea(t *testing.T) {
 		t.Fatalf("a stop after a failed start: %v", err)
 	}
 }
+
+// TestALandedTransferFileWithNoRowIsHeldAtStartByAReceiverThatArchivesAsReceived
+// guards a file a transfer job handed to a receiver of type job that landed,
+// its sender was answered, and whose row was never written before the process
+// stopped: what the transfer required of it (de-identified) was in memory
+// only, so at start it is judged as a file that must be, and a receiver that
+// archives as received holds it (deid_failed, no_profile) with its bytes kept
+// instead of archiving it as received; a landed file of a receiver of
+// another type is recorded as before.
+func TestALandedTransferFileWithNoRowIsHeldAtStartByAReceiverThatArchivesAsReceived(t *testing.T) {
+	e := newEnv(t, envOptions{manual: true, deid: &deidOptions{asReceived: true}})
+	if _, err := e.store.AddReceiver(e.ctx, tenant.Receiver{Name: "xfer", Type: tenant.ReceiverJob, Enabled: true, Storage: "main",
+		QuietPeriod: 5 * time.Second, MaxOpenTime: time.Minute, MaxFileBytes: 1 << 30}, t0, e.audit(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.p.area.Land(e.ctx, "xfer", bytesReader(corpus(t, studyFiles[0])), 1<<30); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.p.area.Land(e.ctx, "dimse", bytesReader(corpus(t, studyFiles[1])), 1<<30); err != nil {
+		t.Fatal(err)
+	}
+	e.manual = false
+	_ = e.p.area.Close()
+	e.start()
+	e.waitFor("the transfer's file to be held", time.Second, func() bool { return len(e.held()) == 1 })
+	q := e.held()[0]
+	if q.Reason != tenant.QuarantineDeidFailed || q.Details["cause"] != "no_profile" || !q.ContentKept || q.Receiver != "xfer" {
+		t.Errorf("the transfer's file is held as %+v, want deid_failed, no_profile, at xfer, its bytes kept", q)
+	}
+	if !q.Deidentified {
+		t.Error("the record is not protected: a release through a receiver that archives as received would archive the file as received")
+	}
+	e.waitFor("the other file to be recorded", time.Second, func() bool { return e.p.stats.Recorded.Load() == 1 })
+}

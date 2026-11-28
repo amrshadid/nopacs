@@ -234,23 +234,30 @@ func (k Sending) recountAfter(ctx context.Context, tx SendingTx, r targetRows) e
 	return recountSubject(ctx, tx, r.subjectID)
 }
 
-// recountScan gives a scan its counts from its instances.
+// recountScan gives a scan its counts from its instances, and whether it
+// was archived as received (as_received): a delete of the last instance
+// archived as received, a replace by a de-identified revision and an edit
+// that gives an instance its profile version each change the answer, which
+// no later read then works out from the instances.
 func recountScan(ctx context.Context, tx SendingTx, id int64) error {
 	_, err := tx.Exec(ctx, `UPDATE scans SET instances = (SELECT count(*) FROM instances WHERE scan_id = ?),
-		bytes = (SELECT coalesce(sum(size), 0) FROM instances WHERE scan_id = ?) WHERE id = ?`, id, id, id)
+		bytes = (SELECT coalesce(sum(size), 0) FROM instances WHERE scan_id = ?),
+		as_received = EXISTS (SELECT 1 FROM instances WHERE scan_id = ? AND profile_version_id IS NULL) WHERE id = ?`, id, id, id, id)
 	return err
 }
 
-// recountSession gives a session its counts, times and modalities from its
-// scans, as a rebuild derives them from the rows beneath (its first
-// scan's creation, its last scan's update), so a catalog after a
-// correction is the one a rebuild makes from the storage.
+// recountSession gives a session its counts, times, modalities and whether
+// it was archived as received from its scans (their as_received, which the
+// caller has made right first), as a rebuild derives them from the rows
+// beneath (its first scan's creation, its last scan's update), so a catalog
+// after a correction is the one a rebuild makes from the storage.
 func recountSession(ctx context.Context, tx SendingTx, id int64) error {
 	if _, err := tx.Exec(ctx, `UPDATE sessions SET scan_count = (SELECT count(*) FROM scans WHERE session_id = ?),
 		instance_count = (SELECT coalesce(sum(instances), 0) FROM scans WHERE session_id = ?),
 		bytes = (SELECT coalesce(sum(bytes), 0) FROM scans WHERE session_id = ?),
 		created = (SELECT min(created) FROM scans WHERE session_id = ?),
-		updated = (SELECT max(updated) FROM scans WHERE session_id = ?) WHERE id = ?`, id, id, id, id, id, id); err != nil {
+		updated = (SELECT max(updated) FROM scans WHERE session_id = ?),
+		as_received = EXISTS (SELECT 1 FROM scans WHERE session_id = ? AND as_received) WHERE id = ?`, id, id, id, id, id, id, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM session_modalities WHERE session_id = ?`, id); err != nil {

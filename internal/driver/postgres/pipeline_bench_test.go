@@ -195,7 +195,7 @@ func BenchmarkClaimInstances(b *testing.B) {
 					}
 				}
 				if _, err := conn.Exec(ctx, `INSERT INTO received_files SELECT r, u, h, se, st, '1.2.840.10008.5.1.4.1.1.4',
-					'1.2.840.10008.1.2.1', 524288, 'x', '', '', '', '', false, now(), false
+					'1.2.840.10008.1.2.1', 524288, 'x', '', '', '', '', false, now(), false, false
 					FROM unnest($1::text[], $2::text[], $3::bytea[], $4::text[], $5::text[]) AS t(r, u, h, se, st) ON CONFLICT DO NOTHING`,
 					rids, uids, sums, series, studies); err != nil {
 					b.Fatal(err)

@@ -70,14 +70,18 @@ func (p *Pipeline) check(ctx context.Context, l landed) (decision, error) {
 			return decision{}, err
 		}
 	}
-	if deidentifies || released.Deidentified {
+	// A file its source required de-identified is protected like one held at
+	// a receiver that de-identifies, so its record is marked and the store
+	// releases it only through a receiver that de-identifies.
+	protected := deidentifies || released.Deidentified || l.told.RequireDeidentified
+	if protected {
 		if keys, err = p.deidKeys(ctx); err != nil {
 			return decision{}, err
 		}
 	}
 	holdAtReceive := func(l landed, reason tenant.QuarantineReason, details map[string]string, h *header.Header) decision {
 		d := p.holdAtReceive(l, reason, details, h)
-		if deidentifies || released.Deidentified {
+		if protected {
 			protect(d.hold, keys)
 		}
 		return d
@@ -89,6 +93,15 @@ func (p *Pipeline) check(ctx context.Context, l landed) (decision, error) {
 		// the release and this landing), it is held again, its record
 		// protected as the one it was released from, and released once a
 		// receiver that de-identifies is named.
+		return holdAtReceive(l, tenant.QuarantineDeidFailed, map[string]string{"cause": "no_profile"}, nil), nil
+	}
+	if l.told.RequireDeidentified && !deidentifies {
+		// What its source required de-identified is never recorded as
+		// received. Accept judged the receiver when the file arrived; a file
+		// that waited on the retry list, or whose row was refused, is judged
+		// again here by the receiver as it is now, which may have been
+		// changed to archive as received meanwhile. The file is kept, held
+		// for a person.
 		return holdAtReceive(l, tenant.QuarantineDeidFailed, map[string]string{"cause": "no_profile"}, nil), nil
 	}
 	f, size, err := p.area.Open(l.file.Path)
@@ -140,7 +153,7 @@ func (p *Pipeline) check(ctx context.Context, l landed) (decision, error) {
 		ReceptionID: receptionID, SOPInstanceUID: inst, SeriesUID: series, StudyUID: study,
 		SOPClassUID: class, TransferSyntaxUID: h.TransferSyntaxUID, Size: l.file.Size,
 		SHA256: sum, Incoming: l.file.Path, Caller: l.caller, Association: l.association,
-		Released: l.releasedFrom != "", Deidentified: deidentifies,
+		Released: l.releasedFrom != "", Deidentified: deidentifies, MustDeidentify: l.told.RequireDeidentified,
 	}
 	// A release that named a storage or a profile version, of a file that
 	// joined no reception and lands again, still names them: the

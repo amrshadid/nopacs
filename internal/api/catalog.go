@@ -192,11 +192,7 @@ func (s catalogService) ListSessions(ctx context.Context, req *v1.ListSessionsRe
 	}
 	out := &v1.ListSessionsResponse{Sessions: make([]*v1.Session, 0, len(got.Items)), NextPageToken: got.Next, TotalCount: got.Total}
 	for _, it := range got.Items {
-		m, err := sessionMessageFor(ctx, d.Masked(), p, it)
-		if err != nil {
-			return nil, c.failIn(d, st, err)
-		}
-		out.Sessions = append(out.Sessions, m)
+		out.Sessions = append(out.Sessions, sessionMessageFor(d.Masked(), it))
 	}
 	c.done(d, st)
 	return out, nil
@@ -223,12 +219,8 @@ func (s catalogService) GetSession(ctx context.Context, req *v1.GetSessionReques
 	if err != nil {
 		return nil, c.failIn(d, st, relabeled(ctx, st, label.Path{Subject: req.GetSubjectLabel(), Session: req.GetSessionLabel()}, err))
 	}
-	m, err := sessionMessageFor(ctx, d.Masked(), p, got)
-	if err != nil {
-		return nil, c.failIn(d, st, err)
-	}
 	c.done(d, st)
-	return &v1.GetSessionResponse{Session: m}, nil
+	return &v1.GetSessionResponse{Session: sessionMessageFor(d.Masked(), got)}, nil
 }
 
 // ListScans answers a page of a tenant's scans.
@@ -266,11 +258,7 @@ func (s catalogService) ListScans(ctx context.Context, req *v1.ListScansRequest)
 	}
 	out := &v1.ListScansResponse{Scans: make([]*v1.Scan, 0, len(got.Items)), NextPageToken: got.Next, TotalCount: got.Total}
 	for _, it := range got.Items {
-		m, err := scanMessageFor(ctx, d.Masked(), p, it)
-		if err != nil {
-			return nil, c.failIn(d, st, err)
-		}
-		out.Scans = append(out.Scans, m)
+		out.Scans = append(out.Scans, scanMessageFor(d.Masked(), it))
 	}
 	c.done(d, st)
 	return out, nil
@@ -295,10 +283,6 @@ func (s catalogService) GetScan(ctx context.Context, req *v1.GetScanRequest) (*v
 	if err != nil {
 		return nil, c.failIn(d, st, relabeled(ctx, st, path, err))
 	}
-	m, err := scanMessageFor(ctx, d.Masked(), p, got)
-	if err != nil {
-		return nil, c.failIn(d, st, err)
-	}
 	c.done(d, st)
-	return &v1.GetScanResponse{Scan: m}, nil
+	return &v1.GetScanResponse{Scan: scanMessageFor(d.Masked(), got)}, nil
 }

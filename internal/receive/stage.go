@@ -33,7 +33,9 @@ const checkHeadroom = 1 << 20
 // de-identified goes de-identified by the profile version the route chosen
 // for its reception names, else the one its receiver names now
 // (receiverFor), or is held when the receiver names none any more
-// (deid_failed, no_profile).
+// (deid_failed, no_profile); and a file recorded as received that its source
+// required de-identified (tenant.ReceivedFile.MustDeidentify) is held the same
+// way, whatever its receiver said when the row was written.
 //
 // A file de-identified (deidentify) is written beside its original in the
 // incoming area, checked by the check after, and only then put, so the
@@ -81,6 +83,20 @@ func (p *Pipeline) prepareOne(ctx context.Context, r tenant.Reception, rcv tenan
 	switch {
 	case !wr.f.Deidentified && rcv.Deidentifies():
 		return hold("recorded_as_received")
+	case !wr.f.Deidentified && wr.f.MustDeidentify:
+		// Its source required it de-identified (ReceivedFile.MustDeidentify)
+		// and its receiver does not de-identify now: whatever the receiver
+		// said when the row was written, it is never archived as received.
+		// Its record is protected (UIDs remapped, checksum keyed, marked
+		// de-identified), so a release is refused except through a receiver
+		// that de-identifies.
+		keys, err := p.deidKeys(ctx)
+		if err != nil {
+			return wr, nil, err
+		}
+		q := p.holdRecord(r, wr.f, tenant.QuarantineDeidFailed, map[string]string{"cause": "no_profile"})
+		protect(&q, keys)
+		return wr, &q, nil
 	case !wr.f.Deidentified:
 		// Its bytes are compared with the row's checksum when they are
 		// put (putIncoming), before any byte reaches the storage.

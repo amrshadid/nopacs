@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -105,6 +106,27 @@ type faultyDB struct {
 	leaseLost atomic.Bool
 	// claims counts ClaimInstances calls.
 	claims atomic.Int64
+	// addFails fails that many next AddReceivedFiles calls as Unavailable.
+	addFails atomic.Int64
+	// addTries counts AddReceivedFiles calls.
+	addTries atomic.Int64
+	// markMust records every received file as one its source required
+	// de-identified (ReceivedFile.MustDeidentify).
+	markMust atomic.Bool
+}
+
+func (d *faultyDB) AddReceivedFiles(ctx context.Context, files []tenant.ReceivedFile, at time.Time, fence *tenant.WorkFence) (int, error) {
+	d.addTries.Add(1)
+	if d.markMust.Load() {
+		files = slices.Clone(files)
+		for i := range files {
+			files[i].MustDeidentify = true
+		}
+	}
+	if d.addFails.Add(-1) >= 0 {
+		return 0, fault.New(fault.Unavailable, "the test database refuses these received files")
+	}
+	return d.Pipeline.AddReceivedFiles(ctx, files, at, fence)
 }
 
 func (d *faultyDB) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Scan, error) {

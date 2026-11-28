@@ -110,7 +110,7 @@ func (t *Tenant) ReleaseFile(ctx context.Context, rel tenant.Release, audit mast
 				q.Caller.CalledAETitle, q.Caller.Address, "", 1, micros(now)}
 			var res sql.Result
 			if q.Deidentified {
-				res, err = tx.ExecContext(ctx, insertDeidentifiedReceivedSQL, args...)
+				res, err = tx.ExecContext(ctx, insertFlaggedReceivedSQL, append(args, 1, 0)...)
 			} else {
 				res, err = tx.StmtContext(ctx, st.insertReceived).ExecContext(ctx, args...)
 			}

@@ -378,6 +378,10 @@ CREATE TABLE reception_associations (
 -- the same file. deidentified is true for a file received at a receiver
 -- that de-identifies, whose row holds the keyed remapping of the file's
 -- placing UIDs and a keyed checksum, false for one recorded as received.
+-- must_deidentify is true for a file its source said must never be archived
+-- as received (a transfer's copy of an instance that was archived as
+-- received): the archive step holds it when its receiver no longer
+-- de-identifies, whatever the row's deidentified says.
 -- The received files of a reception that ended done or quarantined are
 -- removed by the step that ends it: each is then an instance held, a
 -- duplicate of one, or a quarantine record that keeps its own copy of the
@@ -407,6 +411,7 @@ CREATE TABLE received_files (
     released            boolean     NOT NULL,
     received            timestamptz NOT NULL,
     deidentified        boolean     NOT NULL DEFAULT false,
+    must_deidentify     boolean     NOT NULL DEFAULT false,
     CONSTRAINT received_files_pkey PRIMARY KEY (reception_id, sop_instance_uid, sha256),
     CONSTRAINT received_files_sha256_check CHECK (octet_length(sha256) = 32),
     CONSTRAINT received_files_size_check CHECK (size >= 0)
@@ -548,7 +553,11 @@ CREATE INDEX subjects_by_created ON subjects (created, id);
 
 -- A session. route is what the routing chose for it when its first scan was
 -- committed, so every later arrival of the session goes by the same choice;
--- '' for nothing of its own.
+-- '' for nothing of its own. as_received is true when any of its scans holds
+-- an instance archived as received (scans.as_received): kept in the
+-- transaction of every write that changes it, so a list for a key that may
+-- not learn original values filters and marks by this column and reads no
+-- instance.
 CREATE TABLE sessions (
     id             bigint      GENERATED ALWAYS AS IDENTITY,
     study_uid      text        COLLATE "C" NOT NULL,
@@ -568,6 +577,7 @@ CREATE TABLE sessions (
     route          text        NOT NULL DEFAULT '',
     calling_ae     text        COLLATE "C" NOT NULL DEFAULT '',
     called_ae      text        COLLATE "C" NOT NULL DEFAULT '',
+    as_received    boolean     NOT NULL DEFAULT false,
     CONSTRAINT sessions_pkey PRIMARY KEY (id),
     CONSTRAINT sessions_study_uid_key UNIQUE (study_uid),
     CONSTRAINT sessions_folded_key UNIQUE (subject_id, folded),
@@ -594,7 +604,8 @@ CREATE INDEX sessions_by_subject_study_date ON sessions (subject_id, study_date,
 CREATE UNIQUE INDEX sessions_by_label ON sessions (subject_folded, folded);
 
 -- A scan. study_uid is its session's, so one row answers both what study a
--- held instance is in and what scan.
+-- held instance is in and what scan. as_received is true when any instance it
+-- holds records no profile version (was archived as received).
 CREATE TABLE scans (
     id                 bigint      GENERATED ALWAYS AS IDENTITY,
     session_id         bigint      NOT NULL,
@@ -617,6 +628,7 @@ CREATE TABLE scans (
     series_number      integer,
     receiver           text        COLLATE "C" NOT NULL DEFAULT '',
     study_uid          text        COLLATE "C" NOT NULL DEFAULT '',
+    as_received        boolean     NOT NULL DEFAULT false,
     CONSTRAINT scans_pkey PRIMARY KEY (id),
     CONSTRAINT scans_series_uid_key UNIQUE (series_uid),
     CONSTRAINT scans_folded_key UNIQUE (session_id, folded),
@@ -1806,6 +1818,7 @@ CREATE TABLE hidden_sessions (
     route          text        NOT NULL,
     calling_ae     text        COLLATE "C" NOT NULL DEFAULT '',
     called_ae      text        COLLATE "C" NOT NULL DEFAULT '',
+    as_received    boolean     NOT NULL DEFAULT false,
     PRIMARY KEY (correction_id, id)
 );
 
@@ -1832,6 +1845,7 @@ CREATE TABLE hidden_scans (
     series_number      integer,
     receiver           text        COLLATE "C" NOT NULL,
     study_uid          text        COLLATE "C" NOT NULL,
+    as_received        boolean     NOT NULL DEFAULT false,
     PRIMARY KEY (correction_id, id)
 );
 

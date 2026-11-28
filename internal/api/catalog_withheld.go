@@ -1,16 +1,13 @@
 package api
 
 import (
-	"context"
 	"slices"
 
 	"github.com/amrshadid/go-dicom/tag"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/access"
-	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/dicomweb"
-	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -36,51 +33,6 @@ func originalsFor(d access.Decision) tenant.Originals {
 	return tenant.OriginalsAll
 }
 
-// scanAsReceived reports whether any instance the scan holds was archived
-// as received (no profile version de-identified it). A scan whose
-// instances are mixed counts: its values come from whichever file the
-// catalog read them from first, which may be the unprotected one.
-func scanAsReceived(ctx context.Context, p tenant.Pipeline, path label.Path) (bool, error) {
-	page := master.Page{Limit: master.MaxPageLimit}
-	for {
-		held, next, err := p.ListHeldInstances(ctx, path, page)
-		if err != nil {
-			return false, err
-		}
-		for _, in := range held {
-			if in.Profile.IsZero() {
-				return true, nil
-			}
-		}
-		if next == "" {
-			return false, nil
-		}
-		page.Cursor = next
-	}
-}
-
-// sessionAsReceived reports whether any scan of the session holds an
-// instance archived as received.
-func sessionAsReceived(ctx context.Context, p tenant.Pipeline, subject, session string) (bool, error) {
-	page := master.Page{Limit: master.MaxPageLimit}
-	for {
-		got, err := p.ListScans(ctx, tenant.ScanFilter{SubjectLabel: subject, SessionLabel: session, Order: tenant.OrderLabel}, page)
-		if err != nil {
-			return false, err
-		}
-		for _, sc := range got.Items {
-			as, err := scanAsReceived(ctx, p, label.Path{Subject: subject, Session: session, Scan: sc.Label})
-			if err != nil || as {
-				return as, err
-			}
-		}
-		if got.Next == "" {
-			return false, nil
-		}
-		page.Cursor = got.Next
-	}
-}
-
 // withholdScan removes from m the values read from the scan's files and
 // says so.
 func withholdScan(m *v1.Scan) {
@@ -96,36 +48,26 @@ func withholdSession(m *v1.Session) {
 }
 
 // scanMessageFor returns s as the contract writes it for the caller: for a
-// masked key, without the values of a scan archived as received.
-func scanMessageFor(ctx context.Context, masked bool, p tenant.Pipeline, s tenant.CatalogScan) (*v1.Scan, error) {
+// masked key, without the values of a scan archived as received. A scan
+// whose instances are mixed counts: its values come from whichever file the
+// catalog read them from first, which may be the unprotected one. The row
+// says whether it was (CatalogScan.AsReceived), so no instance is read.
+func scanMessageFor(masked bool, s tenant.CatalogScan) *v1.Scan {
 	m := scanMessage(s)
-	if !masked {
-		return m, nil
-	}
-	as, err := scanAsReceived(ctx, p, label.Path{Subject: s.SubjectLabel, Session: s.SessionLabel, Scan: s.Label})
-	if err != nil {
-		return nil, err
-	}
-	if as {
+	if masked && s.AsReceived {
 		withholdScan(m)
 	}
-	return m, nil
+	return m
 }
 
-// sessionMessageFor is scanMessageFor for a session.
-func sessionMessageFor(ctx context.Context, masked bool, p tenant.Pipeline, s tenant.CatalogSession) (*v1.Session, error) {
+// sessionMessageFor is scanMessageFor for a session: one with a scan archived
+// as received counts.
+func sessionMessageFor(masked bool, s tenant.CatalogSession) *v1.Session {
 	m := sessionMessage(s)
-	if !masked {
-		return m, nil
-	}
-	as, err := sessionAsReceived(ctx, p, s.SubjectLabel, s.Label)
-	if err != nil {
-		return nil, err
-	}
-	if as {
+	if masked && s.AsReceived {
 		withholdSession(m)
 	}
-	return m, nil
+	return m
 }
 
 // namesTag reports whether any of the search's keys is on one of tags.

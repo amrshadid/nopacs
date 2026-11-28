@@ -78,7 +78,7 @@ func (c CatalogReader[T]) scanSubject(row Row, r *subjectRow) error {
 func (c CatalogReader[T]) scanSession(row Row, r *sessionRow) error {
 	var created, updated T
 	err := row.Scan(&r.key.ID, &created, &r.key.SubjectFolded, &r.key.Folded, &r.s.StudyDate, &r.s.SubjectLabel, &r.s.Label,
-		&r.s.StudyUID, &r.s.Scans, &r.s.Instances, &r.s.Bytes, &r.s.Storage, &r.s.Receiver, &updated)
+		&r.s.StudyUID, &r.s.Scans, &r.s.Instances, &r.s.Bytes, &r.s.Storage, &r.s.Receiver, &updated, &r.s.AsReceived)
 	r.key.StudyDate = r.s.StudyDate
 	r.key.Created, r.s.Updated = c.Time(created), c.Time(updated)
 	r.s.Created = r.key.Created
@@ -92,7 +92,7 @@ func (c CatalogReader[T]) scanScan(row Row, r *scanRow) error {
 	var manifest []byte
 	err := row.Scan(&r.key.ID, &created, &r.key.SubjectFolded, &r.key.SessionFolded, &r.key.Folded, &r.key.DescriptionFolded,
 		&r.s.SubjectLabel, &r.s.SessionLabel, &r.s.Label, &r.s.SeriesUID, &r.s.Values.Modality, &r.s.Values.SeriesDescription,
-		&number, &r.s.Instances, &r.s.Bytes, &r.s.Storage, &manifest, &r.s.Receiver, &updated)
+		&number, &r.s.Instances, &r.s.Bytes, &r.s.Storage, &manifest, &r.s.Receiver, &updated, &r.s.AsReceived)
 	if number != nil {
 		r.s.Values.SeriesNumber, r.s.Values.HasSeriesNumber = *number, true
 	}
@@ -176,7 +176,7 @@ func (c CatalogReader[T]) scanOneScan(row Row, r *scanRow) error {
 	var manifest, sidecar []byte
 	err := row.Scan(&r.key.ID, &created, &r.key.SubjectFolded, &r.key.SessionFolded, &r.key.Folded, &r.key.DescriptionFolded,
 		&r.s.SubjectLabel, &r.s.SessionLabel, &r.s.Label, &r.s.SeriesUID, &r.s.Values.Modality, &r.s.Values.SeriesDescription,
-		&number, &r.s.Instances, &r.s.Bytes, &r.s.Storage, &manifest, &r.s.Receiver, &updated, &sidecar)
+		&number, &r.s.Instances, &r.s.Bytes, &r.s.Storage, &manifest, &r.s.Receiver, &updated, &r.s.AsReceived, &sidecar)
 	if number != nil {
 		r.s.Values.SeriesNumber, r.s.Values.HasSeriesNumber = *number, true
 	}

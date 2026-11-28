@@ -113,6 +113,13 @@ failed (`as_received` or `pixel_risk_accepted`) while the job goes on with the r
 The target's own profile and pixel rules then judge what a de-identifying
 receiver is given, as for any file it receives.
 
+A file accepted for an instance that must be de-identified, and waiting for its record (on the
+retry list, or landed when the server stopped), is held in quarantine (`deid_failed`, cause
+`no_profile`) with its bytes kept when its receiver archives as received by then. Its record
+is marked de-identified, so a release is refused (`FAILED_PRECONDITION`) except through a
+receiver that de-identifies, which archives it de-identified: it is never archived as
+received, and the job reports the copy as not found in the target.
+
 Other failures reuse the job's codes: `damaged_in_storage` (the source's bytes
 are not what the catalog records), `not_online`, `deleted_in_archive` (the
 instance changed or went after the job listed it), `peer_refused` (the target's

@@ -439,12 +439,13 @@ func (k Rebuild) FinishRebuildStorage(ctx context.Context, fence tenant.WorkFenc
 // finishShadow gives every row of the shadow its derived values, computed
 // from the rows it holds as a reception's commits keep them running in the
 // catalog in use (the scans', sessions' and subjects' counts and times, the
-// sessions' modalities, the receptions' scans, the totals), and marks the
-// build complete.
+// scans' and sessions' as_received, the sessions' modalities, the receptions'
+// scans, the totals), and marks the build complete.
 func finishShadow(ctx context.Context, tx SendingTx, p string, d SendingDialect) error {
 	for _, stmt := range []string{
 		`UPDATE ` + p + `scans SET instances = (SELECT count(*) FROM ` + p + `instances AS i WHERE i.scan_id = scans.id),
-			bytes = (SELECT coalesce(sum(i.size), 0) FROM ` + p + `instances AS i WHERE i.scan_id = scans.id)`,
+			bytes = (SELECT coalesce(sum(i.size), 0) FROM ` + p + `instances AS i WHERE i.scan_id = scans.id),
+			as_received = EXISTS (SELECT 1 FROM ` + p + `instances AS i WHERE i.scan_id = scans.id AND i.profile_version_id IS NULL)`,
 		`DELETE FROM ` + p + `scans WHERE instances = 0`,
 		`DELETE FROM ` + p + `sessions WHERE NOT EXISTS (SELECT 1 FROM ` + p + `scans AS c WHERE c.session_id = sessions.id)`,
 		`DELETE FROM ` + p + `subjects WHERE NOT EXISTS (SELECT 1 FROM ` + p + `sessions AS e WHERE e.subject_id = subjects.id)`,
@@ -452,7 +453,8 @@ func finishShadow(ctx context.Context, tx SendingTx, p string, d SendingDialect)
 			instance_count = (SELECT coalesce(sum(c.instances), 0) FROM ` + p + `scans AS c WHERE c.session_id = sessions.id),
 			bytes = (SELECT coalesce(sum(c.bytes), 0) FROM ` + p + `scans AS c WHERE c.session_id = sessions.id),
 			created = (SELECT min(c.created) FROM ` + p + `scans AS c WHERE c.session_id = sessions.id),
-			updated = (SELECT max(c.updated) FROM ` + p + `scans AS c WHERE c.session_id = sessions.id)`,
+			updated = (SELECT max(c.updated) FROM ` + p + `scans AS c WHERE c.session_id = sessions.id),
+			as_received = EXISTS (SELECT 1 FROM ` + p + `scans AS c WHERE c.session_id = sessions.id AND c.as_received)`,
 		`UPDATE ` + p + `subjects SET session_count = (SELECT count(*) FROM ` + p + `sessions AS e WHERE e.subject_id = subjects.id),
 			instance_count = (SELECT coalesce(sum(e.instance_count), 0) FROM ` + p + `sessions AS e WHERE e.subject_id = subjects.id),
 			bytes = (SELECT coalesce(sum(e.bytes), 0) FROM ` + p + `sessions AS e WHERE e.subject_id = subjects.id),

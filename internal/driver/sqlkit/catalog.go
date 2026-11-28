@@ -35,9 +35,10 @@ const (
 const (
 	SubjectColumns = `id, created, folded, label, session_count, instance_count, bytes, updated`
 	SessionColumns = `id, created, subject_folded, folded, study_date, subject_label, label, study_uid, scan_count,
-		instance_count, bytes, storage, receiver, updated`
+		instance_count, bytes, storage, receiver, updated, as_received`
 	ScanColumns = `id, created, subject_folded, session_folded, folded, description_folded, subject_label, session_label, label,
-		series_uid, modality, series_description, series_number, instances, bytes, storage, manifest_sha256, receiver, updated`
+		series_uid, modality, series_description, series_number, instances, bytes, storage, manifest_sha256, receiver, updated,
+		as_received`
 	// scanSidecarColumn is the digest of a scan's metadata file that holds
 	// with its manifest digest (scan_sidecars), read beside ScanColumns by
 	// the read of one scan only: scan_sidecars' key, one lookup.
@@ -198,20 +199,27 @@ func newestOrder(column, created, id string) string {
 
 // The rows archived as received: a scan that holds an instance recording no
 // profile version, a session with such a scan (the rule of jobs_deid.go's
-// plainSeriesSQL, and of the API's withheld catalog values). The id column
+// plainSeriesSQL, and of the API's withheld catalog values). Each row keeps
+// the answer in its as_received column, written in the transaction of every
+// write that changes it, so these conditions read no instance. The id column
 // is the one the statement reads the row's id from; the condition is a probe
-// of the instances' primary key, run for the rows of a page only.
+// of the row's primary key. A statement over the scans or sessions table
+// itself reads the column directly (scanReceivedColumn, sessionReceivedColumn).
 const (
-	scanReceivedSQL    = `EXISTS (SELECT 1 FROM instances AS i WHERE i.scan_id = %s AND i.profile_version_id IS NULL)`
-	sessionReceivedSQL = `EXISTS (SELECT 1 FROM scans AS sc WHERE sc.session_id = %s AND EXISTS (SELECT 1 FROM instances AS i
-		WHERE i.scan_id = sc.id AND i.profile_version_id IS NULL))`
+	scanReceivedSQL    = `EXISTS (SELECT 1 FROM scans AS xs WHERE xs.id = %s AND xs.as_received)`
+	sessionReceivedSQL = `EXISTS (SELECT 1 FROM sessions AS xe WHERE xe.id = %s AND xe.as_received)`
+
+	scanReceivedColumn    = `scans.as_received`
+	sessionReceivedColumn = `sessions.as_received`
 )
 
 // originals adds, for a list with an order or a filter on a value read from
 // the files (valued), the condition o asks for: none for OriginalsAll, the
 // rows not archived as received for OriginalsHidden, only those for
-// OriginalsOnly. cond is scanReceivedSQL or sessionReceivedSQL on the
-// statement's id column, written with its own id in place of the %s.
+// OriginalsOnly. cond is the as_received column of the statement's own table
+// (scanReceivedColumn, sessionReceivedColumn), or scanReceivedSQL or
+// sessionReceivedSQL on its id column, written with its own id in place of
+// the %s.
 func (b *builder) originals(o tenant.Originals, valued bool, cond string) {
 	switch {
 	case o == tenant.OriginalsOnly:
@@ -265,7 +273,7 @@ func (c CatalogSQL) Sessions(f tenant.SessionFilter, subjectID int64, after *Cat
 	b := &builder{c: c}
 	switch f.Order {
 	case tenant.OrderLabel:
-		b.originals(f.Originals, false, receivedOf(sessionReceivedSQL, "sessions.id"))
+		b.originals(f.Originals, false, sessionReceivedColumn)
 		if f.SubjectLabel != "" {
 			b.where("subject_id = %s", subjectID)
 			b.prefix("folded", label.Fold(f.LabelPrefix), after != nil)
@@ -285,7 +293,7 @@ func (c CatalogSQL) Sessions(f tenant.SessionFilter, subjectID int64, after *Cat
 		if start == "" {
 			start = "0"
 		}
-		b.originals(f.Originals, true, receivedOf(sessionReceivedSQL, "sessions.id"))
+		b.originals(f.Originals, true, sessionReceivedColumn)
 		if f.SubjectLabel != "" {
 			b.where("subject_id = %s", subjectID)
 		}
@@ -334,7 +342,7 @@ func (c CatalogSQL) Scans(f tenant.ScanFilter, sessionID int64, after *CatalogKe
 	b := &builder{c: c}
 	switch f.Order {
 	case tenant.OrderLabel:
-		b.originals(f.Originals, false, receivedOf(scanReceivedSQL, "scans.id"))
+		b.originals(f.Originals, false, scanReceivedColumn)
 		switch {
 		case f.SessionLabel != "":
 			b.where("session_id = %s", sessionID)
@@ -355,7 +363,7 @@ func (c CatalogSQL) Scans(f tenant.ScanFilter, sessionID int64, after *CatalogKe
 		}
 		return b.read(ScanColumns, "scans", "subject_folded, session_folded, folded", limit)
 	case tenant.OrderSeriesDescription:
-		b.originals(f.Originals, true, receivedOf(scanReceivedSQL, "scans.id"))
+		b.originals(f.Originals, true, scanReceivedColumn)
 		// A scan with no description holds '', before every other text,
 		// and a cursor's description is never empty (scanKeyFits), so
 		// the cursor is the lower bound once there is one (prefix says why
@@ -376,7 +384,7 @@ func (c CatalogSQL) Scans(f tenant.ScanFilter, sessionID int64, after *CatalogKe
 		b.newest("created", "id", f.Range, after)
 		return b.read(ScanColumns, "scans", "created DESC, id DESC", limit)
 	case f.Modality != "":
-		b.originals(f.Originals, true, receivedOf(scanReceivedSQL, "scans.id"))
+		b.originals(f.Originals, true, scanReceivedColumn)
 		b.newestOf("modality", f.Modality, "created", "id", f.Range, after)
 		return b.read(ScanColumns, "scans", newestOrder("modality", "created", "id"), limit)
 	case f.Receiver != "":

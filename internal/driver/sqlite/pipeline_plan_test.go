@@ -38,7 +38,7 @@ func fillPipeline(tb testing.TB, path string) {
 		   i * 1000000, i * 1000000, i * 1000000, NULL, 0, '[]', 0, '', '', '', NULL, '' FROM n`,
 		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 20000)
 		 INSERT INTO received_files SELECT 'rc' || (i % 20000 + 1), '2.25.3.' || i, randomblob(32), '2.25.2.1', '2.25.1.1',
-		   '1.2.840.10008.5.1.4.1.1.4', '1.2.840.10008.1.2.1', 1000, 'x/' || i, '', '', '', '', 0, 0, 0 FROM n`,
+		   '1.2.840.10008.5.1.4.1.1.4', '1.2.840.10008.1.2.1', 1000, 'x/' || i, '', '', '', '', 0, 0, 0, 0 FROM n`,
 		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 10000)
 		 INSERT INTO quarantine SELECT 'q' || i, CASE i % 3 WHEN 0 THEN 'not_dicom' WHEN 1 THEN 'bad_uid' ELSE 'different_file' END,
 		   '{}', CASE i % 4 WHEN 0 THEN 'held' WHEN 1 THEN 'released' ELSE 'rejected' END, 'recv' || (i % 200 + 1), 'rc' || i,
