@@ -64,6 +64,11 @@ func (b *batcher) idle() bool {
 	return b.queued.Load() == 0 && len(b.retry) == 0
 }
 
+// pending reports whether a file has been handed to the batcher and its row
+// is not written yet. The sender of such a file was answered already, so the
+// reception it belongs to is not complete while this holds.
+func (b *batcher) pending() bool { return b.queued.Load() > 0 }
+
 // later puts a landed file on the retry list, checked again after the retry
 // interval.
 func (b *batcher) later(l landed) {

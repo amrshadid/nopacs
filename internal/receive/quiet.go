@@ -24,7 +24,9 @@ import (
 //     complete: the unit is completed with a new quiet unit due when the
 //     decision says, in one transaction (CompleteWork with next), so the
 //     reception always has its unit.
-//  3. Take the quiet step, guarded by the last file time the decision read
+//  3. Wait while the batcher holds files whose senders were answered and whose
+//     rows are not written yet: they belong to this reception, and its
+//     closing first would split the study. Then take the quiet step, guarded by the last file time the decision read
 //     (ReceptionStep.LastFile): a batch of files written after the decision
 //     moves that time, the step is refused with ErrStateChanged, and the
 //     decision is made again. A batch written after the step is refused by
@@ -61,6 +63,14 @@ func (p *Pipeline) quiet(ctx context.Context, w tenant.Work) error {
 		}
 		if !d.Complete {
 			next := unitFor(kindQuiet, r.ID, d.Due)
+			return p.complete(ctx, w, &next)
+		}
+		// A file the sender was answered for may have no row yet: the batcher
+		// writes the rows a moment after the answer, and a reception closed in
+		// that moment would take the file as the first of another. The decision
+		// is made again when the batcher has written what it holds.
+		if p.batch.pending() {
+			next := unitFor(kindQuiet, r.ID, now.Add(p.cfg.BatchInterval))
 			return p.complete(ctx, w, &next)
 		}
 		p.at("quiet.before-step")
