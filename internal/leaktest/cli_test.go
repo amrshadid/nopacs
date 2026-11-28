@@ -190,8 +190,8 @@ func cliCases(w *world, f cliFiles, key string) map[string][]cliCase {
 		"retention rule remove": {c("retention", "rule", "remove", T, "agent-rule", "--yes")},
 		"retention rule set":    {c("retention", "rule", "set", T, "agent-rule", "--keep-at-least", "2y")},
 		"retention rule show":   {c("retention", "rule", "show", T, "agent-rule")},
-		// "search" itself has the verb "backfill", so the guide lists the
-		// verb: its cases hold the searches too.
+		// "search" itself has the verb "backfill", so the list of leaf
+		// commands names the verb: its cases hold the searches too.
 		"search backfill": {c("search", "backfill", T, "Modality"), c("search", T), c("search", T, "Modality present", "--count", "--facet", "Modality")},
 		"scan show":       {c("scan", "show", T, path(s)), c("scan", "show", T, path(s), "--metadata"), c("scan", "show", T, path(r), "--metadata")},
 		"sender add":      {c("sender", "add", T, "pacs2", "--type", "dimse", "--host", "127.0.0.1", "--port", "1", "--called-aet", "PACS", "--calling-aet", "NOPACS")},
