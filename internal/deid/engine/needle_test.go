@@ -126,3 +126,21 @@ func TestPartialDatesAreMatchedAsDatesOfTheirPrecision(t *testing.T) {
 		}
 	}
 }
+
+// TestAGeneralizedDateAlreadyGeneralIsNoNeedle guards a birth date that is
+// already the first of January: generalizing it writes the same value, so
+// it must not become a needle, or the check after de-identification would
+// find the "removed" value in the output and hold every such file.
+func TestAGeneralizedDateAlreadyGeneralIsNoNeedle(t *testing.T) {
+	en := newTestEngine(t, testKeys, Options{}, rule("birth", kw("PatientBirthDate"), aGeneralize))
+	ds := build(t, el{tPatientID, "LO", "P1"}, el{tBirthDate, "DA", "19500101"})
+	rec := apply(t, en, ds)
+	if got := mustText(t, ds, tBirthDate); got != "19500101" {
+		t.Errorf("birth date = %q, want 19500101 kept", got)
+	}
+	for _, n := range rec.Needles {
+		if n.Value == "19500101" {
+			t.Errorf("the unchanged birth date is a needle at %s", n.Path)
+		}
+	}
+}
