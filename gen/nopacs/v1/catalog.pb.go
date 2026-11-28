@@ -229,9 +229,16 @@ type Session struct {
 	// When its first file was archived.
 	ArchiveTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=archive_time,json=archiveTime,proto3" json:"archive_time,omitempty"`
 	// When a file was last archived into it.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// True when this answer leaves out the values read from its files:
+	// study_instance_uid, study_date and modalities are empty. It is set for
+	// a masked key (a key made for an AI agent) reading a session a receiver
+	// that keeps files as received archived, where those values are the
+	// sender's originals and are in no de-identified form. An empty value
+	// with this false means the files held none.
+	ValuesWithheld bool `protobuf:"varint,13,opt,name=values_withheld,json=valuesWithheld,proto3" json:"values_withheld,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Session) Reset() {
@@ -348,6 +355,13 @@ func (x *Session) GetUpdateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Session) GetValuesWithheld() bool {
+	if x != nil {
+		return x.ValuesWithheld
+	}
+	return false
+}
+
 // Scan is one series of a session, as the catalog holds it.
 type Scan struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -387,9 +401,17 @@ type Scan struct {
 	// When its first file was archived.
 	ArchiveTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=archive_time,json=archiveTime,proto3" json:"archive_time,omitempty"`
 	// When a file was last archived into it.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// True when this answer leaves out the values read from its files:
+	// series_instance_uid, modality, series_description and series_number
+	// are empty or absent. It is set for a masked key (a key made for an AI
+	// agent) reading a scan a receiver that keeps files as received
+	// archived, where those values are the sender's originals and are in no
+	// de-identified form. An empty value with this false means the files
+	// held none.
+	ValuesWithheld bool `protobuf:"varint,15,opt,name=values_withheld,json=valuesWithheld,proto3" json:"values_withheld,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Scan) Reset() {
@@ -518,6 +540,13 @@ func (x *Scan) GetUpdateTime() *timestamppb.Timestamp {
 		return x.UpdateTime
 	}
 	return nil
+}
+
+func (x *Scan) GetValuesWithheld() bool {
+	if x != nil {
+		return x.ValuesWithheld
+	}
+	return false
 }
 
 // ListSubjectsRequest asks for a page of a tenant's subjects. The
@@ -1529,7 +1558,7 @@ const file_nopacs_v1_catalog_proto_rawDesc = "" +
 	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\x12=\n" +
 	"\farchive_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\varchiveTime\x12;\n" +
 	"\vupdate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\xc8\x03\n" +
+	"updateTime\"\xf1\x03\n" +
 	"\aSession\x12#\n" +
 	"\rsubject_label\x18\x01 \x01(\tR\fsubjectLabel\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12,\n" +
@@ -1549,7 +1578,8 @@ const file_nopacs_v1_catalog_proto_rawDesc = "" +
 	" \x01(\tR\breceiver\x12=\n" +
 	"\farchive_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\varchiveTime\x12;\n" +
 	"\vupdate_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\xbe\x04\n" +
+	"updateTime\x12'\n" +
+	"\x0fvalues_withheld\x18\r \x01(\bR\x0evaluesWithheld\"\xe7\x04\n" +
 	"\x04Scan\x12#\n" +
 	"\rsubject_label\x18\x01 \x01(\tR\fsubjectLabel\x12#\n" +
 	"\rsession_label\x18\x02 \x01(\tR\fsessionLabel\x12\x14\n" +
@@ -1567,7 +1597,8 @@ const file_nopacs_v1_catalog_proto_rawDesc = "" +
 	"\breceiver\x18\f \x01(\tR\breceiver\x12=\n" +
 	"\farchive_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\varchiveTime\x12;\n" +
 	"\vupdate_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTimeB\x10\n" +
+	"updateTime\x12'\n" +
+	"\x0fvalues_withheld\x18\x0f \x01(\bR\x0evaluesWithheldB\x10\n" +
 	"\x0e_series_number\"\xad\x02\n" +
 	"\x13ListSubjectsRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12!\n" +

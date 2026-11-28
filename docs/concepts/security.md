@@ -98,7 +98,16 @@ which rule matched, a pattern's matches and a value's lengths would let it read 
 held value back one guess at a time; it tries the files it sends), `deid code` and
 lookup imports, an import's paths, the metadata and files of data archived as
 received, and backups and exports; quarantine records and receptions reach it
-without their UIDs as received.
+without their UIDs as received. The catalog answers it a session or scan archived
+as received with its labels, counts, sizes and times, but without the values read
+from its files (the study and series UIDs, the study date, the modality, the
+series description and number): they are empty, `values_withheld` is true, and the
+command line prints "withheld". A filter on such a value never matches a
+session or scan archived as received, an order by one lists them last, and a
+DICOMweb search by one never finds them, so a masked key cannot learn a value
+by guessing it. The server's log never holds a request or an
+answer, at any level: its debug lines give the procedure, the request id and the
+size of each message.
 
 A masked key also never chooses where archived data goes: a send job, attaching or
 filling a replica, adding or changing a storage or a sender, and a receiver made to

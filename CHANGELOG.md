@@ -604,6 +604,7 @@ scan, keeps it whole, and serves it through an API with keys.
   progress finishes; an unreadable count refuses. `quota.warn` (90%) writes one
   `QUOTA` event per crossing and keeps the gauges `nopacs_quota_*`; `nopacs
   tenant show`, `tenant status`, `GetTenant` and `GetStatus` show use and bound.
+- The catalog answers a masked key a session or scan archived as received without the values read from its files (UIDs, dates, modality, descriptions), with `values_withheld` set; a filter or order on such a value never matches or leads with those rows, and a DICOMweb search never finds them. The server's log carries no request or answer content at any level. A test starts a real server, receives synthetic files with unmistakable identifiers and drives the API, the DICOMweb and download routes and the command line as masked keys of every grant level, and requires that no original value appears in any answer, error, log, audit entry, event or command output.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

@@ -48,7 +48,7 @@ func sessionsPage(c *ctx, owner, gen int, token, tenant, subject string) tea.Cmd
 					}
 					mods += m
 				}
-				rows = append(rows, row{cells: []string{s.GetLabel(), output.Dash(s.GetStudyDate()), output.Dash(mods), itoa(s.GetScanCount()), itoa(s.GetInstanceCount()), output.Human(s.GetSizeBytes()), listTime(s.GetArchiveTime(), loc)}, ref: s})
+				rows = append(rows, row{cells: []string{s.GetLabel(), output.Value(s.GetValuesWithheld(), s.GetStudyDate()), output.Value(s.GetValuesWithheld(), mods), itoa(s.GetScanCount()), itoa(s.GetInstanceCount()), output.Human(s.GetSizeBytes()), listTime(s.GetArchiveTime(), loc)}, ref: s})
 			}
 			return pageMsg{gen: gen, rows: rows, next: r.GetNextPageToken()}
 		})
@@ -65,7 +65,7 @@ func scansPage(c *ctx, owner, gen int, token, tenant, subject, session string) t
 		return answer(res, err, func(r *v1.ListScansResponse) tea.Msg {
 			rows := make([]row, 0, len(r.GetScans()))
 			for _, s := range r.GetScans() {
-				rows = append(rows, row{cells: []string{s.GetLabel(), output.Dash(s.GetModality()), seriesText(s), output.Dash(s.GetSeriesDescription()), itoa(s.GetInstanceCount()), output.Human(s.GetSizeBytes()), listTime(s.GetArchiveTime(), loc)}, ref: s})
+				rows = append(rows, row{cells: []string{s.GetLabel(), output.Value(s.GetValuesWithheld(), s.GetModality()), seriesText(s), output.Value(s.GetValuesWithheld(), s.GetSeriesDescription()), itoa(s.GetInstanceCount()), output.Human(s.GetSizeBytes()), listTime(s.GetArchiveTime(), loc)}, ref: s})
 			}
 			return pageMsg{gen: gen, rows: rows, next: r.GetNextPageToken()}
 		})
@@ -74,6 +74,9 @@ func scansPage(c *ctx, owner, gen int, token, tenant, subject, session string) t
 
 // seriesText is a scan's Series Number, or a dash when it has none.
 func seriesText(s *v1.Scan) string {
+	if s.GetValuesWithheld() {
+		return output.WithheldText
+	}
 	if s.SeriesNumber == nil {
 		return "-"
 	}

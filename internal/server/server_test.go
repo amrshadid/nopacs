@@ -316,9 +316,26 @@ func TestRedactedLogs(t *testing.T) {
 					t.Fatalf("the log holds the %s", name)
 				}
 			}
-			for _, want := range []string{"message received", "message sent", "CreateTenant", "robot"} {
+			for _, want := range []string{"message received", "message sent", "CreateTenant"} {
 				if !contains(logText, want) {
 					t.Fatalf("the debug log lacks %q, so the search proves nothing:\n%s", want, logText)
+				}
+			}
+			// A message line says only that a message went by and how large it
+			// was: no "message" attribute, whatever it would hold.
+			for _, line := range strings.Split(logText, "\n") {
+				if !contains(line, "message received") && !contains(line, "message sent") {
+					continue
+				}
+				if !contains(line, "bytes") || contains(line, `"message":`) || contains(line, "message=") || contains(line, "message.") {
+					t.Fatalf("a message line is not size only: %s", line)
+				}
+			}
+			// No body is logged at any level: not the request's field, not the
+			// answer's.
+			for _, body := range []string{"robot", "lab", "db.example"} {
+				if contains(logText, `"`+body+`"`) || contains(logText, `holder=`+body) {
+					t.Fatalf("the debug log holds the body value %q:\n%s", body, logText)
 				}
 			}
 		})

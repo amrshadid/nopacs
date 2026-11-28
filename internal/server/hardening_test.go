@@ -681,20 +681,24 @@ func TestTransportAnswersLogged(t *testing.T) {
 }
 
 // TestNothingLoggedBeforeCheck guards that nothing from a request is logged
-// before the check has allowed it, even at debug level: a refused request's
-// message is not in the log, and the same message from the local operator
-// is, once allowed.
+// before the check has allowed it, even at debug level, and that no content
+// of it is logged after either: a refused request leaves no "message
+// received" line, an allowed one leaves the line with its size, and the
+// marker its message carries is in neither case in the log.
 func TestNothingLoggedBeforeCheck(t *testing.T) {
 	e := newEnv(t, options{level: -4})
 	const marker = "marker-before-check"
 	req := &nopacsv1.GetSettingRequest{Name: marker, Scope: installation()}
 	_, _ = e.network("").settings.GetSetting(e.ctx, req)
-	if strings.Contains(e.log.String(), marker) {
+	if strings.Contains(e.log.String(), "message received") || strings.Contains(e.log.String(), marker) {
 		t.Fatal("a refused request's message was logged")
 	}
 	_, _ = e.local().settings.GetSetting(e.ctx, req)
-	if !strings.Contains(e.log.String(), marker) {
-		t.Fatal("an allowed request's message was not logged at debug level, so the first search proves nothing")
+	if !strings.Contains(e.log.String(), "message received") {
+		t.Fatal("an allowed request's message was not logged at debug level, so the search proves nothing")
+	}
+	if strings.Contains(e.log.String(), marker) {
+		t.Fatal("an allowed request's content was logged")
 	}
 }
 

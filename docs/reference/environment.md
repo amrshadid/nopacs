@@ -67,6 +67,8 @@ These are for people who change the code. A test that needs an outside tool or a
 | `NOPACS_INCOMING_CRASH_ROOT` | The area's root, the step to stop at and on which hit |
 | `NOPACS_KILL_CHILD_DB` | The database the child makes changes to until it is killed |
 | `NOPACS_KILL_RECEIVED_DB` | The tenant database the child records received files into, from many receptions at once, until it is killed |
+| `NOPACS_LEAKTEST_DUMP` | A directory that receives every surface the seeded-identifier test saw, in one file, to read what a run found. |
+| `NOPACS_LEAKTEST_TREE` | A module root the seeded-identifier test builds the server and the command line from, in place of the checkout, for a run against a changed copy. |
 | `NOPACS_MEASURE` | When set, runs the measurement of the gap between the two denial paths; it is a measurement, not a check. Run it without the race detector. |
 | `NOPACS_MIGRATE_HELPER` | Turns the test binary into one of the processes that migrate one database at once |
 | `NOPACS_OTHER_USER_DIAL` | The path of the socket the helper dials as the other user |

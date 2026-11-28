@@ -271,6 +271,13 @@ func (x *webRequest) searchStudies(ctx context.Context, q dicomweb.Query, ls *li
 		it = x.sessions(tenant.SessionFilter{}, pageSize(q))
 	}
 	keep := func(s tenant.CatalogSession) (bool, error) {
+		if x.d.Masked() && namesTag(q.Keys, dicomweb.TagStudyInstanceUID, dicomweb.TagStudyDate, dicomweb.TagModalitiesInStudy) {
+			// A study archived as received matches no key on a value of its
+			// files: whether it did would tell a masked key that value.
+			if as, err := sessionAsReceived(ctx, x.p, s.SubjectLabel, s.Label); err != nil || as {
+				return false, err
+			}
+		}
 		for _, k := range q.Keys {
 			var vs []string
 			switch k.Tag {
@@ -312,6 +319,7 @@ func (x *webRequest) searchStudies(ctx context.Context, q dicomweb.Query, ls *li
 // sessions iterates a list of sessions.
 func (x *webRequest) sessions(f tenant.SessionFilter, size int) iterator[tenant.CatalogSession] {
 	return pagesOf(func(ctx context.Context, page master.Page) ([]tenant.CatalogSession, string, error) {
+		f.Originals = originalsFor(x.d)
 		got, err := x.p.ListSessions(ctx, f, page)
 		return got.Items, got.Next, err
 	}, size)
@@ -320,6 +328,7 @@ func (x *webRequest) sessions(f tenant.SessionFilter, size int) iterator[tenant.
 // scans iterates a list of scans.
 func (x *webRequest) scans(f tenant.ScanFilter, size int) iterator[tenant.CatalogScan] {
 	return pagesOf(func(ctx context.Context, page master.Page) ([]tenant.CatalogScan, string, error) {
+		f.Originals = originalsFor(x.d)
 		got, err := x.p.ListScans(ctx, f, page)
 		return got.Items, got.Next, err
 	}, size)
@@ -457,6 +466,13 @@ func (x *webRequest) searchSeries(ctx context.Context, q dicomweb.Query, ls *lin
 		it = x.scans(tenant.ScanFilter{}, pageSize(q))
 	}
 	keep := func(s tenant.CatalogScan) (bool, error) {
+		if x.d.Masked() && namesTag(q.Keys, dicomweb.TagSeriesInstanceUID, dicomweb.TagModality, dicomweb.TagSeriesDescription, dicomweb.TagSeriesNumber) {
+			// As for a study: a series archived as received matches no key
+			// on a value of its files.
+			if as, err := scanAsReceived(ctx, x.p, pathOf(s)); err != nil || as {
+				return false, err
+			}
+		}
 		for _, k := range q.Keys {
 			var vs []string
 			switch k.Tag {

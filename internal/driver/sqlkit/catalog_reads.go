@@ -260,12 +260,30 @@ func (c CatalogReader[T]) ListSessions(ctx context.Context, f tenant.SessionFilt
 	if err := f.Validate(); err != nil {
 		return out, err
 	}
-	binding := c.Run.Binding(sessionFilterParts(f)...)
-	after, err := catalogAfter(page, ListCatalogSessions, binding, f.Order, levelSessions,
-		func(k CatalogKey) bool { return sessionKeyFits(f, k) })
-	if err != nil {
+	phases := sessionPhases(f)
+	if err := page.Validate(); err != nil {
 		return out, err
 	}
+	// A cursor belongs to the phase whose binding it carries.
+	start, after := 0, (*CatalogKey)(nil)
+	if page.Cursor != "" {
+		var first error
+		for i, ph := range phases {
+			a, aerr := catalogAfter(page, ListCatalogSessions, c.Run.Binding(sessionFilterParts(ph)...), ph.Order, levelSessions,
+				func(k CatalogKey) bool { return sessionKeyFits(ph, k) })
+			if aerr == nil {
+				start, after, first = i, a, nil
+				break
+			}
+			if i == 0 {
+				first = aerr
+			}
+		}
+		if first != nil {
+			return out, first
+		}
+	}
+	var err error
 	var subjectID int64
 	if f.SubjectLabel != "" {
 		sub, err := c.subjectByLabel(ctx, f.SubjectLabel)
@@ -281,27 +299,52 @@ func (c CatalogReader[T]) ListSessions(ctx context.Context, f tenant.SessionFilt
 			return out, err
 		}
 	}
-	q := c.SQL.Sessions(f, subjectID, after, page.Limit+1)
+	// The rows of the phases, in order, up to one more than the page: the
+	// next phase is read only for what the one before did not fill.
 	var got []sessionRow
-	if SessionsOfModality(f) {
-		got, err = c.sessionsOfModality(ctx, q)
-	} else {
-		got, err = rows(ctx, c.Run, "the sessions cannot be listed", q, c.scanSession)
+	var from []int
+	for i := start; i < len(phases) && len(got) <= page.Limit; i++ {
+		ph := phases[i]
+		rest := page.Limit + 1 - len(got)
+		q := c.SQL.Sessions(ph, subjectID, after, rest)
+		var rs []sessionRow
+		if SessionsOfModality(ph) {
+			rs, err = c.sessionsOfModality(ctx, q)
+		} else {
+			rs, err = rows(ctx, c.Run, "the sessions cannot be listed", q, c.scanSession)
+		}
+		if err != nil {
+			return out, err
+		}
+		for range rs {
+			from = append(from, i)
+		}
+		got, after = append(got, rs...), nil
 	}
-	if err != nil {
+	cut, last, more := Cut(got, page.Limit)
+	if err := c.addModalities(ctx, cut); err != nil {
 		return out, err
 	}
-	got, last, more := Cut(got, page.Limit)
-	if err := c.addModalities(ctx, got); err != nil {
-		return out, err
-	}
-	for _, r := range got {
+	for _, r := range cut {
 		out.Items = append(out.Items, r.s)
 	}
 	if more {
-		out.Next = catalogCursor(ListCatalogSessions, binding, f.Order, levelSessions, last.key)
+		ph := phases[from[len(cut)-1]]
+		out.Next = catalogCursor(ListCatalogSessions, c.Run.Binding(sessionFilterParts(ph)...), ph.Order, levelSessions, last.key)
 	}
 	return out, nil
+}
+
+// sessionPhases returns the filters a list is read through, in order. One,
+// the filter, but for an order by study date that hides the sessions
+// archived as received (tenant.OriginalsHidden) with no range of dates:
+// those sessions, which no date matches, follow in label order.
+func sessionPhases(f tenant.SessionFilter) []tenant.SessionFilter {
+	if f.Originals != tenant.OriginalsHidden || f.Order != tenant.OrderStudyDate || f.StudyDateStart != "" || f.StudyDateEnd != "" {
+		return []tenant.SessionFilter{f}
+	}
+	rest := tenant.SessionFilter{SubjectLabel: f.SubjectLabel, Order: tenant.OrderLabel, Originals: tenant.OriginalsOnly}
+	return []tenant.SessionFilter{f, rest}
 }
 
 // sessionsOfModality reads a page of a modality's sessions: their ids in
@@ -386,12 +429,29 @@ func (c CatalogReader[T]) ListScans(ctx context.Context, f tenant.ScanFilter, pa
 	if err := f.Validate(); err != nil {
 		return out, err
 	}
-	binding := c.Run.Binding(scanFilterParts(f)...)
-	after, err := catalogAfter(page, ListCatalogScans, binding, f.Order, levelScans,
-		func(k CatalogKey) bool { return scanKeyFits(f, k) })
-	if err != nil {
+	phases := scanPhases(f)
+	if err := page.Validate(); err != nil {
 		return out, err
 	}
+	start, after := 0, (*CatalogKey)(nil)
+	if page.Cursor != "" {
+		var first error
+		for i, ph := range phases {
+			a, aerr := catalogAfter(page, ListCatalogScans, c.Run.Binding(scanFilterParts(ph)...), ph.Order, levelScans,
+				func(k CatalogKey) bool { return scanKeyFits(ph, k) })
+			if aerr == nil {
+				start, after, first = i, a, nil
+				break
+			}
+			if i == 0 {
+				first = aerr
+			}
+		}
+		if first != nil {
+			return out, first
+		}
+	}
+	var err error
 	var sessionID int64
 	switch {
 	case f.SessionLabel != "":
@@ -412,18 +472,37 @@ func (c CatalogReader[T]) ListScans(ctx context.Context, f tenant.ScanFilter, pa
 			return out, err
 		}
 	}
-	got, err := rows(ctx, c.Run, "the scans cannot be listed", c.SQL.Scans(f, sessionID, after, page.Limit+1), c.scanScan)
-	if err != nil {
-		return out, err
+	var got []scanRow
+	var from []int
+	for i := start; i < len(phases) && len(got) <= page.Limit; i++ {
+		rs, err := rows(ctx, c.Run, "the scans cannot be listed", c.SQL.Scans(phases[i], sessionID, after, page.Limit+1-len(got)), c.scanScan)
+		if err != nil {
+			return out, err
+		}
+		for range rs {
+			from = append(from, i)
+		}
+		got, after = append(got, rs...), nil
 	}
-	got, last, more := Cut(got, page.Limit)
-	for _, r := range got {
+	cut, last, more := Cut(got, page.Limit)
+	for _, r := range cut {
 		out.Items = append(out.Items, r.s)
 	}
 	if more {
-		out.Next = catalogCursor(ListCatalogScans, binding, f.Order, levelScans, last.key)
+		ph := phases[from[len(cut)-1]]
+		out.Next = catalogCursor(ListCatalogScans, c.Run.Binding(scanFilterParts(ph)...), ph.Order, levelScans, last.key)
 	}
 	return out, nil
+}
+
+// scanPhases is sessionPhases for scans: an order by series description
+// that hides the scans archived as received, with no description prefix,
+// is followed by those scans in label order.
+func scanPhases(f tenant.ScanFilter) []tenant.ScanFilter {
+	if f.Originals != tenant.OriginalsHidden || f.Order != tenant.OrderSeriesDescription || f.DescriptionPrefix != "" {
+		return []tenant.ScanFilter{f}
+	}
+	return []tenant.ScanFilter{f, {Order: tenant.OrderLabel, Originals: tenant.OriginalsOnly}}
 }
 
 // ListHeldInstances implements tenant.InstanceReads.

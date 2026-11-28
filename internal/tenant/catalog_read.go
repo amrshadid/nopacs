@@ -161,6 +161,28 @@ func (f SubjectFilter) Total() TotalSource {
 	return TotalUnknown
 }
 
+// Originals says how a list treats the rows archived as received: those
+// with an instance that records no profile version, whose values read from
+// their files (study date, modality, series description) are the sender's
+// originals. A caller that may not learn an original value, a masked key,
+// must not learn it either by asking which rows a filter on it keeps or in
+// what order it sorts them.
+type Originals uint8
+
+const (
+	// OriginalsAll treats a row archived as received as any other.
+	OriginalsAll Originals = iota
+	// OriginalsHidden keeps a row archived as received out of what a filter
+	// on a value read from the files keeps (a modality, a range of study
+	// dates, a series description prefix), and, in an order by such a
+	// value, lists it after every other row, in label order.
+	OriginalsHidden
+	// OriginalsOnly keeps only the rows archived as received. A reader of
+	// the catalog sets it to list the last part of an OriginalsHidden
+	// order; a caller of a list does not.
+	OriginalsOnly
+)
+
 // SessionFilter is what ListSessions keeps and its order. The
 // combinations served:
 //
@@ -193,6 +215,8 @@ type SessionFilter struct {
 	// Order is the order of the answer: OrderNewest, OrderLabel or
 	// OrderStudyDate.
 	Order CatalogOrder
+	// Originals says how the rows archived as received are treated.
+	Originals Originals
 }
 
 // Validate returns an Invalid error unless the filter is one an index
@@ -255,7 +279,7 @@ func (f SessionFilter) Validate() error {
 // order with no filter, the tenant's total of its sessions; with only a
 // subject, the subject's count of its sessions; none otherwise.
 func (f SessionFilter) Total() TotalSource {
-	if f.Order != OrderNewest && f.Order != OrderLabel {
+	if f.Order != OrderNewest && f.Order != OrderLabel || f.Originals == OriginalsOnly {
 		return TotalUnknown
 	}
 	if f.LabelPrefix != "" || f.Modality != "" || f.Receiver != "" || !f.Range.IsZero() {
@@ -302,6 +326,8 @@ type ScanFilter struct {
 	// Order is the order of the answer: OrderNewest, OrderLabel or
 	// OrderSeriesDescription.
 	Order CatalogOrder
+	// Originals says how the rows archived as received are treated.
+	Originals Originals
 }
 
 // Validate returns an Invalid error unless the filter is one an index
@@ -374,7 +400,7 @@ func (f ScanFilter) Validate() error {
 // session, the session's count of its scans; none otherwise, a subject
 // alone included, since a subject keeps no count of its scans.
 func (f ScanFilter) Total() TotalSource {
-	if f.Order != OrderNewest && f.Order != OrderLabel {
+	if f.Order != OrderNewest && f.Order != OrderLabel || f.Originals == OriginalsOnly {
 		return TotalUnknown
 	}
 	if f.LabelPrefix != "" || f.Modality != "" || f.Receiver != "" || !f.Range.IsZero() {

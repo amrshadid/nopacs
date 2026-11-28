@@ -48,6 +48,19 @@ func Dash(s string) string {
 	return s
 }
 
+// WithheldText is what stands in a table or a list of values for one the
+// server left out of an answer to a masked key.
+const WithheldText = "withheld"
+
+// Value is Dash(s), or WithheldText when the server withheld the value
+// (the answer's values_withheld is true).
+func Value(withheld bool, s string) string {
+	if withheld {
+		return WithheldText
+	}
+	return Dash(s)
+}
+
 // IsTerminal reports whether w is a terminal: a file that is a character
 // device. It is how the command line chooses whether color is allowed; it
 // takes no dependency for it.

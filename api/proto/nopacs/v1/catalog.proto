@@ -263,6 +263,14 @@ message Session {
 
   // When a file was last archived into it.
   google.protobuf.Timestamp update_time = 12;
+
+  // True when this answer leaves out the values read from its files:
+  // study_instance_uid, study_date and modalities are empty. It is set for
+  // a masked key (a key made for an AI agent) reading a session a receiver
+  // that keeps files as received archived, where those values are the
+  // sender's originals and are in no de-identified form. An empty value
+  // with this false means the files held none.
+  bool values_withheld = 13;
 }
 
 // Scan is one series of a session, as the catalog holds it.
@@ -317,6 +325,15 @@ message Scan {
 
   // When a file was last archived into it.
   google.protobuf.Timestamp update_time = 14;
+
+  // True when this answer leaves out the values read from its files:
+  // series_instance_uid, modality, series_description and series_number
+  // are empty or absent. It is set for a masked key (a key made for an AI
+  // agent) reading a scan a receiver that keeps files as received
+  // archived, where those values are the sender's originals and are in no
+  // de-identified form. An empty value with this false means the files
+  // held none.
+  bool values_withheld = 15;
 }
 
 // ListSubjectsRequest asks for a page of a tenant's subjects. The

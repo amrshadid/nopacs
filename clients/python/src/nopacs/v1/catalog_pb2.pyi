@@ -40,7 +40,7 @@ class Subject(_message.Message):
     def __init__(self, label: _Optional[str] = ..., session_count: _Optional[int] = ..., instance_count: _Optional[int] = ..., size_bytes: _Optional[int] = ..., archive_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Session(_message.Message):
-    __slots__ = ("subject_label", "label", "study_instance_uid", "study_date", "modalities", "scan_count", "instance_count", "size_bytes", "storage", "receiver", "archive_time", "update_time")
+    __slots__ = ("subject_label", "label", "study_instance_uid", "study_date", "modalities", "scan_count", "instance_count", "size_bytes", "storage", "receiver", "archive_time", "update_time", "values_withheld")
     SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
     LABEL_FIELD_NUMBER: _ClassVar[int]
     STUDY_INSTANCE_UID_FIELD_NUMBER: _ClassVar[int]
@@ -53,6 +53,7 @@ class Session(_message.Message):
     RECEIVER_FIELD_NUMBER: _ClassVar[int]
     ARCHIVE_TIME_FIELD_NUMBER: _ClassVar[int]
     UPDATE_TIME_FIELD_NUMBER: _ClassVar[int]
+    VALUES_WITHHELD_FIELD_NUMBER: _ClassVar[int]
     subject_label: str
     label: str
     study_instance_uid: str
@@ -65,10 +66,11 @@ class Session(_message.Message):
     receiver: str
     archive_time: _timestamp_pb2.Timestamp
     update_time: _timestamp_pb2.Timestamp
-    def __init__(self, subject_label: _Optional[str] = ..., label: _Optional[str] = ..., study_instance_uid: _Optional[str] = ..., study_date: _Optional[str] = ..., modalities: _Optional[_Iterable[str]] = ..., scan_count: _Optional[int] = ..., instance_count: _Optional[int] = ..., size_bytes: _Optional[int] = ..., storage: _Optional[str] = ..., receiver: _Optional[str] = ..., archive_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    values_withheld: bool
+    def __init__(self, subject_label: _Optional[str] = ..., label: _Optional[str] = ..., study_instance_uid: _Optional[str] = ..., study_date: _Optional[str] = ..., modalities: _Optional[_Iterable[str]] = ..., scan_count: _Optional[int] = ..., instance_count: _Optional[int] = ..., size_bytes: _Optional[int] = ..., storage: _Optional[str] = ..., receiver: _Optional[str] = ..., archive_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., values_withheld: _Optional[bool] = ...) -> None: ...
 
 class Scan(_message.Message):
-    __slots__ = ("subject_label", "session_label", "label", "series_instance_uid", "modality", "series_description", "series_number", "instance_count", "size_bytes", "storage", "manifest_sha256", "receiver", "archive_time", "update_time")
+    __slots__ = ("subject_label", "session_label", "label", "series_instance_uid", "modality", "series_description", "series_number", "instance_count", "size_bytes", "storage", "manifest_sha256", "receiver", "archive_time", "update_time", "values_withheld")
     SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
     SESSION_LABEL_FIELD_NUMBER: _ClassVar[int]
     LABEL_FIELD_NUMBER: _ClassVar[int]
@@ -83,6 +85,7 @@ class Scan(_message.Message):
     RECEIVER_FIELD_NUMBER: _ClassVar[int]
     ARCHIVE_TIME_FIELD_NUMBER: _ClassVar[int]
     UPDATE_TIME_FIELD_NUMBER: _ClassVar[int]
+    VALUES_WITHHELD_FIELD_NUMBER: _ClassVar[int]
     subject_label: str
     session_label: str
     label: str
@@ -97,7 +100,8 @@ class Scan(_message.Message):
     receiver: str
     archive_time: _timestamp_pb2.Timestamp
     update_time: _timestamp_pb2.Timestamp
-    def __init__(self, subject_label: _Optional[str] = ..., session_label: _Optional[str] = ..., label: _Optional[str] = ..., series_instance_uid: _Optional[str] = ..., modality: _Optional[str] = ..., series_description: _Optional[str] = ..., series_number: _Optional[int] = ..., instance_count: _Optional[int] = ..., size_bytes: _Optional[int] = ..., storage: _Optional[str] = ..., manifest_sha256: _Optional[str] = ..., receiver: _Optional[str] = ..., archive_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    values_withheld: bool
+    def __init__(self, subject_label: _Optional[str] = ..., session_label: _Optional[str] = ..., label: _Optional[str] = ..., series_instance_uid: _Optional[str] = ..., modality: _Optional[str] = ..., series_description: _Optional[str] = ..., series_number: _Optional[int] = ..., instance_count: _Optional[int] = ..., size_bytes: _Optional[int] = ..., storage: _Optional[str] = ..., manifest_sha256: _Optional[str] = ..., receiver: _Optional[str] = ..., archive_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., values_withheld: _Optional[bool] = ...) -> None: ...
 
 class ListSubjectsRequest(_message.Message):
     __slots__ = ("tenant", "label_prefix", "start_time", "end_time", "order", "page_size", "page_token")

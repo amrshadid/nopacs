@@ -172,6 +172,7 @@ func (s catalogService) ListSessions(ctx context.Context, req *v1.ListSessionsRe
 		StudyDateStart: req.GetStudyDateStart(), StudyDateEnd: req.GetStudyDateEnd(),
 		Modality: req.GetModality(), Receiver: req.GetReceiver(),
 	}
+	f.Originals = originalsFor(d)
 	if f.Order, err = orderOf(req.GetOrder()); err != nil {
 		return nil, c.failIn(d, st, err)
 	}
@@ -189,11 +190,15 @@ func (s catalogService) ListSessions(ctx context.Context, req *v1.ListSessionsRe
 	if err != nil {
 		return nil, c.failIn(d, st, relabeled(ctx, st, filterPath(f.SubjectLabel, ""), listError(err, page.Cursor)))
 	}
-	c.done(d, st)
 	out := &v1.ListSessionsResponse{Sessions: make([]*v1.Session, 0, len(got.Items)), NextPageToken: got.Next, TotalCount: got.Total}
 	for _, it := range got.Items {
-		out.Sessions = append(out.Sessions, sessionMessage(it))
+		m, err := sessionMessageFor(ctx, d.Masked(), p, it)
+		if err != nil {
+			return nil, c.failIn(d, st, err)
+		}
+		out.Sessions = append(out.Sessions, m)
 	}
+	c.done(d, st)
 	return out, nil
 }
 
@@ -218,8 +223,12 @@ func (s catalogService) GetSession(ctx context.Context, req *v1.GetSessionReques
 	if err != nil {
 		return nil, c.failIn(d, st, relabeled(ctx, st, label.Path{Subject: req.GetSubjectLabel(), Session: req.GetSessionLabel()}, err))
 	}
+	m, err := sessionMessageFor(ctx, d.Masked(), p, got)
+	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
 	c.done(d, st)
-	return &v1.GetSessionResponse{Session: sessionMessage(got)}, nil
+	return &v1.GetSessionResponse{Session: m}, nil
 }
 
 // ListScans answers a page of a tenant's scans.
@@ -236,7 +245,7 @@ func (s catalogService) ListScans(ctx context.Context, req *v1.ListScansRequest)
 	f := tenant.ScanFilter{
 		SubjectLabel: req.GetSubjectLabel(), SessionLabel: req.GetSessionLabel(), LabelPrefix: req.GetLabelPrefix(),
 		Modality: req.GetModality(), DescriptionPrefix: tenant.FoldDescriptionPrefix(req.GetSeriesDescriptionPrefix()),
-		Receiver: req.GetReceiver(),
+		Receiver: req.GetReceiver(), Originals: originalsFor(d),
 	}
 	if f.Order, err = orderOf(req.GetOrder()); err != nil {
 		return nil, c.failIn(d, st, err)
@@ -255,11 +264,15 @@ func (s catalogService) ListScans(ctx context.Context, req *v1.ListScansRequest)
 	if err != nil {
 		return nil, c.failIn(d, st, relabeled(ctx, st, filterPath(f.SubjectLabel, f.SessionLabel), listError(err, page.Cursor)))
 	}
-	c.done(d, st)
 	out := &v1.ListScansResponse{Scans: make([]*v1.Scan, 0, len(got.Items)), NextPageToken: got.Next, TotalCount: got.Total}
 	for _, it := range got.Items {
-		out.Scans = append(out.Scans, scanMessage(it))
+		m, err := scanMessageFor(ctx, d.Masked(), p, it)
+		if err != nil {
+			return nil, c.failIn(d, st, err)
+		}
+		out.Scans = append(out.Scans, m)
 	}
+	c.done(d, st)
 	return out, nil
 }
 
@@ -282,6 +295,10 @@ func (s catalogService) GetScan(ctx context.Context, req *v1.GetScanRequest) (*v
 	if err != nil {
 		return nil, c.failIn(d, st, relabeled(ctx, st, path, err))
 	}
+	m, err := scanMessageFor(ctx, d.Masked(), p, got)
+	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
 	c.done(d, st)
-	return &v1.GetScanResponse{Scan: scanMessage(got)}, nil
+	return &v1.GetScanResponse{Scan: m}, nil
 }

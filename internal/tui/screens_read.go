@@ -83,8 +83,8 @@ func newScanDetail(c *ctx, tenant string, s *v1.Scan) screen {
 	d.pairs = func(c *ctx, ref any) []pair {
 		s, _ := ref.(*v1.Scan)
 		return []pair{
-			{"Series UID", output.Dash(s.GetSeriesInstanceUid())}, {"Modality", output.Dash(s.GetModality())}, {"Series number", seriesText(s)},
-			{"Description", output.Dash(s.GetSeriesDescription())}, {"Instances", itoa(s.GetInstanceCount())}, {"Size", output.Human(s.GetSizeBytes())},
+			{"Series UID", output.Value(s.GetValuesWithheld(), s.GetSeriesInstanceUid())}, {"Modality", output.Value(s.GetValuesWithheld(), s.GetModality())}, {"Series number", seriesText(s)},
+			{"Description", output.Value(s.GetValuesWithheld(), s.GetSeriesDescription())}, {"Instances", itoa(s.GetInstanceCount())}, {"Size", output.Human(s.GetSizeBytes())},
 			{"Storage", output.Dash(s.GetStorage())}, {"Manifest SHA-256", output.Dash(s.GetManifestSha256())}, {"Receiver", output.Dash(s.GetReceiver())},
 			{"Archived", output.Time(s.GetArchiveTime(), c.loc)}, {"Updated", output.Time(s.GetUpdateTime(), c.loc)},
 		}

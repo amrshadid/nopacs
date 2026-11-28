@@ -231,7 +231,7 @@ combination it does not serve.`,
 				rows := make([][]string, 0, len(items))
 				for _, s := range items {
 					rows = append(rows, []string{
-						s.GetSubjectLabel(), s.GetLabel(), output.Dash(s.GetStudyDate()), output.Dash(strings.Join(s.GetModalities(), ",")),
+						s.GetSubjectLabel(), s.GetLabel(), output.Value(s.GetValuesWithheld(), s.GetStudyDate()), output.Value(s.GetValuesWithheld(), strings.Join(s.GetModalities(), ",")),
 						count(s.GetScanCount()), count(s.GetInstanceCount()), output.Human(s.GetSizeBytes()), output.Dash(s.GetReceiver()), a.when(s.GetArchiveTime()),
 					})
 				}
@@ -309,8 +309,8 @@ not serve.`,
 				rows := make([][]string, 0, len(items))
 				for _, s := range items {
 					rows = append(rows, []string{
-						s.GetSubjectLabel(), s.GetSessionLabel(), s.GetLabel(), output.Dash(s.GetModality()), seriesNumber(s),
-						output.Dash(s.GetSeriesDescription()), count(s.GetInstanceCount()), output.Human(s.GetSizeBytes()), a.when(s.GetArchiveTime()),
+						s.GetSubjectLabel(), s.GetSessionLabel(), s.GetLabel(), output.Value(s.GetValuesWithheld(), s.GetModality()), seriesNumber(s),
+						output.Value(s.GetValuesWithheld(), s.GetSeriesDescription()), count(s.GetInstanceCount()), output.Human(s.GetSizeBytes()), a.when(s.GetArchiveTime()),
 					})
 				}
 				return a.write(func(w io.Writer) error {
@@ -341,6 +341,9 @@ func scansOrder(subject, session, modality, receiver string, span bool) v1.Catal
 
 // seriesNumber is a scan's Series Number, or a dash when it has none.
 func seriesNumber(s *v1.Scan) string {
+	if s.GetValuesWithheld() {
+		return output.WithheldText
+	}
 	if s.SeriesNumber == nil {
 		return "-"
 	}

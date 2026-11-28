@@ -17,7 +17,6 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/access"
 	"github.com/amrshadid/nopacs/internal/api/codes"
-	"github.com/amrshadid/nopacs/internal/obs/redact"
 )
 
 // errNoSuchMethod answers a procedure the table does not know, after the
@@ -87,7 +86,7 @@ func (s *Server) interceptor(next connect.ServerFunc) connect.ServerFunc {
 
 // replayStream hands the handler the message the check already read, as
 // its first Receive, so a message is read from the wire once; it logs each
-// message at debug level, redacted, once the check has allowed the request;
+// message's size (never its content) at debug level once the check allowed it;
 // and it refuses to send an answer over the size limit in the request's
 // encoding.
 type replayStream struct {
@@ -129,7 +128,7 @@ func (r *replayStream) Receive(msg any) error {
 // jsonCodec is the name of the RPC library's JSON codec.
 const jsonCodec = "json"
 
-// Send logs the message, redacted, and sends it, unless its encoding is
+// Send logs the answer's size and sends it, unless its encoding is
 // over the limit. The RPC library's own send limit counts the compressed
 // bytes, so a large answer that compresses well would pass it and then be
 // refused by a stock gRPC client, whose limit counts the bytes after
@@ -153,9 +152,12 @@ func (r *replayStream) Send(msg any) error {
 	return r.ServerStream.Send(msg)
 }
 
-// logMessage writes a message at debug level, through the redactor. It is
-// the only place the server logs a request's or a response's content, and
-// it runs only once the check has allowed the request.
+// logMessage writes that a message went by at debug level: the request id,
+// the procedure and the encoded size, never the message. A request or an
+// answer holds identifiers and values of people's files (and an answer is
+// written before it is reduced for a masked key), and a log is read by
+// people and shipped to systems that no key guards. The request's own
+// outcome is the "request" line, which has the code and the duration.
 func (r *replayStream) logMessage(what string, msg any) {
 	m, ok := msg.(proto.Message)
 	if !ok || !r.s.log.Enabled(r.ctx, slog.LevelDebug) {
@@ -165,7 +167,7 @@ func (r *replayStream) logMessage(what string, msg any) {
 	r.s.log.LogAttrs(r.ctx, slog.LevelDebug, what,
 		slog.String("request_id", id),
 		slog.String("method", r.method),
-		slog.Any("message", redact.LogValue(m)))
+		slog.Int("bytes", proto.Size(m)))
 }
 
 // HTTPHandler serves a plain HTTP route once the request path has checked

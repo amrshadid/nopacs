@@ -50,13 +50,13 @@ func subjectFilterParts(f tenant.SubjectFilter) []string {
 // sessionFilterParts returns what a session list's cursor is bound to.
 func sessionFilterParts(f tenant.SessionFilter) []string {
 	return []string{ListCatalogSessions, f.Order.String(), f.SubjectLabel, f.LabelPrefix, f.StudyDateStart, f.StudyDateEnd,
-		f.Modality, f.Receiver, MicrosText(f.Range.Start), MicrosText(f.Range.End)}
+		f.Modality, f.Receiver, MicrosText(f.Range.Start), MicrosText(f.Range.End), strconv.Itoa(int(f.Originals))}
 }
 
 // scanFilterParts returns what a scan list's cursor is bound to.
 func scanFilterParts(f tenant.ScanFilter) []string {
 	return []string{ListCatalogScans, f.Order.String(), f.SubjectLabel, f.SessionLabel, f.LabelPrefix, f.Modality,
-		f.DescriptionPrefix, f.Receiver, MicrosText(f.Range.Start), MicrosText(f.Range.End)}
+		f.DescriptionPrefix, f.Receiver, MicrosText(f.Range.Start), MicrosText(f.Range.End), strconv.Itoa(int(f.Originals))}
 }
 
 // keyFields returns the fields of a cursor after k in a list of level and

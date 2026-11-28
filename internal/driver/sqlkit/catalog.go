@@ -196,6 +196,33 @@ func newestOrder(column, created, id string) string {
 	return column + " DESC, " + created + " DESC, " + id + " DESC"
 }
 
+// The rows archived as received: a scan that holds an instance recording no
+// profile version, a session with such a scan (the rule of jobs_deid.go's
+// plainSeriesSQL, and of the API's withheld catalog values). The id column
+// is the one the statement reads the row's id from; the condition is a probe
+// of the instances' primary key, run for the rows of a page only.
+const (
+	scanReceivedSQL    = `EXISTS (SELECT 1 FROM instances AS i WHERE i.scan_id = %s AND i.profile_version_id IS NULL)`
+	sessionReceivedSQL = `EXISTS (SELECT 1 FROM scans AS sc WHERE sc.session_id = %s AND EXISTS (SELECT 1 FROM instances AS i
+		WHERE i.scan_id = sc.id AND i.profile_version_id IS NULL))`
+)
+
+// originals adds, for a list with an order or a filter on a value read from
+// the files (valued), the condition o asks for: none for OriginalsAll, the
+// rows not archived as received for OriginalsHidden, only those for
+// OriginalsOnly. cond is scanReceivedSQL or sessionReceivedSQL on the
+// statement's id column, written with its own id in place of the %s.
+func (b *builder) originals(o tenant.Originals, valued bool, cond string) {
+	switch {
+	case o == tenant.OriginalsOnly:
+		b.cond = append(b.cond, cond)
+	case o == tenant.OriginalsHidden && valued:
+		b.cond = append(b.cond, "NOT "+cond)
+	}
+}
+
+func receivedOf(cond, id string) string { return strings.Replace(cond, "%s", id, 1) }
+
 // prefix adds the range of the texts of column that start with p, folded
 // already; nothing for an empty prefix. After a cursor (resumed) the
 // cursor's own condition is the lower bound, past the prefix's start since
@@ -238,6 +265,7 @@ func (c CatalogSQL) Sessions(f tenant.SessionFilter, subjectID int64, after *Cat
 	b := &builder{c: c}
 	switch f.Order {
 	case tenant.OrderLabel:
+		b.originals(f.Originals, false, receivedOf(sessionReceivedSQL, "sessions.id"))
 		if f.SubjectLabel != "" {
 			b.where("subject_id = %s", subjectID)
 			b.prefix("folded", label.Fold(f.LabelPrefix), after != nil)
@@ -257,6 +285,7 @@ func (c CatalogSQL) Sessions(f tenant.SessionFilter, subjectID int64, after *Cat
 		if start == "" {
 			start = "0"
 		}
+		b.originals(f.Originals, true, receivedOf(sessionReceivedSQL, "sessions.id"))
 		if f.SubjectLabel != "" {
 			b.where("subject_id = %s", subjectID)
 		}
@@ -273,6 +302,7 @@ func (c CatalogSQL) Sessions(f tenant.SessionFilter, subjectID int64, after *Cat
 	}
 	switch {
 	case f.Modality != "":
+		b.originals(f.Originals, true, receivedOf(sessionReceivedSQL, "session_modalities.session_id"))
 		b.newestOf("modality", f.Modality, "created", "session_id", f.Range, after)
 		return b.read("session_id, created", "session_modalities", newestOrder("modality", "created", "session_id"), limit)
 	case f.SubjectLabel != "":
@@ -304,6 +334,7 @@ func (c CatalogSQL) Scans(f tenant.ScanFilter, sessionID int64, after *CatalogKe
 	b := &builder{c: c}
 	switch f.Order {
 	case tenant.OrderLabel:
+		b.originals(f.Originals, false, receivedOf(scanReceivedSQL, "scans.id"))
 		switch {
 		case f.SessionLabel != "":
 			b.where("session_id = %s", sessionID)
@@ -324,6 +355,7 @@ func (c CatalogSQL) Scans(f tenant.ScanFilter, sessionID int64, after *CatalogKe
 		}
 		return b.read(ScanColumns, "scans", "subject_folded, session_folded, folded", limit)
 	case tenant.OrderSeriesDescription:
+		b.originals(f.Originals, true, receivedOf(scanReceivedSQL, "scans.id"))
 		// A scan with no description holds '', before every other text,
 		// and a cursor's description is never empty (scanKeyFits), so
 		// the cursor is the lower bound once there is one (prefix says why
@@ -344,6 +376,7 @@ func (c CatalogSQL) Scans(f tenant.ScanFilter, sessionID int64, after *CatalogKe
 		b.newest("created", "id", f.Range, after)
 		return b.read(ScanColumns, "scans", "created DESC, id DESC", limit)
 	case f.Modality != "":
+		b.originals(f.Originals, true, receivedOf(scanReceivedSQL, "scans.id"))
 		b.newestOf("modality", f.Modality, "created", "id", f.Range, after)
 		return b.read(ScanColumns, "scans", newestOrder("modality", "created", "id"), limit)
 	case f.Receiver != "":

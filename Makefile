@@ -302,7 +302,7 @@ check-auditchain:
 PYDICOM_CORPUS ?=
 CHECK_READING_ENV = $(if $(PYDICOM_CORPUS),NOPACS_PYDICOM_CORPUS="$(PYDICOM_CORPUS)")
 
-.PHONY: check-metadata check-catalog check-frames check-dicomweb check-stow check-deid check-j2k check-send
+.PHONY: check-metadata check-catalog check-frames check-dicomweb check-stow check-deid check-j2k check-send check-leaks
 
 check-metadata:
 	@test -n "$(PYTHON)" || { echo "check-metadata: PYTHON is empty; name an interpreter that has pydicom" >&2; exit 1; }
@@ -350,6 +350,13 @@ check-stow:
 check-send:
 	@command -v "$(PYTHON)" > /dev/null || { echo "check-send: no interpreter $(PYTHON)" >&2; exit 1; }
 	NOPACS_REQUIRE_DCMTK=1 NOPACS_DCMTK="$(DCMTK)" NOPACS_PYTHON="$(PYTHON)" $(GO) test -count=1 -v -run '^TestOutside' ./internal/send
+
+# The seeded-identifier test: a real server built from the tree receives
+# synthetic files with unmistakable identifiers; masked keys of every grant
+# level drive the API, the DICOMweb and download routes and the command line;
+# no original value may appear on any surface (DCMTK=<dir> names dcmtk).
+check-leaks:
+	NOPACS_REQUIRE_DCMTK=1 NOPACS_DCMTK="$(DCMTK)" $(GO) test -count=1 -timeout 10m -v -run '^TestSeededIdentifiersReachNoSurface$$' ./internal/leaktest
 
 # The outside check of the SQLite master database: the driver writes the
 # contract suite's sample, and the sqlite3 tool (SQLITE3=... names one) reads

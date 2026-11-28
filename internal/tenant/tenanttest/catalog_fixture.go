@@ -19,6 +19,9 @@ type studySpec struct {
 	study, at                  int
 	date                       string
 	scans                      []scanSpec
+	// profile is the profile version its instances record; the zero ref
+	// archives them as received.
+	profile tenant.ProfileRef
 }
 
 // scanSpec is one scan of a studySpec: its label, header values and
@@ -71,7 +74,7 @@ func (e *penv) archiveStudy(s studySpec) tenant.Reception {
 				part = append(part, f)
 			}
 		}
-		e.commitValues(r, label.Path{Subject: s.subject, Session: s.session, Scan: sc.label}, s.at+i,
+		e.commitValuesWith(s.profile, r, label.Path{Subject: s.subject, Session: s.session, Scan: sc.label}, s.at+i,
 			tenant.ScanValuesOf(s.date, sc.modality, sc.description, numberText(sc)), part)
 	}
 	return r
@@ -88,6 +91,12 @@ func numberText(sc scanSpec) string {
 // commitValues claims files of one series for r and commits those claimed
 // into the scan at path, with the values, at T0 plus seconds.
 func (e *penv) commitValues(r tenant.Reception, path label.Path, seconds int, v tenant.ScanValues, files []tenant.ReceivedFile) {
+	e.commitValuesWith(tenant.ProfileRef{}, r, path, seconds, v, files)
+}
+
+// commitValuesWith is commitValues with the instances recording the profile
+// version given, none for the zero ref (archived as received).
+func (e *penv) commitValuesWith(profile tenant.ProfileRef, r tenant.Reception, path label.Path, seconds int, v tenant.ScanValues, files []tenant.ReceivedFile) {
 	e.Helper()
 	claims := make([]tenant.InstanceClaim, len(files))
 	for i, f := range files {
@@ -104,7 +113,7 @@ func (e *penv) commitValues(r tenant.Reception, path label.Path, seconds int, v 
 		key, err := layout.InstanceKey(path, f.SOPInstanceUID)
 		e.ok("InstanceKey", err)
 		c.Instances = append(c.Instances, tenant.ConfirmedInstance{SOPInstanceUID: f.SOPInstanceUID, Key: key, Length: f.Size,
-			Size: f.Size, ArchivedSHA256: f.SHA256})
+			Size: f.Size, ArchivedSHA256: f.SHA256, Profile: profile})
 	}
 	if len(c.Instances) == 0 {
 		return
