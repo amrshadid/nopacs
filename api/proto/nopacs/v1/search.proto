@@ -159,8 +159,10 @@ message SearchRequest {
 
   // The condition, at most 4096 bytes, within the language's bounds (depth
   // 16, 64 leaves, 100 values in a list, 1 KiB a value). Empty for every
-  // row of the level, which no index is needed for.
-  string query = 3;
+  // row of the level, which no index is needed for. Redacted when a message
+  // is printed: its literals are what a person searched for, which may be a
+  // patient's name or identifier.
+  string query = 3 [debug_redact = true];
 
   // How many rows at most, from 1 to 1000. Absent or zero is 100.
   int32 page_size = 4;
@@ -207,8 +209,9 @@ message SearchResponse {
 // FacetValue is a value of a facet and how many rows have it.
 message FacetValue {
   // The value as the search table holds it: a number as a decimal, a date as
-  // YYYYMMDD.
-  string value = 1;
+  // YYYYMMDD. It is read from archived files, so it is redacted wherever
+  // the server logs.
+  string value = 1 [debug_redact = true];
 
   // How many rows have it.
   int64 count = 2;

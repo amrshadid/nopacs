@@ -33,8 +33,13 @@ var secretFields = []string{
 }
 
 // patientDataFields are the fields through which a file's values cross the
-// API in a trial run of a profile: the caller's own data (a file it sent,
-// or a held file it may read), answered only to it; and the paths of an
+// API in a trial run of a profile, a route explanation or an edit preview:
+// the caller's own data (a file it sent, or a held file it may read),
+// answered only to it; the values an edit gives, the values a route
+// comparison saw and the values of a search facet, read from archived
+// files; the terms of a profile's text lists, which may be names, and
+// their checksum; the issuer of a Patient ID, whose fields identify the
+// population a patient belongs to; and the paths of an
 // import under its root and an import's inline map, since a folder or file
 // name in a tree a site kept, or a subject's label in its map, can be a
 // patient's name, and the contract answers them only to an operator. Each must be marked debug_redact, so the server's redactor
@@ -54,6 +59,26 @@ var patientDataFields = []string{
 	"nopacs.v1.ImportFile.path",
 	"nopacs.v1.ImportUnit.folder",
 	"nopacs.v1.QuarantinedFile.import_path",
+	"nopacs.v1.TextList.terms",
+	"nopacs.v1.TextListSummary.sha256",
+	"nopacs.v1.EditChange.value",
+	"nopacs.v1.SearchRequest.query",
+	"nopacs.v1.EditPreviewAttribute.old_value",
+	"nopacs.v1.EditPreviewAttribute.new_value",
+	"nopacs.v1.PatientIDIssuer.issuer",
+	"nopacs.v1.PatientIDIssuer.universal_entity_id",
+	"nopacs.v1.PatientIDIssuer.universal_entity_id_type",
+	"nopacs.v1.PatientIDIssuer.identifier_type_code",
+	"nopacs.v1.IssuerDesignator.local_namespace_entity_id",
+	"nopacs.v1.IssuerDesignator.universal_entity_id",
+	"nopacs.v1.IssuerDesignator.universal_entity_id_type",
+	"nopacs.v1.IssuerCode.code_value",
+	"nopacs.v1.IssuerCode.coding_scheme_designator",
+	"nopacs.v1.IssuerCode.long_code_value",
+	"nopacs.v1.IssuerCode.urn_code_value",
+	"nopacs.v1.ExplainRouteRequest.file",
+	"nopacs.v1.DecidingComparison.values",
+	"nopacs.v1.FacetValue.value",
 }
 
 // textFields lists every field of the contract that carries free text: each
@@ -936,6 +961,272 @@ var textFields = []string{
 	"nopacs.v1.HoldChanged.subject_label",
 	"nopacs.v1.HoldChanged.session_label",
 	"nopacs.v1.HoldChanged.scan_label",
+
+	// access.proto, the server's version and commit and a key's tenant:
+	// fixed words and names.
+	"nopacs.v1.ListKeysRequest.tenant",
+	"nopacs.v1.WhoAmIResponse.server_version",
+	"nopacs.v1.WhoAmIResponse.server_commit",
+
+	// profile.proto, text lists, a trial run's receiver and the effective
+	// profile of a receiver: names, checksums, fixed words and a profile's
+	// own rule names, never a value read from a file. The terms of a list
+	// and its checksum are listed in patientDataFields too, since a term may
+	// be a person's name and a short list's checksum can be found by
+	// hashing guesses.
+	"nopacs.v1.TextList.name",
+	"nopacs.v1.TextList.terms",
+	"nopacs.v1.TextListSummary.name",
+	"nopacs.v1.TextListSummary.sha256",
+	"nopacs.v1.CleanAction.lists",
+	"nopacs.v1.RedactAction.lists",
+	"nopacs.v1.TextListChange.name",
+	"nopacs.v1.DescribeProfileRequest.effective_receiver",
+	"nopacs.v1.EffectiveElement.what",
+	"nopacs.v1.EffectiveElement.action",
+	"nopacs.v1.EffectiveElement.layer",
+	"nopacs.v1.EffectiveElement.layer_profile",
+	"nopacs.v1.EffectiveElement.rule_name",
+	"nopacs.v1.EffectiveElement.origin",
+
+	// receiver.proto, a receiver's namespace, the reasons a person gives for
+	// forcing a profile, the receiver and profile a trial run names, and the
+	// elements a profile version would change: names, tags, fixed words and a
+	// person's reason, which the contract says never holds a value read from
+	// a file.
+	"nopacs.v1.Receiver.namespace",
+	"nopacs.v1.SetReceiverRequest.force_reason",
+	"nopacs.v1.TryReceiverProfileRequest.tenant",
+	"nopacs.v1.TryReceiverProfileRequest.receiver",
+	"nopacs.v1.TryReceiverProfileRequest.profile",
+	"nopacs.v1.TryReceiverProfileResponse.profile",
+	"nopacs.v1.ChangeElement.tag",
+	"nopacs.v1.ChangeElement.action",
+	"nopacs.v1.ChangeHold.reason",
+
+	// job.proto, the reasons of de-identification and deletion jobs, the
+	// attribute keywords a search backfill fills, and the ids of a job
+	// that is paused or resumed.
+	"nopacs.v1.DeidJob.reason",
+	"nopacs.v1.DeleteBatchJob.reason",
+	"nopacs.v1.SearchBackfillJob.fields",
+	"nopacs.v1.PauseJobRequest.tenant",
+	"nopacs.v1.PauseJobRequest.id",
+	"nopacs.v1.ResumeJobRequest.tenant",
+	"nopacs.v1.ResumeJobRequest.id",
+
+	// correction.proto, edits, moves, merges and batch deletes: tenant, label,
+	// storage, replica, hold and sender names, ids, confirm tokens (digests),
+	// attribute keywords and tags, fixed phrases and a person's reason, which
+	// the contract says never holds a value read from a file. An instance id
+	// holds a SOP Instance UID as received, as it does in data.proto. The
+	// value an edit gives an attribute and the values before and after are
+	// data of a file, listed in patientDataFields too.
+	"nopacs.v1.Correction.identity_rewrite_refused",
+	"nopacs.v1.DeleteBatchRequest.tenant",
+	"nopacs.v1.DeleteBatchRequest.reason",
+	"nopacs.v1.DeleteBatchRequest.confirm",
+	"nopacs.v1.DeleteBatchItem.storages",
+	"nopacs.v1.DeleteBatchItem.replicas",
+	"nopacs.v1.DeleteBatchItem.holds",
+	"nopacs.v1.DeleteBatchItem.sent_to",
+	"nopacs.v1.DeleteBatchPreview.confirm",
+	"nopacs.v1.DeleteBatchTarget.correction_id",
+	"nopacs.v1.ListDeleteBatchTargetsRequest.tenant",
+	"nopacs.v1.ListDeleteBatchTargetsRequest.job_id",
+	"nopacs.v1.ListDeleteBatchTargetsRequest.page_token",
+	"nopacs.v1.ListDeleteBatchTargetsResponse.next_page_token",
+	"nopacs.v1.EditChange.attribute",
+	"nopacs.v1.EditChange.value",
+	"nopacs.v1.EditRequest.tenant",
+	"nopacs.v1.EditRequest.reason",
+	"nopacs.v1.EditRequest.confirm",
+	"nopacs.v1.EditPreviewAttribute.attribute",
+	"nopacs.v1.EditPreviewAttribute.old_value",
+	"nopacs.v1.EditPreviewAttribute.new_value",
+	"nopacs.v1.EditPreviewInstance.subject_label",
+	"nopacs.v1.EditPreviewInstance.session_label",
+	"nopacs.v1.EditPreviewInstance.scan_label",
+	"nopacs.v1.EditPreviewInstance.instance_id",
+	"nopacs.v1.EditPreview.storages",
+	"nopacs.v1.EditPreview.confirm",
+	"nopacs.v1.MoveRequest.tenant",
+	"nopacs.v1.MoveRequest.subject_label",
+	"nopacs.v1.MoveRequest.session_label",
+	"nopacs.v1.MoveRequest.to_subject_label",
+	"nopacs.v1.MoveRequest.reason",
+	"nopacs.v1.MoveRequest.confirm",
+	"nopacs.v1.MergeRequest.tenant",
+	"nopacs.v1.MergeRequest.subject_label",
+	"nopacs.v1.MergeRequest.into_subject_label",
+	"nopacs.v1.MergeRequest.reason",
+	"nopacs.v1.MergeRequest.confirm",
+	"nopacs.v1.MovePreview.sessions",
+	"nopacs.v1.MovePreview.storages",
+	"nopacs.v1.MovePreview.holds",
+	"nopacs.v1.MovePreview.clashes",
+	"nopacs.v1.MovePreview.confirm",
+
+	// deid.proto, pixel templates, the coverage report, lookups and the
+	// issuer of a Patient ID: a device's manufacturer, model and SOP class
+	// as a person writes them, names, namespaces, tags, VRs and a private
+	// creator (answered only when it is printable ASCII of at most 64 bytes
+	// and holds neither a removed value nor a term of a text list). The
+	// issuer fields are an identity's own values as a file holds them, so
+	// they are listed in patientDataFields too.
+	"nopacs.v1.PixelTemplate.manufacturer",
+	"nopacs.v1.PixelTemplate.model",
+	"nopacs.v1.PixelTemplate.sop_class",
+	"nopacs.v1.AddPixelTemplatesRequest.tenant",
+	"nopacs.v1.RemovePixelTemplateRequest.tenant",
+	"nopacs.v1.RemovePixelTemplateRequest.manufacturer",
+	"nopacs.v1.RemovePixelTemplateRequest.model",
+	"nopacs.v1.RemovePixelTemplateRequest.sop_class",
+	"nopacs.v1.ListPixelTemplatesRequest.tenant",
+	"nopacs.v1.ListPixelTemplatesRequest.page_token",
+	"nopacs.v1.ListPixelTemplatesResponse.next_page_token",
+	"nopacs.v1.GetCoverageRequest.tenant",
+	"nopacs.v1.GetCoverageRequest.page_token",
+	"nopacs.v1.GetCoverageResponse.next_page_token",
+	"nopacs.v1.CoverageReport.job_id",
+	"nopacs.v1.CoverageElement.tag",
+	"nopacs.v1.CoverageElement.private_creator",
+	"nopacs.v1.CoverageElement.vr",
+	"nopacs.v1.RefreshCoverageRequest.tenant",
+	"nopacs.v1.CodeRequest.namespace",
+	"nopacs.v1.PatientIDIssuer.issuer",
+	"nopacs.v1.PatientIDIssuer.universal_entity_id",
+	"nopacs.v1.PatientIDIssuer.universal_entity_id_type",
+	"nopacs.v1.PatientIDIssuer.identifier_type_code",
+	"nopacs.v1.IssuerDesignator.local_namespace_entity_id",
+	"nopacs.v1.IssuerDesignator.universal_entity_id",
+	"nopacs.v1.IssuerDesignator.universal_entity_id_type",
+	"nopacs.v1.IssuerCode.code_value",
+	"nopacs.v1.IssuerCode.coding_scheme_designator",
+	"nopacs.v1.IssuerCode.long_code_value",
+	"nopacs.v1.IssuerCode.urn_code_value",
+	"nopacs.v1.LookupEntry.namespace",
+
+	// retention.proto, the reason a person gives for a clock confirmation.
+	"nopacs.v1.ConfirmClockResponse.tenants_refused",
+
+	// monitor.proto, storage status, the events of sender and move
+	// changes and a refused clock confirmation: names, ids, labels and fixed
+	// phrases.
+	"nopacs.v1.StorageStatus.encryption_algorithm",
+	"nopacs.v1.SenderAllowIdentifiedChanged.sender",
+	"nopacs.v1.SessionMoved.correction",
+	"nopacs.v1.SessionMoved.from_subject_label",
+	"nopacs.v1.SessionMoved.to_subject_label",
+	"nopacs.v1.SessionMoved.session_label",
+	"nopacs.v1.SubjectMerged.correction",
+	"nopacs.v1.SubjectMerged.from_subject_label",
+	"nopacs.v1.SubjectMerged.to_subject_label",
+
+	// route.proto, rule sets, rules, explanations and dry runs: tenant,
+	// receiver, rule, storage and sender names, labels of the archive, ids,
+	// conditions a person writes (configuration, answered as written as a
+	// profile's rules are; their literals are the author's own text, and
+	// identifiers are kept out of them by instruction, not by the server),
+	// a calling and called AE title as the request
+	// gives it, tags, VRs, fixed phrases and a person's reason, never a value
+	// read from a file. A file sent to be explained and the values a
+	// comparison saw are data of a file, listed in patientDataFields too.
+	"nopacs.v1.RuleSet.receiver",
+	"nopacs.v1.RuleSet.comment",
+	"nopacs.v1.RuleSet.created_by_key",
+	"nopacs.v1.ArchiveRule.name",
+	"nopacs.v1.ArchiveRule.when",
+	"nopacs.v1.ArchiveRule.storage",
+	"nopacs.v1.ForwardRule.name",
+	"nopacs.v1.ForwardRule.when",
+	"nopacs.v1.ForwardRule.series",
+	"nopacs.v1.ForwardRule.senders",
+	"nopacs.v1.CreateRuleSetRequest.tenant",
+	"nopacs.v1.CreateRuleSetRequest.receiver",
+	"nopacs.v1.CreateRuleSetRequest.force_reason",
+	"nopacs.v1.GetRuleSetRequest.tenant",
+	"nopacs.v1.GetRuleSetRequest.receiver",
+	"nopacs.v1.ListRuleSetsRequest.tenant",
+	"nopacs.v1.ListRuleSetsRequest.receiver",
+	"nopacs.v1.ListRuleSetsRequest.page_token",
+	"nopacs.v1.ListRuleSetsResponse.next_page_token",
+	"nopacs.v1.ActivateRuleSetRequest.tenant",
+	"nopacs.v1.ActivateRuleSetRequest.receiver",
+	"nopacs.v1.ActivateRuleSetRequest.force_reason",
+	"nopacs.v1.ExplainRouteRequest.tenant",
+	"nopacs.v1.ExplainRouteRequest.receiver",
+	"nopacs.v1.ExplainRouteRequest.file",
+	"nopacs.v1.ExplainRouteRequest.calling_ae_title",
+	"nopacs.v1.ExplainRouteRequest.called_ae_title",
+	"nopacs.v1.RouteInstance.subject_label",
+	"nopacs.v1.RouteInstance.session_label",
+	"nopacs.v1.RouteInstance.scan_label",
+	"nopacs.v1.RouteInstance.instance_id",
+	"nopacs.v1.RouteDecision.archive_rule",
+	"nopacs.v1.RouteDecision.storage",
+	"nopacs.v1.RouteDecision.unrouted",
+	"nopacs.v1.RouteDecision.forward_rules",
+	"nopacs.v1.RouteDecision.forward_unknown",
+	"nopacs.v1.RuleResult.rule",
+	"nopacs.v1.RuleResult.unusable",
+	"nopacs.v1.DecidingComparison.comparison",
+	"nopacs.v1.DecidingComparison.field",
+	"nopacs.v1.DecidingComparison.tag",
+	"nopacs.v1.DecidingComparison.vr",
+	"nopacs.v1.DecidingComparison.values",
+	"nopacs.v1.DryRunRoutesRequest.tenant",
+	"nopacs.v1.DryRunRoutesRequest.receiver",
+	"nopacs.v1.DryRunSession.subject_label",
+	"nopacs.v1.DryRunSession.session_label",
+	"nopacs.v1.DryRunSession.recorded_archive_rule",
+	"nopacs.v1.DryRunSession.recorded_forward_rules",
+	"nopacs.v1.DryRunSession.archive_rule",
+	"nopacs.v1.DryRunSession.forward_rules",
+	"nopacs.v1.DryRunSession.forward_unknown",
+	"nopacs.v1.DryRunSession.unreadable",
+	"nopacs.v1.GetRouteHitsRequest.tenant",
+	"nopacs.v1.GetRouteHitsRequest.receiver",
+	"nopacs.v1.RouteHit.rule",
+
+	// search.proto, a search's tenant, page tokens and facet field, and the
+	// attributes the search tables hold, by keyword. A facet's values are
+	// read from archived files, and a search's condition is whatever a person
+	// typed at that moment (a Patient's name or ID may be its literal; the
+	// audit keeps only the fields it compares), so both are listed in
+	// patientDataFields too.
+	"nopacs.v1.BackfillAttributeRequest.tenant",
+	"nopacs.v1.BackfillAttributeRequest.attribute",
+	"nopacs.v1.SearchRequest.tenant",
+	"nopacs.v1.SearchRequest.query",
+	"nopacs.v1.SearchRequest.page_token",
+	"nopacs.v1.SearchRequest.facet",
+	"nopacs.v1.SearchResponse.next_page_token",
+	"nopacs.v1.FacetValue.value",
+	"nopacs.v1.ListSearchAttributesRequest.tenant",
+	"nopacs.v1.SearchAttribute.field",
+
+	// transfer.proto, transfers between tenants: tenant, receiver and label
+	// names, ids and a person's reason, which the contract says never holds
+	// a value read from a file.
+	"nopacs.v1.Transfer.subject_label",
+	"nopacs.v1.Transfer.session_label",
+	"nopacs.v1.Transfer.target_tenant",
+	"nopacs.v1.Transfer.receiver",
+	"nopacs.v1.Transfer.reason",
+	"nopacs.v1.Transfer.delete_correction_id",
+	"nopacs.v1.TransferPreview.receiver",
+	"nopacs.v1.CreateTransferRequest.tenant",
+	"nopacs.v1.CreateTransferRequest.subject_label",
+	"nopacs.v1.CreateTransferRequest.session_label",
+	"nopacs.v1.CreateTransferRequest.target_tenant",
+	"nopacs.v1.CreateTransferRequest.receiver",
+	"nopacs.v1.CreateTransferRequest.reason",
+	"nopacs.v1.GetTransferRequest.tenant",
+	"nopacs.v1.GetTransferRequest.id",
+	"nopacs.v1.ListTransfersRequest.tenant",
+	"nopacs.v1.ListTransfersRequest.page_token",
+	"nopacs.v1.ListTransfersResponse.next_page_token",
 }
 
 // TestOnlyTheNamedFieldsCarrySecrets guards where secrets may cross the

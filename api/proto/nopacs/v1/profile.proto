@@ -455,8 +455,9 @@ message TextList {
   // are at most 512 KiB folded, and 3 MiB written in every case and
   // Unicode form (composed and decomposed) as the character set that
   // writes them longest does, so a version accepted is never refused a
-  // file for the set it was received in.
-  repeated string terms = 3;
+  // file for the set it was received in. A term may be a person's name, so
+  // the terms are redacted wherever the server logs.
+  repeated string terms = 3 [debug_redact = true];
 }
 
 // TextListSummary is what a description says of a text list: never a
@@ -476,8 +477,9 @@ message TextListSummary {
   // feed, in lowercase hexadecimal: two lists with one checksum hold the
   // same terms however they were written. It is not keyed, so a list of a
   // few terms can be found by hashing guesses: it is answered only to a
-  // caller that may read the terms, and empty to a masked key.
-  string sha256 = 4;
+  // caller that may read the terms, and empty to a masked key. For the
+  // same reason it is redacted wherever the server logs.
+  string sha256 = 4 [debug_redact = true];
 }
 
 // UnsearchedSegments is what happens to an image whose compressed pixel

@@ -1493,8 +1493,9 @@ message EditChange {
 
   // The value it is given, its values separated by a backslash as DICOM
   // writes them (PS3.5 6.4); empty gives it an empty value. An attribute
-  // the instance lacks is added. Empty with remove.
-  string value = 2;
+  // the instance lacks is added. Empty with remove. It is data a person
+  // gives a file, so it is redacted wherever the server logs.
+  string value = 2 [debug_redact = true];
 
   // Remove the attribute instead.
   bool remove = 3;
@@ -1542,11 +1543,12 @@ message EditPreviewAttribute {
   // not known.
   bool known = 3;
 
-  // Its value now, only with show_values.
-  string old_value = 4;
+  // Its value now, only with show_values. It is read from a received file,
+  // so it is redacted wherever the server logs.
+  string old_value = 4 [debug_redact = true];
 
-  // The value the change gives it.
-  string new_value = 5;
+  // The value the change gives it, redacted as old_value is.
+  string new_value = 5 [debug_redact = true];
 
   // The change removes it.
   bool remove = 6;

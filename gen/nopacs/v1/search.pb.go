@@ -194,7 +194,9 @@ type SearchRequest struct {
 	Level SearchLevel `protobuf:"varint,2,opt,name=level,proto3,enum=nopacs.v1.SearchLevel" json:"level,omitempty"`
 	// The condition, at most 4096 bytes, within the language's bounds (depth
 	// 16, 64 leaves, 100 values in a list, 1 KiB a value). Empty for every
-	// row of the level, which no index is needed for.
+	// row of the level, which no index is needed for. Redacted when a message
+	// is printed: its literals are what a person searched for, which may be a
+	// patient's name or identifier.
 	Query string `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
 	// How many rows at most, from 1 to 1000. Absent or zero is 100.
 	PageSize int32 `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -396,7 +398,8 @@ func (x *SearchResponse) GetFacet() []*FacetValue {
 type FacetValue struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The value as the search table holds it: a number as a decimal, a date as
-	// YYYYMMDD.
+	// YYYYMMDD. It is read from archived files, so it is redacted wherever
+	// the server logs.
 	Value string `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	// How many rows have it.
 	Count         int64 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
@@ -617,11 +620,11 @@ const file_nopacs_v1_search_proto_rawDesc = "" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1c\n" +
 	"\tattribute\x18\x02 \x01(\tR\tattribute\"=\n" +
 	"\x19BackfillAttributeResponse\x12 \n" +
-	"\x03job\x18\x01 \x01(\v2\x0e.nopacs.v1.JobR\x03job\"\xd3\x01\n" +
+	"\x03job\x18\x01 \x01(\v2\x0e.nopacs.v1.JobR\x03job\"\xd8\x01\n" +
 	"\rSearchRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12,\n" +
-	"\x05level\x18\x02 \x01(\x0e2\x16.nopacs.v1.SearchLevelR\x05level\x12\x14\n" +
-	"\x05query\x18\x03 \x01(\tR\x05query\x12\x1b\n" +
+	"\x05level\x18\x02 \x01(\x0e2\x16.nopacs.v1.SearchLevelR\x05level\x12\x19\n" +
+	"\x05query\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05query\x12\x1b\n" +
 	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x05 \x01(\tR\tpageToken\x12\x14\n" +
@@ -636,10 +639,10 @@ const file_nopacs_v1_search_proto_rawDesc = "" +
 	"totalCount\x88\x01\x01\x12/\n" +
 	"\x14total_is_lower_bound\x18\x06 \x01(\bR\x11totalIsLowerBound\x12+\n" +
 	"\x05facet\x18\a \x03(\v2\x15.nopacs.v1.FacetValueR\x05facetB\x0e\n" +
-	"\f_total_count\"8\n" +
+	"\f_total_count\"=\n" +
 	"\n" +
-	"FacetValue\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
+	"FacetValue\x12\x19\n" +
+	"\x05value\x18\x01 \x01(\tB\x03\x80\x01\x01R\x05value\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x03R\x05count\"5\n" +
 	"\x1bListSearchAttributesRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\"Z\n" +

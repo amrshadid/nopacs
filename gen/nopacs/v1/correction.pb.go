@@ -2741,7 +2741,8 @@ type EditChange struct {
 	Attribute string `protobuf:"bytes,1,opt,name=attribute,proto3" json:"attribute,omitempty"`
 	// The value it is given, its values separated by a backslash as DICOM
 	// writes them (PS3.5 6.4); empty gives it an empty value. An attribute
-	// the instance lacks is added. Empty with remove.
+	// the instance lacks is added. Empty with remove. It is data a person
+	// gives a file, so it is redacted wherever the server logs.
 	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	// Remove the attribute instead.
 	Remove        bool `protobuf:"varint,3,opt,name=remove,proto3" json:"remove,omitempty"`
@@ -2916,9 +2917,10 @@ type EditPreviewAttribute struct {
 	// False when the instance's metadata omits its data set, so present is
 	// not known.
 	Known bool `protobuf:"varint,3,opt,name=known,proto3" json:"known,omitempty"`
-	// Its value now, only with show_values.
+	// Its value now, only with show_values. It is read from a received file,
+	// so it is redacted wherever the server logs.
 	OldValue string `protobuf:"bytes,4,opt,name=old_value,json=oldValue,proto3" json:"old_value,omitempty"`
-	// The value the change gives it.
+	// The value the change gives it, redacted as old_value is.
 	NewValue string `protobuf:"bytes,5,opt,name=new_value,json=newValue,proto3" json:"new_value,omitempty"`
 	// The change removes it.
 	Remove        bool `protobuf:"varint,6,opt,name=remove,proto3" json:"remove,omitempty"`
@@ -5115,11 +5117,11 @@ const file_nopacs_v1_correction_proto_rawDesc = "" +
 	"\x0fReplaceResponse\x125\n" +
 	"\n" +
 	"correction\x18\x01 \x01(\v2\x15.nopacs.v1.CorrectionR\n" +
-	"correction\"X\n" +
+	"correction\"]\n" +
 	"\n" +
 	"EditChange\x12\x1c\n" +
-	"\tattribute\x18\x01 \x01(\tR\tattribute\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\x12\x16\n" +
+	"\tattribute\x18\x01 \x01(\tR\tattribute\x12\x19\n" +
+	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\x12\x16\n" +
 	"\x06remove\x18\x03 \x01(\bR\x06remove\"\x83\x02\n" +
 	"\vEditRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x123\n" +
@@ -5129,13 +5131,13 @@ const file_nopacs_v1_correction_proto_rawDesc = "" +
 	"\rvalidate_only\x18\x05 \x01(\bR\fvalidateOnly\x12\x18\n" +
 	"\aconfirm\x18\x06 \x01(\tR\aconfirm\x12\x1f\n" +
 	"\vshow_values\x18\a \x01(\bR\n" +
-	"showValues\"\xb6\x01\n" +
+	"showValues\"\xc0\x01\n" +
 	"\x14EditPreviewAttribute\x12\x1c\n" +
 	"\tattribute\x18\x01 \x01(\tR\tattribute\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x12\x14\n" +
-	"\x05known\x18\x03 \x01(\bR\x05known\x12\x1b\n" +
-	"\told_value\x18\x04 \x01(\tR\boldValue\x12\x1b\n" +
-	"\tnew_value\x18\x05 \x01(\tR\bnewValue\x12\x16\n" +
+	"\x05known\x18\x03 \x01(\bR\x05known\x12 \n" +
+	"\told_value\x18\x04 \x01(\tB\x03\x80\x01\x01R\boldValue\x12 \n" +
+	"\tnew_value\x18\x05 \x01(\tB\x03\x80\x01\x01R\bnewValue\x12\x16\n" +
 	"\x06remove\x18\x06 \x01(\bR\x06remove\"\xfc\x01\n" +
 	"\x13EditPreviewInstance\x12#\n" +
 	"\rsubject_label\x18\x01 \x01(\tR\fsubjectLabel\x12#\n" +

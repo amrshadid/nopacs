@@ -440,8 +440,9 @@ message ExplainRouteRequest {
   // The file. Exactly one is required.
   oneof source {
     // A DICOM Part 10 file sent with the request, at most 64 MiB, as the
-    // receiver would receive it.
-    bytes file = 4;
+    // receiver would receive it. It is the caller's own data, so it is
+    // redacted wherever the server logs.
+    bytes file = 4 [debug_redact = true];
 
     // An instance the archive holds, by its scan's labels and its SOP
     // Instance UID; or the scan's first instance, by SOP Instance UID,
@@ -564,8 +565,9 @@ message DecidingComparison {
   RouteTruth truth = 6;
 
   // The values of the field the comparison saw, each that is not empty;
-  // only with show_values, and empty otherwise.
-  repeated string values = 7;
+  // only with show_values, and empty otherwise. They are read from the
+  // file, so they are redacted wherever the server logs.
+  repeated string values = 7 [debug_redact = true];
 }
 
 // DryRunRoutesRequest names the rule set and how many sessions to try it

@@ -1151,7 +1151,8 @@ type isExplainRouteRequest_Source interface {
 
 type ExplainRouteRequest_File struct {
 	// A DICOM Part 10 file sent with the request, at most 64 MiB, as the
-	// receiver would receive it.
+	// receiver would receive it. It is the caller's own data, so it is
+	// redacted wherever the server logs.
 	File []byte `protobuf:"bytes,4,opt,name=file,proto3,oneof"`
 }
 
@@ -1512,7 +1513,8 @@ type DecidingComparison struct {
 	// The comparison's own result, which is the rule's or its negation's.
 	Truth RouteTruth `protobuf:"varint,6,opt,name=truth,proto3,enum=nopacs.v1.RouteTruth" json:"truth,omitempty"`
 	// The values of the field the comparison saw, each that is not empty;
-	// only with show_values, and empty otherwise.
+	// only with show_values, and empty otherwise. They are read from the
+	// file, so they are redacted wherever the server logs.
 	Values        []string `protobuf:"bytes,7,rep,name=values,proto3" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2153,12 +2155,12 @@ const file_nopacs_v1_route_proto_rawDesc = "" +
 	"\x05force\x18\x04 \x01(\bR\x05force\x12!\n" +
 	"\fforce_reason\x18\x05 \x01(\tR\vforceReason\"H\n" +
 	"\x17ActivateRuleSetResponse\x12-\n" +
-	"\brule_set\x18\x01 \x01(\v2\x12.nopacs.v1.RuleSetR\aruleSet\"\xae\x02\n" +
+	"\brule_set\x18\x01 \x01(\v2\x12.nopacs.v1.RuleSetR\aruleSet\"\xb3\x02\n" +
 	"\x13ExplainRouteRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1a\n" +
 	"\breceiver\x18\x02 \x01(\tR\breceiver\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x05R\aversion\x12\x14\n" +
-	"\x04file\x18\x04 \x01(\fH\x00R\x04file\x126\n" +
+	"\aversion\x18\x03 \x01(\x05R\aversion\x12\x19\n" +
+	"\x04file\x18\x04 \x01(\fB\x03\x80\x01\x01H\x00R\x04file\x126\n" +
 	"\binstance\x18\x05 \x01(\v2\x18.nopacs.v1.RouteInstanceH\x00R\binstance\x12(\n" +
 	"\x10calling_ae_title\x18\x06 \x01(\tR\x0ecallingAeTitle\x12&\n" +
 	"\x0fcalled_ae_title\x18\a \x01(\tR\rcalledAeTitle\x12\x1f\n" +
@@ -2191,7 +2193,7 @@ const file_nopacs_v1_route_proto_rawDesc = "" +
 	"\x05truth\x18\x03 \x01(\x0e2\x15.nopacs.v1.RouteTruthR\x05truth\x12\x1a\n" +
 	"\bunusable\x18\x04 \x01(\tR\bunusable\x12<\n" +
 	"\n" +
-	"decided_by\x18\x05 \x01(\v2\x1d.nopacs.v1.DecidingComparisonR\tdecidedBy\"\xcb\x01\n" +
+	"decided_by\x18\x05 \x01(\v2\x1d.nopacs.v1.DecidingComparisonR\tdecidedBy\"\xd0\x01\n" +
 	"\x12DecidingComparison\x12\x1e\n" +
 	"\n" +
 	"comparison\x18\x01 \x01(\tR\n" +
@@ -2200,8 +2202,8 @@ const file_nopacs_v1_route_proto_rawDesc = "" +
 	"\x03tag\x18\x03 \x01(\tR\x03tag\x12\x0e\n" +
 	"\x02vr\x18\x04 \x01(\tR\x02vr\x12\x18\n" +
 	"\apresent\x18\x05 \x01(\bR\apresent\x12+\n" +
-	"\x05truth\x18\x06 \x01(\x0e2\x15.nopacs.v1.RouteTruthR\x05truth\x12\x16\n" +
-	"\x06values\x18\a \x03(\tR\x06values\"\x7f\n" +
+	"\x05truth\x18\x06 \x01(\x0e2\x15.nopacs.v1.RouteTruthR\x05truth\x12\x1b\n" +
+	"\x06values\x18\a \x03(\tB\x03\x80\x01\x01R\x06values\"\x7f\n" +
 	"\x13DryRunRoutesRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1a\n" +
 	"\breceiver\x18\x02 \x01(\tR\breceiver\x12\x18\n" +

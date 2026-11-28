@@ -809,7 +809,8 @@ type TextList struct {
 	// are at most 512 KiB folded, and 3 MiB written in every case and
 	// Unicode form (composed and decomposed) as the character set that
 	// writes them longest does, so a version accepted is never refused a
-	// file for the set it was received in.
+	// file for the set it was received in. A term may be a person's name, so
+	// the terms are redacted wherever the server logs.
 	Terms         []string `protobuf:"bytes,3,rep,name=terms,proto3" json:"terms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -881,7 +882,8 @@ type TextListSummary struct {
 	// feed, in lowercase hexadecimal: two lists with one checksum hold the
 	// same terms however they were written. It is not keyed, so a list of a
 	// few terms can be found by hashing guesses: it is answered only to a
-	// caller that may read the terms, and empty to a masked key.
+	// caller that may read the terms, and empty to a masked key. For the
+	// same reason it is redacted wherever the server logs.
 	Sha256        string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -7706,16 +7708,16 @@ const file_nopacs_v1_profile_proto_rawDesc = "" +
 	"\vdescription\x18\x06 \x01(\tR\vdescription\x12N\n" +
 	"\x13unsearched_segments\x18\a \x01(\x0e2\x1d.nopacs.v1.UnsearchedSegmentsR\x12unsearchedSegments\x122\n" +
 	"\n" +
-	"text_lists\x18\b \x03(\v2\x13.nopacs.v1.TextListR\ttextLists\"N\n" +
+	"text_lists\x18\b \x03(\v2\x13.nopacs.v1.TextListR\ttextLists\"S\n" +
 	"\bTextList\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x14\n" +
-	"\x05terms\x18\x03 \x03(\tR\x05terms\"m\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x19\n" +
+	"\x05terms\x18\x03 \x03(\tB\x03\x80\x01\x01R\x05terms\"r\n" +
 	"\x0fTextListSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x14\n" +
-	"\x05terms\x18\x03 \x01(\x05R\x05terms\x12\x16\n" +
-	"\x06sha256\x18\x04 \x01(\tR\x06sha256\"\xd4\x01\n" +
+	"\x05terms\x18\x03 \x01(\x05R\x05terms\x12\x1b\n" +
+	"\x06sha256\x18\x04 \x01(\tB\x03\x80\x01\x01R\x06sha256\"\xd4\x01\n" +
 	"\vProfileRule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x126\n" +
 	"\bselector\x18\x02 \x01(\v2\x1a.nopacs.v1.ProfileSelectorR\bselector\x12/\n" +
