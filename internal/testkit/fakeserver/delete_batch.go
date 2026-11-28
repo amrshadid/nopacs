@@ -38,6 +38,9 @@ func (h correctionHandler) DeleteBatch(_ context.Context, req *v1.DeleteBatchReq
 	if err != nil {
 		return nil, err
 	}
+	if err := s.refuseMasked(messageMaskedBulk); err != nil {
+		return nil, err
+	}
 	if len(req.GetTargets()) == 0 {
 		return nil, fault.New(fault.Invalid, "targets: name at least one")
 	}
@@ -46,8 +49,12 @@ func (h correctionHandler) DeleteBatch(_ context.Context, req *v1.DeleteBatchReq
 		if t.GetSubjectLabel() == "" || t.GetInstanceId() != "" {
 			return nil, fault.New(fault.Invalid, "targets: each names a subject, a session or a scan")
 		}
-		p.Items = append(p.Items, &v1.DeleteBatchItem{Target: proto.Clone(t).(*v1.CorrectionTarget), Counts: &v1.CorrectionCounts{Instances: 1, Bytes: 1000},
-			Storages: []string{"main"}})
+		item := &v1.DeleteBatchItem{Target: proto.Clone(t).(*v1.CorrectionTarget), Counts: &v1.CorrectionCounts{Instances: 1, Bytes: 1000},
+			Storages: []string{"main"}}
+		if s.corr.batchItem != nil {
+			s.corr.batchItem(item)
+		}
+		p.Items = append(p.Items, item)
 		p.Counts.Instances++
 		p.Counts.Bytes += 1000
 	}
@@ -79,6 +86,14 @@ func (h correctionHandler) DeleteBatch(_ context.Context, req *v1.DeleteBatchReq
 	}
 	s.corr.batches[key(req.GetTenant(), j.GetId())] = targets
 	return &v1.DeleteBatchResponse{Preview: &v1.DeleteBatchPreview{Counts: p.GetCounts()}, Job: proto.Clone(j).(*v1.Job)}, nil
+}
+
+// SetBatchItem gives fn each item of a batch's preview, to add what keeps the
+// target from being deleted: its holds, its replicas, a retention minimum.
+func (s *Server) SetBatchItem(fn func(*v1.DeleteBatchItem)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.corr.batchItem = fn
 }
 
 // SetBatchOutcome records what became of one target of a batch job, as the
@@ -129,6 +144,10 @@ func (s *Server) pauseJob(tenant, id string, paused bool) (*v1.Job, error) {
 		return nil, fault.New(fault.Precondition, "only a batch delete job pauses")
 	case jobEnded(j.GetState()):
 		return nil, fault.New(fault.Precondition, "the job has ended")
+	case !paused:
+		if err := s.refuseMasked(messageMaskedBulk); err != nil {
+			return nil, err
+		}
 	}
 	j.Paused = paused
 	return proto.Clone(j).(*v1.Job), nil

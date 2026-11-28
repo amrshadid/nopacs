@@ -276,6 +276,9 @@ func (h senderHandler) SetSender(_ context.Context, req *v1.SetSenderRequest) (*
 		case "enabled":
 			next.Enabled = in.GetEnabled()
 		case "allow_identified":
+			if err := s.refuseMasked(messageMaskedDestination); err != nil {
+				return nil, err
+			}
 			next.AllowIdentified = in.GetAllowIdentified()
 		case "max_associations":
 			next.MaxAssociations = in.GetMaxAssociations()

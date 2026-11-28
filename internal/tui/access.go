@@ -19,6 +19,10 @@ type access struct {
 	installation v1.Role
 	// tenants are the roles on single tenants.
 	tenants map[string]v1.Role
+	// masked says the caller's key is a masked key (Key.masked): never
+	// answered an original value and refused what writes into archived files,
+	// deletes in bulk or chooses where data goes. The menu leaves those out.
+	masked bool
 }
 
 // newAccess reads the grants of a principal.
@@ -30,6 +34,7 @@ func newAccess(p *v1.Principal) *access {
 	if p.GetLocalOperator() != nil {
 		a.operator = true
 	}
+	a.masked = p.GetKey().GetMasked()
 	for _, g := range p.GetGrants() {
 		switch sc := g.GetScope().GetKind().(type) {
 		case *v1.Scope_Installation:
@@ -60,4 +65,13 @@ func (a *access) onTenant(name string, role v1.Role) bool {
 // sees no tenant and no screen.
 func (a *access) anyGrant() bool {
 	return a.all() || a.installation > 0 || len(a.tenants) > 0
+}
+
+// maskedKey says whether the caller is known to hold a masked key.
+func (a *access) maskedKey() bool { return a != nil && a.masked }
+
+// onTenantPlain says whether the caller holds at least role on the tenant and
+// is not a masked key: the check of what a masked key is refused outright.
+func (a *access) onTenantPlain(name string, role v1.Role) bool {
+	return !a.maskedKey() && a.onTenant(name, role)
 }

@@ -41,6 +41,9 @@ func (h correctionHandler) move(tenant string, t *v1.CorrectionTarget, to, reaso
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := s.refuseMasked(messageMaskedDestination); err != nil {
+		return nil, nil, err
+	}
 	if t.GetSubjectLabel() == "" || to == "" || to == t.GetSubjectLabel() {
 		return nil, nil, fault.New(fault.Invalid, "to_subject_label: names another subject")
 	}

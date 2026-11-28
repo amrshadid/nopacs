@@ -202,6 +202,11 @@ func (h routeHandler) ExplainRoute(_ context.Context, req *v1.ExplainRouteReques
 	if _, err := s.receiverOf(req.GetTenant(), req.GetReceiver()); err != nil {
 		return nil, err
 	}
+	if req.GetShowValues() {
+		if err := s.refuseMasked(messageMaskedOriginals); err != nil {
+			return nil, err
+		}
+	}
 	s.rts.asked = proto.Clone(req).(*v1.ExplainRouteRequest)
 	if s.rts.explain == nil {
 		return nil, fault.New(fault.Unavailable, "the fake was given no explanation")

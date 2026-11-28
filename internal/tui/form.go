@@ -56,6 +56,10 @@ type formScreen struct {
 	submit func(c *ctx, f formScreen) (tea.Cmd, error)
 	// result handles an answer only this form knows, such as a new key.
 	result func(c *ctx, f formScreen, msg tea.Msg) (screen, tea.Cmd, bool)
+	// refusal makes a call this form made that failed show its reason on the
+	// form itself (the reason code the server gave and its message), so the
+	// person who typed a value sees why it was refused beside it.
+	refusal bool
 }
 
 // value is what field i holds: its text, or the word chosen.
@@ -77,7 +81,12 @@ func (f formScreen) update(c *ctx, msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case actionDoneMsg:
 		return f, func() tea.Msg { return backMsg{n: max(f.pop, 1), reload: true, note: msg.note} }
-	case failMsg, canceledMsg:
+	case failMsg:
+		f.busy = false
+		if f.refusal {
+			f.msg = refusalLine(msg.err)
+		}
+	case canceledMsg:
 		f.busy = false
 	case tea.PasteMsg:
 		f.fields = append([]formField{}, f.fields...)

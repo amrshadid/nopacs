@@ -50,7 +50,7 @@ func newSenderDetail(c *ctx, tenant string, s *v1.Sender) screen {
 	d.pairs = func(c *ctx, ref any) []pair {
 		s, _ := ref.(*v1.Sender)
 		ps := []pair{{"Name", s.GetName()}, {"Type", output.SenderType(s)}, {"Enabled", yesNoWord(s.GetEnabled())},
-			{"Health", output.SenderHealth(s.GetHealth())}}
+			{"Health", output.SenderHealth(s.GetHealth())}, {"Allow identified", allowIdentifiedText(s.GetAllowIdentified())}}
 		if t := s.GetHealth().GetNextTryTime(); t != nil {
 			ps = append(ps, pair{"Next try", output.Time(t, c.loc)})
 		}
@@ -79,7 +79,11 @@ func newSenderDetail(c *ctx, tenant string, s *v1.Sender) screen {
 		s, _ := ref.(*v1.Sender)
 		ts, cmd := newSenderTest(c, tenant, s)
 		return push(ts, cmd)
+	}}, {key: "i", help: "allow identified", installation: true, plain: true, do: func(c *ctx, _ screen, ref any) tea.Cmd {
+		s, _ := ref.(*v1.Sender)
+		return push(newAllowIdentifiedForm(c, tenant, s), nil)
 	}}}
+	d.actions = allowed(c, tenant, d.actions)
 	return d
 }
 
@@ -226,7 +230,17 @@ func newJobDetail(c *ctx, tenant, id string) (screen, tea.Cmd) {
 		j, _ := ref.(*v1.Job)
 		return getJob(c, id, tenant, j.GetId())
 	}
-	d.actions = []action{
+	d.actions = jobActions(c, tenant, nil)
+	s := jobScreen{detailScreen: d, tenant: tenant}
+	return s, loadJob(c, s.id, tenant, id)
+}
+
+// jobActions are the keys of a job's screen: its failures, cancel and retry
+// for every kind, and for a batch delete its targets, pause and resume. The
+// pause is the operator's, the resume the admin's and never a masked key's,
+// as the server asks.
+func jobActions(c *ctx, tenant string, j *v1.Job) []action {
+	acts := []action{
 		{key: "f", help: "failures", do: func(c *ctx, _ screen, ref any) tea.Cmd {
 			j, _ := ref.(*v1.Job)
 			s, cmd := newJobFailureList(c, tenant, j.GetId())
@@ -241,8 +255,23 @@ func newJobDetail(c *ctx, tenant, id string) (screen, tea.Cmd) {
 			return push(newRetryJob(c, tenant, j.GetId()), nil)
 		}},
 	}
-	s := jobScreen{detailScreen: d, tenant: tenant}
-	return s, loadJob(c, s.id, tenant, id)
+	if j.GetDeleteBatch() != nil {
+		acts = append(acts,
+			action{key: "t", help: "targets", need: v1.Role_ROLE_OPERATOR, do: func(c *ctx, _ screen, ref any) tea.Cmd {
+				j, _ := ref.(*v1.Job)
+				s, cmd := newBatchTargets(c, tenant, j.GetId())
+				return push(s, cmd)
+			}},
+			action{key: "p", help: "pause", need: v1.Role_ROLE_OPERATOR, do: func(c *ctx, self screen, ref any) tea.Cmd {
+				j, _ := ref.(*v1.Job)
+				return pauseJob(c, self.sid(), tenant, j.GetId(), false)
+			}},
+			action{key: "u", help: "resume", need: v1.Role_ROLE_ADMIN, plain: true, do: func(c *ctx, self screen, ref any) tea.Cmd {
+				j, _ := ref.(*v1.Job)
+				return pauseJob(c, self.sid(), tenant, j.GetId(), true)
+			}})
+	}
+	return allowed(c, tenant, acts)
 }
 
 // update applies a message: the job read starts the stream once; an event of
@@ -251,8 +280,13 @@ func newJobDetail(c *ctx, tenant, id string) (screen, tea.Cmd) {
 // ended follows again after a wait; the rest is the detail screen's.
 func (s jobScreen) update(c *ctx, msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
+	case jobPausedMsg:
+		s.ref, s.loading = msg.job, false
+		s.actions = jobActions(c, s.tenant, msg.job)
+		return s, say(msg.note)
 	case jobLoadedMsg:
 		s.ref, s.loading = msg.job, false
+		s.actions = jobActions(c, s.tenant, msg.job)
 		if !s.following && !output.JobEnded(msg.job.GetState()) {
 			s.cursor, s.following = msg.cursor, true
 			return s, followJobs(c, s.id, s.tenant, s.cursor)
@@ -265,7 +299,7 @@ func (s jobScreen) update(c *ctx, msg tea.Msg) (screen, tea.Cmd) {
 			return s, followJobs(c, s.id, s.tenant, s.cursor)
 		}
 		moved := &v1.Job{Id: j.GetId(), Kind: j.GetKind(), State: j.GetState(), Counts: msg.counts, Reason: j.GetReason(), CreateTime: j.GetCreateTime(),
-			StartTime: j.GetStartTime(), StateTime: j.GetStateTime(), EndTime: j.GetEndTime(), CreatedByKeyId: j.GetCreatedByKeyId(), RetryOf: j.GetRetryOf(), RetryJob: j.GetRetryJob()}
+			StartTime: j.GetStartTime(), StateTime: j.GetStateTime(), EndTime: j.GetEndTime(), CreatedByKeyId: j.GetCreatedByKeyId(), RetryOf: j.GetRetryOf(), RetryJob: j.GetRetryJob(), Paused: j.GetPaused()}
 		if msg.step {
 			moved.State = msg.state
 		}
@@ -294,6 +328,9 @@ func (s jobScreen) update(c *ctx, msg tea.Msg) (screen, tea.Cmd) {
 	next, cmd := s.detailScreen.update(c, msg)
 	if d, ok := next.(detailScreen); ok {
 		s.detailScreen = d
+		if j, isJob := d.ref.(*v1.Job); isJob {
+			s.actions = jobActions(c, s.tenant, j)
+		}
 		return s, cmd
 	}
 	return next, cmd

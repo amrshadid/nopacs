@@ -76,7 +76,9 @@ func newTenantList(c *ctx) (screen, tea.Cmd) {
 	l.fetch = func(c *ctx, l listScreen, token string) tea.Cmd { return tenantsPage(c, l.id, l.gen, token) }
 	l.open = func(c *ctx, _ listScreen, r row) tea.Cmd {
 		t, _ := r.ref.(*v1.Tenant)
-		s, cmd := newTenantDetail(c, t, false)
+		// The list leaves out the storage quota, which only a read of one tenant
+		// carries.
+		s, cmd := newTenantDetail(c, t, true)
 		return push(s, cmd)
 	}
 	l.note = func(r row) string {
@@ -112,7 +114,8 @@ func newTenantDetail(c *ctx, t *v1.Tenant, fetch bool) (screen, tea.Cmd) {
 		if t.GetStateReason() != "" {
 			ps = append(ps, pair{"Reason", t.GetStateReason()})
 		}
-		return append(ps, pair{"Created", output.Time(t.GetCreateTime(), c.loc)})
+		ps = append(ps, pair{"Created", output.Time(t.GetCreateTime(), c.loc)})
+		return append(ps, quotaPairs(t.GetQuota())...)
 	}
 	d.refetch = func(c *ctx, id int, ref any) tea.Cmd {
 		t, _ := ref.(*v1.Tenant)
@@ -147,6 +150,23 @@ func newTenantDetail(c *ctx, t *v1.Tenant, fetch bool) (screen, tea.Cmd) {
 		return d, d.refetch(c, d.id, t)
 	}
 	return d, nil
+}
+
+// quotaPairs are the labeled lines of a tenant's storage quota: its use against
+// its bounds, what its purges will give back, and its warning; none when the
+// server sent no quota.
+func quotaPairs(q *v1.TenantQuota) []pair {
+	if q == nil {
+		return nil
+	}
+	ps := []pair{{"Quota", output.Quota(q)}}
+	if purge := output.QuotaPurge(q); purge != "" {
+		ps = append(ps, pair{"To purge", purge})
+	}
+	if warn := output.QuotaWarning(q); warn != "" {
+		ps = append(ps, pair{"Quota warning", warn})
+	}
+	return ps
 }
 
 // newRemoveTenant asks for the tenant's name to be typed before it is

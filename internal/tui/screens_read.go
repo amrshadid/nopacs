@@ -25,6 +25,25 @@ func downloadAction(tenant string, ref func(any) []string) action {
 	}}
 }
 
+// editAction is the key of a catalog list that opens the header edit form for
+// what the row under the cursor stands for.
+func editAction(tenant string, ref func(any) []string) action {
+	return action{key: "e", help: "edit headers", needsRow: true, plain: true, do: func(c *ctx, _ screen, r any) tea.Cmd {
+		return push(newEditForm(c, tenant, strings.Join(ref(r), "/"), ""), nil)
+	}}
+}
+
+// changeActions are the keys of a catalog list that change what a row stands
+// for, offered to an admin on the tenant who is not a masked key: edit its
+// headers, mark it for a batch delete and start the batch, and what more applies
+// to its level.
+func changeActions(c *ctx, tenant string, ref func(any) []string, more ...action) []action {
+	if !c.acc.onTenantPlain(tenant, v1.Role_ROLE_ADMIN) {
+		return nil
+	}
+	return append([]action{editAction(tenant, ref), markAction(tenant, ref), batchAction(tenant)}, more...)
+}
+
 // newSubjectList makes the list of a tenant's subjects, newest first; a
 // subject opens on its sessions.
 func newSubjectList(c *ctx, tenant string) (screen, tea.Cmd) {
@@ -36,7 +55,11 @@ func newSubjectList(c *ctx, tenant string) (screen, tea.Cmd) {
 		ns, cmd := newSessionList(c, tenant, s.GetLabel())
 		return push(ns, cmd)
 	}
-	l.actions = []action{downloadAction(tenant, func(r any) []string { s, _ := r.(*v1.Subject); return []string{s.GetLabel()} })}
+	subject := func(r any) []string { s, _ := r.(*v1.Subject); return []string{s.GetLabel()} }
+	l.actions = append([]action{downloadAction(tenant, subject)}, changeActions(c, tenant, subject,
+		action{key: "g", help: "merge", needsRow: true, plain: true, do: func(c *ctx, _ screen, r any) tea.Cmd {
+			return push(newMergeForm(c, tenant, subject(r)[0]), nil)
+		}}, transferAction(tenant, subject))...)
 	nl, cmd := l.start(c)
 	return nl, cmd
 }
@@ -54,7 +77,11 @@ func newSessionList(c *ctx, tenant, subject string) (screen, tea.Cmd) {
 		ns, cmd := newScanList(c, tenant, subject, s.GetLabel())
 		return push(ns, cmd)
 	}
-	l.actions = []action{downloadAction(tenant, func(r any) []string { s, _ := r.(*v1.Session); return []string{subject, s.GetLabel()} })}
+	session := func(r any) []string { s, _ := r.(*v1.Session); return []string{subject, s.GetLabel()} }
+	l.actions = append([]action{downloadAction(tenant, session)}, changeActions(c, tenant, session,
+		action{key: "o", help: "move", needsRow: true, plain: true, do: func(c *ctx, _ screen, r any) tea.Cmd {
+			return push(newMoveForm(c, tenant, strings.Join(session(r), "/")), nil)
+		}}, transferAction(tenant, session))...)
 	nl, cmd := l.start(c)
 	return nl, cmd
 }
@@ -71,7 +98,8 @@ func newScanList(c *ctx, tenant, subject, session string) (screen, tea.Cmd) {
 		s, _ := r.ref.(*v1.Scan)
 		return push(newScanDetail(c, tenant, s), nil)
 	}
-	l.actions = []action{downloadAction(tenant, func(r any) []string { s, _ := r.(*v1.Scan); return []string{subject, session, s.GetLabel()} })}
+	scan := func(r any) []string { s, _ := r.(*v1.Scan); return []string{subject, session, s.GetLabel()} }
+	l.actions = append([]action{downloadAction(tenant, scan)}, changeActions(c, tenant, scan)...)
 	nl, cmd := l.start(c)
 	return nl, cmd
 }
@@ -103,7 +131,12 @@ func newScanDetail(c *ctx, tenant string, s *v1.Scan) screen {
 			s, _ := ref.(*v1.Scan)
 			return push(newDownloadForm(c, tenant, []string{s.GetSubjectLabel(), s.GetSessionLabel(), s.GetLabel()}), nil)
 		}},
+		{key: "e", help: "edit headers", need: v1.Role_ROLE_ADMIN, plain: true, do: func(c *ctx, _ screen, ref any) tea.Cmd {
+			s, _ := ref.(*v1.Scan)
+			return push(newEditForm(c, tenant, s.GetSubjectLabel()+"/"+s.GetSessionLabel()+"/"+s.GetLabel(), ""), nil)
+		}},
 	}
+	d.actions = allowed(c, tenant, d.actions)
 	return d
 }
 
@@ -118,6 +151,12 @@ func newHeaderList(c *ctx, tenant string, s *v1.Scan) (screen, tea.Cmd) {
 	l.open = func(c *ctx, _ listScreen, r row) tea.Cmd {
 		in, _ := r.ref.(*v1.InstanceMetadata)
 		return push(newInstanceHeader(c, in), nil)
+	}
+	if c.acc.onTenantPlain(tenant, v1.Role_ROLE_ADMIN) {
+		l.actions = []action{{key: "e", help: "edit headers", needsRow: true, plain: true, do: func(c *ctx, _ screen, r any) tea.Cmd {
+			in, _ := r.(*v1.InstanceMetadata)
+			return push(newEditForm(c, tenant, s.GetSubjectLabel()+"/"+s.GetSessionLabel()+"/"+s.GetLabel(), in.GetInstanceId()), nil)
+		}}}
 	}
 	nl, cmd := l.start(c)
 	return nl, cmd

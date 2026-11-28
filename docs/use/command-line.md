@@ -286,17 +286,34 @@ rejected, replicas with their repair and switch, retention rules with the sessio
 due and a disposal, holds, corrections with their previews, scrub findings, profiles
 and a receiver's routes, and the audit seal's verification), the subjects,
 sessions and scans of a tenant with a scan's headers and a download of what is
-shown, keys, settings and the audit log. The menu and the keys of each screen
+shown, keys, settings and the audit log. The screens that change the archive
+follow the commands of the same names and show a preview before anything is
+changed: editing the headers of a subject, session, scan or instance (values hidden
+unless asked for, which is audited), moving a session and merging a subject (with
+the state of the identity rewrite, a refusal included), a batch delete from rows
+marked in the catalog or from a catalog filter, with each target's outcome and the
+job's pause, resume and cancel, a transfer of a subject or a session into another
+tenant, copy or move, with its steps, a receiver's rule set versions (view,
+activate, explain a file or an archived instance, dry run, hit counts), a tenant's
+storage quota and its warning, a sender's allow-identified mark, and a replica's
+backfill, a recall from an archive tier and a sample to verify. Creating a rule
+set stays with `nopacs route create`: the program does not edit its JSON file. The menu and the keys of each screen
 are built from the caller's grants (a reader sees no Keys or Settings, and a
-tenant's screens offer only what its role on the tenant allows); the server
+tenant's screens offer only what its role on the tenant allows, and a masked
+key is offered none of what writes into archived files, deletes in bulk or chooses
+where data goes); the server
 checks every call whatever the menu offers. It
 finds the server with the same flags and environment as the commands and is a
 client of the same API ([internal/tui](../../internal/tui/doc.go)). With any
 argument, or with either end not a terminal, `nopacs` prints the usage line and
 exits 2.
 
-- **Keys.** On a tenant, `n` opens its senders and `w` its jobs; on a job, `f`
-  its failures, `c` cancels it and `r` retries it. Arrows or `j`/`k`, page up and down, enter to open, esc to go back
+- **Keys.** On a tenant, `n` opens its senders, `w` its jobs and `y` its
+  transfers; on a job, `f` its failures, `c` cancels it and `r` retries it, and on
+  a batch delete job `t` lists its targets, `p` pauses it and `u` resumes it. On
+  a catalog row of an admin, `e` edits headers, `x` marks the row for a batch delete,
+  `b` starts the batch, `o` moves a session, `g` merges a subject and `t` transfers
+  it; on a receiver, `v` opens its rule set versions. Arrows or `j`/`k`, page up and down, enter to open, esc to go back
   (or to cancel a call that is waiting), `/` to filter the loaded rows, `?` for
   the keys of the screen, `q` to quit. A list loads 100 rows and the next 100
   when the cursor nears the end.
@@ -304,8 +321,9 @@ exits 2.
   screen asks once more.
 - **Nothing destructive happens on one key.** Revoking a key and removing a
   grant, a setting override or a tenant need its id or name typed; so do
-  deleting, relabeling, replacing, undoing and purging data (a delete shows its
-  preview first), detaching a replica, repairing a primary, removing a rule,
+  deleting, relabeling, replacing, editing, moving, merging, transferring,
+  recalling and undoing and purging data (each shows its preview first; a batch
+  delete asks for the tenant's name), detaching a replica, repairing a primary, removing a rule,
   releasing a hold and disposing of sessions. A switch is confirmed by typing the
   first characters of the token its preview showed, or the primary's name.
 - **Terminal.** It fits 80 by 24 and redraws on resize; there is no color when

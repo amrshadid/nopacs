@@ -44,10 +44,16 @@ func newReplicaList(c *ctx, tenant string) (screen, tea.Cmd) {
 			}})
 	}
 	if canOperate {
-		l.actions = append(l.actions, action{key: "b", help: "backfill", needsRow: true, do: func(c *ctx, _ screen, ref any) tea.Cmd {
-			rs, _ := ref.(*v1.ReplicaStatus)
-			return push(newBackfillReplica(c, tenant, rs.GetReplica()), nil)
-		}})
+		l.actions = append(l.actions,
+			action{key: "b", help: "backfill", needsRow: true, do: func(c *ctx, _ screen, ref any) tea.Cmd {
+				rs, _ := ref.(*v1.ReplicaStatus)
+				return push(newBackfillReplica(c, tenant, rs.GetReplica()), nil)
+			}},
+			action{key: "c", help: "recall", do: func(c *ctx, _ screen, _ any) tea.Cmd { return push(newRecallForm(c, tenant), nil) }},
+			action{key: "v", help: "sample", needsRow: true, do: func(c *ctx, _ screen, ref any) tea.Cmd {
+				rs, _ := ref.(*v1.ReplicaStatus)
+				return push(newVerifyForm(c, tenant, rs.GetReplica()), nil)
+			}})
 	}
 	nl, cmd := l.start(c)
 	return nl, cmd

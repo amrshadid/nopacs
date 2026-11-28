@@ -529,6 +529,12 @@ scan, keeps it whole, and serves it through an API with keys.
   replicas, repair, switch, retention, holds, corrections, scrub findings,
   profiles, routes and the audit seal's verification, each destructive step
   confirmed by typing its target.
+- The interactive program gains screens for header edits, batch deletes (marked
+  rows, typed targets or a filter, with pause and resume), routing rule sets
+  (view, activate, explain, dry run, hits), quotas, moves and merges, transfers,
+  a sender's allow-identified mark, and replica recall and sample checks; each
+  offered only to keys whose grants allow it, masked keys included, with values
+  hidden by default.
 - Holds outlive a lost database: placing a hold writes a sealed record,
   `meta/.holds/<id>.json` (under its own derived key, never the reason's
   text), on every primary its target touches before the hold commits, and

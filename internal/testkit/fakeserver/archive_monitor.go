@@ -71,6 +71,7 @@ func (h monitorHandler) GetStatus(_ context.Context, req *v1.GetStatusRequest) (
 			st.Replicas = append(st.Replicas, s.replicaStatusOf(name, sto))
 		}
 	}
+	st.Quota = s.tenants[name].GetQuota()
 	st.Retention = s.ret.status[name]
 	if as := s.ret.statusAs[name]; as != "" {
 		st.Tenant = as

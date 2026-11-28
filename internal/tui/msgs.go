@@ -37,7 +37,15 @@ type backMsg struct {
 	n      int
 	reload bool
 	note   string
+	// then, when set, runs once the screens are left: a change that ends on
+	// a screen of its own (the correction an edit made, the job a batch
+	// started) opens it over the screen it returns to.
+	then tea.Cmd
 }
+
+// noteMsg asks the root to show a sentence on the bottom line, for a change
+// that worked on a screen that stays.
+type noteMsg struct{ note string }
 
 // reloadMsg tells a screen to fetch what it shows again.
 type reloadMsg struct{}

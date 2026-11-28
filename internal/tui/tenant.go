@@ -35,6 +35,7 @@ func tenantActions(c *ctx, name string) []action {
 		{key: "h", help: "quarantine", need: v1.Role_ROLE_READER, do: open(newQuarantineList)},
 		{key: "c", help: "catalog", need: v1.Role_ROLE_READER, do: open(newSubjectList)},
 		{key: "b", help: "replicas", need: v1.Role_ROLE_READER, do: open(newReplicaList)},
+		{key: "y", help: "transfers", need: v1.Role_ROLE_OPERATOR, do: open(newTransferList)},
 		{key: "i", help: "retention", need: v1.Role_ROLE_READER, do: open(newRuleList)},
 		{key: "l", help: "holds", need: v1.Role_ROLE_OPERATOR, do: open(newHoldList)},
 		{key: "x", help: "corrections", need: v1.Role_ROLE_OPERATOR, do: open(newCorrectionList)},
@@ -54,6 +55,7 @@ func allowed(c *ctx, tenant string, actions []action) []action {
 	var out []action
 	for _, a := range actions {
 		switch {
+		case a.plain && c.acc.maskedKey():
 		case a.installation && !c.acc.onInstallation(v1.Role_ROLE_ADMIN):
 		case a.need != 0 && !c.acc.onTenant(tenant, a.need):
 		default:
@@ -183,6 +185,7 @@ func statusPairs(c *ctx, ref any) []pair {
 	for _, r := range st.GetReplicas() {
 		ps = append(ps, pair{"Replica " + r.GetReplica(), "of " + r.GetPrimary() + ", " + itoa(r.GetScansInStep()) + " scans in step, " + itoa(r.GetScansPending()) + " waiting"})
 	}
+	ps = append(ps, quotaPairs(st.GetQuota())...)
 	if rs := st.GetRetention(); rs != nil {
 		v := itoa(rs.GetRules()) + " rules, " + itoa(rs.GetSessionsDue()) + " sessions due, " + itoa(rs.GetActiveHolds()) + " holds"
 		if rs.GetPaused() {
@@ -262,6 +265,10 @@ func newReceiverList(c *ctx, tenant string) (screen, tea.Cmd) {
 		d.actions = []action{{key: "u", help: "routes", do: func(c *ctx, _ screen, ref any) tea.Cmd {
 			rc, _ := ref.(*v1.Receiver)
 			s, cmd := newRouteList(c, tenant, rc.GetName())
+			return push(s, cmd)
+		}}, {key: "v", help: "versions", do: func(c *ctx, _ screen, ref any) tea.Cmd {
+			rc, _ := ref.(*v1.Receiver)
+			s, cmd := newRuleSetList(c, tenant, rc.GetName())
 			return push(s, cmd)
 		}}}
 		return push(d, nil)

@@ -41,6 +41,9 @@ func (h transferHandler) CreateTransfer(_ context.Context, req *v1.CreateTransfe
 	if err != nil {
 		return nil, err
 	}
+	if err := s.refuseMasked(messageMaskedDestination); err != nil {
+		return nil, err
+	}
 	if req.GetSubjectLabel() == "" || req.GetTargetTenant() == "" || req.GetTargetTenant() == req.GetTenant() {
 		return nil, fault.New(fault.Invalid, "subject_label and target_tenant: name a subject and another tenant")
 	}

@@ -21,8 +21,7 @@ func newCorrectionList(c *ctx, tenant string) (screen, tea.Cmd) {
 	}
 	l.open = func(c *ctx, _ listScreen, r row) tea.Cmd {
 		cr, _ := r.ref.(*v1.Correction)
-		d := detailScreen{base: base{c.newID()}, heading: "Correction " + clean(cr.GetId()), ref: cr, pairs: correctionLines}
-		return push(d, nil)
+		return push(newCorrectionDetail(c, cr), nil)
 	}
 	if c.acc.onTenant(tenant, v1.Role_ROLE_ADMIN) {
 		l.actions = []action{
@@ -38,9 +37,23 @@ func newCorrectionList(c *ctx, tenant string) (screen, tea.Cmd) {
 				return push(newPurgeForm(c, tenant, cr.GetId()), nil)
 			}},
 		}
+		// What writes into archived files, deletes in bulk or chooses where
+		// data goes is refused to a masked key, so it is not offered.
+		if !c.acc.maskedKey() {
+			l.actions = append(l.actions,
+				action{key: "e", help: "edit headers", do: func(c *ctx, _ screen, _ any) tea.Cmd { return push(newEditForm(c, tenant, "", ""), nil) }},
+				action{key: "o", help: "move", do: func(c *ctx, _ screen, _ any) tea.Cmd { return push(newMoveForm(c, tenant, ""), nil) }},
+				action{key: "g", help: "merge", do: func(c *ctx, _ screen, _ any) tea.Cmd { return push(newMergeForm(c, tenant, ""), nil) }},
+				batchAction(tenant))
+		}
 	}
 	nl, cmd := l.start(c)
 	return nl, cmd
+}
+
+// newCorrectionDetail makes the screen of one correction.
+func newCorrectionDetail(c *ctx, cr *v1.Correction) screen {
+	return detailScreen{base: base{c.newID()}, heading: "Correction " + clean(cr.GetId()), ref: cr, pairs: correctionLines}
 }
 
 // parseTarget reads a path of labels a person typed: subject, subject/session

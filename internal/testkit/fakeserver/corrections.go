@@ -26,7 +26,10 @@ type corrections struct {
 	// batches are each batch job's targets, by tenant and job
 	// (delete_batch.go).
 	batches map[string][]*v1.DeleteBatchTarget
-	next    int
+	// batchItem, when set, shapes each item of a batch preview: a test gives a
+	// target holds, replicas or a retention minimum with it.
+	batchItem func(*v1.DeleteBatchItem)
+	next      int
 }
 
 // correctionHandler is the fake's CorrectionService.
@@ -129,6 +132,9 @@ func (h correctionHandler) Edit(_ context.Context, req *v1.EditRequest) (*v1.Edi
 	err := s.beginCorrection(req.GetTenant(), req.GetReason(), true)
 	defer s.mu.Unlock()
 	if err != nil {
+		return nil, err
+	}
+	if err := s.refuseMasked(messageMaskedWrite); err != nil {
 		return nil, err
 	}
 	t := req.GetTarget()

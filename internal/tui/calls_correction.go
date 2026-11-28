@@ -165,6 +165,9 @@ func correctionLines(c *ctx, ref any) []pair {
 		{"Reason", cr.GetReason()}, {"Made by", output.Dash(cr.GetCreatedByKeyId())}, {"Made", output.Time(cr.GetCreateTime(), c.loc)},
 		{"Purge after", output.Time(cr.GetPurgeTime(), c.loc)},
 	}
+	if cr.GetIdentityRewriteRefused() != "" {
+		ps = append(ps, pair{"Identity rewrite", "refused: " + cr.GetIdentityRewriteRefused() + "; the move stands and the moved instances keep the identity they have"})
+	}
 	if cr.GetStateReason() != "" {
 		ps = append(ps, pair{"Why", cr.GetStateReason()})
 	}

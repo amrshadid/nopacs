@@ -107,6 +107,8 @@ type ctx struct {
 	topID    int
 	// acc is what the caller may do, from who-am-I; nil until known.
 	acc *access
+	// marked holds the catalog rows marked for a batch delete.
+	marked basket
 }
 
 // newID gives the next screen id.
@@ -204,6 +206,15 @@ func back(reload bool, note string) tea.Cmd {
 	return func() tea.Msg { return backMsg{reload: reload, note: note} }
 }
 
+// backThen leaves n screens, tells the one it returns to that what it shows
+// may have changed, and opens the screen then makes.
+func backThen(n int, note string, then tea.Cmd) tea.Cmd {
+	return func() tea.Msg { return backMsg{n: n, reload: true, note: note, then: then} }
+}
+
+// say is the command that shows a sentence on the bottom line.
+func say(note string) tea.Cmd { return func() tea.Msg { return noteMsg{note: note} } }
+
 // model is the root: the stack of screens, who is connected, and the line at
 // the bottom. It is the one value Bubble Tea holds.
 type model struct {
@@ -269,6 +280,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.setTop(), msg.cmd
 	case backMsg:
 		return m.leave(msg)
+	case noteMsg:
+		m.err, m.note = nil, msg.note
+		return m, nil
 	case deliverMsg:
 		m, cmd := m.deliver(msg.to, msg.msg)
 		return m, cmd
@@ -322,9 +336,9 @@ func (m model) leave(b backMsg) (tea.Model, tea.Cmd) {
 	}
 	if b.reload {
 		m, cmd := m.deliver(m.top().sid(), reloadMsg{})
-		return m, cmd
+		return m, tea.Batch(cmd, b.then)
 	}
-	return m, nil
+	return m, b.then
 }
 
 // key handles a key press. esc first stops a call the screen is waiting for;

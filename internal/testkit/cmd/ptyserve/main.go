@@ -77,6 +77,11 @@ func main() {
 		}
 		fake.AddTenant(t)
 	}
+	// One scan in the first tenant, for the screens that act on the catalog.
+	at := timestamppb.New(now.Add(-time.Hour))
+	fake.AddSubject("t000", &v1.Subject{Label: "sub-a", SessionCount: 1, InstanceCount: 1, SizeBytes: 100, ArchiveTime: at})
+	fake.AddSession("t000", &v1.Session{SubjectLabel: "sub-a", Label: "ses-1", ScanCount: 1, InstanceCount: 1, SizeBytes: 100, ArchiveTime: at})
+	fake.AddScan("t000", &v1.Scan{SubjectLabel: "sub-a", SessionLabel: "ses-1", Label: "scan-1", Modality: "MR", InstanceCount: 1, SizeBytes: 100, ArchiveTime: at})
 	fake.AddKey(&v1.Key{Id: "k00000000100", Holder: "nightly export", CreateTime: timestamppb.New(now)})
 	fake.AddAudit(&v1.AuditEntry{Id: "a1", Time: timestamppb.New(now), Method: "/nopacs.v1.TenantService/ListTenants",
 		Outcome: v1.AuditOutcome_AUDIT_OUTCOME_DONE, RequestId: "req-seed"})

@@ -19,6 +19,8 @@ It shows, on the built binary and not on a test double:
     a SIGINT sent mid-session ends it with status 130 and the same;
   * the list of tenants asks the server for a page at a time (the helper counts
     the calls the server really answered);
+  * a batch delete form shows its preview and deletes nothing until the tenant's
+    name is typed;
   * with output that is not a terminal, or with any argument, it does not open:
     the usage line and exit status 2, as before.
 
@@ -401,6 +403,40 @@ def scenario_small_and_resize(binary, helper_path):
         stop_helper(helper)
 
 
+def scenario_batch_delete_preview(binary, helper_path):
+    print("-- a batch delete shows its preview and deletes nothing until confirmed")
+    helper, datadir = start_helper(helper_path)
+    try:
+        s = Session(binary, datadir, cols=120, rows=40)
+        check(s.wait_for("local operator"), "the program is up")
+        s.press("1")
+        check(s.wait_for("t000"), "the tenant list is drawn")
+        s.press("\r")
+        check(s.wait_for("Tenant t000"), "the tenant's screen is drawn")
+        s.press("x")
+        check(s.wait_for("Corrections of t000"), "the corrections are listed")
+        s.press("b")
+        check(s.wait_for("Delete a batch in t000"), "the batch form is drawn")
+        s.press("sub-a/ses-1/scan-1\t\tduplicates of an earlier import\r")
+        check(s.wait_for("Confirm token"), "the preview shows the token the batch must carry")
+        text = s.screen.text()
+        check("sub-a/ses-1/scan-1" in text and "Targets:" in text and "fake-batch." in text, "the preview names the target and its totals")
+        stats = helper_stats(helper)
+        check(stats.get("DeleteBatch") == 1, "one call was made, the preview (got %r)" % stats.get("DeleteBatch"))
+        s.press("c")
+        check(s.wait_for("deletes each target in turn"), "the confirmation asks for the tenant's name")
+        s.press("t00\r")
+        check(s.wait_for("type t000 exactly"), "a half-typed name is refused")
+        stats = helper_stats(helper)
+        check(stats.get("DeleteBatch") == 1 and not stats.get("ListJobs"), "nothing was deleted: still the one preview call")
+        s.press("\x03")
+        code = s.finish()
+        check(code == 0, "ctrl+c ends the program with status 0 (got %r)" % code)
+        check(s.restored(), "the alternate screen was left and the cursor shown")
+    finally:
+        stop_helper(helper)
+
+
 def scenario_not_a_terminal(binary, helper_path):
     print("-- no terminal, or an argument: it does not open")
     helper, datadir = start_helper(helper_path)
@@ -446,6 +482,7 @@ def main(argv):
     scenario_signal(args.binary, args.helper, signal.SIGINT, 130, "SIGINT")
     scenario_paging(args.binary, args.helper)
     scenario_small_and_resize(args.binary, args.helper)
+    scenario_batch_delete_preview(args.binary, args.helper)
     scenario_not_a_terminal(args.binary, args.helper)
 
     if failures:

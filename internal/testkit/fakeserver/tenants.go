@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
@@ -86,7 +87,10 @@ func (h tenantHandler) ListTenants(_ context.Context, req *v1.ListTenantsRequest
 	}
 	res := &v1.ListTenantsResponse{NextPageToken: next}
 	for _, n := range names[from:to] {
-		res.Tenants = append(res.Tenants, h.s.tenants[n])
+		// The list leaves the storage quota out; only a read of one tenant has it.
+		listed := proto.Clone(h.s.tenants[n]).(*v1.Tenant)
+		listed.Quota = nil
+		res.Tenants = append(res.Tenants, listed)
 	}
 	return res, nil
 }

@@ -46,7 +46,11 @@ type action struct {
 	// any caller. The server checks every call whatever the keys offer.
 	need         v1.Role
 	installation bool
-	do           func(c *ctx, self screen, ref any) tea.Cmd
+	// plain leaves the key out for a masked key, which the server refuses
+	// what writes into archived files, deletes in bulk or chooses where
+	// data goes.
+	plain bool
+	do    func(c *ctx, self screen, ref any) tea.Cmd
 }
 
 // listScreen is every list of the program: tenants, keys, grants, settings,
