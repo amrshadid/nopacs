@@ -2,6 +2,7 @@ package sqlkit
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -349,6 +350,15 @@ func (k Rebuild) shadowScan(ctx context.Context, tx SendingTx, p string, s *tena
 	}
 	var id int64
 	if _, err := tx.QueryRow(ctx, `SELECT id FROM `+p+`scans WHERE series_uid = ?`, []any{s.SeriesUID}, &id); err != nil {
+		return 0, err
+	}
+	// What the scan's search row will hold, kept until the activation.
+	text, err := json.Marshal(s.Search)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO `+p+`search_shadow (series_uid, content) VALUES (?, ?)
+		ON CONFLICT (series_uid) DO UPDATE SET content = excluded.content`, s.SeriesUID, string(text)); err != nil {
 		return 0, err
 	}
 	return id, nil

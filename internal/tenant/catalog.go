@@ -9,6 +9,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/search"
 )
 
 // The bounds of the catalog's operations.
@@ -80,6 +81,13 @@ type ScanCommit struct {
 	// commit takes them, and one already there fills only those it holds
 	// empty.
 	Values ScanValues
+	// Search is what the search table holds of the scan, read from the
+	// header of the commit's instance with the lowest SOP Instance UID
+	// (search.Extract). The commit writes it when the scan has no row, or
+	// has one read from a file with a higher UID; the zero Row leaves the
+	// scan's row as it is, and gives a scan made by this commit a row with
+	// no values.
+	Search search.Row
 	// Instances are the instances confirmed, at most MaxScanCommit.
 	Instances []ConfirmedInstance
 	// At is when the commit is made.

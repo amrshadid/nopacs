@@ -38,6 +38,7 @@ func runRebuilding(t *testing.T, open OpenEvents, scratch Scratch) {
 		{"RebuildMadeOnce", testRebuildMadeOnce},
 		{"RebuildActivationRefused", testRebuildActivationRefused},
 		{"RebuildTradesLabels", testRebuildTradesLabels},
+		{"RebuildRemakesSearch", testRebuildRemakesSearch},
 		{"RebuildSessionReceiver", testRebuildSessionReceiver},
 		{"RebuildPauseUntilActivated", testRebuildPauseUntilActivated},
 		{"RebuildPauseEndsAnyWay", testRebuildPauseEndsAnyWay},

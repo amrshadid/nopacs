@@ -12,6 +12,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/reception"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -95,6 +96,9 @@ type senv struct {
 	// pixelRisk says archive records each instance with profile as an image
 	// whose accepted pixel risk a sender refuses unless marked.
 	pixelRisk bool
+	// rows, when set, gives the search row archive commits each scan with:
+	// study and scan as archive numbers them.
+	rows func(study, scan int) search.Row
 }
 
 // sealed is the stand-in for a credential sealed by the caller: the store
@@ -180,6 +184,9 @@ func (e *senv) archiveRouted(receiver string, study, scans, per, base int, when 
 		p := label.Path{Subject: r.SubjectLabel, Session: r.SessionLabel, Scan: "scan-" + series}
 		c := tenant.ScanCommit{ReceptionID: r.ID, StudyUID: r.StudyUID, SeriesUID: series, SubjectLabel: p.Subject,
 			SessionLabel: p.Session, ScanLabel: p.Scan, Storage: "store", ManifestSHA256: sum(s), At: r.StepTime}
+		if e.rows != nil {
+			c.Search = e.rows(study, s)
+		}
 		for _, f := range files[s*per : (s+1)*per] {
 			key, err := layout.InstanceKey(p, f.SOPInstanceUID)
 			e.ok("InstanceKey", err)

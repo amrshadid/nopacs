@@ -346,6 +346,11 @@ func (k Sending) publishEdit(ctx context.Context, tx SendingTx, c tenant.Correct
 			return err
 		}
 	}
+	for series, row := range cc.Search {
+		if err := ApplyEditSearch(ctx, tx, c.ID, series, row); err != nil {
+			return err
+		}
+	}
 	return k.afterEditRows(ctx, tx, c, rows, cc.Manifests)
 }
 

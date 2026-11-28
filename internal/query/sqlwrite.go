@@ -1,6 +1,8 @@
 package query
 
 import (
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -74,20 +76,45 @@ func (w *writer) has(h *Has, level Level, alias string, depth int) (string, erro
 	}
 	t, _ := w.c.Registry.Table(h.Level)
 	inner := "t" + strconv.Itoa(depth+1)
-	some, err := w.node(h.Child, h.Level, inner, depth+1)
+	first := len(*w.args)
+	child, err := w.node(h.Child, h.Level, inner, depth+1)
 	if err != nil {
 		return "", err
 	}
+	some := w.c.restricted(child, h.Level, inner)
 	in := alias + "." + outer + " IN (SELECT " + inner + "." + innerCol + " FROM " + t.Name + " " + inner + " WHERE " + some + ")"
 	if !h.Every {
 		return in, nil
 	}
-	none, err := w.node(h.Child, h.Level, inner, depth+1)
-	if err != nil {
-		return "", err
+	// The child is written once and its text used again: a database that
+	// numbers its placeholders ($n) reads the same ones, and one that does
+	// not ("?") is given the child's values again, in the order its text
+	// holds them. Writing it a second time would double the work of each
+	// level of "every" inside another.
+	none := child
+	if w.c.Dialect.Placeholder(1) == w.c.Dialect.Placeholder(2) {
+		*w.args = append(*w.args, slices.Clone((*w.args)[first:])...)
 	}
-	return "(" + in + " AND NOT EXISTS (SELECT 1 FROM " + t.Name + " " + inner + " WHERE " + inner + "." + innerCol + " = " +
-		alias + "." + outer + " AND NOT COALESCE(" + none + ", FALSE)))", nil
+	seen := ""
+	if w.c.Restrict != nil {
+		if r := w.c.Restrict(h.Level, inner); r != "" {
+			seen = " AND " + r
+		}
+	}
+	out := "(" + in + " AND NOT EXISTS (SELECT 1 FROM " + t.Name + " " + inner + " WHERE " + inner + "." + innerCol + " = " +
+		alias + "." + outer + seen + " AND NOT COALESCE(" + none + ", FALSE)))"
+	return out, w.checkSize(len(out))
+}
+
+// checkSize refuses a query that has grown past the bounds of the SQL or of
+// its values, as soon as it has: "every" inside "every" repeats its child,
+// so a short condition would otherwise write megabytes of SQL.
+func (w *writer) checkSize(sqlBytes int) error {
+	if sqlBytes > MaxSQLBytes || len(*w.args) > MaxParams {
+		return invalid("the query is too complex: it would make more than " + strconv.Itoa(MaxSQLBytes) + " bytes of SQL or " +
+			strconv.Itoa(MaxParams) + " values; simplify it, or ask the nesting of every less")
+	}
+	return nil
 }
 
 // leaf writes one comparison. On a multi-valued attribute it holds when
@@ -174,7 +201,7 @@ func (w *writer) compare(l *Leaf, col Column, alias, row string) (string, error)
 		// many characters a value has ("ß" folds to "ss", a decomposed
 		// "ü" loses its combining mark), and a row the exact pattern keeps
 		// must not be lost by the one that finds it.
-		return "(" + match(OpLike, strings.ReplaceAll(Fold(p), "?", "*"), true) + " AND " + match(OpLike, p, false) + ")", nil
+		return "(" + match(OpLike, foldedFinder(p), true) + " AND " + match(OpLike, p, false) + ")", nil
 	case OpContains:
 		return match(OpContains, Fold(l.Values[0].Text), true), nil
 	case OpWords:
@@ -242,4 +269,19 @@ func GlobToLike(p string) string {
 		}
 	}
 	return b.String()
+}
+
+// spacesAroundStar finds a run of spaces and the "*" they touch.
+var spacesAroundStar = regexp.MustCompile(`\s*\*\s*`)
+
+// foldedFinder returns the pattern, over folded text, that finds every row
+// the exact pattern p can keep. Fold trims the spaces at both ends of a
+// value, so a folded column does not hold the space an exact value begins or
+// ends with, and a space written beside a wildcard in p ("* T1*") would
+// need it: each space beside a wildcard is left out, which finds more rows,
+// never fewer, and the exact pattern then keeps those that match it, as
+// routing's evaluator does. Each "?" is a "*": folding may change how many
+// characters a value has.
+func foldedFinder(p string) string {
+	return spacesAroundStar.ReplaceAllString(strings.ReplaceAll(Fold(p), "?", "*"), "*")
 }

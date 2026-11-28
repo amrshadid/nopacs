@@ -55,6 +55,13 @@ var shadowOwnTables = []string{
 		count INTEGER NOT NULL
 	) STRICT, WITHOUT ROWID`,
 	`INSERT INTO catalog_totals (one, subjects, sessions, scans, instances) VALUES (1, 0, 0, 0, 0)`,
+	// What the search table holds of each scan the build found, as JSON, by
+	// the scan's series: the activation writes it under the scan's id in
+	// the catalog in use.
+	`CREATE TABLE search_shadow (
+		series_uid TEXT NOT NULL PRIMARY KEY,
+		content    TEXT NOT NULL
+	) STRICT, WITHOUT ROWID`,
 }
 
 // rebuild returns the rebuilds' implementation on t.

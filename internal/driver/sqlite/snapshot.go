@@ -16,6 +16,18 @@ import (
 // (sqlite.org/schematab.html) and pragma functions
 // (sqlite.org/pragma.html#pragfunc) to find what to read.
 
+// dataTables lists the tables of a database that hold data: not the
+// engine's own, and not a virtual table (an FTS5 index) nor the shadow tables
+// that hold its content (its _data, _idx, _content, _docsize and _config),
+// found by how they are declared, so an index added later is left out too. A
+// virtual table is derived from the table it indexes: a restore fills it
+// again through the triggers that keep it, as every row loaded is a write.
+const dataTables = `SELECT name FROM sqlite_schema AS t WHERE type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
+	AND sql NOT LIKE 'CREATE VIRTUAL TABLE%'
+	AND NOT EXISTS (SELECT 1 FROM sqlite_schema AS v WHERE v.sql LIKE 'CREATE VIRTUAL TABLE%' AND
+		t.name IN (v.name || '_data', v.name || '_idx', v.name || '_content', v.name || '_docsize', v.name || '_config'))
+	ORDER BY name`
+
 // snapshotDialect is how a snapshot reads and writes the database in p.
 // Reads use the read pool, where a transaction reads one moment of the
 // file once it has read once (write-ahead mode, sqlite.org/wal.html);
@@ -23,7 +35,7 @@ import (
 // IMMEDIATE.
 func snapshotDialect(p *pools) sqlkit.SnapshotDialect {
 	return sqlkit.SnapshotDialect{
-		Tables:     `SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\' ORDER BY name`,
+		Tables:     dataTables,
 		Columns:    `SELECT name, type FROM pragma_table_info(?) ORDER BY cid`,
 		References: `SELECT m.name, f."table" FROM sqlite_schema AS m, pragma_foreign_key_list(m.name) AS f WHERE m.type = 'table'`,
 		Kind: func(declared string) (snapshot.Kind, bool) {

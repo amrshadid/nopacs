@@ -268,7 +268,7 @@ func testListSettings(t *testing.T) {
 					"receiver.bind-addresses=@/BUILT_IN,receiver.header-limit=64MiB@/BUILT_IN,receiver.ports=@/BUILT_IN," +
 					"replica.lag-alert=1h@/BUILT_IN,replica.rate=0@/BUILT_IN," +
 					"replica.repair=manual@/BUILT_IN,replica.repair-lease=1m@/BUILT_IN,retention.max-clock-step=2d@/BUILT_IN,retention.max-per-pass=1000@/BUILT_IN," +
-					"retention.shorten-notice=30d@/BUILT_IN,scrub.archive-sample=0%@/BUILT_IN,scrub.interval=30d@/BUILT_IN,scrub.rate=64MiB@/BUILT_IN,sender.allow-plain-http=false@/BUILT_IN," +
+					"retention.shorten-notice=30d@/BUILT_IN,scrub.archive-sample=0%@/BUILT_IN,scrub.interval=30d@/BUILT_IN,scrub.rate=64MiB@/BUILT_IN,search.facet-rows=1000000@/BUILT_IN,sender.allow-plain-http=false@/BUILT_IN," +
 					"sender.destinations=@/BUILT_IN,sender.max-associations=32@/BUILT_IN,sender.tenant-max-associations=8@/BUILT_IN,storage.directory-roots=@/BUILT_IN," +
 					"storage.reserve=10%,10GiB@/BUILT_IN,storage.s3-endpoints=@/BUILT_IN,test.allotted=@/BUILT_IN,test.retention=100d@/INSTALLATION,test.text=@/BUILT_IN,transfer.wait=24h@/BUILT_IN"
 				if got := names(o); got != want {

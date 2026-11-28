@@ -457,6 +457,21 @@ var rules = map[string]rule{
 		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: labelPath(r.GetSubjectLabel(), r.GetSessionLabel(), r.GetScanLabel())}
 	}),
 
+	// SearchService: reader on the tenant for a search and for the list of
+	// its attributes. A masked key may search; the handler leaves out every
+	// row archived as received (originalsFor).
+	nopacsv1connect.SearchServiceSearchProcedure: byMessage(func(r *v1.SearchRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Details: searchDetails(r)}
+	}),
+	nopacsv1connect.SearchServiceListSearchAttributesProcedure: byMessage(func(r *v1.ListSearchAttributesRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{}
+	}),
+	// A backfill rewrites the tenant's search rows from its metadata files:
+	// a maintenance of the tenant, admin.
+	nopacsv1connect.SearchServiceBackfillAttributeProcedure: byMessage(func(r *v1.BackfillAttributeRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: map[string]string{detailAttribute: clip(r.GetAttribute(), 128)}}
+	}),
+
 	// DataService: reader on the tenant. The object is the path of labels
 	// the request names; an instance id and a position are recorded only
 	// as present.

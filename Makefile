@@ -324,6 +324,24 @@ check-dicomweb:
 	@command -v "$(PYTHON)" > /dev/null || { echo "check-dicomweb: no interpreter $(PYTHON)" >&2; exit 1; }
 	NOPACS_CHECK_DICOMWEB_PYTHON="$(PYTHON)" $(CHECK_READING_ENV) $(GO) test -count=1 -v -run '^TestDICOMwebWithDicomwebClient$$' ./internal/api
 
+# Search against tools that are not NoPACs. check-search runs Search over a
+# tenant of synthetic files archived by reception and compares its rows, counts
+# and facets with a reference filter over the same files read with pydicom
+# (PYTHON needs pydicom). check-search-dicomweb makes QIDO-RS searches of studies
+# and series from dicomweb-client against a real server process whose tenant
+# holds files sent by dcmtk's storescu, and compares them with `nopacs search`
+# (PYTHON needs dicomweb-client; DCMTK=dir names dcmtk's programs).
+.PHONY: check-search check-search-dicomweb
+check-search:
+	@test -n "$(PYTHON)" || { echo "check-search: PYTHON is empty; name an interpreter that has pydicom" >&2; exit 1; }
+	@command -v "$(PYTHON)" > /dev/null || { echo "check-search: no interpreter $(PYTHON)" >&2; exit 1; }
+	NOPACS_CHECK_SEARCH_PYTHON="$(PYTHON)" $(GO) test -count=1 -v -run '^TestSearchEqualsPydicom$$' ./internal/api
+
+check-search-dicomweb:
+	@test -n "$(PYTHON)" || { echo "check-search-dicomweb: PYTHON is empty; name an interpreter that has dicomweb-client" >&2; exit 1; }
+	@command -v "$(PYTHON)" > /dev/null || { echo "check-search-dicomweb: no interpreter $(PYTHON)" >&2; exit 1; }
+	NOPACS_REQUIRE_DCMTK=1 NOPACS_DCMTK="$(DCMTK)" NOPACS_CHECK_SEARCH_DICOMWEB_PYTHON="$(PYTHON)" $(GO) test -count=1 -v -run '^TestSearchWithDicomwebClient$$' ./internal/servecmd
+
 # The de-identification engine against pydicom: every file the engine
 # de-identifies from the corpus is read by pydicom and searched for each value
 # the test profile removes.

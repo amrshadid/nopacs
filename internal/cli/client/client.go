@@ -76,6 +76,8 @@ type Client struct {
 	Routes nopacsv1connect.RouteServiceClient
 	// Transfers is the TransferService.
 	Transfers nopacsv1connect.TransferServiceClient
+	// Search is the SearchService.
+	Search nopacsv1connect.SearchServiceClient
 	// Backups is the BackupService.
 	Backups nopacsv1connect.BackupServiceClient
 
@@ -181,6 +183,7 @@ func New(cfg Config) (*Client, error) {
 		Retention:   nopacsv1connect.NewRetentionServiceClient(c),
 		Routes:      nopacsv1connect.NewRouteServiceClient(c),
 		Transfers:   nopacsv1connect.NewTransferServiceClient(c),
+		Search:      nopacsv1connect.NewSearchServiceClient(c),
 		base:        strings.TrimSuffix(base, "/"),
 		key:         bearerK,
 		timeout:     timeout,

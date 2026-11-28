@@ -73,6 +73,9 @@ func (a *app) jobDetails(j *v1.Job) []output.Pair {
 	if rj := j.GetRebuild(); rj != nil {
 		pairs = append(pairs, rebuildJobDetails(rj)...)
 	}
+	if sb := j.GetSearchBackfill(); sb != nil {
+		pairs = append(pairs, searchBackfillDetails(sb)...)
+	}
 	pairs = append(pairs, output.ReplicationJobPairs(j)...)
 	sentLabel, refusedLabel := countLabels(j)
 	if j.GetReason() != "" {

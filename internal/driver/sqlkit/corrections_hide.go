@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -100,6 +101,13 @@ func (k Sending) hideTarget(ctx context.Context, tx SendingTx, id string, r targ
 	}
 	if _, err := k.hideRows(ctx, tx, id, "reception_scans", in, arg); err != nil {
 		return err
+	}
+	// The scans' search rows leave with them: a search never finds what a
+	// delete hid, and an undo puts them back.
+	for _, t := range search.Tables() {
+		if _, err := k.hideRows(ctx, tx, id, t, in, arg); err != nil {
+			return err
+		}
 	}
 	if _, err := k.hideRows(ctx, tx, id, "scans", `id IN `+scope, arg); err != nil {
 		return err
@@ -370,11 +378,15 @@ func (k Sending) showTarget(ctx context.Context, tx SendingTx, c tenant.Correcti
 		return err
 	}
 	for _, s := range scans {
-		if _, err := k.restoreParent(ctx, tx, id, "scans", s, [][2]string{{"instances", "scan_id"}, {"reception_scans", "scan_id"}}); err != nil {
+		children := [][2]string{{"instances", "scan_id"}, {"reception_scans", "scan_id"}}
+		for _, t := range search.Tables() {
+			children = append(children, [2]string{t, "scan_id"})
+		}
+		if _, err := k.restoreParent(ctx, tx, id, "scans", s, children); err != nil {
 			return err
 		}
 	}
-	for _, table := range []string{"instances", "session_modalities", "reception_scans"} {
+	for _, table := range append([]string{"instances", "session_modalities", "reception_scans"}, search.Tables()...) {
 		list, _, err := k.columnList(ctx, tx, table)
 		if err != nil {
 			return err
@@ -430,6 +442,9 @@ func (k Sending) showTarget(ctx context.Context, tx SendingTx, c tenant.Correcti
 	}); err != nil {
 		return err
 	}
+	if err := RestoreEditSearch(ctx, tx, id); err != nil {
+		return err
+	}
 	return dropHidden(ctx, tx, id)
 }
 
@@ -479,7 +494,7 @@ func dropHidden(ctx context.Context, tx SendingTx, id string) error {
 	if err := dropHiddenScanRowsInTx(ctx, tx, id); err != nil {
 		return err
 	}
-	for _, table := range []string{"instances", "reception_scans", "scans", "session_modalities", "sessions", "subjects"} {
+	for _, table := range append([]string{"instances", "reception_scans", "scans", "session_modalities", "sessions", "subjects"}, search.Tables()...) {
 		// #nosec G202 -- table is a constant.
 		if _, err := tx.Exec(ctx, `DELETE FROM hidden_`+table+` WHERE correction_id = ?`, id); err != nil {
 			return err

@@ -185,6 +185,11 @@ func (k Rebuild) ActivateCatalog(ctx context.Context, fence tenant.WorkFence, no
 		if err := k.copyShadow(ctx, tx, sp); err != nil {
 			return err
 		}
+		// The scans' search rows are made again from what the build read, so
+		// they are the rows an archive made.
+		if err := k.copyShadowSearch(ctx, tx, sp); err != nil {
+			return err
+		}
 		// What corrections own and have not purged is counted again with
 		// the catalog's totals, so a rebuild makes every running total of
 		// a tenant's use (tenant.Quotas) right.

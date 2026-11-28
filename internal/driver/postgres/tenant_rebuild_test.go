@@ -140,7 +140,7 @@ func TestRebuildScratchSharedWithNoOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustExec(t, a, `ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM `+role)
-	if n := scratchCount(t, base, private, `SELECT count(*) FROM pg_tables WHERE schemaname = $1`); n != len(tenant.CatalogTables())+2 {
+	if n := scratchCount(t, base, private, `SELECT count(*) FROM pg_tables WHERE schemaname = $1`); n != len(tenant.CatalogTables())+3 {
 		t.Fatalf("the shadow made %d tables", n)
 	}
 	readable := scratchCount(t, base, private, `SELECT count(*) FROM pg_tables WHERE schemaname = $1
@@ -235,8 +235,8 @@ func TestRebuildShadowLeavesTheSchema(t *testing.T) {
 		}
 		return n
 	}
-	if n := count(); n != len(tenant.CatalogTables())+2 {
-		t.Fatalf("the shadow made %d tables, want %d", n, len(tenant.CatalogTables())+2)
+	if n := count(); n != len(tenant.CatalogTables())+3 {
+		t.Fatalf("the shadow made %d tables, want %d", n, len(tenant.CatalogTables())+3)
 	}
 	// Another job's shadow in the schema: the rebuild_state row names it.
 	mustExec(t, admin(t, base), `UPDATE `+scratch+`.rebuild_state SET job_id = 'someone-else'`)

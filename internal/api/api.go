@@ -215,6 +215,8 @@ type Handlers struct {
 	Routes nopacsv1connect.RouteServiceHandler
 	// Transfers is TransferService.
 	Transfers nopacsv1connect.TransferServiceHandler
+	// Search is SearchService.
+	Search nopacsv1connect.SearchServiceHandler
 
 	// c is what the services share, kept for the test seams
 	// (export_test.go).
@@ -304,6 +306,7 @@ func New(cfg Config) (Handlers, error) {
 		Retention:   retentionService{c: c},
 		Routes:      routeService{c: c},
 		Transfers:   transferService{c: c},
+		Search:      searchService{c},
 		c:           c,
 	}, nil
 }
@@ -333,6 +336,7 @@ func (h Handlers) Register(srv *connect.Server) {
 	nopacsv1connect.RegisterRetentionServiceHandler(srv, h.Retention)
 	nopacsv1connect.RegisterRouteServiceHandler(srv, h.Routes)
 	nopacsv1connect.RegisterTransferServiceHandler(srv, h.Transfers)
+	nopacsv1connect.RegisterSearchServiceHandler(srv, h.Search)
 }
 
 // decisionKey is the context key of the Decision. Unexported, so only
@@ -468,6 +472,11 @@ type core struct {
 		backupLimit time.Duration
 		// recheck, when not zero, stands for RecheckInterval in watchKey.
 		recheck time.Duration
+		// seriesFromCatalog, when set, serves a search of series by the
+		// keys the catalog also holds (modality, description, number) from
+		// the catalog's lists, as the search tables did not exist, so a test
+		// compares the two paths.
+		seriesFromCatalog bool
 		// guarding, when set, runs as the guard of a delete that lifts
 		// retention, or of a clock's confirmation on the installation,
 		// begins: inside the change's transaction, after the request was

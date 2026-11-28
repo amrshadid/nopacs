@@ -1,0 +1,243 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "nopacs/v1/catalog.proto";
+import "nopacs/v1/job.proto";
+
+// SearchService finds the subjects, sessions and scans of a tenant by a
+// condition on the values their files hold, in the condition language a
+// receiver's routing rules are written in. It reads the tenant's database
+// alone, never a storage.
+//
+// A condition is text such as
+//
+//	Modality in ("MR", "CT") and SeriesDescription contains "mprage"
+//	  and SliceThickness between 0.8 and 1.2
+//
+// Its leaves compare an attribute (a DICOM keyword or tag) or a catalog
+// field (session.date, subject.label, calling_ae, called_ae,
+// session.receiver) with a value: =, == (exact), !=, in, <, <=, >, >=,
+// between, prefix, like (with "*" and "?"), contains, words, present and
+// absent; "and", "or" and "not" join them. "has" and "every" reach across
+// levels: `has scan (Modality == "CT")` asks of a session that it holds a
+// scan of that modality, `every scan (...)` that all its scans meet a
+// condition, and the same of a subject's sessions. A text comparison with
+// "=" ignores case and accents; "==" does not.
+//
+// What is searchable. The search tables hold, for each scan, a column for
+// each attribute listed by ListSearchAttributes, read from the header of the
+// scan's file with the lowest SOP Instance UID as the archive keeps it (de-
+// identified, never the original a profile changed), so a series is
+// described by one of its files: an attribute that varies inside a series
+// describes that file. A session's date, its receiver and AE titles, and a
+// subject's label are the catalog's.
+//
+// Indexes. A search is refused as invalid, with a message that names the
+// attribute to index, unless an index serves it: an "and" is served when one
+// of its parts is, an "or" when every part is, and a "not" alone never; a
+// "contains", "words" or a "like" pattern needs three characters in a row
+// between its wildcards; "matches" is for routing and is never served. So a
+// page costs about the same at ten thousand scans as at ten million, and a
+// client learns at once what cannot be asked.
+//
+// Pages, counts and facets. A page is of the rows of one level in the order
+// of their ids and resumes by a keyset cursor, so rows archived or removed
+// meanwhile neither shift a page nor repeat a row. A count and a facet cost
+// in proportion to the rows that match; both read at most the tenant's
+// search.facet-rows setting: a count that reaches it answers that many with
+// total_is_lower_bound set, and a facet of more rows is refused as a
+// precondition failure that names the setting.
+//
+// Masked keys. A key that may not learn original values (access.proto, masked
+// keys) never finds a scan archived as received, nor a session holding one:
+// such rows match no condition, are in no count or facet, and are never
+// answered, since which rows a condition keeps would tell the values of the
+// files. Everything else is searched as for any key. The exclusion is of
+// whole rows, also for a condition on a label only.
+//
+// An attribute added to the search tables after scans were archived is
+// searchable once those scans have been read for it (a search job); a search
+// that names it before then is refused as a precondition failure.
+service SearchService {
+  // Search answers a page of the subjects, sessions or scans of a tenant that
+  // meet a condition, with a count and the values of one field when asked.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the level and the condition's
+  // fields (never its values) in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid (a
+  // condition that does not parse, names a field the search tables do not
+  // hold, compares a value of another type, or that no index serves; a
+  // facet of a field of another level; a page token not this search's),
+  // precondition failed (an attribute still being filled; a facet of more
+  // rows than search.facet-rows), not found (a tenant that does not exist,
+  // for a caller who may list every tenant), unavailable (the tenant's
+  // database does not answer, or the tenant is not ready).
+  rpc Search(SearchRequest) returns (SearchResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListSearchAttributes answers the attributes the search tables hold and
+  // whether each is ready to search.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), not found
+  // (a tenant that does not exist, for a caller who may list every tenant),
+  // unavailable (the tenant's database does not answer, or the tenant is not
+  // ready).
+  rpc ListSearchAttributes(ListSearchAttributesRequest) returns (ListSearchAttributesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // BackfillAttribute makes the job (SearchBackfillJob) that fills the search
+  // tables for the scans archived before an attribute was added: it reads each
+  // scan's metadata file and writes the scan's search row as the archive
+  // writes it, then makes every attribute still being filled ready to search
+  // and analyzes the table. The attribute named must be one of those being
+  // filled. The job is the tenant's one at a time, resumes where it stood
+  // after a restart, and is canceled with JobService.CancelJob (its
+  // attributes then stay being filled). It is a change of the tenant's
+  // search tables: admin, not reader.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, the job's id as its object, the
+  // attribute in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid (an
+  // attribute the search tables do not hold), not found (a tenant that does
+  // not exist, for a caller who may list every tenant), precondition failed
+  // (the attribute is ready already; a search backfill of the tenant has not
+  // ended; a rebuild of the tenant is running; the tenant is moved or
+  // fenced, with the reason TENANT_MOVED or TENANT_FENCED), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc BackfillAttribute(BackfillAttributeRequest) returns (BackfillAttributeResponse);
+}
+
+// BackfillAttributeRequest asks for the fill of an attribute added after
+// scans were archived.
+message BackfillAttributeRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The attribute's DICOM keyword, as ListSearchAttributes lists it, still
+  // being filled. Required.
+  string attribute = 2;
+}
+
+// BackfillAttributeResponse is the job made.
+message BackfillAttributeResponse {
+  // The job, queued, of kind search_backfill.
+  Job job = 1;
+}
+
+// SearchLevel is the level whose rows a search lists.
+enum SearchLevel {
+  // Not given: scans.
+  SEARCH_LEVEL_UNSPECIFIED = 0;
+  // The scans (series) that meet the condition.
+  SEARCH_LEVEL_SCAN = 1;
+  // The sessions (studies) that meet it.
+  SEARCH_LEVEL_SESSION = 2;
+  // The subjects that meet it.
+  SEARCH_LEVEL_SUBJECT = 3;
+}
+
+// SearchRequest is a search.
+message SearchRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The level whose rows are listed. Unspecified is scans.
+  SearchLevel level = 2;
+
+  // The condition, at most 4096 bytes, within the language's bounds (depth
+  // 16, 64 leaves, 100 values in a list, 1 KiB a value). Empty for every
+  // row of the level, which no index is needed for.
+  string query = 3;
+
+  // How many rows at most, from 1 to 1000. Absent or zero is 100.
+  int32 page_size = 4;
+
+  // The page_token of the previous page of this search. Empty for the first.
+  string page_token = 5;
+
+  // Asks for how many rows match, counted up to the tenant's
+  // search.facet-rows.
+  bool count = 6;
+
+  // A field whose distinct values are answered with how many rows of the
+  // level have each (a keyword, a tag or a catalog field held at the level
+  // asked). Empty for none.
+  string facet = 7;
+}
+
+// SearchResponse is a page of a search.
+message SearchResponse {
+  // The page's subjects, when the level is subject.
+  repeated Subject subjects = 1;
+
+  // The page's sessions, when the level is session.
+  repeated Session sessions = 2;
+
+  // The page's scans, when the level is scan.
+  repeated Scan scans = 3;
+
+  // The token of the next page, empty after the last.
+  string next_page_token = 4;
+
+  // How many rows match, when count was asked; absent otherwise.
+  optional int64 total_count = 5;
+
+  // Says the count stopped at the tenant's search.facet-rows: more rows
+  // match than total_count says.
+  bool total_is_lower_bound = 6;
+
+  // The facet's values, the most frequent first (at most 1000), when one was
+  // asked; a row with several values counts under each.
+  repeated FacetValue facet = 7;
+}
+
+// FacetValue is a value of a facet and how many rows have it.
+message FacetValue {
+  // The value as the search table holds it: a number as a decimal, a date as
+  // YYYYMMDD.
+  string value = 1;
+
+  // How many rows have it.
+  int64 count = 2;
+}
+
+// ListSearchAttributesRequest asks for the attributes of a tenant's search.
+message ListSearchAttributesRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+}
+
+// ListSearchAttributesResponse is the attributes of a tenant's search.
+message ListSearchAttributesResponse {
+  // Each attribute, by keyword.
+  repeated SearchAttribute attributes = 1;
+}
+
+// SearchAttribute is an attribute the search tables hold.
+message SearchAttribute {
+  // The attribute's DICOM keyword.
+  string field = 1;
+
+  // Whether its column is filled for every scan: a search that names it
+  // before is refused.
+  bool ready = 2;
+
+  // How many scans the last search backfill that covered the attribute could
+  // not read (their metadata was missing or not in its form): they hold no
+  // value for it, so a fill that ended partial shows here. Zero when none, or
+  // when no backfill covered it.
+  int64 scans_skipped = 3;
+}

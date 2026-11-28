@@ -15,6 +15,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/receive/sidecar"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -177,6 +178,11 @@ func (e *Engine) Replace(ctx context.Context, r ReplaceRequest) (tenant.Correcti
 	cc := tenant.CorrectionCommit{ID: c.ID, Manifests: map[string]tenant.SHA256{series: meta.after}, Replaced: &replaced}
 	if !meta.metadata.IsZero() {
 		cc.Sidecars = map[string]tenant.SHA256{series: meta.metadata}
+	}
+	// The scan's search row takes the new header when it was read from this
+	// instance (or from one with a higher UID).
+	if len(line.Dataset) > 0 {
+		cc.Search = map[string]search.Row{series: search.ExtractJSON(line.Dataset, r.UID)}
 	}
 	return e.published(ctx, c, func() (tenant.Correction, string, error) { return e.commit(ctx, cc) }, release)
 }

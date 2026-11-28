@@ -18,6 +18,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/receive/sidecar"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -326,6 +327,11 @@ func readScan(ctx context.Context, st Storage, storage string, path label.Path) 
 		if why != "" {
 			out.unreadable = why
 			return out, nil
+		}
+		if len(out.instances) == 0 {
+			// The lines are in order of SOP Instance UID: the first is the
+			// file the scan's search values are read from.
+			out.scan.Search = search.ExtractJSON(line.Dataset, line.SOPInstanceUID)
 		}
 		out.instances = append(out.instances, in)
 	}

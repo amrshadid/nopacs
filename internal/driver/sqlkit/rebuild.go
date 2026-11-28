@@ -69,7 +69,7 @@ type ShadowHost interface {
 }
 
 // shadowTables are the build's own tables a shadow holds.
-var shadowTables = []string{"rebuild_state", "rebuild_tallies"}
+var shadowTables = []string{"rebuild_state", "rebuild_tallies", "search_shadow"}
 
 // ShadowTables returns every table a shadow holds: the catalog's and the
 // build's own, so a driver removes exactly these and nothing else.

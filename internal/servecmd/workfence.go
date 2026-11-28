@@ -171,6 +171,30 @@ func (d fencedDB) CreateJob(ctx context.Context, j tenant.NewJob, audit master.A
 	return d.tenantDB.CreateJob(ctx, j, audit, guard)
 }
 
+// ApplySearchBackfill asks the fence, then writes the page.
+func (d fencedDB) ApplySearchBackfill(ctx context.Context, a tenant.SearchBackfillApply) (tenant.SearchBackfillJob, error) {
+	if err := d.fence(); err != nil {
+		return tenant.SearchBackfillJob{}, err
+	}
+	return d.tenantDB.ApplySearchBackfill(ctx, a)
+}
+
+// EndSearchBackfill asks the fence, then ends the job.
+func (d fencedDB) EndSearchBackfill(ctx context.Context, id string, now time.Time) (tenant.Job, error) {
+	if err := d.fence(); err != nil {
+		return tenant.Job{}, err
+	}
+	return d.tenantDB.EndSearchBackfill(ctx, id, now)
+}
+
+// StopSearchBackfill asks the fence, then stops the job.
+func (d fencedDB) StopSearchBackfill(ctx context.Context, id, reason string, now time.Time) (tenant.Job, error) {
+	if err := d.fence(); err != nil {
+		return tenant.Job{}, err
+	}
+	return d.tenantDB.StopSearchBackfill(ctx, id, reason, now)
+}
+
 // CheckRetentionClock asks the fence, then checks and records the clock.
 func (d fencedDB) CheckRetentionClock(ctx context.Context, c tenant.RetentionClockCheck) (tenant.RetentionClock, error) {
 	if err := d.fence(); err != nil {

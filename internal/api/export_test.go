@@ -129,3 +129,8 @@ func SafeTrial(err error) error { return trial.SafeError(err) }
 // EncryptionMessage is encryptionMessage, for the test of what a status
 // says of an S3 storage's encryption.
 var EncryptionMessage = encryptionMessage
+
+// SetSeriesFromCatalog makes a search of series by h answer the keys the
+// catalog also holds (modality, description, number) from the catalog's
+// lists instead of the search tables.
+func SetSeriesFromCatalog(h Handlers, on bool) { h.c.seams.seriesFromCatalog = on }

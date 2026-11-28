@@ -300,6 +300,12 @@ func Contract() Table {
 		nopacsv1connect.CatalogServiceListScansProcedure:    onTenant(func() *nopacsv1.ListScansRequest { return &nopacsv1.ListScansRequest{} }, master.RoleReader),
 		nopacsv1connect.CatalogServiceGetScanProcedure:      onTenant(func() *nopacsv1.GetScanRequest { return &nopacsv1.GetScanRequest{} }, master.RoleReader),
 
+		// SearchService: reader on the tenant for a search and its attributes.
+		nopacsv1connect.SearchServiceSearchProcedure:               onTenant(func() *nopacsv1.SearchRequest { return &nopacsv1.SearchRequest{} }, master.RoleReader),
+		nopacsv1connect.SearchServiceListSearchAttributesProcedure: onTenant(func() *nopacsv1.ListSearchAttributesRequest { return &nopacsv1.ListSearchAttributesRequest{} }, master.RoleReader),
+		// A backfill of a search attribute changes the tenant's search rows: admin.
+		nopacsv1connect.SearchServiceBackfillAttributeProcedure: onTenant(func() *nopacsv1.BackfillAttributeRequest { return &nopacsv1.BackfillAttributeRequest{} }, master.RoleAdmin),
+
 		// DataService: reader on the tenant for a stream of files.
 		nopacsv1connect.DataServiceReadFilesProcedure: onTenant(func() *nopacsv1.ReadFilesRequest { return &nopacsv1.ReadFilesRequest{} }, master.RoleReader),
 

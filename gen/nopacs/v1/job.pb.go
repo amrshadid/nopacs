@@ -1529,6 +1529,69 @@ func (x *DeleteBatchJob) GetTargets() int64 {
 	return 0
 }
 
+// SearchBackfillJob is a job that fills the search tables' column of each
+// attribute added after scans were archived (SearchService.BackfillAttribute),
+// reading each scan's metadata file. Its counts are of scans: instances is the
+// scans it covers, sent the scans written, refused the scans whose metadata
+// could not be read (they keep no value for the attributes). It ends done
+// when every scan was written, partial when any could not be read, and
+// failed, with its reason, when it could not go on; the attributes are
+// ready to search once it ended done or partial.
+type SearchBackfillJob struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The attributes, by keyword, the job makes ready: every attribute still
+	// being filled when it was made.
+	Fields []string `protobuf:"bytes,1,rep,name=fields,proto3" json:"fields,omitempty"`
+	// The scans whose metadata could not be read.
+	ScansSkipped  int64 `protobuf:"varint,2,opt,name=scans_skipped,json=scansSkipped,proto3" json:"scans_skipped,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchBackfillJob) Reset() {
+	*x = SearchBackfillJob{}
+	mi := &file_nopacs_v1_job_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchBackfillJob) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchBackfillJob) ProtoMessage() {}
+
+func (x *SearchBackfillJob) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_job_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchBackfillJob.ProtoReflect.Descriptor instead.
+func (*SearchBackfillJob) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SearchBackfillJob) GetFields() []string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *SearchBackfillJob) GetScansSkipped() int64 {
+	if x != nil {
+		return x.ScansSkipped
+	}
+	return 0
+}
+
 // ImportJob is a job that hands the files of a directory under an import
 // receiver's root to that receiver (ImportReceiver).
 type ImportJob struct {
@@ -1598,7 +1661,7 @@ type ImportJob struct {
 
 func (x *ImportJob) Reset() {
 	*x = ImportJob{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[9]
+	mi := &file_nopacs_v1_job_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1610,7 +1673,7 @@ func (x *ImportJob) String() string {
 func (*ImportJob) ProtoMessage() {}
 
 func (x *ImportJob) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[9]
+	mi := &file_nopacs_v1_job_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1623,7 +1686,7 @@ func (x *ImportJob) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportJob.ProtoReflect.Descriptor instead.
 func (*ImportJob) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{9}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ImportJob) GetReceiver() string {
@@ -1709,7 +1772,7 @@ type ImportSkipCount struct {
 
 func (x *ImportSkipCount) Reset() {
 	*x = ImportSkipCount{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[10]
+	mi := &file_nopacs_v1_job_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1721,7 +1784,7 @@ func (x *ImportSkipCount) String() string {
 func (*ImportSkipCount) ProtoMessage() {}
 
 func (x *ImportSkipCount) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[10]
+	mi := &file_nopacs_v1_job_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1734,7 +1797,7 @@ func (x *ImportSkipCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportSkipCount.ProtoReflect.Descriptor instead.
 func (*ImportSkipCount) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{10}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ImportSkipCount) GetCode() ImportSkipCode {
@@ -1765,7 +1828,7 @@ type ImportQuarantineCount struct {
 
 func (x *ImportQuarantineCount) Reset() {
 	*x = ImportQuarantineCount{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[11]
+	mi := &file_nopacs_v1_job_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1777,7 +1840,7 @@ func (x *ImportQuarantineCount) String() string {
 func (*ImportQuarantineCount) ProtoMessage() {}
 
 func (x *ImportQuarantineCount) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[11]
+	mi := &file_nopacs_v1_job_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1790,7 +1853,7 @@ func (x *ImportQuarantineCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportQuarantineCount.ProtoReflect.Descriptor instead.
 func (*ImportQuarantineCount) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{11}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ImportQuarantineCount) GetReason() QuarantineReason {
@@ -1876,7 +1939,7 @@ type ImportCounts struct {
 
 func (x *ImportCounts) Reset() {
 	*x = ImportCounts{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[12]
+	mi := &file_nopacs_v1_job_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1888,7 +1951,7 @@ func (x *ImportCounts) String() string {
 func (*ImportCounts) ProtoMessage() {}
 
 func (x *ImportCounts) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[12]
+	mi := &file_nopacs_v1_job_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1901,7 +1964,7 @@ func (x *ImportCounts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportCounts.ProtoReflect.Descriptor instead.
 func (*ImportCounts) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{12}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ImportCounts) GetFound() int64 {
@@ -2039,7 +2102,7 @@ type JobTally struct {
 
 func (x *JobTally) Reset() {
 	*x = JobTally{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[13]
+	mi := &file_nopacs_v1_job_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2051,7 +2114,7 @@ func (x *JobTally) String() string {
 func (*JobTally) ProtoMessage() {}
 
 func (x *JobTally) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[13]
+	mi := &file_nopacs_v1_job_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2064,7 +2127,7 @@ func (x *JobTally) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobTally.ProtoReflect.Descriptor instead.
 func (*JobTally) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{13}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *JobTally) GetKey() string {
@@ -2102,6 +2165,7 @@ type Job struct {
 	//	*Job_Repair
 	//	*Job_Dispose
 	//	*Job_DeleteBatch
+	//	*Job_SearchBackfill
 	Kind isJob_Kind `protobuf_oneof:"kind"`
 	// Where it is.
 	State JobState `protobuf:"varint,3,opt,name=state,proto3,enum=nopacs.v1.JobState" json:"state,omitempty"`
@@ -2156,7 +2220,7 @@ type Job struct {
 
 func (x *Job) Reset() {
 	*x = Job{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[14]
+	mi := &file_nopacs_v1_job_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2168,7 +2232,7 @@ func (x *Job) String() string {
 func (*Job) ProtoMessage() {}
 
 func (x *Job) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[14]
+	mi := &file_nopacs_v1_job_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2181,7 +2245,7 @@ func (x *Job) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Job.ProtoReflect.Descriptor instead.
 func (*Job) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{14}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Job) GetId() string {
@@ -2274,6 +2338,15 @@ func (x *Job) GetDeleteBatch() *DeleteBatchJob {
 	if x != nil {
 		if x, ok := x.Kind.(*Job_DeleteBatch); ok {
 			return x.DeleteBatch
+		}
+	}
+	return nil
+}
+
+func (x *Job) GetSearchBackfill() *SearchBackfillJob {
+	if x != nil {
+		if x, ok := x.Kind.(*Job_SearchBackfill); ok {
+			return x.SearchBackfill
 		}
 	}
 	return nil
@@ -2421,6 +2494,12 @@ type Job_DeleteBatch struct {
 	DeleteBatch *DeleteBatchJob `protobuf:"bytes,22,opt,name=delete_batch,json=deleteBatch,proto3,oneof"`
 }
 
+type Job_SearchBackfill struct {
+	// The scans archived before a search attribute was added given its
+	// value, read from each scan's metadata file.
+	SearchBackfill *SearchBackfillJob `protobuf:"bytes,25,opt,name=search_backfill,json=searchBackfill,proto3,oneof"`
+}
+
 func (*Job_Send) isJob_Kind() {}
 
 func (*Job_Deid) isJob_Kind() {}
@@ -2438,6 +2517,8 @@ func (*Job_Repair) isJob_Kind() {}
 func (*Job_Dispose) isJob_Kind() {}
 
 func (*Job_DeleteBatch) isJob_Kind() {}
+
+func (*Job_SearchBackfill) isJob_Kind() {}
 
 // JobFailure is one instance of a job that was refused, or sent with a
 // warning.
@@ -2485,7 +2566,7 @@ type JobFailure struct {
 
 func (x *JobFailure) Reset() {
 	*x = JobFailure{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[15]
+	mi := &file_nopacs_v1_job_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2497,7 +2578,7 @@ func (x *JobFailure) String() string {
 func (*JobFailure) ProtoMessage() {}
 
 func (x *JobFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[15]
+	mi := &file_nopacs_v1_job_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2510,7 +2591,7 @@ func (x *JobFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobFailure.ProtoReflect.Descriptor instead.
 func (*JobFailure) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{15}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *JobFailure) GetInstanceId() string {
@@ -2618,7 +2699,7 @@ type CreateJobRequest struct {
 
 func (x *CreateJobRequest) Reset() {
 	*x = CreateJobRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[16]
+	mi := &file_nopacs_v1_job_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2630,7 +2711,7 @@ func (x *CreateJobRequest) String() string {
 func (*CreateJobRequest) ProtoMessage() {}
 
 func (x *CreateJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[16]
+	mi := &file_nopacs_v1_job_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2643,7 +2724,7 @@ func (x *CreateJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateJobRequest.ProtoReflect.Descriptor instead.
 func (*CreateJobRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{16}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CreateJobRequest) GetTenant() string {
@@ -2760,7 +2841,7 @@ type CreateJobResponse struct {
 
 func (x *CreateJobResponse) Reset() {
 	*x = CreateJobResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[17]
+	mi := &file_nopacs_v1_job_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2772,7 +2853,7 @@ func (x *CreateJobResponse) String() string {
 func (*CreateJobResponse) ProtoMessage() {}
 
 func (x *CreateJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[17]
+	mi := &file_nopacs_v1_job_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2785,7 +2866,7 @@ func (x *CreateJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateJobResponse.ProtoReflect.Descriptor instead.
 func (*CreateJobResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{17}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CreateJobResponse) GetJob() *Job {
@@ -2808,7 +2889,7 @@ type GetJobRequest struct {
 
 func (x *GetJobRequest) Reset() {
 	*x = GetJobRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[18]
+	mi := &file_nopacs_v1_job_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2820,7 +2901,7 @@ func (x *GetJobRequest) String() string {
 func (*GetJobRequest) ProtoMessage() {}
 
 func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[18]
+	mi := &file_nopacs_v1_job_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2833,7 +2914,7 @@ func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{18}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetJobRequest) GetTenant() string {
@@ -2861,7 +2942,7 @@ type GetJobResponse struct {
 
 func (x *GetJobResponse) Reset() {
 	*x = GetJobResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[19]
+	mi := &file_nopacs_v1_job_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2873,7 +2954,7 @@ func (x *GetJobResponse) String() string {
 func (*GetJobResponse) ProtoMessage() {}
 
 func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[19]
+	mi := &file_nopacs_v1_job_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2886,7 +2967,7 @@ func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobResponse.ProtoReflect.Descriptor instead.
 func (*GetJobResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{19}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetJobResponse) GetJob() *Job {
@@ -2928,7 +3009,7 @@ type ListJobsRequest struct {
 
 func (x *ListJobsRequest) Reset() {
 	*x = ListJobsRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[20]
+	mi := &file_nopacs_v1_job_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2940,7 +3021,7 @@ func (x *ListJobsRequest) String() string {
 func (*ListJobsRequest) ProtoMessage() {}
 
 func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[20]
+	mi := &file_nopacs_v1_job_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2953,7 +3034,7 @@ func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{20}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListJobsRequest) GetTenant() string {
@@ -3025,7 +3106,7 @@ type ListJobsResponse struct {
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[21]
+	mi := &file_nopacs_v1_job_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3037,7 +3118,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[21]
+	mi := &file_nopacs_v1_job_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3050,7 +3131,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{21}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListJobsResponse) GetJobs() []*Job {
@@ -3080,7 +3161,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[22]
+	mi := &file_nopacs_v1_job_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3092,7 +3173,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[22]
+	mi := &file_nopacs_v1_job_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3105,7 +3186,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{22}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CancelJobRequest) GetTenant() string {
@@ -3133,7 +3214,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[23]
+	mi := &file_nopacs_v1_job_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3145,7 +3226,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[23]
+	mi := &file_nopacs_v1_job_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3158,7 +3239,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{23}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CancelJobResponse) GetJob() *Job {
@@ -3181,7 +3262,7 @@ type PauseJobRequest struct {
 
 func (x *PauseJobRequest) Reset() {
 	*x = PauseJobRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[24]
+	mi := &file_nopacs_v1_job_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3193,7 +3274,7 @@ func (x *PauseJobRequest) String() string {
 func (*PauseJobRequest) ProtoMessage() {}
 
 func (x *PauseJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[24]
+	mi := &file_nopacs_v1_job_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3206,7 +3287,7 @@ func (x *PauseJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseJobRequest.ProtoReflect.Descriptor instead.
 func (*PauseJobRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{24}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PauseJobRequest) GetTenant() string {
@@ -3234,7 +3315,7 @@ type PauseJobResponse struct {
 
 func (x *PauseJobResponse) Reset() {
 	*x = PauseJobResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[25]
+	mi := &file_nopacs_v1_job_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3246,7 +3327,7 @@ func (x *PauseJobResponse) String() string {
 func (*PauseJobResponse) ProtoMessage() {}
 
 func (x *PauseJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[25]
+	mi := &file_nopacs_v1_job_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3259,7 +3340,7 @@ func (x *PauseJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseJobResponse.ProtoReflect.Descriptor instead.
 func (*PauseJobResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{25}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *PauseJobResponse) GetJob() *Job {
@@ -3282,7 +3363,7 @@ type ResumeJobRequest struct {
 
 func (x *ResumeJobRequest) Reset() {
 	*x = ResumeJobRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[26]
+	mi := &file_nopacs_v1_job_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3294,7 +3375,7 @@ func (x *ResumeJobRequest) String() string {
 func (*ResumeJobRequest) ProtoMessage() {}
 
 func (x *ResumeJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[26]
+	mi := &file_nopacs_v1_job_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3307,7 +3388,7 @@ func (x *ResumeJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeJobRequest.ProtoReflect.Descriptor instead.
 func (*ResumeJobRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{26}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ResumeJobRequest) GetTenant() string {
@@ -3335,7 +3416,7 @@ type ResumeJobResponse struct {
 
 func (x *ResumeJobResponse) Reset() {
 	*x = ResumeJobResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[27]
+	mi := &file_nopacs_v1_job_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3347,7 +3428,7 @@ func (x *ResumeJobResponse) String() string {
 func (*ResumeJobResponse) ProtoMessage() {}
 
 func (x *ResumeJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[27]
+	mi := &file_nopacs_v1_job_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3360,7 +3441,7 @@ func (x *ResumeJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeJobResponse.ProtoReflect.Descriptor instead.
 func (*ResumeJobResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{27}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ResumeJobResponse) GetJob() *Job {
@@ -3383,7 +3464,7 @@ type RetryJobRequest struct {
 
 func (x *RetryJobRequest) Reset() {
 	*x = RetryJobRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[28]
+	mi := &file_nopacs_v1_job_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3395,7 +3476,7 @@ func (x *RetryJobRequest) String() string {
 func (*RetryJobRequest) ProtoMessage() {}
 
 func (x *RetryJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[28]
+	mi := &file_nopacs_v1_job_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3408,7 +3489,7 @@ func (x *RetryJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetryJobRequest.ProtoReflect.Descriptor instead.
 func (*RetryJobRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{28}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RetryJobRequest) GetTenant() string {
@@ -3438,7 +3519,7 @@ type RetryJobResponse struct {
 
 func (x *RetryJobResponse) Reset() {
 	*x = RetryJobResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[29]
+	mi := &file_nopacs_v1_job_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3450,7 +3531,7 @@ func (x *RetryJobResponse) String() string {
 func (*RetryJobResponse) ProtoMessage() {}
 
 func (x *RetryJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[29]
+	mi := &file_nopacs_v1_job_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3463,7 +3544,7 @@ func (x *RetryJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetryJobResponse.ProtoReflect.Descriptor instead.
 func (*RetryJobResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{29}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RetryJobResponse) GetJob() *Job {
@@ -3503,7 +3584,7 @@ type ListJobFailuresRequest struct {
 
 func (x *ListJobFailuresRequest) Reset() {
 	*x = ListJobFailuresRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[30]
+	mi := &file_nopacs_v1_job_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3515,7 +3596,7 @@ func (x *ListJobFailuresRequest) String() string {
 func (*ListJobFailuresRequest) ProtoMessage() {}
 
 func (x *ListJobFailuresRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[30]
+	mi := &file_nopacs_v1_job_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3528,7 +3609,7 @@ func (x *ListJobFailuresRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobFailuresRequest.ProtoReflect.Descriptor instead.
 func (*ListJobFailuresRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{30}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListJobFailuresRequest) GetTenant() string {
@@ -3579,7 +3660,7 @@ type ListJobFailuresResponse struct {
 
 func (x *ListJobFailuresResponse) Reset() {
 	*x = ListJobFailuresResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[31]
+	mi := &file_nopacs_v1_job_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3591,7 +3672,7 @@ func (x *ListJobFailuresResponse) String() string {
 func (*ListJobFailuresResponse) ProtoMessage() {}
 
 func (x *ListJobFailuresResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[31]
+	mi := &file_nopacs_v1_job_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3604,7 +3685,7 @@ func (x *ListJobFailuresResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobFailuresResponse.ProtoReflect.Descriptor instead.
 func (*ListJobFailuresResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{31}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListJobFailuresResponse) GetFailures() []*JobFailure {
@@ -3664,7 +3745,7 @@ type ImportFile struct {
 
 func (x *ImportFile) Reset() {
 	*x = ImportFile{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[32]
+	mi := &file_nopacs_v1_job_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3676,7 +3757,7 @@ func (x *ImportFile) String() string {
 func (*ImportFile) ProtoMessage() {}
 
 func (x *ImportFile) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[32]
+	mi := &file_nopacs_v1_job_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3689,7 +3770,7 @@ func (x *ImportFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportFile.ProtoReflect.Descriptor instead.
 func (*ImportFile) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{32}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ImportFile) GetPath() string {
@@ -3790,7 +3871,7 @@ type ImportUnit struct {
 
 func (x *ImportUnit) Reset() {
 	*x = ImportUnit{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[33]
+	mi := &file_nopacs_v1_job_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3802,7 +3883,7 @@ func (x *ImportUnit) String() string {
 func (*ImportUnit) ProtoMessage() {}
 
 func (x *ImportUnit) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[33]
+	mi := &file_nopacs_v1_job_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3815,7 +3896,7 @@ func (x *ImportUnit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportUnit.ProtoReflect.Descriptor instead.
 func (*ImportUnit) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{33}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ImportUnit) GetId() string {
@@ -3894,7 +3975,7 @@ type ListImportFilesRequest struct {
 
 func (x *ListImportFilesRequest) Reset() {
 	*x = ListImportFilesRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[34]
+	mi := &file_nopacs_v1_job_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3906,7 +3987,7 @@ func (x *ListImportFilesRequest) String() string {
 func (*ListImportFilesRequest) ProtoMessage() {}
 
 func (x *ListImportFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[34]
+	mi := &file_nopacs_v1_job_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3919,7 +4000,7 @@ func (x *ListImportFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImportFilesRequest.ProtoReflect.Descriptor instead.
 func (*ListImportFilesRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{34}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListImportFilesRequest) GetTenant() string {
@@ -3977,7 +4058,7 @@ type ListImportFilesResponse struct {
 
 func (x *ListImportFilesResponse) Reset() {
 	*x = ListImportFilesResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[35]
+	mi := &file_nopacs_v1_job_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3989,7 +4070,7 @@ func (x *ListImportFilesResponse) String() string {
 func (*ListImportFilesResponse) ProtoMessage() {}
 
 func (x *ListImportFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[35]
+	mi := &file_nopacs_v1_job_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4002,7 +4083,7 @@ func (x *ListImportFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImportFilesResponse.ProtoReflect.Descriptor instead.
 func (*ListImportFilesResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{35}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListImportFilesResponse) GetFiles() []*ImportFile {
@@ -4043,7 +4124,7 @@ type ListImportUnitsRequest struct {
 
 func (x *ListImportUnitsRequest) Reset() {
 	*x = ListImportUnitsRequest{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[36]
+	mi := &file_nopacs_v1_job_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4055,7 +4136,7 @@ func (x *ListImportUnitsRequest) String() string {
 func (*ListImportUnitsRequest) ProtoMessage() {}
 
 func (x *ListImportUnitsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[36]
+	mi := &file_nopacs_v1_job_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4068,7 +4149,7 @@ func (x *ListImportUnitsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImportUnitsRequest.ProtoReflect.Descriptor instead.
 func (*ListImportUnitsRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{36}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListImportUnitsRequest) GetTenant() string {
@@ -4119,7 +4200,7 @@ type ListImportUnitsResponse struct {
 
 func (x *ListImportUnitsResponse) Reset() {
 	*x = ListImportUnitsResponse{}
-	mi := &file_nopacs_v1_job_proto_msgTypes[37]
+	mi := &file_nopacs_v1_job_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4131,7 +4212,7 @@ func (x *ListImportUnitsResponse) String() string {
 func (*ListImportUnitsResponse) ProtoMessage() {}
 
 func (x *ListImportUnitsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_job_proto_msgTypes[37]
+	mi := &file_nopacs_v1_job_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4144,7 +4225,7 @@ func (x *ListImportUnitsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImportUnitsResponse.ProtoReflect.Descriptor instead.
 func (*ListImportUnitsResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{37}
+	return file_nopacs_v1_job_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ListImportUnitsResponse) GetUnits() []*ImportUnit {
@@ -4226,7 +4307,10 @@ const file_nopacs_v1_job_proto_rawDesc = "" +
 	"\tscheduled\x18\x04 \x01(\bR\tscheduled\"B\n" +
 	"\x0eDeleteBatchJob\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x18\n" +
-	"\atargets\x18\x02 \x01(\x03R\atargets\"\xa3\x03\n" +
+	"\atargets\x18\x02 \x01(\x03R\atargets\"P\n" +
+	"\x11SearchBackfillJob\x12\x16\n" +
+	"\x06fields\x18\x01 \x03(\tR\x06fields\x12#\n" +
+	"\rscans_skipped\x18\x02 \x01(\x03R\fscansSkipped\"\xa3\x03\n" +
 	"\tImportJob\x12\x1a\n" +
 	"\breceiver\x18\x01 \x01(\tR\breceiver\x12\x17\n" +
 	"\x04path\x18\x02 \x01(\tB\x03\x80\x01\x01R\x04path\x12\x1e\n" +
@@ -4266,7 +4350,7 @@ const file_nopacs_v1_job_proto_rawDesc = "" +
 	"\tdiscarded\x18\x12 \x01(\x03R\tdiscardedJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14R\x10listed_not_foundR\x10found_not_listedR\x0edigest_differsR\x14catalogs_not_checked\"2\n" +
 	"\bJobTally\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\"\x99\b\n" +
+	"\x05count\x18\x02 \x01(\x03R\x05count\"\xe2\b\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12(\n" +
 	"\x04send\x18\x02 \x01(\v2\x12.nopacs.v1.SendJobH\x00R\x04send\x12(\n" +
@@ -4278,7 +4362,8 @@ const file_nopacs_v1_job_proto_rawDesc = "" +
 	"\treplicate\x18\x13 \x01(\v2\x17.nopacs.v1.ReplicateJobH\x00R\treplicate\x12.\n" +
 	"\x06repair\x18\x14 \x01(\v2\x14.nopacs.v1.RepairJobH\x00R\x06repair\x121\n" +
 	"\adispose\x18\x15 \x01(\v2\x15.nopacs.v1.DisposeJobH\x00R\adispose\x12>\n" +
-	"\fdelete_batch\x18\x16 \x01(\v2\x19.nopacs.v1.DeleteBatchJobH\x00R\vdeleteBatch\x12)\n" +
+	"\fdelete_batch\x18\x16 \x01(\v2\x19.nopacs.v1.DeleteBatchJobH\x00R\vdeleteBatch\x12G\n" +
+	"\x0fsearch_backfill\x18\x19 \x01(\v2\x1c.nopacs.v1.SearchBackfillJobH\x00R\x0esearchBackfill\x12)\n" +
 	"\x05state\x18\x03 \x01(\x0e2\x13.nopacs.v1.JobStateR\x05state\x12,\n" +
 	"\x06counts\x18\x04 \x01(\v2\x14.nopacs.v1.JobCountsR\x06counts\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12)\n" +
@@ -4515,7 +4600,7 @@ func file_nopacs_v1_job_proto_rawDescGZIP() []byte {
 }
 
 var file_nopacs_v1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_nopacs_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_nopacs_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_nopacs_v1_job_proto_goTypes = []any{
 	(JobState)(0),                   // 0: nopacs.v1.JobState
 	(DeidJobMode)(0),                // 1: nopacs.v1.DeidJobMode
@@ -4534,119 +4619,121 @@ var file_nopacs_v1_job_proto_goTypes = []any{
 	(*RepairJob)(nil),               // 14: nopacs.v1.RepairJob
 	(*DisposeJob)(nil),              // 15: nopacs.v1.DisposeJob
 	(*DeleteBatchJob)(nil),          // 16: nopacs.v1.DeleteBatchJob
-	(*ImportJob)(nil),               // 17: nopacs.v1.ImportJob
-	(*ImportSkipCount)(nil),         // 18: nopacs.v1.ImportSkipCount
-	(*ImportQuarantineCount)(nil),   // 19: nopacs.v1.ImportQuarantineCount
-	(*ImportCounts)(nil),            // 20: nopacs.v1.ImportCounts
-	(*JobTally)(nil),                // 21: nopacs.v1.JobTally
-	(*Job)(nil),                     // 22: nopacs.v1.Job
-	(*JobFailure)(nil),              // 23: nopacs.v1.JobFailure
-	(*CreateJobRequest)(nil),        // 24: nopacs.v1.CreateJobRequest
-	(*CreateJobResponse)(nil),       // 25: nopacs.v1.CreateJobResponse
-	(*GetJobRequest)(nil),           // 26: nopacs.v1.GetJobRequest
-	(*GetJobResponse)(nil),          // 27: nopacs.v1.GetJobResponse
-	(*ListJobsRequest)(nil),         // 28: nopacs.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),        // 29: nopacs.v1.ListJobsResponse
-	(*CancelJobRequest)(nil),        // 30: nopacs.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),       // 31: nopacs.v1.CancelJobResponse
-	(*PauseJobRequest)(nil),         // 32: nopacs.v1.PauseJobRequest
-	(*PauseJobResponse)(nil),        // 33: nopacs.v1.PauseJobResponse
-	(*ResumeJobRequest)(nil),        // 34: nopacs.v1.ResumeJobRequest
-	(*ResumeJobResponse)(nil),       // 35: nopacs.v1.ResumeJobResponse
-	(*RetryJobRequest)(nil),         // 36: nopacs.v1.RetryJobRequest
-	(*RetryJobResponse)(nil),        // 37: nopacs.v1.RetryJobResponse
-	(*ListJobFailuresRequest)(nil),  // 38: nopacs.v1.ListJobFailuresRequest
-	(*ListJobFailuresResponse)(nil), // 39: nopacs.v1.ListJobFailuresResponse
-	(*ImportFile)(nil),              // 40: nopacs.v1.ImportFile
-	(*ImportUnit)(nil),              // 41: nopacs.v1.ImportUnit
-	(*ListImportFilesRequest)(nil),  // 42: nopacs.v1.ListImportFilesRequest
-	(*ListImportFilesResponse)(nil), // 43: nopacs.v1.ListImportFilesResponse
-	(*ListImportUnitsRequest)(nil),  // 44: nopacs.v1.ListImportUnitsRequest
-	(*ListImportUnitsResponse)(nil), // 45: nopacs.v1.ListImportUnitsResponse
-	(*timestamppb.Timestamp)(nil),   // 46: google.protobuf.Timestamp
-	(QuarantineReason)(0),           // 47: nopacs.v1.QuarantineReason
+	(*SearchBackfillJob)(nil),       // 17: nopacs.v1.SearchBackfillJob
+	(*ImportJob)(nil),               // 18: nopacs.v1.ImportJob
+	(*ImportSkipCount)(nil),         // 19: nopacs.v1.ImportSkipCount
+	(*ImportQuarantineCount)(nil),   // 20: nopacs.v1.ImportQuarantineCount
+	(*ImportCounts)(nil),            // 21: nopacs.v1.ImportCounts
+	(*JobTally)(nil),                // 22: nopacs.v1.JobTally
+	(*Job)(nil),                     // 23: nopacs.v1.Job
+	(*JobFailure)(nil),              // 24: nopacs.v1.JobFailure
+	(*CreateJobRequest)(nil),        // 25: nopacs.v1.CreateJobRequest
+	(*CreateJobResponse)(nil),       // 26: nopacs.v1.CreateJobResponse
+	(*GetJobRequest)(nil),           // 27: nopacs.v1.GetJobRequest
+	(*GetJobResponse)(nil),          // 28: nopacs.v1.GetJobResponse
+	(*ListJobsRequest)(nil),         // 29: nopacs.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),        // 30: nopacs.v1.ListJobsResponse
+	(*CancelJobRequest)(nil),        // 31: nopacs.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),       // 32: nopacs.v1.CancelJobResponse
+	(*PauseJobRequest)(nil),         // 33: nopacs.v1.PauseJobRequest
+	(*PauseJobResponse)(nil),        // 34: nopacs.v1.PauseJobResponse
+	(*ResumeJobRequest)(nil),        // 35: nopacs.v1.ResumeJobRequest
+	(*ResumeJobResponse)(nil),       // 36: nopacs.v1.ResumeJobResponse
+	(*RetryJobRequest)(nil),         // 37: nopacs.v1.RetryJobRequest
+	(*RetryJobResponse)(nil),        // 38: nopacs.v1.RetryJobResponse
+	(*ListJobFailuresRequest)(nil),  // 39: nopacs.v1.ListJobFailuresRequest
+	(*ListJobFailuresResponse)(nil), // 40: nopacs.v1.ListJobFailuresResponse
+	(*ImportFile)(nil),              // 41: nopacs.v1.ImportFile
+	(*ImportUnit)(nil),              // 42: nopacs.v1.ImportUnit
+	(*ListImportFilesRequest)(nil),  // 43: nopacs.v1.ListImportFilesRequest
+	(*ListImportFilesResponse)(nil), // 44: nopacs.v1.ListImportFilesResponse
+	(*ListImportUnitsRequest)(nil),  // 45: nopacs.v1.ListImportUnitsRequest
+	(*ListImportUnitsResponse)(nil), // 46: nopacs.v1.ListImportUnitsResponse
+	(*timestamppb.Timestamp)(nil),   // 47: google.protobuf.Timestamp
+	(QuarantineReason)(0),           // 48: nopacs.v1.QuarantineReason
 }
 var file_nopacs_v1_job_proto_depIdxs = []int32{
 	1,  // 0: nopacs.v1.DeidJob.mode:type_name -> nopacs.v1.DeidJobMode
 	2,  // 1: nopacs.v1.RebuildJob.mode:type_name -> nopacs.v1.RebuildJobMode
 	3,  // 2: nopacs.v1.ReplicateJob.mode:type_name -> nopacs.v1.ReplicateJobMode
-	20, // 3: nopacs.v1.ImportJob.counts:type_name -> nopacs.v1.ImportCounts
-	46, // 4: nopacs.v1.ImportJob.retention_start:type_name -> google.protobuf.Timestamp
+	21, // 3: nopacs.v1.ImportJob.counts:type_name -> nopacs.v1.ImportCounts
+	47, // 4: nopacs.v1.ImportJob.retention_start:type_name -> google.protobuf.Timestamp
 	4,  // 5: nopacs.v1.ImportSkipCount.code:type_name -> nopacs.v1.ImportSkipCode
-	47, // 6: nopacs.v1.ImportQuarantineCount.reason:type_name -> nopacs.v1.QuarantineReason
-	18, // 7: nopacs.v1.ImportCounts.skipped:type_name -> nopacs.v1.ImportSkipCount
-	19, // 8: nopacs.v1.ImportCounts.quarantined:type_name -> nopacs.v1.ImportQuarantineCount
+	48, // 6: nopacs.v1.ImportQuarantineCount.reason:type_name -> nopacs.v1.QuarantineReason
+	19, // 7: nopacs.v1.ImportCounts.skipped:type_name -> nopacs.v1.ImportSkipCount
+	20, // 8: nopacs.v1.ImportCounts.quarantined:type_name -> nopacs.v1.ImportQuarantineCount
 	9,  // 9: nopacs.v1.Job.send:type_name -> nopacs.v1.SendJob
 	10, // 10: nopacs.v1.Job.deid:type_name -> nopacs.v1.DeidJob
 	11, // 11: nopacs.v1.Job.scrub:type_name -> nopacs.v1.ScrubJob
 	12, // 12: nopacs.v1.Job.rebuild:type_name -> nopacs.v1.RebuildJob
-	17, // 13: nopacs.v1.Job.import_job:type_name -> nopacs.v1.ImportJob
+	18, // 13: nopacs.v1.Job.import_job:type_name -> nopacs.v1.ImportJob
 	13, // 14: nopacs.v1.Job.replicate:type_name -> nopacs.v1.ReplicateJob
 	14, // 15: nopacs.v1.Job.repair:type_name -> nopacs.v1.RepairJob
 	15, // 16: nopacs.v1.Job.dispose:type_name -> nopacs.v1.DisposeJob
 	16, // 17: nopacs.v1.Job.delete_batch:type_name -> nopacs.v1.DeleteBatchJob
-	0,  // 18: nopacs.v1.Job.state:type_name -> nopacs.v1.JobState
-	8,  // 19: nopacs.v1.Job.counts:type_name -> nopacs.v1.JobCounts
-	46, // 20: nopacs.v1.Job.create_time:type_name -> google.protobuf.Timestamp
-	46, // 21: nopacs.v1.Job.start_time:type_name -> google.protobuf.Timestamp
-	46, // 22: nopacs.v1.Job.state_time:type_name -> google.protobuf.Timestamp
-	46, // 23: nopacs.v1.Job.end_time:type_name -> google.protobuf.Timestamp
-	21, // 24: nopacs.v1.Job.tallies:type_name -> nopacs.v1.JobTally
-	5,  // 25: nopacs.v1.JobFailure.code:type_name -> nopacs.v1.JobFailureCode
-	46, // 26: nopacs.v1.JobFailure.time:type_name -> google.protobuf.Timestamp
-	9,  // 27: nopacs.v1.CreateJobRequest.send:type_name -> nopacs.v1.SendJob
-	10, // 28: nopacs.v1.CreateJobRequest.deid:type_name -> nopacs.v1.DeidJob
-	11, // 29: nopacs.v1.CreateJobRequest.scrub:type_name -> nopacs.v1.ScrubJob
-	12, // 30: nopacs.v1.CreateJobRequest.rebuild:type_name -> nopacs.v1.RebuildJob
-	17, // 31: nopacs.v1.CreateJobRequest.import_job:type_name -> nopacs.v1.ImportJob
-	22, // 32: nopacs.v1.CreateJobResponse.job:type_name -> nopacs.v1.Job
-	22, // 33: nopacs.v1.GetJobResponse.job:type_name -> nopacs.v1.Job
-	0,  // 34: nopacs.v1.ListJobsRequest.states:type_name -> nopacs.v1.JobState
-	46, // 35: nopacs.v1.ListJobsRequest.start_time:type_name -> google.protobuf.Timestamp
-	46, // 36: nopacs.v1.ListJobsRequest.end_time:type_name -> google.protobuf.Timestamp
-	22, // 37: nopacs.v1.ListJobsResponse.jobs:type_name -> nopacs.v1.Job
-	22, // 38: nopacs.v1.CancelJobResponse.job:type_name -> nopacs.v1.Job
-	22, // 39: nopacs.v1.PauseJobResponse.job:type_name -> nopacs.v1.Job
-	22, // 40: nopacs.v1.ResumeJobResponse.job:type_name -> nopacs.v1.Job
-	22, // 41: nopacs.v1.RetryJobResponse.job:type_name -> nopacs.v1.Job
-	22, // 42: nopacs.v1.RetryJobResponse.retry:type_name -> nopacs.v1.Job
-	23, // 43: nopacs.v1.ListJobFailuresResponse.failures:type_name -> nopacs.v1.JobFailure
-	6,  // 44: nopacs.v1.ImportFile.kind:type_name -> nopacs.v1.ImportFileKind
-	4,  // 45: nopacs.v1.ImportFile.skip_code:type_name -> nopacs.v1.ImportSkipCode
-	47, // 46: nopacs.v1.ImportFile.quarantine_reason:type_name -> nopacs.v1.QuarantineReason
-	46, // 47: nopacs.v1.ImportFile.time:type_name -> google.protobuf.Timestamp
-	7,  // 48: nopacs.v1.ImportUnit.state:type_name -> nopacs.v1.ImportUnitState
-	20, // 49: nopacs.v1.ImportUnit.counts:type_name -> nopacs.v1.ImportCounts
-	46, // 50: nopacs.v1.ImportUnit.walk_end_time:type_name -> google.protobuf.Timestamp
-	6,  // 51: nopacs.v1.ListImportFilesRequest.kinds:type_name -> nopacs.v1.ImportFileKind
-	40, // 52: nopacs.v1.ListImportFilesResponse.files:type_name -> nopacs.v1.ImportFile
-	7,  // 53: nopacs.v1.ListImportUnitsRequest.states:type_name -> nopacs.v1.ImportUnitState
-	41, // 54: nopacs.v1.ListImportUnitsResponse.units:type_name -> nopacs.v1.ImportUnit
-	24, // 55: nopacs.v1.JobService.CreateJob:input_type -> nopacs.v1.CreateJobRequest
-	26, // 56: nopacs.v1.JobService.GetJob:input_type -> nopacs.v1.GetJobRequest
-	28, // 57: nopacs.v1.JobService.ListJobs:input_type -> nopacs.v1.ListJobsRequest
-	30, // 58: nopacs.v1.JobService.CancelJob:input_type -> nopacs.v1.CancelJobRequest
-	32, // 59: nopacs.v1.JobService.PauseJob:input_type -> nopacs.v1.PauseJobRequest
-	34, // 60: nopacs.v1.JobService.ResumeJob:input_type -> nopacs.v1.ResumeJobRequest
-	36, // 61: nopacs.v1.JobService.RetryJob:input_type -> nopacs.v1.RetryJobRequest
-	38, // 62: nopacs.v1.JobService.ListJobFailures:input_type -> nopacs.v1.ListJobFailuresRequest
-	42, // 63: nopacs.v1.JobService.ListImportFiles:input_type -> nopacs.v1.ListImportFilesRequest
-	44, // 64: nopacs.v1.JobService.ListImportUnits:input_type -> nopacs.v1.ListImportUnitsRequest
-	25, // 65: nopacs.v1.JobService.CreateJob:output_type -> nopacs.v1.CreateJobResponse
-	27, // 66: nopacs.v1.JobService.GetJob:output_type -> nopacs.v1.GetJobResponse
-	29, // 67: nopacs.v1.JobService.ListJobs:output_type -> nopacs.v1.ListJobsResponse
-	31, // 68: nopacs.v1.JobService.CancelJob:output_type -> nopacs.v1.CancelJobResponse
-	33, // 69: nopacs.v1.JobService.PauseJob:output_type -> nopacs.v1.PauseJobResponse
-	35, // 70: nopacs.v1.JobService.ResumeJob:output_type -> nopacs.v1.ResumeJobResponse
-	37, // 71: nopacs.v1.JobService.RetryJob:output_type -> nopacs.v1.RetryJobResponse
-	39, // 72: nopacs.v1.JobService.ListJobFailures:output_type -> nopacs.v1.ListJobFailuresResponse
-	43, // 73: nopacs.v1.JobService.ListImportFiles:output_type -> nopacs.v1.ListImportFilesResponse
-	45, // 74: nopacs.v1.JobService.ListImportUnits:output_type -> nopacs.v1.ListImportUnitsResponse
-	65, // [65:75] is the sub-list for method output_type
-	55, // [55:65] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	17, // 18: nopacs.v1.Job.search_backfill:type_name -> nopacs.v1.SearchBackfillJob
+	0,  // 19: nopacs.v1.Job.state:type_name -> nopacs.v1.JobState
+	8,  // 20: nopacs.v1.Job.counts:type_name -> nopacs.v1.JobCounts
+	47, // 21: nopacs.v1.Job.create_time:type_name -> google.protobuf.Timestamp
+	47, // 22: nopacs.v1.Job.start_time:type_name -> google.protobuf.Timestamp
+	47, // 23: nopacs.v1.Job.state_time:type_name -> google.protobuf.Timestamp
+	47, // 24: nopacs.v1.Job.end_time:type_name -> google.protobuf.Timestamp
+	22, // 25: nopacs.v1.Job.tallies:type_name -> nopacs.v1.JobTally
+	5,  // 26: nopacs.v1.JobFailure.code:type_name -> nopacs.v1.JobFailureCode
+	47, // 27: nopacs.v1.JobFailure.time:type_name -> google.protobuf.Timestamp
+	9,  // 28: nopacs.v1.CreateJobRequest.send:type_name -> nopacs.v1.SendJob
+	10, // 29: nopacs.v1.CreateJobRequest.deid:type_name -> nopacs.v1.DeidJob
+	11, // 30: nopacs.v1.CreateJobRequest.scrub:type_name -> nopacs.v1.ScrubJob
+	12, // 31: nopacs.v1.CreateJobRequest.rebuild:type_name -> nopacs.v1.RebuildJob
+	18, // 32: nopacs.v1.CreateJobRequest.import_job:type_name -> nopacs.v1.ImportJob
+	23, // 33: nopacs.v1.CreateJobResponse.job:type_name -> nopacs.v1.Job
+	23, // 34: nopacs.v1.GetJobResponse.job:type_name -> nopacs.v1.Job
+	0,  // 35: nopacs.v1.ListJobsRequest.states:type_name -> nopacs.v1.JobState
+	47, // 36: nopacs.v1.ListJobsRequest.start_time:type_name -> google.protobuf.Timestamp
+	47, // 37: nopacs.v1.ListJobsRequest.end_time:type_name -> google.protobuf.Timestamp
+	23, // 38: nopacs.v1.ListJobsResponse.jobs:type_name -> nopacs.v1.Job
+	23, // 39: nopacs.v1.CancelJobResponse.job:type_name -> nopacs.v1.Job
+	23, // 40: nopacs.v1.PauseJobResponse.job:type_name -> nopacs.v1.Job
+	23, // 41: nopacs.v1.ResumeJobResponse.job:type_name -> nopacs.v1.Job
+	23, // 42: nopacs.v1.RetryJobResponse.job:type_name -> nopacs.v1.Job
+	23, // 43: nopacs.v1.RetryJobResponse.retry:type_name -> nopacs.v1.Job
+	24, // 44: nopacs.v1.ListJobFailuresResponse.failures:type_name -> nopacs.v1.JobFailure
+	6,  // 45: nopacs.v1.ImportFile.kind:type_name -> nopacs.v1.ImportFileKind
+	4,  // 46: nopacs.v1.ImportFile.skip_code:type_name -> nopacs.v1.ImportSkipCode
+	48, // 47: nopacs.v1.ImportFile.quarantine_reason:type_name -> nopacs.v1.QuarantineReason
+	47, // 48: nopacs.v1.ImportFile.time:type_name -> google.protobuf.Timestamp
+	7,  // 49: nopacs.v1.ImportUnit.state:type_name -> nopacs.v1.ImportUnitState
+	21, // 50: nopacs.v1.ImportUnit.counts:type_name -> nopacs.v1.ImportCounts
+	47, // 51: nopacs.v1.ImportUnit.walk_end_time:type_name -> google.protobuf.Timestamp
+	6,  // 52: nopacs.v1.ListImportFilesRequest.kinds:type_name -> nopacs.v1.ImportFileKind
+	41, // 53: nopacs.v1.ListImportFilesResponse.files:type_name -> nopacs.v1.ImportFile
+	7,  // 54: nopacs.v1.ListImportUnitsRequest.states:type_name -> nopacs.v1.ImportUnitState
+	42, // 55: nopacs.v1.ListImportUnitsResponse.units:type_name -> nopacs.v1.ImportUnit
+	25, // 56: nopacs.v1.JobService.CreateJob:input_type -> nopacs.v1.CreateJobRequest
+	27, // 57: nopacs.v1.JobService.GetJob:input_type -> nopacs.v1.GetJobRequest
+	29, // 58: nopacs.v1.JobService.ListJobs:input_type -> nopacs.v1.ListJobsRequest
+	31, // 59: nopacs.v1.JobService.CancelJob:input_type -> nopacs.v1.CancelJobRequest
+	33, // 60: nopacs.v1.JobService.PauseJob:input_type -> nopacs.v1.PauseJobRequest
+	35, // 61: nopacs.v1.JobService.ResumeJob:input_type -> nopacs.v1.ResumeJobRequest
+	37, // 62: nopacs.v1.JobService.RetryJob:input_type -> nopacs.v1.RetryJobRequest
+	39, // 63: nopacs.v1.JobService.ListJobFailures:input_type -> nopacs.v1.ListJobFailuresRequest
+	43, // 64: nopacs.v1.JobService.ListImportFiles:input_type -> nopacs.v1.ListImportFilesRequest
+	45, // 65: nopacs.v1.JobService.ListImportUnits:input_type -> nopacs.v1.ListImportUnitsRequest
+	26, // 66: nopacs.v1.JobService.CreateJob:output_type -> nopacs.v1.CreateJobResponse
+	28, // 67: nopacs.v1.JobService.GetJob:output_type -> nopacs.v1.GetJobResponse
+	30, // 68: nopacs.v1.JobService.ListJobs:output_type -> nopacs.v1.ListJobsResponse
+	32, // 69: nopacs.v1.JobService.CancelJob:output_type -> nopacs.v1.CancelJobResponse
+	34, // 70: nopacs.v1.JobService.PauseJob:output_type -> nopacs.v1.PauseJobResponse
+	36, // 71: nopacs.v1.JobService.ResumeJob:output_type -> nopacs.v1.ResumeJobResponse
+	38, // 72: nopacs.v1.JobService.RetryJob:output_type -> nopacs.v1.RetryJobResponse
+	40, // 73: nopacs.v1.JobService.ListJobFailures:output_type -> nopacs.v1.ListJobFailuresResponse
+	44, // 74: nopacs.v1.JobService.ListImportFiles:output_type -> nopacs.v1.ListImportFilesResponse
+	46, // 75: nopacs.v1.JobService.ListImportUnits:output_type -> nopacs.v1.ListImportUnitsResponse
+	66, // [66:76] is the sub-list for method output_type
+	56, // [56:66] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_job_proto_init() }
@@ -4655,7 +4742,7 @@ func file_nopacs_v1_job_proto_init() {
 		return
 	}
 	file_nopacs_v1_quarantine_proto_init()
-	file_nopacs_v1_job_proto_msgTypes[14].OneofWrappers = []any{
+	file_nopacs_v1_job_proto_msgTypes[15].OneofWrappers = []any{
 		(*Job_Send)(nil),
 		(*Job_Deid)(nil),
 		(*Job_Scrub)(nil),
@@ -4665,8 +4752,9 @@ func file_nopacs_v1_job_proto_init() {
 		(*Job_Repair)(nil),
 		(*Job_Dispose)(nil),
 		(*Job_DeleteBatch)(nil),
+		(*Job_SearchBackfill)(nil),
 	}
-	file_nopacs_v1_job_proto_msgTypes[16].OneofWrappers = []any{
+	file_nopacs_v1_job_proto_msgTypes[17].OneofWrappers = []any{
 		(*CreateJobRequest_Send)(nil),
 		(*CreateJobRequest_Deid)(nil),
 		(*CreateJobRequest_Scrub)(nil),
@@ -4679,7 +4767,7 @@ func file_nopacs_v1_job_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_job_proto_rawDesc), len(file_nopacs_v1_job_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   38,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

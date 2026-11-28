@@ -16,7 +16,7 @@ The pages are grouped by what you came to do:
 | [start](start/install.md) | get going | install the two programs; a first archive end to end |
 | [concepts](concepts/archive.md) | understand | what an archive is made of; the lifecycle of a file; the security model; de-identification |
 | [operate](operate/running.md) | run a site | running; settings; backup and moving a tenant; replicas; moving off a storage; scrub coverage; encryption at rest; choosing a database; upgrading; troubleshooting |
-| [use](use/command-line.md) | work in the archive | the command line; receiving; routing; reading; sending; importing; correcting; retention and holds; profiles |
+| [use](use/command-line.md) | work in the archive | the command line; receiving; routing; reading; searching; sending; importing; correcting; retention and holds; profiles |
 | [api](api/overview.md) | build on it | the overview; reasons and retry delays; a walkthrough; DICOMweb; the clients |
 | [reference](reference/settings.md) | look a fact up | settings, commands, errors, events, metrics, environment variables, all generated from the code |
 | [develop](develop/architecture.md) | change the code | architecture; testing; gates; guides |
@@ -31,7 +31,7 @@ The pages are grouped by what you came to do:
 
 **You work with the data.**
 [The command line](use/command-line.md) (with contexts for many installations, and the
-interactive program), [receiving](use/receiving.md), [reading](use/reading.md),
+interactive program), [receiving](use/receiving.md), [reading](use/reading.md), [searching](use/searching.md),
 [sending on](use/sending.md), [importing](use/importing.md), [copying and moving between tenants](use/transferring.md), [correcting](use/correcting.md) and
 [retention rules and holds](use/retention.md).
 
@@ -61,6 +61,7 @@ and the guides: [a database driver](develop/guides/database-driver.md), [a stora
 | send each study to a storage by where it comes from | [Routing](use/routing.md) |
 | see what arrived, and why a file is held | [A reception, end to end](use/receiving.md) |
 | read the archive back | [Reading the archive](use/reading.md), [DICOMweb](api/dicomweb.md) |
+| find scans, sessions or subjects by the values their files hold | [Searching a tenant](use/searching.md) |
 | send archived data on to a PACS | [Sending data on](use/sending.md) |
 | bring in a directory of existing files | [Importing a directory](use/importing.md) |
 | copy or move a subject or a session to another tenant | [Copying and moving data between tenants](use/transferring.md) |

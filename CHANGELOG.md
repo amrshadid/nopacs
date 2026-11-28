@@ -173,6 +173,16 @@ scan, keeps it whole, and serves it through an API with keys.
   sender sends (host, port, AE titles, URL, TLS or account). A replace gives the
   instance its new revision's profile version and pixel risk, so the rule
   judges the bytes the catalog points to.
+- Search: find subjects, sessions or scans by the header values their files
+  hold, in the routing condition language over 22 indexed attributes kept in
+  step with the catalog by every correction and rebuild, with `has` and `every`
+  across levels (`SearchService`, `nopacs search`, and series-level QIDO-RS). A
+  query must be served by an index, `contains` needs three characters, and a
+  query compiling past 64 KiB of SQL or 999 values is refused; counts stop at
+  `search.facet-rows` and say "at least", and facets are refused above it; a
+  masked key never sees a row archived as received. A new attribute is filled
+  by a backfill job (`nopacs search backfill`) that resumes after a restart.
+  Checked against a pydicom reference filter and dicomweb-client.
 
 #### Keeping the archive whole
 

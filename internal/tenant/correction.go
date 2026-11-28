@@ -7,6 +7,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/search"
 )
 
 // Corrections is what the tenant's database keeps of corrections: recorded
@@ -565,6 +566,12 @@ type CorrectionCommit struct {
 	// catalog holds of each scan whose instances it set them on
 	// (EditCatalogValues).
 	Values map[string]EditValues
+	// Search is, for an edit or a replace, by Series Instance UID, the
+	// search row the new revision's header gives each scan, read from the
+	// file of the scan with the lowest UID that was changed. The publish
+	// writes it when the scan's row was read from that file or from one
+	// with a higher UID, keeping the row it replaces for an undo.
+	Search map[string]search.Row
 	// Replaced is, for a replace, how its new revision was archived: the
 	// profile version that de-identified it (zero for bytes archived as
 	// received, which the tenant must otherwise have) and whether a pixel

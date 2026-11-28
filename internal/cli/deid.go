@@ -222,6 +222,9 @@ func jobKindText(j *v1.Job) (string, string) {
 	if b := j.GetDeleteBatch(); b != nil {
 		return "delete batch", strconv.FormatInt(b.GetTargets(), 10) + " targets"
 	}
+	if sb := j.GetSearchBackfill(); sb != nil {
+		return "search backfill", strings.Join(sb.GetFields(), ", ")
+	}
 	return j.GetSend().GetSender(), output.JobTarget(j.GetSend())
 }
 

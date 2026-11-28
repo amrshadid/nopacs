@@ -1483,6 +1483,30 @@ Usage: `nopacs scan show <tenant> <subject>/<session>/<scan> [--metadata] [flags
 |---|---|---|---|
 | `--metadata` | bool |  | also show the DICOM header of every instance of the scan, as JSON |
 
+### `nopacs search`
+
+Find scans, sessions or subjects by the values their files hold
+
+Usage: `nopacs search <tenant> [<condition>] [--level scan|session|subject] [--count] [--facet FIELD] [--limit N | --all] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--count` | bool |  | also count the rows that match, up to the tenant's search.facet-rows |
+| `--facet` | string |  | list the values of this field with how many rows have each |
+| `--level` | string |  | what to list: scan (default), session or subject |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+
+#### `nopacs search backfill`
+
+Fill a search attribute added after scans were archived
+
+Usage: `nopacs search backfill <tenant> <attribute> [--wait] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--wait` | bool |  | follow the job until it ends, as "job watch" does, with its exit codes |
+
 ### `nopacs sender`
 
 Add, list, show, change, remove and test a tenant's senders

@@ -11,6 +11,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -264,6 +265,13 @@ func (t *Tenant) CommitScan(ctx context.Context, c tenant.ScanCommit) (tenant.Sc
 		scanID, newScan, err := commitScanRow(ctx, tx, c, session.id, receiver)
 		if err != nil {
 			return err
+		}
+		// The scan's search row: made with the scan, and changed by a file
+		// with a lower SOP Instance UID than the one its values came from.
+		if newScan || !c.Search.IsZero() {
+			if err := sqlkit.WriteSearch(ctx, sendingTx{tx: tx, t: t}, scanID, c.Search, search.Lowest); err != nil {
+				return err
+			}
 		}
 		profiles, err := sqlkit.ProfileVersionIDs(ctx, sendingTx{tx: tx, t: t}, c.Instances)
 		if err != nil {

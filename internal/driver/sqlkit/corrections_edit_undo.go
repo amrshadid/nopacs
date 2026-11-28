@@ -74,6 +74,9 @@ func (k Sending) UndoEdit(ctx context.Context, u tenant.EditUndo) (tenant.Correc
 		if err := restoreEditValues(ctx, tx, c.ID); err != nil {
 			return err
 		}
+		if err := RestoreEditSearch(ctx, tx, c.ID); err != nil {
+			return err
+		}
 		if err := k.afterEditRows(ctx, tx, *c, rows, u.Manifests); err != nil {
 			return err
 		}

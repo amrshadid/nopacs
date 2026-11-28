@@ -50,6 +50,10 @@ func runCorrections(t *testing.T, open OpenEvents) {
 		{"MoveRefusals", testMoveRefusals},
 		{"MoveOwedIdentity", testMoveOwedIdentity},
 		{"QuotaCounts", testQuotaCounts},
+		{"SearchFollowsCorrections", testSearchFollowsCorrections},
+		{"SearchFollowsEdits", testSearchFollowsEdits},
+		{"SearchFollowsInstanceDelete", testSearchFollowsInstanceDelete},
+		{"SearchFollowsRelabelsAndMoves", testSearchFollowsRelabelsAndMoves},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -1097,6 +1097,23 @@ message DeleteBatchJob {
   int64 targets = 2;
 }
 
+// SearchBackfillJob is a job that fills the search tables' column of each
+// attribute added after scans were archived (SearchService.BackfillAttribute),
+// reading each scan's metadata file. Its counts are of scans: instances is the
+// scans it covers, sent the scans written, refused the scans whose metadata
+// could not be read (they keep no value for the attributes). It ends done
+// when every scan was written, partial when any could not be read, and
+// failed, with its reason, when it could not go on; the attributes are
+// ready to search once it ended done or partial.
+message SearchBackfillJob {
+  // The attributes, by keyword, the job makes ready: every attribute still
+  // being filled when it was made.
+  repeated string fields = 1;
+
+  // The scans whose metadata could not be read.
+  int64 scans_skipped = 2;
+}
+
 // ImportJob is a job that hands the files of a directory under an import
 // receiver's root to that receiver (ImportReceiver).
 message ImportJob {
@@ -1415,6 +1432,10 @@ message Job {
 
     // Many subjects, sessions or scans deleted with one reason.
     DeleteBatchJob delete_batch = 22;
+
+    // The scans archived before a search attribute was added given its
+    // value, read from each scan's metadata file.
+    SearchBackfillJob search_backfill = 25;
   }
 
   // Where it is.

@@ -214,6 +214,8 @@ func countLabels(j *v1.Job) (sent, refused string) {
 		return "Deleted", "Failed"
 	case *v1.Job_DeleteBatch:
 		return "Deleted", "Skipped"
+	case *v1.Job_SearchBackfill:
+		return "Filled", "Unreadable"
 	}
 	return "Sent", "Refused"
 }

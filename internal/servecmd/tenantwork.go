@@ -137,6 +137,7 @@ type tenantDB interface {
 	tenant.JobWork
 	tenant.Retention
 	tenant.Disposal
+	tenant.SearchBackfills
 	tenant.Holds
 }
 
@@ -567,6 +568,7 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	ret := &tenantRetention{w: w, name: name, st: db, base: st, log: log}
 	run(ret.run)
 	run((&tenantBatches{w: w, name: name, st: db, base: st, log: log}).run)
+	run((&tenantSearchFills{w: w, name: name, st: db, log: log}).run)
 	run((&tenantTransfers{w: w, name: name, st: db, base: st, log: log}).run)
 	run(w.holdRecords(id, name, db, open, sw.Gate(), log))
 	return nil

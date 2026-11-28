@@ -7,6 +7,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/search"
 )
 
 // What a rebuild writes into its shadow (Rebuilding.RebuildScan), and what
@@ -33,6 +34,9 @@ type RebuiltScan struct {
 	Route ReceptionRoute
 	// Values are what the catalog keeps from its files' headers.
 	Values ScanValues
+	// Search is what the search table holds of it, read from the metadata
+	// of its file with the lowest SOP Instance UID.
+	Search search.Row
 	// Created is when its first file was archived, Updated the last.
 	Created, Updated time.Time
 	// ManifestSHA256 is the checksum of its manifest as read.

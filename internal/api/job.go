@@ -74,6 +74,15 @@ func (v *jobViews) message(ctx context.Context, j tenant.Job) *v1.Job {
 		}
 		return m
 	}
+	if j.Kind == tenant.JobSearchBackfill {
+		m := jobMessage(j, "")
+		if sb, ok := v.p.(tenant.SearchBackfills); ok {
+			if bj, err := sb.SearchBackfillJob(ctx, j.ID); err == nil {
+				m.Kind = &v1.Job_SearchBackfill{SearchBackfill: &v1.SearchBackfillJob{Fields: bj.Fields, ScansSkipped: bj.Skipped}}
+			}
+		}
+		return m
+	}
 	if j.Kind == tenant.JobReplicate {
 		return jobMessage(j, replicaHeld(ctx, v.p, j))
 	}

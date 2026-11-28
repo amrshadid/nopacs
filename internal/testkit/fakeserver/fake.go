@@ -204,6 +204,7 @@ func (s *Server) Register(srv *connect.Server) {
 	s.registerRetention(srv)
 	s.registerRoutes(srv)
 	s.registerTransfers(srv)
+	s.registerSearch(srv)
 	nopacsv1connect.RegisterBackupServiceHandler(srv, backupHandler{s})
 }
 

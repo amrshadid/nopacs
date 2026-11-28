@@ -353,6 +353,7 @@ that can no longer be answered, 7 a bound of the server reached.`,
 		a.newTransfer(),
 		a.newCatalog(),
 		a.newScan(),
+		a.newSearch(),
 		a.newDownload(),
 		a.newBackup(),
 	)

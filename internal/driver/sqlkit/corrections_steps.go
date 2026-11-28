@@ -9,6 +9,7 @@ import (
 	corr "github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -131,6 +132,13 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 			var r targetRows
 			if r, err = resolveTarget(ctx, tx, c.Target, true); err == nil {
 				err = k.hideTarget(ctx, tx, c.ID, r, cc.Snapshots)
+			}
+			if err == nil && r.instance != nil {
+				for series, row := range cc.Search {
+					if err = ApplyDeleteSearch(ctx, tx, c.ID, series, c.Target.Instance, row); err != nil {
+						break
+					}
+				}
 			}
 		case corr.KindRelabel:
 			err = k.switchLabels(ctx, tx, *c, cc.Manifests, cc.Snapshots)
@@ -391,6 +399,13 @@ func (k Sending) publishReplace(ctx context.Context, tx SendingTx, c tenant.Corr
 	}
 	if _, err := ClearDamageInTx(ctx, tx, in.uid); err != nil {
 		return err
+	}
+	// The scan's search row, when it was read from the instance replaced
+	// (or from one with a higher UID), takes the new revision's header.
+	if row, ok := cc.Search[s.series]; ok {
+		if err := WriteSearch(ctx, tx, s.id, row, search.LowestOrSame); err != nil {
+			return err
+		}
 	}
 	return k.releaseOverwritten(ctx, tx, c.Quarantine, q, cc.Now)
 }

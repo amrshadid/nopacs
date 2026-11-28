@@ -153,6 +153,14 @@ func (e *Engine) Delete(ctx context.Context, r DeleteRequest) (tenant.Correction
 			return e.abandon(ctx, c, reasonStorage, err)
 		}
 	}
+	if c.Level == record.LevelInstance {
+		// The scan's search row, when it was read from the instance deleted,
+		// is read again from the next lowest instance the scan holds.
+		rows := e.searchAfterInstanceDelete(ctx, c)
+		return e.published(ctx, c, func() (tenant.Correction, string, error) {
+			return e.commit(ctx, tenant.CorrectionCommit{ID: c.ID, Search: rows})
+		}, func() {})
+	}
 	return e.publish(ctx, c, nil, snapshots)
 }
 

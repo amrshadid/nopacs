@@ -884,7 +884,7 @@ CREATE TABLE senders (
 -- progress event, which is written at most once in a period.
 CREATE TABLE jobs (
     id                  TEXT    NOT NULL PRIMARY KEY,
-    kind                TEXT    NOT NULL CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch', 'transfer')),
+    kind                TEXT    NOT NULL CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch', 'transfer', 'search_backfill')),
     sender              TEXT    NOT NULL,
     subject_label       TEXT    NOT NULL,
     session_label       TEXT    NOT NULL,
@@ -2155,6 +2155,16 @@ CREATE TABLE delete_batch_targets (
     PRIMARY KEY (job_id, ord)
 ) STRICT, WITHOUT ROWID;
 
+-- A search backfill job's own part: the attributes it makes ready when it
+-- ends (their keywords, joined by commas), the id of the last scan it wrote,
+-- and how many scans it could not read.
+CREATE TABLE search_backfill_jobs (
+    job_id        TEXT    NOT NULL PRIMARY KEY,
+    fields        TEXT    NOT NULL,
+    after_scan_id INTEGER NOT NULL CHECK (after_scan_id >= 0),
+    skipped       INTEGER NOT NULL CHECK (skipped >= 0)
+) STRICT;
+
 -- A receiver's routing rule sets: each version's body (the JSON of its
 -- archive and forward rules), when it was made and by which key. A version
 -- is never changed once made, which the trigger holds: a reception's
@@ -2257,3 +2267,227 @@ CREATE TABLE transfer_provenance (
 ) STRICT, WITHOUT ROWID;
 
 CREATE INDEX transfer_provenance_by_job ON transfer_provenance (job_id, sop_instance_uid);
+
+-- The search tables: what a search over a tenant's scans reads, kept in step with the
+-- catalog by the transactions that write it. A scan's row holds one typed column for each
+-- attribute a search can name (its exact value and, for text, its folded value, made in Go
+-- by the function a condition's values are folded with), a btree index on each, and a
+-- trigram index on the text a search may look inside. An attribute with several values
+-- holds a row for each in a table of its own. Sessions and subjects are searched in the
+-- catalog's own tables.
+--
+-- Adding an attribute means: ADD COLUMN (and its folded column), its index, a row in
+-- search_attributes in state 'building', the backfill job that fills the column for the
+-- scans already archived (which sets the row 'ready'), then ANALYZE.
+
+CREATE TABLE scan_search (
+    scan_id INTEGER NOT NULL PRIMARY KEY,
+    source_uid TEXT NOT NULL,
+    modality TEXT,
+    modality_folded TEXT,
+    series_description TEXT,
+    series_description_folded TEXT,
+    series_number REAL,
+    protocol_name TEXT,
+    protocol_name_folded TEXT,
+    study_description TEXT,
+    study_description_folded TEXT,
+    body_part_examined TEXT,
+    body_part_examined_folded TEXT,
+    manufacturer TEXT,
+    manufacturer_folded TEXT,
+    manufacturer_model_name TEXT,
+    manufacturer_model_name_folded TEXT,
+    station_name TEXT,
+    station_name_folded TEXT,
+    sequence_name TEXT,
+    sequence_name_folded TEXT,
+    patient_sex TEXT,
+    patient_age TEXT,
+    magnetic_field_strength REAL,
+    slice_thickness REAL,
+    repetition_time REAL,
+    echo_time REAL,
+    flip_angle REAL,
+    acquisition_date TEXT,
+    acquisition_date_time TEXT
+) STRICT;
+
+CREATE INDEX scan_search_modality ON scan_search (modality);
+CREATE INDEX scan_search_modality_folded ON scan_search (modality_folded);
+CREATE INDEX scan_search_series_description ON scan_search (series_description);
+CREATE INDEX scan_search_series_description_folded ON scan_search (series_description_folded);
+CREATE INDEX scan_search_series_number ON scan_search (series_number);
+CREATE INDEX scan_search_protocol_name ON scan_search (protocol_name);
+CREATE INDEX scan_search_protocol_name_folded ON scan_search (protocol_name_folded);
+CREATE INDEX scan_search_study_description ON scan_search (study_description);
+CREATE INDEX scan_search_study_description_folded ON scan_search (study_description_folded);
+CREATE INDEX scan_search_body_part_examined ON scan_search (body_part_examined);
+CREATE INDEX scan_search_body_part_examined_folded ON scan_search (body_part_examined_folded);
+CREATE INDEX scan_search_manufacturer ON scan_search (manufacturer);
+CREATE INDEX scan_search_manufacturer_folded ON scan_search (manufacturer_folded);
+CREATE INDEX scan_search_manufacturer_model_name ON scan_search (manufacturer_model_name);
+CREATE INDEX scan_search_manufacturer_model_name_folded ON scan_search (manufacturer_model_name_folded);
+CREATE INDEX scan_search_station_name ON scan_search (station_name);
+CREATE INDEX scan_search_station_name_folded ON scan_search (station_name_folded);
+CREATE INDEX scan_search_sequence_name ON scan_search (sequence_name);
+CREATE INDEX scan_search_sequence_name_folded ON scan_search (sequence_name_folded);
+CREATE INDEX scan_search_patient_sex ON scan_search (patient_sex);
+CREATE INDEX scan_search_patient_age ON scan_search (patient_age);
+CREATE INDEX scan_search_magnetic_field_strength ON scan_search (magnetic_field_strength);
+CREATE INDEX scan_search_slice_thickness ON scan_search (slice_thickness);
+CREATE INDEX scan_search_repetition_time ON scan_search (repetition_time);
+CREATE INDEX scan_search_echo_time ON scan_search (echo_time);
+CREATE INDEX scan_search_flip_angle ON scan_search (flip_angle);
+CREATE INDEX scan_search_acquisition_date ON scan_search (acquisition_date);
+CREATE INDEX scan_search_acquisition_date_time ON scan_search (acquisition_date_time);
+
+CREATE TABLE scan_search_image_type (
+    scan_id INTEGER NOT NULL,
+    image_type TEXT,
+    image_type_folded TEXT
+) STRICT;
+CREATE INDEX scan_search_image_type_by_scan ON scan_search_image_type (scan_id);
+CREATE INDEX scan_search_image_type_by_value ON scan_search_image_type (image_type);
+CREATE INDEX scan_search_image_type_by_folded ON scan_search_image_type (image_type_folded);
+
+CREATE TABLE scan_search_scanning_sequence (
+    scan_id INTEGER NOT NULL,
+    scanning_sequence TEXT,
+    scanning_sequence_folded TEXT
+) STRICT;
+CREATE INDEX scan_search_scanning_sequence_by_scan ON scan_search_scanning_sequence (scan_id);
+CREATE INDEX scan_search_scanning_sequence_by_value ON scan_search_scanning_sequence (scanning_sequence);
+CREATE INDEX scan_search_scanning_sequence_by_folded ON scan_search_scanning_sequence (scanning_sequence_folded);
+
+CREATE TABLE scan_search_operators_name (
+    scan_id INTEGER NOT NULL,
+    operators_name TEXT,
+    operators_name_folded TEXT
+) STRICT;
+CREATE INDEX scan_search_operators_name_by_scan ON scan_search_operators_name (scan_id);
+CREATE INDEX scan_search_operators_name_by_value ON scan_search_operators_name (operators_name);
+CREATE INDEX scan_search_operators_name_by_folded ON scan_search_operators_name (operators_name_folded);
+
+CREATE VIRTUAL TABLE scan_search_series_description_fts USING fts5(series_description_folded, content='scan_search', content_rowid='scan_id', tokenize='trigram');
+CREATE VIRTUAL TABLE scan_search_protocol_name_fts USING fts5(protocol_name_folded, content='scan_search', content_rowid='scan_id', tokenize='trigram');
+CREATE VIRTUAL TABLE scan_search_study_description_fts USING fts5(study_description_folded, content='scan_search', content_rowid='scan_id', tokenize='trigram');
+
+-- The trigram tables are external-content tables over the scan's row: a trigger keeps
+-- each in step with every write, whoever makes it.
+CREATE TRIGGER scan_search_after_insert AFTER INSERT ON scan_search BEGIN
+    INSERT INTO scan_search_series_description_fts(rowid, series_description_folded) VALUES (new.scan_id, new.series_description_folded);
+    INSERT INTO scan_search_protocol_name_fts(rowid, protocol_name_folded) VALUES (new.scan_id, new.protocol_name_folded);
+    INSERT INTO scan_search_study_description_fts(rowid, study_description_folded) VALUES (new.scan_id, new.study_description_folded);
+END;
+CREATE TRIGGER scan_search_after_delete AFTER DELETE ON scan_search BEGIN
+    INSERT INTO scan_search_series_description_fts(scan_search_series_description_fts, rowid, series_description_folded) VALUES ('delete', old.scan_id, old.series_description_folded);
+    INSERT INTO scan_search_protocol_name_fts(scan_search_protocol_name_fts, rowid, protocol_name_folded) VALUES ('delete', old.scan_id, old.protocol_name_folded);
+    INSERT INTO scan_search_study_description_fts(scan_search_study_description_fts, rowid, study_description_folded) VALUES ('delete', old.scan_id, old.study_description_folded);
+END;
+CREATE TRIGGER scan_search_after_update AFTER UPDATE ON scan_search BEGIN
+    INSERT INTO scan_search_series_description_fts(scan_search_series_description_fts, rowid, series_description_folded) VALUES ('delete', old.scan_id, old.series_description_folded);
+    INSERT INTO scan_search_protocol_name_fts(scan_search_protocol_name_fts, rowid, protocol_name_folded) VALUES ('delete', old.scan_id, old.protocol_name_folded);
+    INSERT INTO scan_search_study_description_fts(scan_search_study_description_fts, rowid, study_description_folded) VALUES ('delete', old.scan_id, old.study_description_folded);
+    INSERT INTO scan_search_series_description_fts(rowid, series_description_folded) VALUES (new.scan_id, new.series_description_folded);
+    INSERT INTO scan_search_protocol_name_fts(rowid, protocol_name_folded) VALUES (new.scan_id, new.protocol_name_folded);
+    INSERT INTO scan_search_study_description_fts(rowid, study_description_folded) VALUES (new.scan_id, new.study_description_folded);
+END;
+
+-- What a search over scans reads: the scan's row with the session and subject the
+-- catalog holds it under now, so a move or a merge changes no row of the search table.
+-- Both joins are on a primary key and a search that names neither column does not
+-- make them.
+CREATE VIEW scan_search_view AS SELECT ss.scan_id, s.session_id AS session_id, se.subject_id AS subject_id,
+    ss.source_uid, ss.modality, ss.modality_folded, ss.series_description, ss.series_description_folded, ss.series_number, ss.protocol_name, ss.protocol_name_folded, ss.study_description, ss.study_description_folded, ss.body_part_examined, ss.body_part_examined_folded, ss.manufacturer, ss.manufacturer_folded, ss.manufacturer_model_name, ss.manufacturer_model_name_folded, ss.station_name, ss.station_name_folded, ss.sequence_name, ss.sequence_name_folded, ss.patient_sex, ss.patient_age, ss.magnetic_field_strength, ss.slice_thickness, ss.repetition_time, ss.echo_time, ss.flip_angle, ss.acquisition_date, ss.acquisition_date_time
+    FROM scan_search AS ss LEFT JOIN scans AS s ON s.id = ss.scan_id LEFT JOIN sessions AS se ON se.id = s.session_id;
+
+CREATE INDEX sessions_by_calling_ae ON sessions (calling_ae, id);
+CREATE INDEX sessions_by_called_ae ON sessions (called_ae, id);
+
+CREATE TABLE hidden_scan_search (
+    correction_id TEXT NOT NULL,
+    scan_id INTEGER NOT NULL,
+    source_uid TEXT NOT NULL,
+    modality TEXT,
+    modality_folded TEXT,
+    series_description TEXT,
+    series_description_folded TEXT,
+    series_number REAL,
+    protocol_name TEXT,
+    protocol_name_folded TEXT,
+    study_description TEXT,
+    study_description_folded TEXT,
+    body_part_examined TEXT,
+    body_part_examined_folded TEXT,
+    manufacturer TEXT,
+    manufacturer_folded TEXT,
+    manufacturer_model_name TEXT,
+    manufacturer_model_name_folded TEXT,
+    station_name TEXT,
+    station_name_folded TEXT,
+    sequence_name TEXT,
+    sequence_name_folded TEXT,
+    patient_sex TEXT,
+    patient_age TEXT,
+    magnetic_field_strength REAL,
+    slice_thickness REAL,
+    repetition_time REAL,
+    echo_time REAL,
+    flip_angle REAL,
+    acquisition_date TEXT,
+    acquisition_date_time TEXT
+) STRICT;
+CREATE INDEX hidden_scan_search_by_correction ON hidden_scan_search (correction_id, scan_id);
+CREATE TABLE hidden_scan_search_image_type (
+    correction_id TEXT NOT NULL,
+    scan_id INTEGER NOT NULL,
+    image_type TEXT,
+    image_type_folded TEXT
+) STRICT;
+CREATE INDEX hidden_scan_search_image_type_by_correction ON hidden_scan_search_image_type (correction_id, scan_id);
+CREATE TABLE hidden_scan_search_scanning_sequence (
+    correction_id TEXT NOT NULL,
+    scan_id INTEGER NOT NULL,
+    scanning_sequence TEXT,
+    scanning_sequence_folded TEXT
+) STRICT;
+CREATE INDEX hidden_scan_search_scanning_sequence_by_correction ON hidden_scan_search_scanning_sequence (correction_id, scan_id);
+CREATE TABLE hidden_scan_search_operators_name (
+    correction_id TEXT NOT NULL,
+    scan_id INTEGER NOT NULL,
+    operators_name TEXT,
+    operators_name_folded TEXT
+) STRICT;
+CREATE INDEX hidden_scan_search_operators_name_by_correction ON hidden_scan_search_operators_name (correction_id, scan_id);
+
+-- The edits a correction made to a scan's row, as the row was before, so an undo
+-- gives the values back.
+CREATE TABLE correction_search (correction_id TEXT NOT NULL, series_uid TEXT NOT NULL, prior TEXT NOT NULL, PRIMARY KEY (correction_id, series_uid)) STRICT, WITHOUT ROWID;
+
+-- Each attribute a search can name, and whether its column is filled for every scan: a
+-- search on an attribute still being filled is refused, since it would answer from a
+-- part of the scans. A tenant with no scan has every attribute ready.
+CREATE TABLE search_attributes (field TEXT NOT NULL PRIMARY KEY, state TEXT NOT NULL CHECK (state IN ('ready', 'building'))) STRICT, WITHOUT ROWID;
+INSERT INTO search_attributes (field, state) SELECT 'Modality', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'SeriesDescription', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'SeriesNumber', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'ProtocolName', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'StudyDescription', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'BodyPartExamined', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'Manufacturer', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'ManufacturerModelName', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'StationName', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'SequenceName', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'PatientSex', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'PatientAge', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'MagneticFieldStrength', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'SliceThickness', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'RepetitionTime', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'EchoTime', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'FlipAngle', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'AcquisitionDate', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'AcquisitionDateTime', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'ImageType', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'ScanningSequence', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+INSERT INTO search_attributes (field, state) SELECT 'OperatorsName', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;

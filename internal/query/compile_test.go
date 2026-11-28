@@ -124,9 +124,11 @@ func TestCompileOperators(t *testing.T) {
 			lite: `t0.session_id IN (SELECT t1.session_id FROM scan_search t1 WHERE (t1.modality = ? AND t1.slice_thickness <= ?))`,
 			args: []any{"MR", 1.0}},
 		{cond: `every scan (Modality == "MR")`, level: LevelSession,
-			pg:   `(t0.session_id IN (SELECT t1.session_id FROM scan_search t1 WHERE t1.modality = $1) AND NOT EXISTS (SELECT 1 FROM scan_search t1 WHERE t1.session_id = t0.session_id AND NOT COALESCE(t1.modality = $2, FALSE)))`,
+			pg: `(t0.session_id IN (SELECT t1.session_id FROM scan_search t1 WHERE t1.modality = $1) AND NOT EXISTS (SELECT 1 FROM scan_search t1 WHERE t1.session_id = t0.session_id AND NOT COALESCE(t1.modality = $1, FALSE)))`,
+			// The child is written once: Postgres reads its $1 again, SQLite is given its
+			// value again for the second "?".
 			lite: `(t0.session_id IN (SELECT t1.session_id FROM scan_search t1 WHERE t1.modality = ?) AND NOT EXISTS (SELECT 1 FROM scan_search t1 WHERE t1.session_id = t0.session_id AND NOT COALESCE(t1.modality = ?, FALSE)))`,
-			args: []any{"MR", "MR"}},
+			args: []any{"MR"}, liteArgs: []any{"MR", "MR"}},
 		{cond: `has session (session.date >= 2024-01-01) and Modality == "MR"`,
 			pg:   `(t0.session_id IN (SELECT t1.session_id FROM session_search t1 WHERE t1.study_date >= $1) AND t0.modality = $2)`,
 			lite: `(t0.session_id IN (SELECT t1.session_id FROM session_search t1 WHERE t1.study_date >= ?) AND t0.modality = ?)`,

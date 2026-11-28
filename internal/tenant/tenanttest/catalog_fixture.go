@@ -8,6 +8,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/core/reception"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -31,6 +32,9 @@ type scanSpec struct {
 	number                       int32
 	hasNumber                    bool
 	instances                    int
+	// row is the search row the scan is committed with; the zero row for
+	// none.
+	row search.Row
 }
 
 // seriesOf returns the Series Instance UID of scan i of study.
@@ -74,8 +78,10 @@ func (e *penv) archiveStudy(s studySpec) tenant.Reception {
 				part = append(part, f)
 			}
 		}
+		e.row = sc.row
 		e.commitValuesWith(s.profile, r, label.Path{Subject: s.subject, Session: s.session, Scan: sc.label}, s.at+i,
 			tenant.ScanValuesOf(s.date, sc.modality, sc.description, numberText(sc)), part)
+		e.row = search.Row{}
 	}
 	return r
 }
@@ -105,7 +111,7 @@ func (e *penv) commitValuesWith(profile tenant.ProfileRef, r tenant.Reception, p
 	answers, err := e.p.ClaimInstances(e.ctx, r.ID, claims, at(seconds), nil)
 	e.ok("ClaimInstances", err)
 	c := tenant.ScanCommit{ReceptionID: r.ID, StudyUID: r.StudyUID, SeriesUID: files[0].SeriesUID, SubjectLabel: path.Subject,
-		SessionLabel: path.Session, ScanLabel: path.Scan, Storage: "store", ManifestSHA256: sum(seconds + 7000), Values: v, At: at(seconds)}
+		SessionLabel: path.Session, ScanLabel: path.Scan, Storage: "store", ManifestSHA256: sum(seconds + 7000), Values: v, Search: e.row, At: at(seconds)}
 	for i, f := range files {
 		if k := answers[i].Kind; k != tenant.ClaimedNow && k != tenant.ClaimedBefore {
 			continue

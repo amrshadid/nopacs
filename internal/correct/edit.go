@@ -16,6 +16,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/receive"
 	"github.com/amrshadid/nopacs/internal/receive/sidecar"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -175,6 +176,19 @@ func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []t
 		if named {
 			change = func(v *sidecar.Values) { applyValues(v, values) }
 			cc.Values[scan[0].SeriesUID] = values
+		}
+		// The scan's search row, read from the new header of the changed file
+		// with the lowest SOP Instance UID: the publish applies it when the
+		// row was read from that file.
+		low := scan[0].UID
+		for _, t := range scan {
+			low = min(low, t.UID)
+		}
+		if js := lines[low].Dataset; len(js) > 0 {
+			if cc.Search == nil {
+				cc.Search = map[string]search.Row{}
+			}
+			cc.Search[scan[0].SeriesUID] = search.ExtractJSON(js, low)
 		}
 		meta, err := e.rewriteMetaMany(ctx, st, scan[0].Storage, scan[0].Path, lines, files, change, nil)
 		if err != nil {

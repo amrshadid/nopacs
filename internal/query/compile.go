@@ -13,6 +13,15 @@ import (
 // dialect says what counts toward the run (TrigramServes).
 const MinContains = 3
 
+// The bounds of a compiled search: the most bytes of SQL and the most values
+// one makes. A condition within the grammar's bounds can still make more
+// ("every" of "every" repeats its child at each level); one that would is
+// refused as invalid before any SQL runs.
+const (
+	MaxSQLBytes = 64 << 10
+	MaxParams   = 999
+)
+
 // Dialect is what differs between the databases a search compiles for:
 // Postgres and SQLite, which a database driver passes to its Compiler.
 // Everything else the compiler writes is SQL both read alike.
@@ -95,6 +104,26 @@ type Compiler struct {
 	Dialect Dialect
 	// Now is when the search runs: relative dates count back from its day.
 	Now time.Time
+	// Restrict, when not nil, returns a condition of fixed text, with no
+	// parameter, that every row of a level must meet to be seen by the
+	// search, written on the table under alias: it is added to the search's
+	// own rows and to the rows of each "has" and "every", so a row it hides
+	// takes no part in what matches. It is how a caller that may not learn
+	// some rows' values is kept from learning them by what a condition
+	// matches. "" for no restriction at that level.
+	Restrict func(level Level, alias string) string
+}
+
+// restricted returns where with the restriction of the level's rows under
+// alias added.
+func (c Compiler) restricted(where string, level Level, alias string) string {
+	if c.Restrict == nil {
+		return where
+	}
+	if r := c.Restrict(level, alias); r != "" {
+		return "(" + where + ") AND " + r
+	}
+	return where
 }
 
 // Compile compiles a condition into the WHERE clause of a search over the
@@ -125,7 +154,7 @@ func (c Compiler) Compile(n Node, level Level) (SQL, error) {
 	}
 	out := SQL{From: t.Name + " t0", Alias: "t0"}
 	if n == nil {
-		out.Where = "1 = 1"
+		out.Where = c.restricted("1 = 1", level, "t0")
 		return out, nil
 	}
 	if err := Check(n); err != nil {
@@ -143,7 +172,10 @@ func (c Compiler) Compile(n Node, level Level) (SQL, error) {
 	if err != nil {
 		return SQL{}, err
 	}
-	out.Where = where
+	out.Where = c.restricted(where, level, "t0")
+	if err := w.checkSize(len(out.Where)); err != nil {
+		return SQL{}, err
+	}
 	return out, nil
 }
 

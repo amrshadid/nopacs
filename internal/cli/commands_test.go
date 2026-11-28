@@ -453,6 +453,7 @@ func TestSettingCommands(t *testing.T) {
 			"scrub.archive-sample            0%               built-in default\n"+
 			"scrub.interval                  30d              built-in default\n"+
 			"scrub.rate                      64MiB            built-in default\n"+
+			"search.facet-rows               1000000          built-in default\n"+
 			"sender.allow-plain-http         false            built-in default\n"+
 			"sender.destinations                              built-in default\n"+
 			"sender.max-associations         32               built-in default\n"+
@@ -473,7 +474,7 @@ func TestSettingCommands(t *testing.T) {
 		t.Errorf("get --json: %v", doc)
 	}
 	document(t, r.run("setting", "set", "key.default-lifetime", "30d", "--json"))
-	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 59 {
+	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 60 {
 		t.Errorf("list --json: %v", ss)
 	}
 	document(t, r.run("setting", "unset", "test.retention", "--tenant", "lab1", "--json"))

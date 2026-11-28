@@ -79,6 +79,9 @@ func jobMessage(j tenant.Job, held string) *v1.Job {
 		// Its reason and whether it is paused are the batch job's own rows,
 		// which a view reads.
 		m.Kind = &v1.Job_DeleteBatch{DeleteBatch: &v1.DeleteBatchJob{}}
+	case tenant.JobSearchBackfill:
+		// Its attributes are the job's own row, which a view reads.
+		m.Kind = &v1.Job_SearchBackfill{SearchBackfill: &v1.SearchBackfillJob{}}
 	}
 	return m
 }

@@ -188,13 +188,16 @@ func checkKeys(q dicomweb.Query) *dicomweb.Error {
 		for _, t := range allowed {
 			ok = ok || t == k.Tag
 		}
+		// At the series level every attribute the search tables index is
+		// matched by them.
+		ok = ok || (q.Level == dicomweb.Series && indexedKey(k))
 		if !ok {
 			names := make([]string, len(allowed))
 			for i, t := range allowed {
 				names[i] = t.GetKeyword()
 			}
 			return &dicomweb.Error{Status: http.StatusBadRequest,
-				Message: "matching on " + k.Keyword + " is not served at the " + q.Level.String() + " level; it matches " + strings.Join(names, ", ")}
+				Message: "matching on " + k.Keyword + " is not served at the " + q.Level.String() + " level; it matches " + strings.Join(names, ", ") + searchKeysNote(q.Level)}
 		}
 	}
 	return nil
@@ -420,50 +423,72 @@ func (x *webRequest) searchSeries(ctx context.Context, q dicomweb.Query, ls *lin
 	if byStudy && studyKey.Match != dicomweb.MatchSingle {
 		return searchAnswer{}, &dicomweb.Error{Status: http.StatusBadRequest, Message: "a search of series names one study"}
 	}
-	var it iterator[tenant.CatalogScan]
-	switch {
-	case byStudy:
-		sess, err := x.session(ctx, studyKey.Value)
-		if err != nil {
-			return searchAnswer{}, err
-		}
-		if bySeries {
-			rows, err := x.scansOfStudy(ctx, studyKey.Value, uidsOf(seriesKey))
+	// The keys the search tables index are matched by them, in order of the
+	// scans' ids, so no row is read to be set aside; every other request is
+	// served from the catalog's lists.
+	ss, perr := seriesSearchOf(q, x.r.URL.RawQuery)
+	if perr != nil {
+		return searchAnswer{}, perr
+	}
+	viaSearch := ss.used && (ss.extended || !x.c.seams.seriesFromCatalog)
+	fromCatalog := func() (iterator[tenant.CatalogScan], error) {
+		switch {
+		case byStudy:
+			sess, err := x.session(ctx, studyKey.Value)
 			if err != nil {
+				return nil, err
+			}
+			if bySeries {
+				rows, err := x.scansOfStudy(ctx, studyKey.Value, uidsOf(seriesKey))
+				return &rowsOf[tenant.CatalogScan]{rows: rows}, err
+			}
+			return x.scans(tenant.ScanFilter{SubjectLabel: sess.SubjectLabel, SessionLabel: sess.Label, Order: tenant.OrderLabel}, pageSize(q)), nil
+		case bySeries:
+			var rows []tenant.CatalogScan
+			for _, u := range uidsOf(seriesKey) {
+				s, ok, err := x.scanBySeries(ctx, u)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					rows = append(rows, s)
+				}
+			}
+			return &rowsOf[tenant.CatalogScan]{rows: rows}, nil
+		case byModality && modality.Match == dicomweb.MatchSingle:
+			if tenant.ValidateModality(modality.Value) != nil {
+				return none[tenant.CatalogScan]{}, nil
+			}
+			return x.scans(tenant.ScanFilter{Modality: modality.Value}, pageSize(q)), nil
+		case byDesc && (desc.Match == dicomweb.MatchSingle || dicomweb.LiteralPrefix(desc.Value) != ""):
+			prefix := desc.Value
+			if desc.Match == dicomweb.MatchWildcard {
+				prefix = dicomweb.LiteralPrefix(desc.Value)
+			}
+			if len([]rune(prefix)) > tenant.MaxSeriesDescriptionLength {
+				return none[tenant.CatalogScan]{}, nil
+			}
+			return x.scans(tenant.ScanFilter{DescriptionPrefix: prefix, Order: tenant.OrderSeriesDescription}, pageSize(q)), nil
+		}
+		return x.scans(tenant.ScanFilter{}, pageSize(q)), nil
+	}
+	var (
+		it  iterator[tenant.CatalogScan]
+		err error
+	)
+	if viaSearch {
+		studyUID := ""
+		if byStudy {
+			// A study the tenant does not hold matches nothing, as it does
+			// through the catalog's lists.
+			if _, err := x.session(ctx, studyKey.Value); err != nil {
 				return searchAnswer{}, err
 			}
-			it = &rowsOf[tenant.CatalogScan]{rows: rows}
-			break
+			studyUID = studyKey.Value
 		}
-		it = x.scans(tenant.ScanFilter{SubjectLabel: sess.SubjectLabel, SessionLabel: sess.Label, Order: tenant.OrderLabel}, pageSize(q))
-	case bySeries:
-		var rows []tenant.CatalogScan
-		for _, u := range uidsOf(seriesKey) {
-			s, ok, err := x.scanBySeries(ctx, u)
-			if err != nil {
-				return searchAnswer{}, err
-			}
-			if ok {
-				rows = append(rows, s)
-			}
-		}
-		it = &rowsOf[tenant.CatalogScan]{rows: rows}
-	case byModality && modality.Match == dicomweb.MatchSingle:
-		if tenant.ValidateModality(modality.Value) != nil {
-			return searchAnswer{}, nil
-		}
-		it = x.scans(tenant.ScanFilter{Modality: modality.Value}, pageSize(q))
-	case byDesc && (desc.Match == dicomweb.MatchSingle || dicomweb.LiteralPrefix(desc.Value) != ""):
-		prefix := desc.Value
-		if desc.Match == dicomweb.MatchWildcard {
-			prefix = dicomweb.LiteralPrefix(desc.Value)
-		}
-		if len([]rune(prefix)) > tenant.MaxSeriesDescriptionLength {
-			return searchAnswer{}, nil
-		}
-		it = x.scans(tenant.ScanFilter{DescriptionPrefix: prefix, Order: tenant.OrderSeriesDescription}, pageSize(q))
-	default:
-		it = x.scans(tenant.ScanFilter{}, pageSize(q))
+		it = x.searchedScans(ss.cond, studyUID, pageSize(q))
+	} else if it, err = fromCatalog(); err != nil {
+		return searchAnswer{}, err
 	}
 	keep := func(s tenant.CatalogScan) (bool, error) {
 		if x.d.Masked() && namesTag(q.Keys, dicomweb.TagSeriesInstanceUID, dicomweb.TagModality, dicomweb.TagSeriesDescription, dicomweb.TagSeriesNumber) {
@@ -474,6 +499,11 @@ func (x *webRequest) searchSeries(ctx context.Context, q dicomweb.Query, ls *lin
 			}
 		}
 		for _, k := range q.Keys {
+			if viaSearch && indexedKey(k) {
+				// Matched by the search tables, which every row of the
+				// search is of.
+				continue
+			}
 			var vs []string
 			switch k.Tag {
 			case dicomweb.TagStudyInstanceUID:
@@ -498,6 +528,26 @@ func (x *webRequest) searchSeries(ctx context.Context, q dicomweb.Query, ls *lin
 		return true, nil
 	}
 	rows, more, err := walk(ctx, it, keep, q.Offset, q.Limit)
+	if err != nil && viaSearch {
+		switch kind := fault.KindOf(err); {
+		case ss.extended && (kind == fault.Invalid || kind == fault.Precondition):
+			// No index serves what was asked of an attribute no other path
+			// matches (a 400 that says what to ask instead), or its column is
+			// still being filled (a 503 that ends by itself).
+			if perr, ok := searchRefusal(err); ok {
+				return searchAnswer{}, perr
+			}
+		case !ss.extended && (kind == fault.Invalid || kind == fault.Precondition):
+			// A key the catalog also holds that the tables refuse (a pattern
+			// no index serves, a column still being filled) is matched from
+			// the catalog's lists, as before them.
+			viaSearch = false
+			if it, err = fromCatalog(); err != nil {
+				return searchAnswer{}, err
+			}
+			rows, more, err = walk(ctx, it, keep, q.Offset, q.Limit)
+		}
+	}
 	if err != nil {
 		return searchAnswer{}, err
 	}

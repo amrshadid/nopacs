@@ -359,6 +359,7 @@ type PipelineParts interface {
 	WorkReclaim
 	ScanContents
 	CatalogReads
+	Searching
 	ScanValueFill
 	SidecarRewrites
 	Sending
@@ -376,6 +377,7 @@ type PipelineParts interface {
 	Holds
 	Disposal
 	DeleteBatches
+	SearchBackfills
 	Transfers
 	TransferTargets
 }

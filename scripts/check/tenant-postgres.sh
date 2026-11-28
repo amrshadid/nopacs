@@ -77,7 +77,7 @@ echo
 echo "== the tenant's tables"
 tables_hold "$(q "SELECT string_agg(table_name, ' ' ORDER BY table_name COLLATE \"C\") FROM information_schema.tables WHERE table_schema = '$schema'")" \
 	subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles tenant_secrets tenant_identity \
-	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs replicate_jobs repair_outcomes delete_batch_jobs delete_batch_targets transfer_jobs transfer_items transfer_provenance route_rule_sets route_matches purge_totals storage_switches \
+	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs replicate_jobs repair_outcomes delete_batch_jobs delete_batch_targets transfer_jobs transfer_items transfer_provenance route_rule_sets route_matches purge_totals scan_search scan_search_image_type scan_search_scanning_sequence scan_search_operators_name hidden_scan_search hidden_scan_search_image_type hidden_scan_search_scanning_sequence hidden_scan_search_operators_name correction_search search_attributes search_backfill_jobs storage_switches \
 	scrub_verified scan_sidecars \
 	correction_keys correction_objects correction_records_owed correction_copies_abandoned \
 	retention_rules retention_sessions retention_state holds hold_records dispose_jobs dispose_sessions

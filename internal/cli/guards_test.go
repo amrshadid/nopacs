@@ -447,7 +447,7 @@ func TestGrammar(t *testing.T) {
 		"correction delete-batch": true, "correction batch-targets": true, "job pause": true, "job resume": true,
 		"correction move": true, "correction merge": true,
 		"transfer create": true, "transfer show": true, "transfer list": true,
-		"catalog subjects": true, "catalog sessions": true, "catalog scans": true, "scan show": true, "download": true,
+		"catalog subjects": true, "catalog sessions": true, "catalog scans": true, "scan show": true, "search backfill": true, "download": true,
 		"watch": true, "backup create": true,
 		"storage status": true,
 		"replica list":   true, "replica attach": true, "replica detach": true, "replica backfill": true, "replica verify": true,

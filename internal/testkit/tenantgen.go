@@ -23,6 +23,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/receive/header"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -99,6 +100,15 @@ type TenantShape struct {
 	// Profiles are the files instances are made from, chosen by scan; at
 	// least one.
 	Profiles []FileProfile
+	// ScanInstances, when positive, is how many instances every scan holds,
+	// so Instances of them make that many scans: a tenant measured by its
+	// scans, as a search is. Zero draws each scan's size from the mix of
+	// research series.
+	ScanInstances int
+	// SearchRows says each scan is committed with the row a search table
+	// holds of it, drawn from the seed (SearchRowOf): without it a scan has
+	// a row with no values, as a commit with no header gives.
+	SearchRows bool
 	// Workers is how many studies are written at once; 1 when zero.
 	Workers int
 	// Progress, when not nil, is called after each study is written with
@@ -145,7 +155,9 @@ type studyPlan struct {
 // subject's visits by the seed and the subject's index, so study k is the
 // same in every call that writes it whole. The slice is indexed from study
 // first.
-func planStudies(seed uint64, first int, n int64) []studyPlan {
+// A positive perScan gives every scan that many instances instead of the
+// mix, so a tenant of many scans is made of few instances.
+func planStudies(seed uint64, first int, n int64, perScan int) []studyPlan {
 	var out []studyPlan
 	var total int64
 	subject, visitsLeft := -1, 0
@@ -169,6 +181,9 @@ func planStudies(seed uint64, first int, n int64) []studyPlan {
 					break
 				}
 				w -= s.weight
+			}
+			if perScan > 0 {
+				size = perScan
 			}
 			if left := n - total; int64(size) > left {
 				size = int(left)
@@ -206,7 +221,7 @@ func GenerateTenant(ctx context.Context, p tenant.Pipeline, shape TenantShape) (
 	if err := ensureReceiver(ctx, p); err != nil {
 		return GeneratedTenant{}, err
 	}
-	plan := planStudies(shape.Seed, shape.FirstStudy, shape.Instances)
+	plan := planStudies(shape.Seed, shape.FirstStudy, shape.Instances, shape.ScanInstances)
 	workers := max(shape.Workers, 1)
 	g := gen{p: p, shape: shape, key: hashKey(shape.Seed)}
 	var next atomic.Int64
@@ -331,8 +346,13 @@ func (g gen) study(ctx context.Context, k int, plan studyPlan) (int64, error) {
 		uid, label string
 		profile    FileProfile
 		values     tenant.ScanValues
+		search     search.Row
 		files      []tenant.ReceivedFile
 	}
+	// The search rows are drawn from a generator of their own, so a tenant
+	// made with them has the identifiers, labels and values of one made
+	// without.
+	rs := rand.New(rand.NewPCG(g.shape.Seed^0x5ea4c4, uint64(k))) // #nosec G404 G115 -- a seeded generator is the point, and k is a study index, never negative.
 	all := make([]series, len(plan.scans))
 	var files []tenant.ReceivedFile
 	date := studyDate(r)
@@ -350,6 +370,14 @@ func (g gen) study(ctx context.Context, k int, plan studyPlan) (int64, error) {
 				Incoming: GenReceiver + "/" + in[:2] + "/" + in, Caller: caller, Association: assoc,
 			}
 			s.files = append(s.files, f)
+		}
+		if g.shape.SearchRows {
+			// The row is read from the file with the lowest SOP Instance UID.
+			source := s.files[0].SOPInstanceUID
+			for _, f := range s.files {
+				source = min(source, f.SOPInstanceUID)
+			}
+			s.search = SearchRowOf(rs, source, date, i+1)
 		}
 		files = append(files, s.files...)
 		all[i] = s
@@ -395,7 +423,7 @@ func (g gen) study(ctx context.Context, k int, plan studyPlan) (int64, error) {
 				return 0, err
 			}
 			c := tenant.ScanCommit{ReceptionID: rid, StudyUID: studyUID, SeriesUID: s.uid, SubjectLabel: subjectLabel,
-				SessionLabel: sessionLabel, ScanLabel: s.label, Storage: GenStorage, At: at, Values: s.values,
+				SessionLabel: sessionLabel, ScanLabel: s.label, Storage: GenStorage, At: at, Values: s.values, Search: s.search,
 				ManifestSHA256: tenant.SHA256(sha256.Sum256([]byte(s.uid)))}
 			for i, f := range part {
 				if k := answers[i].Kind; k != tenant.ClaimedNow && k != tenant.ClaimedBefore {

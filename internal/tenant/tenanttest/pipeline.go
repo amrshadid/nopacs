@@ -12,6 +12,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/reception"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -104,6 +105,14 @@ func runPipeline(t *testing.T, open OpenPipeline) {
 		{"CatalogTotals", testCatalogTotals},
 		{"CatalogLargest", testCatalogLargest},
 		{"CatalogOriginals", testCatalogOriginals},
+		{"SearchMatchesRouting", testSearchMatchesRouting},
+		{"SearchWritten", testSearchWritten},
+		{"SearchRefusals", testSearchRefusals},
+		{"SearchCountsAndFacets", testSearchCountsAndFacets},
+		{"SearchHidesOriginals", testSearchHidesOriginals},
+		{"SearchPagesHoldWhileArchiving", testSearchPagesHoldWhileArchiving},
+		{"SearchStudyScope", testSearchStudyScope},
+		{"SearchTextWithNUL", testSearchTextWithNUL},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -140,6 +149,9 @@ type penv struct {
 	*env
 	p    tenant.Pipeline
 	open OpenPipeline
+	// row is the search row the next commits of the catalog fixtures give
+	// their scans; the zero row gives none.
+	row search.Row
 }
 
 // at returns T0 plus seconds.

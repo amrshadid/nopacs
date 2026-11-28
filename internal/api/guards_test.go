@@ -236,6 +236,15 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		"ListLookupTables": func(c clients) outcome {
 			return call(c.deid.ListLookupTables, &v1.ListLookupTablesRequest{Tenant: name})
 		},
+		"Search": func(c clients) outcome {
+			return call(c.search.Search, &v1.SearchRequest{Tenant: name})
+		},
+		"ListSearchAttributes": func(c clients) outcome {
+			return call(c.search.ListSearchAttributes, &v1.ListSearchAttributesRequest{Tenant: name})
+		},
+		"BackfillAttribute": func(c clients) outcome {
+			return call(c.search.BackfillAttribute, &v1.BackfillAttributeRequest{Tenant: name, Attribute: "Modality"})
+		},
 		"Delete": func(c clients) outcome {
 			return call(c.corrections.Delete, &v1.DeleteRequest{Tenant: name, Target: &v1.CorrectionTarget{SubjectLabel: "S1"}, Reason: "x", ValidateOnly: true})
 		},

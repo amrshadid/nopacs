@@ -317,6 +317,7 @@ var contractFiles = []protoreflect.FileDescriptor{
 	nopacsv1.File_nopacs_v1_retention_proto,
 	nopacsv1.File_nopacs_v1_route_proto,
 	nopacsv1.File_nopacs_v1_transfer_proto,
+	nopacsv1.File_nopacs_v1_search_proto,
 }
 
 // contractMethods returns every served method of the contract by procedure

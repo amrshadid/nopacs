@@ -19,6 +19,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/receive/frames"
 	"github.com/amrshadid/nopacs/internal/receive/header"
 	"github.com/amrshadid/nopacs/internal/receive/sidecar"
+	"github.com/amrshadid/nopacs/internal/search"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -353,7 +354,8 @@ func (p *Pipeline) archiveScan(ctx context.Context, w tenant.Work, r tenant.Rece
 	}
 	p.at("archive.before-sidecar")
 	var values tenant.ScanValues
-	sidecarSum, err := p.putSidecar(ctx, store, metadataKey, cat, g.uid, r, at, puts, func(u string) bool { return !inManifest[u] || ours[u] }, &values)
+	var searched search.Row
+	sidecarSum, err := p.putSidecar(ctx, store, metadataKey, cat, g.uid, r, at, puts, func(u string) bool { return !inManifest[u] || ours[u] }, &values, &searched)
 	if err != nil {
 		return res, err
 	}
@@ -369,7 +371,7 @@ func (p *Pipeline) archiveScan(ctx context.Context, w tenant.Work, r tenant.Rece
 		c := tenant.ScanCommit{
 			ReceptionID: r.ID, StudyUID: r.StudyUID, SeriesUID: g.uid,
 			SubjectLabel: path.Subject, SessionLabel: path.Session, ScanLabel: path.Scan,
-			Storage: r.Storage, ManifestSHA256: manifestSum, SidecarSHA256: sidecarSum, Values: values, At: at, Fence: &fence,
+			Storage: r.Storage, ManifestSHA256: manifestSum, SidecarSHA256: sidecarSum, Values: values, Search: searched, At: at, Fence: &fence,
 		}
 		for _, wr := range part {
 			c.Instances = append(c.Instances, tenant.ConfirmedInstance{
@@ -517,7 +519,7 @@ func (p *Pipeline) LockScan(storage, manifestKey string) func() {
 // attempt that never committed wrote, and nothing of it is kept, since
 // every line it holds is one the manifest does not list.
 func (p *Pipeline) putSidecar(ctx context.Context, store blob.Store, key string, c scanCatalog, seriesUID string, r tenant.Reception,
-	at time.Time, puts []written, drop func(string) bool, values *tenant.ScanValues) (tenant.SHA256, error) {
+	at time.Time, puts []written, drop func(string) bool, values *tenant.ScanValues, searched *search.Row) (tenant.SHA256, error) {
 	var old io.Reader
 	if c.hasScan {
 		rc, err := store.Read(ctx, key, 0, -1)
@@ -535,6 +537,7 @@ func (p *Pipeline) putSidecar(ctx context.Context, store blob.Store, key string,
 		return tenant.SHA256{}, err
 	}
 	*values = scanValues(h)
+	*searched = p.searchRow(ctx, puts, h)
 	meta.withValues(c, *values)
 	i := 0
 	added := func() (sidecar.Instance, bool, error) {

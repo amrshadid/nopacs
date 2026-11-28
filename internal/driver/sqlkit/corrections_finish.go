@@ -51,6 +51,12 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 			c.ID); err != nil {
 			return err
 		}
+		// The search rows an edit or an instance delete kept for its undo hold
+		// the values the files had before it: they go with the purge, as the
+		// lines they were read from do.
+		if _, err := tx.Exec(ctx, `DELETE FROM correction_search WHERE correction_id = ?`, c.ID); err != nil {
+			return err
+		}
 		// An edit's lines as they were are written back only before its
 		// purge: an undo is refused once it began.
 		if c.Kind == corr.KindEdit {

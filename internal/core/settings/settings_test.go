@@ -65,8 +65,9 @@ func TestBuiltin(t *testing.T) {
 		ReadPerCaller: {InstallationOnly, "16", false},
 		ReadPerServer: {InstallationOnly, "256", false},
 
-		ScrubRate:     {Ordinary, "64MiB", false},
-		ScrubInterval: {Ordinary, "30d", false},
+		ScrubRate:       {Ordinary, "64MiB", false},
+		ScrubInterval:   {Ordinary, "30d", false},
+		SearchFacetRows: {Ordinary, "1000000", false},
 
 		ScrubArchiveSample: {Ordinary, "0%", false},
 		ReplicaLagAlert:    {Ordinary, "1h", false},

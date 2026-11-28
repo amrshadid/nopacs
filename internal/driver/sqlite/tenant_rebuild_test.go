@@ -77,7 +77,7 @@ func TestRebuildShadowFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tables) != len(tenant.CatalogTables())+2 {
+	if len(tables) != len(tenant.CatalogTables())+3 {
 		t.Errorf("the shadow holds %v", tables)
 	}
 	if _, err := ts.CancelJob(ctx, "rb-1", now, audit("a2"), nil); err != nil {
