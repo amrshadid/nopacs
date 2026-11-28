@@ -1,6 +1,6 @@
 # Architecture
 
-[Documentation index](../README.md) · [A reception, end to end](../use/receiving.md) · [Reading the archive](../use/reading.md) · [Testing](testing.md)
+[Documentation index](../README.md) · [A reception, end to end](../use/receiving.md) · [Reading the archive](../use/reading.md) · [The databases](database.md) · [Testing](testing.md)
 
 How NoPACs' parts meet. Each package's own documentation is its `doc.go` (open
 it, or run `go doc ./internal/<package>`); this page holds what no single package
@@ -198,6 +198,8 @@ exist, not whether a tenant does. The order of checks is the contract's: the key
 again first, so a key that lapsed after the check makes no change.
 
 ## Where state lives
+
+The tables of both kinds of database are drawn in [the databases](database.md).
 
 - **The master database** (SQLite file or Postgres): tenants, keys (hashed),
   grants, installation settings, the installation's audit log.

@@ -19,7 +19,7 @@ The pages are grouped by what you came to do:
 | [use](use/command-line.md) | work in the archive | the command line; receiving; routing; reading; searching; sending; importing; correcting; retention and holds; profiles |
 | [api](api/overview.md) | build on it | the overview; reasons and retry delays; a walkthrough; DICOMweb; the clients |
 | [reference](reference/settings.md) | look a fact up | settings, commands, errors, events, metrics, environment variables, all generated from the code |
-| [develop](develop/architecture.md) | change the code | architecture; testing; gates; guides |
+| [develop](develop/architecture.md) | change the code | architecture; the databases; testing; gates; guides |
 
 ## By reader
 
@@ -41,7 +41,7 @@ interactive program), [receiving](use/receiving.md), [reading](use/reading.md), 
 generated clients are in `clients/python` and `clients/typescript`.
 
 **You change the code.**
-[Architecture](develop/architecture.md), [testing](develop/testing.md), [gates and outside checks](develop/gates.md)
+[Architecture](develop/architecture.md), [the databases](develop/database.md), [testing](develop/testing.md), [gates and outside checks](develop/gates.md)
 and the guides: [a database driver](develop/guides/database-driver.md), [a storage driver](develop/guides/storage-driver.md),
 [an API method](develop/guides/api-method.md), [a migration](develop/guides/migration.md) and
 [an event type](develop/guides/event-type.md).
