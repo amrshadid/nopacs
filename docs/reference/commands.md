@@ -1069,106 +1069,6 @@ Usage: `nopacs receiver remove <tenant> <name> --yes [flags]`
 |---|---|---|---|
 | `--yes` | bool |  | really stop and remove the receiver; without it the command only says what it would do |
 
-#### `nopacs receiver route`
-
-List and change the routes a receiver chooses each study's storage by
-
-Usage: `nopacs receiver route`
-
-##### `nopacs receiver route add`
-
-Add a route to a receiver
-
-Usage: `nopacs receiver route add <tenant> <receiver> <route> --storage NAME [conditions] [--profile NAME@VERSION] [--forward-to SENDER | --no-forward] [--position N] [flags]`
-
-| Flag | Type | Default | What it does |
-|---|---|---|---|
-| `--absent` | stringArray |  | a condition: SUBJECT is absent or empty |
-| `--equals` | stringArray |  | a condition: the value of SUBJECT equals TEXT, written SUBJECT=TEXT (repeat for more; all must hold) |
-| `--forward-to` | stringArray |  | forward the receptions the route chooses to this sender in place of the receiver's (repeat for more) |
-| `--no-forward` | bool |  | forward the receptions the route chooses to no sender |
-| `--not-equals` | stringArray |  | a condition: the value of SUBJECT does not equal TEXT, written SUBJECT=TEXT |
-| `--not-pattern` | stringArray |  | a condition: the whole value of SUBJECT does not match the RE2 expression, written SUBJECT=EXPRESSION |
-| `--not-prefix` | stringArray |  | a condition: the value of SUBJECT does not start with TEXT, written SUBJECT=TEXT |
-| `--pattern` | stringArray |  | a condition: the whole value of SUBJECT matches the RE2 expression, written SUBJECT=EXPRESSION |
-| `--position` | int |  | the route's place in the order, from 1; the last when absent |
-| `--prefix` | stringArray |  | a condition: the value of SUBJECT starts with TEXT, written SUBJECT=TEXT |
-| `--present` | stringArray |  | a condition: SUBJECT has a value |
-| `--profile` | string |  | de-identify the studies the route chooses by this profile version, NAME@VERSION, in place of the receiver's |
-| `--storage` | string |  | the tenant's storage a new session the route chooses is archived to |
-
-##### `nopacs receiver route default`
-
-Say what happens to a study no route chooses
-
-Usage: `nopacs receiver route default <tenant> <receiver> storage|quarantine`
-
-##### `nopacs receiver route export`
-
-Write a receiver's routing to a file, with the time the receiver was last changed
-
-Usage: `nopacs receiver route export <tenant> <receiver> [--to FILE] [flags]`
-
-| Flag | Type | Default | What it does |
-|---|---|---|---|
-| `--to` | string |  | the file to write; standard output when not given |
-
-##### `nopacs receiver route import`
-
-Replace a receiver's routing whole with a file's, if the receiver has not changed since its export
-
-Usage: `nopacs receiver route import <tenant> <receiver> FILE|- [--ignore-update-time] [flags]`
-
-| Flag | Type | Default | What it does |
-|---|---|---|---|
-| `--ignore-update-time` | bool |  | write over the receiver as it is now, not only if it is as it was exported |
-
-##### `nopacs receiver route list`
-
-List a receiver's routes in order, and its default
-
-Usage: `nopacs receiver route list <tenant> <receiver>`
-
-##### `nopacs receiver route move`
-
-Move a route to another place in the order
-
-Usage: `nopacs receiver route move <tenant> <receiver> <route> --to N [flags]`
-
-| Flag | Type | Default | What it does |
-|---|---|---|---|
-| `--to` | int |  | the route's new place in the order, from 1 |
-
-##### `nopacs receiver route remove`
-
-Remove a route of a receiver
-
-Usage: `nopacs receiver route remove <tenant> <receiver> <route>`
-
-##### `nopacs receiver route set`
-
-Change a route of a receiver
-
-Usage: `nopacs receiver route set <tenant> <receiver> <route> [flags of what to change] [flags]`
-
-| Flag | Type | Default | What it does |
-|---|---|---|---|
-| `--absent` | stringArray |  | a condition: SUBJECT is absent or empty |
-| `--equals` | stringArray |  | a condition: the value of SUBJECT equals TEXT, written SUBJECT=TEXT (repeat for more; all must hold) |
-| `--forward-to` | stringArray |  | forward the receptions the route chooses to this sender in place of the receiver's (repeat for more) |
-| `--no-conditions` | bool |  | remove every condition, so the route holds for every study |
-| `--no-forward` | bool |  | forward the receptions the route chooses to no sender |
-| `--not-equals` | stringArray |  | a condition: the value of SUBJECT does not equal TEXT, written SUBJECT=TEXT |
-| `--not-pattern` | stringArray |  | a condition: the whole value of SUBJECT does not match the RE2 expression, written SUBJECT=EXPRESSION |
-| `--not-prefix` | stringArray |  | a condition: the value of SUBJECT does not start with TEXT, written SUBJECT=TEXT |
-| `--pattern` | stringArray |  | a condition: the whole value of SUBJECT matches the RE2 expression, written SUBJECT=EXPRESSION |
-| `--prefix` | stringArray |  | a condition: the value of SUBJECT starts with TEXT, written SUBJECT=TEXT |
-| `--present` | stringArray |  | a condition: SUBJECT has a value |
-| `--profile` | string |  | de-identify the studies the route chooses by this profile version, NAME@VERSION, in place of the receiver's |
-| `--receiver-profile` | bool |  | de-identify by the receiver's profile again |
-| `--receiver-senders` | bool |  | forward to the receiver's senders again |
-| `--storage` | string |  | the tenant's storage a new session the route chooses is archived to |
-
 #### `nopacs receiver set`
 
 Change some fields of a receiver
@@ -1460,6 +1360,86 @@ Usage: `nopacs retention rule set <tenant> <name> [--receiver R [--route RT] | -
 Show one retention rule
 
 Usage: `nopacs retention rule show <tenant> <name>`
+
+### `nopacs route`
+
+Make, read and try a receiver's routing rule sets
+
+Usage: `nopacs route`
+
+#### `nopacs route activate`
+
+Make a receiver run one of its rule set versions, or none (0)
+
+Usage: `nopacs route activate <tenant> <receiver> <version>`
+
+#### `nopacs route create`
+
+Make a receiver's next rule set version from a file, and activate it
+
+Usage: `nopacs route create <tenant> <receiver> FILE|- [--activate] [--comment TEXT] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--activate` | bool |  | make the receiver run the new version at once |
+| `--comment` | string |  | why the version is made, at most 1024 bytes on one line |
+
+#### `nopacs route dry-run`
+
+Try a rule set version on a receiver's latest sessions
+
+Usage: `nopacs route dry-run <tenant> <receiver> [--version N] [--sessions N] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--sessions` | int | `100` | how many of the latest sessions to try it on, 1 to 1000 |
+
+#### `nopacs route explain`
+
+Show what a rule set decides for one file, rule by rule
+
+Usage: `nopacs route explain <tenant> <receiver> (--file FILE.dcm [--calling-aet AE] [--called-aet AE] | --instance SUBJECT/SESSION/SCAN[/UID]) [--version N] [--show-values] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--called-aet` | string |  | the called AE title --file is explained as received with |
+| `--calling-aet` | string |  | the calling AE title --file is explained as received from |
+| `--file` | string |  | a DICOM file to explain, as the receiver would receive it |
+| `--instance` | string |  | an archived instance: SUBJECT/SESSION/SCAN, or with /UID |
+| `--show-values` | bool |  | show the values each deciding comparison saw (audited; refused to a masked key) |
+
+#### `nopacs route export`
+
+Write a receiver's rule set to a file, to edit and give to create
+
+Usage: `nopacs route export <tenant> <receiver> [--version N] [--to FILE] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--to` | string |  | the file to write; standard output when not given |
+
+#### `nopacs route get`
+
+Show the rule set a receiver runs, or one of its versions
+
+Usage: `nopacs route get <tenant> <receiver> [--version N] [flags]`
+
+#### `nopacs route hits`
+
+Count the receptions each rule routed
+
+Usage: `nopacs route hits <tenant> <receiver> [--version N] [flags]`
+
+#### `nopacs route list`
+
+List a receiver's rule set versions, the newest first
+
+Usage: `nopacs route list <tenant> <receiver> [--limit N | --all] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
 
 ### `nopacs scan`
 

@@ -30,8 +30,7 @@ are the installation's to allot (the settings receiver.ports and
 receiver.bind-addresses).
 Every command takes the tenant first. Adding, changing and removing need the
 admin role on the tenant; list and show need the reader role.`,
-		a.newReceiverAdd(), a.newReceiverList(), a.newReceiverShow(), a.newReceiverSet(), a.newReceiverRemove(),
-		a.newReceiverRoute())
+		a.newReceiverAdd(), a.newReceiverList(), a.newReceiverShow(), a.newReceiverSet(), a.newReceiverRemove())
 }
 
 // newReceiverAdd builds "receiver add".
@@ -251,12 +250,8 @@ func (a *app) receiverDetails(w io.Writer, r *v1.Receiver) error {
 	if len(r.GetForwardTo()) > 0 {
 		pairs = append(pairs, output.Pair{Label: "Forwards to", Value: strings.Join(r.GetForwardTo(), ", ")})
 	}
-	if n := len(r.GetRouting().GetRoutes()); n > 0 || r.GetRouting().GetQuarantineUnmatched() {
-		text := strconv.Itoa(n) + " routes (nopacs receiver route list)"
-		if r.GetRouting().GetQuarantineUnmatched() {
-			text += "; a study no route chooses is held as unrouted"
-		}
-		pairs = append(pairs, output.Pair{Label: "Routing", Value: text})
+	if v := r.GetRuleSetVersion(); v > 0 {
+		pairs = append(pairs, output.Pair{Label: "Routing", Value: "rule set version " + strconv.Itoa(int(v)) + " (nopacs route get)"})
 	}
 	switch {
 	case r.GetProfile() != nil:

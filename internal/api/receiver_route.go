@@ -2,149 +2,142 @@ package api
 
 import (
 	"context"
-	"strconv"
 
-	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
+	"github.com/amrshadid/nopacs/internal/deid/profile"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// routeSubjects pairs each subject a route may read with the contract's
-// value of the same name (receiver.proto, Route.conditions).
-var routeSubjects = map[v1.ConditionSubject]tenant.RouteSubject{
-	v1.ConditionSubject_CONDITION_SUBJECT_MODALITY:          tenant.SubjectModality,
-	v1.ConditionSubject_CONDITION_SUBJECT_SOP_CLASS_UID:     tenant.SubjectSOPClassUID,
-	v1.ConditionSubject_CONDITION_SUBJECT_MANUFACTURER:      tenant.SubjectManufacturer,
-	v1.ConditionSubject_CONDITION_SUBJECT_MODEL_NAME:        tenant.SubjectModelName,
-	v1.ConditionSubject_CONDITION_SUBJECT_SOFTWARE_VERSIONS: tenant.SubjectSoftwareVersions,
-	v1.ConditionSubject_CONDITION_SUBJECT_CALLING_AE_TITLE:  tenant.SubjectCallingAETitle,
-	v1.ConditionSubject_CONDITION_SUBJECT_CALLED_AE_TITLE:   tenant.SubjectCalledAETitle,
-}
+// errNoProfiles is a tenant database that keeps no profiles, which every
+// driver of this version does.
+var errNoProfiles = fault.New(fault.Internal, "the tenant's database keeps no profiles")
 
-// routingValues returns the routing a request's receiver gives, checked
-// for what a request can get wrong alone: the bounds of its lists, before
-// they are copied, and each condition's subject and test. The rules of
-// each value are tenant.Routing.Validate's.
-func routingValues(field string, m *v1.ReceiverRouting) (tenant.Routing, error) {
-	out := tenant.Routing{QuarantineUnmatched: m.GetQuarantineUnmatched()}
-	if len(m.GetRoutes()) > tenant.MaxRoutes {
-		return out, invalid(field+".routes", "holds at most "+strconv.Itoa(tenant.MaxRoutes)+" routes")
-	}
-	for i, rm := range m.GetRoutes() {
-		at := field + ".routes[" + strconv.Itoa(i) + "]"
-		rt := tenant.Route{Name: rm.GetName(), Storage: rm.GetStorage()}
-		if pv := rm.GetProfile(); pv != nil {
-			rt.Profile = tenant.ProfileRef{Name: pv.GetName(), Version: pv.GetVersion()}
-			if err := rt.Profile.Validate(); err != nil {
-				return out, fieldOf(at+".profile", err)
-			}
-		}
-		if f := rm.GetForwardTo(); f != nil {
-			if len(f.GetSenders()) > tenant.MaxForwardTo {
-				return out, invalid(at+".forward_to.senders", "names at most 16 senders")
-			}
-			rt.ReplacesForwardTo, rt.ForwardTo = true, f.GetSenders()
-		}
-		if len(rm.GetConditions()) > tenant.MaxRouteConditions {
-			return out, invalid(at+".conditions", "holds at most "+strconv.Itoa(tenant.MaxRouteConditions)+" conditions")
-		}
-		for j, cm := range rm.GetConditions() {
-			cond, err := conditionValue(at+".conditions["+strconv.Itoa(j)+"]", cm)
-			if err != nil {
-				return out, err
-			}
-			rt.Conditions = append(rt.Conditions, cond)
-		}
-		out.Routes = append(out.Routes, rt)
-	}
-	return out, nil
-}
-
-// conditionValue returns one route condition a request gives.
-func conditionValue(field string, m *v1.ProfileCondition) (tenant.RouteCondition, error) {
-	subject, ok := routeSubjects[m.GetSubject()]
+// loadedProfile returns a stored profile version loaded; one the tenant does
+// not have is a precondition failure starting with field.
+func loadedProfile(ctx context.Context, p tenant.Pipeline, field string, ref tenant.ProfileRef) (*profile.Version, error) {
+	profiles, ok := p.(tenant.Profiles)
 	if !ok {
-		if m.GetSubject() == v1.ConditionSubject_CONDITION_SUBJECT_RECEIVER {
-			return tenant.RouteCondition{}, invalid(field+".subject", "is not the receiver: a route belongs to one receiver")
-		}
-		return tenant.RouteCondition{}, invalid(field+".subject", "is one of ConditionSubject other than CONDITION_SUBJECT_RECEIVER")
+		return nil, errNoProfiles
 	}
-	c := tenant.RouteCondition{Subject: subject, Negate: m.GetNegate()}
-	switch t := m.GetTest().(type) {
-	case *v1.ProfileCondition_Equals:
-		c.Test, c.Value = tenant.TestEquals, t.Equals
-	case *v1.ProfileCondition_Prefix:
-		c.Test, c.Value = tenant.TestPrefix, t.Prefix
-	case *v1.ProfileCondition_Pattern:
-		c.Test, c.Value = tenant.TestPattern, t.Pattern
-	case *v1.ProfileCondition_Present:
-		c.Test, c.Present = tenant.TestPresent, t.Present
-	default:
-		return c, invalid(field, "has one test: equals, prefix, pattern or present")
+	v, err := profiles.ProfileVersion(ctx, ref.Name, ref.Version)
+	if fault.KindOf(err) == fault.NotFound {
+		return nil, fault.Wrap(fault.Precondition, err, field+": the tenant has no profile version "+ref.String())
 	}
-	return c, nil
+	if err != nil {
+		return nil, err
+	}
+	loaded, err := profile.Load(v.Name, v.Version, v.Source, v.Expanded, v.Checksum)
+	if err != nil {
+		return nil, fault.Wrap(fault.Internal, err, field+": the stored profile version "+ref.String()+" does not load")
+	}
+	return loaded, nil
 }
 
-// routingMessage returns a receiver's routing as the contract writes it,
-// absent when it has none.
-func routingMessage(r tenant.Routing) *v1.ReceiverRouting {
-	if r.IsZero() {
-		return nil
+// checkRuleSetProfiles checks each profile version a rule set the receiver
+// rcv is to run names, as a receiver's own is checked (checkProfileVersion):
+// one the tenant has, which can de-identify a receiver's files. A forward
+// rule's destination profile is also stacked over each profile a study of
+// the receiver may be archived under (the receiver's, and each archive
+// rule's), as a destination layer over the layer below it
+// (profile.Stack): it may only tighten what that profile did, so a copy
+// never carries more of a file than the archive holds. A destination that
+// would loosen one, or whose rule cannot be compared with the one below,
+// is a precondition failure carrying every problem (problemsError).
+func (c *core) checkRuleSetProfiles(ctx context.Context, p tenant.Pipeline, rcv tenant.Receiver, rs tenant.RuleSet) error {
+	type lower struct {
+		kind profile.LayerKind
+		ref  tenant.ProfileRef
 	}
-	m := &v1.ReceiverRouting{QuarantineUnmatched: r.QuarantineUnmatched}
-	for _, rt := range r.Routes {
-		rm := &v1.Route{Name: rt.Name, Storage: rt.Storage}
-		if !rt.Profile.IsZero() {
-			rm.Profile = &v1.ProfileVersionRef{Name: rt.Profile.Name, Version: rt.Profile.Version}
+	var lowers []lower
+	loaded := map[tenant.ProfileRef]*profile.Version{}
+	load := func(field string, ref tenant.ProfileRef) (*profile.Version, error) {
+		if v, ok := loaded[ref]; ok {
+			return v, nil
 		}
-		if rt.ReplacesForwardTo {
-			rm.ForwardTo = &v1.RouteForwardTo{Senders: rt.ForwardTo}
+		v, err := loadedProfile(ctx, p, field, ref)
+		if err == nil {
+			loaded[ref] = v
 		}
-		for _, c := range rt.Conditions {
-			rm.Conditions = append(rm.Conditions, conditionMessage(c))
-		}
-		m.Routes = append(m.Routes, rm)
+		return v, err
 	}
-	return m
-}
-
-// conditionMessage returns one route condition as the contract writes it.
-func conditionMessage(c tenant.RouteCondition) *v1.ProfileCondition {
-	m := &v1.ProfileCondition{Negate: c.Negate}
-	for s, rs := range routeSubjects {
-		if rs == c.Subject {
-			m.Subject = s
-		}
+	if rcv.Deidentifies() {
+		lowers = append(lowers, lower{profile.LayerReceiver, rcv.Profile})
 	}
-	switch c.Test {
-	case tenant.TestEquals:
-		m.Test = &v1.ProfileCondition_Equals{Equals: c.Value}
-	case tenant.TestPrefix:
-		m.Test = &v1.ProfileCondition_Prefix{Prefix: c.Value}
-	case tenant.TestPattern:
-		m.Test = &v1.ProfileCondition_Pattern{Pattern: c.Value}
-	case tenant.TestPresent:
-		m.Test = &v1.ProfileCondition_Present{Present: c.Present}
-	}
-	return m
-}
-
-// checkRouteProfiles checks each profile version a receiver's routes name
-// as a receiver's own is checked (checkProfileVersion): one the tenant has,
-// which can de-identify a receiver's files. Each failure is a precondition
-// failure naming the route.
-func (c *core) checkRouteProfiles(ctx context.Context, p tenant.Pipeline, r tenant.Receiver) error {
-	for _, rt := range r.Routing.Routes {
-		if rt.Profile.IsZero() {
+	for _, a := range rs.Archive {
+		if a.Profile.IsZero() {
 			continue
 		}
-		if err := c.checkProfileVersion(ctx, p, "receiver.routing: route "+rt.Name, rt.Profile); err != nil {
+		field := "archive rule " + a.Name
+		if err := c.checkProfileVersion(ctx, p, field, a.Profile); err != nil {
 			return err
+		}
+		lowers = append(lowers, lower{profile.LayerRoute, a.Profile})
+		if !rcv.Deidentifies() {
+			continue
+		}
+		// An archive rule's profile is a route layer over the receiver's: it
+		// may only tighten what the receiver removes, or a study would be
+		// archived with more of it than the receiver's profile allows.
+		below, err := load(field, rcv.Profile)
+		if err != nil {
+			return err
+		}
+		upper, err := load(field, a.Profile)
+		if err != nil {
+			return err
+		}
+		if _, problems := profile.Stack(profile.Layer{Kind: profile.LayerReceiver, Name: rcv.Profile.String(), Expanded: below.Expanded()},
+			profile.Layer{Kind: profile.LayerRoute, Name: a.Profile.String(), Expanded: upper.Expanded()}); len(problems) > 0 {
+			return &layerRefusal{err: fault.New(fault.Precondition, field+": its profile "+a.Profile.String()+
+				" would loosen what the receiver's profile "+rcv.Profile.String()+" archives: "+problems[0].String()+problemsMore(len(problems))), problems: problems}
+		}
+	}
+	for _, f := range rs.Forward {
+		if f.Profile.IsZero() {
+			continue
+		}
+		field := "forward rule " + f.Name
+		for _, name := range f.Senders {
+			// A stow peer's answer names each instance by the UIDs it was
+			// sent with, which a copy changes, so only a DIMSE sender sends
+			// copies; a sender the tenant does not have is the store's to
+			// refuse.
+			if s, err := p.Sender(ctx, name); err == nil && s.Type == tenant.SenderSTOW {
+				return fault.New(fault.Precondition, field+": a destination profile is applied by DIMSE senders only, and "+name+" is a stow sender")
+			}
+		}
+		if err := c.checkProfileVersion(ctx, p, field, f.Profile); err != nil {
+			return err
+		}
+		upper, err := load(field, f.Profile)
+		if err != nil {
+			return err
+		}
+		for _, l := range lowers {
+			below, err := load(field, l.ref)
+			if err != nil {
+				return err
+			}
+			if _, problems := profile.Stack(profile.Layer{Kind: l.kind, Name: l.ref.String(), Expanded: below.Expanded()},
+				profile.Layer{Kind: profile.LayerDestination, Name: f.Profile.String(), Expanded: upper.Expanded()}); len(problems) > 0 {
+				return &layerRefusal{err: fault.New(fault.Precondition, field+": its destination profile "+f.Profile.String()+
+					" would loosen what "+l.ref.String()+" archives: "+problems[0].String()+problemsMore(len(problems))), problems: problems}
+			}
 		}
 	}
 	return nil
 }
 
-// errNoProfiles is a tenant database that keeps no profiles, which every
-// driver of this version does.
-var errNoProfiles = fault.New(fault.Internal, "the tenant's database keeps no profiles")
+// layerRefusal is a destination profile that loosens a layer below it: the
+// precondition failure, and every problem, which the API answers as a
+// ProfileProblems detail (problemsError).
+type layerRefusal struct {
+	err      error
+	problems profile.Problems
+}
+
+// Error returns the failure's message.
+func (r *layerRefusal) Error() string { return r.err.Error() }
+
+// Unwrap returns the failure, so its kind is the fault's.
+func (r *layerRefusal) Unwrap() error { return r.err }

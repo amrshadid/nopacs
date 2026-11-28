@@ -61,31 +61,35 @@ func profilesPage(c *ctx, owner, gen int, token, tenant string) tea.Cmd {
 	})
 }
 
-// routeRow is one route of a receiver as the cells of a row.
-func routeRow(i int, rt *v1.Route) row {
+// routeRow is one archive rule of a receiver's rule set as the cells of a
+// row.
+func routeRow(i int, rt *v1.ArchiveRule) row {
 	profile := "-"
 	if p := rt.GetProfile(); p != nil {
 		profile = p.GetName() + "@" + strconv.Itoa(int(p.GetVersion()))
 	}
 	when := "every study"
-	if n := len(rt.GetConditions()); n > 0 {
-		when = strconv.Itoa(n) + " condition(s)"
+	if rt.GetWhen() != "" {
+		when = rt.GetWhen()
 	}
 	return row{cells: []string{strconv.Itoa(i + 1), rt.GetName(), when, rt.GetStorage(), profile}, ref: rt}
 }
 
-// routesPage asks for a receiver and lists its routes in order. The routes
-// are part of the receiver, so there is one page.
+// routesPage asks for the rule set a receiver runs and lists its archive
+// rules in order, in one page; a receiver that runs none lists none.
 func routesPage(c *ctx, owner, gen int, tenant, receiver string) tea.Cmd {
 	cl := c.client
 	return c.call(owner, func(ctx context.Context) tea.Msg {
-		res, err := client.Call(ctx, cl, "receiver route list", func(ctx context.Context) (*v1.GetReceiverResponse, error) {
-			return cl.Receivers.GetReceiver(ctx, &v1.GetReceiverRequest{Tenant: tenant, Name: receiver})
+		res, err := client.Call(ctx, cl, "route get", func(ctx context.Context) (*v1.GetRuleSetResponse, error) {
+			return cl.Routes.GetRuleSet(ctx, &v1.GetRuleSetRequest{Tenant: tenant, Receiver: receiver})
 		})
-		return answer(res, err, func(r *v1.GetReceiverResponse) tea.Msg {
-			routes := r.GetReceiver().GetRouting().GetRoutes()
-			rows := make([]row, 0, len(routes))
-			for i, rt := range routes {
+		if fault.KindOf(err) == fault.NotFound {
+			return pageMsg{gen: gen}
+		}
+		return answer(res, err, func(r *v1.GetRuleSetResponse) tea.Msg {
+			rules := r.GetRuleSet().GetArchiveRules()
+			rows := make([]row, 0, len(rules))
+			for i, rt := range rules {
 				rows = append(rows, routeRow(i, rt))
 			}
 			return pageMsg{gen: gen, rows: rows}

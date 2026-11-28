@@ -116,10 +116,10 @@ type envOptions struct {
 	deid *deidOptions
 	// forwarded, when set, is the pipeline's Config.Forwarded.
 	forwarded func()
-	// routing, when set, is the receiver's routing, set before the
-	// pipeline starts, with the storages and senders it names added
-	// (route_test.go).
-	routing *tenant.Routing
+	// routing, when set, is the receiver's rule set, made and activated
+	// before the pipeline starts, with the storages and senders it names
+	// added (route_test.go).
+	routing *tenant.RuleSet
 	// pause, when set, is the pipeline's Config.Pause (pause_test.go).
 	pause WritePause
 }

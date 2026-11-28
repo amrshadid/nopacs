@@ -72,6 +72,8 @@ type Client struct {
 	Replicas nopacsv1connect.ReplicaServiceClient
 	// Retention is the RetentionService.
 	Retention nopacsv1connect.RetentionServiceClient
+	// Routes is the RouteService.
+	Routes nopacsv1connect.RouteServiceClient
 	// Backups is the BackupService.
 	Backups nopacsv1connect.BackupServiceClient
 
@@ -175,6 +177,7 @@ func New(cfg Config) (*Client, error) {
 		Backups:     nopacsv1connect.NewBackupServiceClient(c),
 		Replicas:    nopacsv1connect.NewReplicaServiceClient(c),
 		Retention:   nopacsv1connect.NewRetentionServiceClient(c),
+		Routes:      nopacsv1connect.NewRouteServiceClient(c),
 		base:        strings.TrimSuffix(base, "/"),
 		key:         bearerK,
 		timeout:     timeout,

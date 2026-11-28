@@ -82,6 +82,20 @@ func floorReason(tag uint32, vr, nvr string) string {
 	return "a person's name (VR PN in the data dictionary, whatever VR the file wrote it with), which PS3.15 Table E.1-1 removes or replaces wherever it lists one"
 }
 
+// FloorReason returns why the floor covers the standard attribute of tag
+// by its tag alone (one of the floor's attributes, or one the data
+// dictionary gives VR PN), and "" when it does not. A rule that must never
+// read who the patient is, such as a routing condition, refuses a field
+// for which it answers a reason: the floor is the one list of what names or
+// identifies the person. A private tag is never covered by its tag, since
+// what it holds is not known from it.
+func FloorReason(t uint32) string {
+	if tag.Tag(t).Group()%2 == 1 {
+		return ""
+	}
+	return floorReason(t, "", needleVR(tag.Tag(t), "", ""))
+}
+
 // needleVR returns the VR an element's values are taken as by the floor
 // and as needles: PN for a person's name, whatever VR the file wrote it
 // with, and the element's VR as the engine reads it (effectiveVR)

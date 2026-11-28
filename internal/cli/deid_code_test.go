@@ -145,44 +145,66 @@ func TestProfileLookupCommands(t *testing.T) {
 	}
 }
 
-// TestRouteExportImport guards "receiver route export" and "import": the
-// export holds the receiver, its update time and its routing; edited and
-// imported it replaces the routing whole; a file whose update time is
-// not the receiver's is refused with exit 5 and changes nothing, unless
-// --ignore-update-time; a misspelled field is refused.
-func TestRouteExportImport(t *testing.T) {
+// TestRouteCreateExportActivate guards the route commands: create reads a
+// rule set file and makes a version, activated with --activate, and the
+// table shows its rules; export writes the version back as a file create
+// reads, without what the server answers; a misspelled field is refused
+// (exit 2); a version made from the export is the next one; activate goes
+// back to an older version and 0 runs none; list shows which runs; explain
+// hides values and says so, and sends them only asked.
+func TestRouteCreateExportActivate(t *testing.T) {
 	r := newRig(t)
 	r.must("tenant", "create", "lab1")
 	r.must("storage", "add", "lab1", "main", "--type", "dir", "--root", "fast")
 	r.must("storage", "add", "lab1", "lab-a", "--type", "dir", "--root", "fast")
 	r.must("receiver", "add", "lab1", "scanner1", "--storage", "main", "--port", "11112", "--aet", "NOPACS", "--any-caller", "--profile", "research@1")
-	r.must("receiver", "route", "add", "lab1", "scanner1", "lab-a", "--storage", "lab-a", "--equals", "calling-aet=LAB_A")
 	dir := t.TempDir()
-	file := dir + "/routes.json"
-	r.must("receiver", "route", "export", "lab1", "scanner1", "--to", file)
-	d := document(t, r.run("receiver", "route", "export", "lab1", "scanner1", "--json"))
-	if d["receiver"] != "scanner1" || d["updateTime"] == "" || d["routing"] == nil {
-		t.Fatalf("export: %v", d)
+	rules := writeFile(t, dir, "rules.json", `{"archiveRules":[{"name":"lab-a","when":"calling_ae == \"LAB_A\"","storage":"lab-a"}],"quarantineUnmatched":true}`)
+	res := r.run("route", "create", "lab1", "scanner1", rules, "--activate", "--comment", "by site")
+	if res.code != 0 || !strings.Contains(res.stdout, "scanner1@1 (running)") || !strings.Contains(res.stdout, `calling_ae == "LAB_A"`) ||
+		!strings.Contains(res.stdout, "held as unrouted") {
+		t.Fatalf("create:\n%+v", res)
 	}
+	file := dir + "/export.json"
+	r.must("route", "export", "lab1", "scanner1", "--to", file)
 	text := readText(t, file)
-	edited := writeFile(t, dir, "edited.json", strings.Replace(text, "LAB_A", "LAB_B", 1))
-	res := r.run("receiver", "route", "import", "lab1", "scanner1", edited)
-	if res.code != 0 || !strings.Contains(res.stdout, `"LAB_B"`) {
-		t.Fatalf("import:\n%+v", res)
+	if strings.Contains(text, `"version"`) || strings.Contains(text, "createTime") || !strings.Contains(text, "by site") {
+		t.Errorf("export:\n%q", text)
 	}
-	stale := writeFile(t, dir, "stale.json", strings.Replace(text, d["updateTime"].(string), "2001-01-01T00:00:00Z", 1))
-	if res := r.run("receiver", "route", "import", "lab1", "scanner1", stale); res.code != 5 {
-		t.Errorf("a stale export: %+v", res)
-	}
-	if res := r.run("receiver", "route", "list", "lab1", "scanner1"); !strings.Contains(res.stdout, "LAB_B") {
-		t.Errorf("a refused import changed the routing:\n%s", res.stdout)
-	}
-	if res := r.run("receiver", "route", "import", "lab1", "scanner1", stale, "--ignore-update-time"); res.code != 0 || !strings.Contains(res.stdout, "LAB_A") {
-		t.Errorf("--ignore-update-time: %+v", res)
-	}
-	typo := writeFile(t, dir, "typo.json", strings.Replace(text, `"routes"`, `"rutes"`, 1))
-	if res := r.run("receiver", "route", "import", "lab1", "scanner1", typo); res.code != 2 {
+	typo := writeFile(t, dir, "typo.json", strings.Replace(text, `"archiveRules"`, `"archiveRule"`, 1))
+	if res := r.run("route", "create", "lab1", "scanner1", typo); res.code != 2 {
 		t.Errorf("a misspelled field: %+v", res)
+	}
+	if res := r.run("route", "create", "lab1", "scanner1", file, "--json"); res.code != 0 || document(t, res)["version"] != float64(2) {
+		t.Errorf("a version made from the export: %+v", res)
+	}
+	list := r.run("route", "list", "lab1", "scanner1")
+	if list.code != 0 || !strings.Contains(list.stdout, "1        yes") {
+		t.Errorf("list:\n%s", list.stdout)
+	}
+	if res := r.run("route", "activate", "lab1", "scanner1", "2"); res.code != 0 || !strings.Contains(res.stdout, "scanner1@2 (running)") {
+		t.Errorf("activate 2: %+v", res)
+	}
+	if res := r.run("route", "activate", "lab1", "scanner1", "0"); res.code != 0 || !strings.Contains(res.stdout, "runs no rule set") {
+		t.Errorf("activate 0: %+v", res)
+	}
+	r.fake.SetRouteAnswers(&v1.ExplainRouteResponse{Version: 1, Decision: &v1.RouteDecision{ArchiveRule: "lab-a", Storage: "lab-a"},
+		Rules: []*v1.RuleResult{{Phase: v1.RulePhase_RULE_PHASE_ARCHIVE, Rule: "lab-a", Truth: v1.RouteTruth_ROUTE_TRUTH_TRUE,
+			DecidedBy: &v1.DecidingComparison{Comparison: `calling_ae == "LAB_A"`, Field: "calling_ae", Present: true}}}}, nil, nil)
+	ct := writeFile(t, dir, "ct.dcm", "DICM")
+	res = r.run("route", "explain", "lab1", "scanner1", "--file", ct, "--calling-aet", "LAB_A")
+	if res.code != 0 || !strings.Contains(res.stdout, "archive rule lab-a to lab-a") || !strings.Contains(res.stdout, "Values are hidden") {
+		t.Errorf("explain:\n%+v", res)
+	}
+	if asked := r.fake.LastExplain(); asked.GetShowValues() || asked.GetCallingAeTitle() != "LAB_A" || string(asked.GetFile()) != "DICM" {
+		t.Errorf("explain asked %v", asked)
+	}
+	r.must("route", "explain", "lab1", "scanner1", "--instance", "sub/ses/scan", "--show-values")
+	if in := r.fake.LastExplain(); !in.GetShowValues() || in.GetInstance().GetScanLabel() != "scan" {
+		t.Errorf("explain of an instance asked %v", in)
+	}
+	if res := r.run("route", "explain", "lab1", "scanner1"); res.code != 2 {
+		t.Errorf("explain of nothing: %+v", res)
 	}
 }
 

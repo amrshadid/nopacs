@@ -64,6 +64,10 @@ func TestWriteJSONOutputs(t *testing.T) {
 	r.fake.SetCodeAnswer(&v1.CodeResponse{Attribute: "00100020", Code: "abcdefghijklmnop"})
 	codes := writeFile(t, work, "codes.csv", "PID-0001,P001\n")
 	routes := filepath.Join(work, "routes.json")
+	rules := writeFile(t, work, "rules.json", `{"archiveRules":[{"name":"ct","when":"Modality == \"CT\"","storage":"main"}]}`)
+	r.fake.SetRouteAnswers(&v1.ExplainRouteResponse{Version: 1, Decision: &v1.RouteDecision{ArchiveRule: "ct", Storage: "main"}},
+		&v1.DryRunRoutesResponse{Version: 1, Same: 1, Sessions: []*v1.DryRunSession{{SubjectLabel: "s", SessionLabel: "e", Outcome: v1.DryRunOutcome_DRY_RUN_OUTCOME_SAME}}},
+		[]*v1.RouteHit{{Version: 1, Phase: v1.RulePhase_RULE_PHASE_ARCHIVE, Rule: "ct", Receptions: 2}})
 	steps := []struct {
 		name string
 		args []string
@@ -84,8 +88,14 @@ func TestWriteJSONOutputs(t *testing.T) {
 		{"receiver-list", []string{"receiver", "list", "lab1"}},
 		{"receiver-show", []string{"receiver", "show", "lab1", "scanner1"}},
 		{"receiver-set", []string{"receiver", "set", "lab1", "scanner1", "--quiet-period", "5m"}},
-		{"receiver-route-export", []string{"receiver", "route", "export", "lab1", "scanner1", "--to", routes}},
-		{"receiver-route-import", []string{"receiver", "route", "import", "lab1", "scanner1", routes}},
+		{"route-create", []string{"route", "create", "lab1", "scanner1", rules, "--activate"}},
+		{"route-get", []string{"route", "get", "lab1", "scanner1"}},
+		{"route-list", []string{"route", "list", "lab1", "scanner1"}},
+		{"route-export", []string{"route", "export", "lab1", "scanner1", "--to", routes}},
+		{"route-activate", []string{"route", "activate", "lab1", "scanner1", "1"}},
+		{"route-explain", []string{"route", "explain", "lab1", "scanner1", "--file", dcm}},
+		{"route-dry-run", []string{"route", "dry-run", "lab1", "scanner1"}},
+		{"route-hits", []string{"route", "hits", "lab1", "scanner1"}},
 		{"receiver-add-import", []string{"receiver", "add", "lab1", "old-tree", "--type", "import", "--storage", "main", "--root", "old", "--layout", "plain"}},
 		{"job-import", []string{"job", "import", "lab1", "old-tree", "proj1"}},
 		{"job-files", []string{"job", "files", "lab1", "job_1"}},

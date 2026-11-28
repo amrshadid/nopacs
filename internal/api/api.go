@@ -211,6 +211,8 @@ type Handlers struct {
 	Replicas nopacsv1connect.ReplicaServiceHandler
 	// Retention is RetentionService.
 	Retention nopacsv1connect.RetentionServiceHandler
+	// Routes is RouteService.
+	Routes nopacsv1connect.RouteServiceHandler
 
 	// c is what the services share, kept for the test seams
 	// (export_test.go).
@@ -298,6 +300,7 @@ func New(cfg Config) (Handlers, error) {
 		Backups:     backupService{c},
 		Replicas:    replicaService{c: c},
 		Retention:   retentionService{c: c},
+		Routes:      routeService{c: c},
 		c:           c,
 	}, nil
 }
@@ -325,6 +328,7 @@ func (h Handlers) Register(srv *connect.Server) {
 	nopacsv1connect.RegisterBackupServiceHandler(srv, h.Backups)
 	nopacsv1connect.RegisterReplicaServiceHandler(srv, h.Replicas)
 	nopacsv1connect.RegisterRetentionServiceHandler(srv, h.Retention)
+	nopacsv1connect.RegisterRouteServiceHandler(srv, h.Routes)
 }
 
 // decisionKey is the context key of the Decision. Unexported, so only

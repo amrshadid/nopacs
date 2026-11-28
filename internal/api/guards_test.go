@@ -339,6 +339,27 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		"ReleaseHold": func(c clients) outcome {
 			return call(c.retention.ReleaseHold, &v1.ReleaseHoldRequest{Tenant: name, Id: correctionULID, Reason: "x"})
 		},
+		"CreateRuleSet": func(c clients) outcome {
+			return call(c.routes.CreateRuleSet, &v1.CreateRuleSetRequest{Tenant: name, Receiver: "r", RuleSet: &v1.RuleSet{}})
+		},
+		"GetRuleSet": func(c clients) outcome {
+			return call(c.routes.GetRuleSet, &v1.GetRuleSetRequest{Tenant: name, Receiver: "r"})
+		},
+		"ListRuleSets": func(c clients) outcome {
+			return call(c.routes.ListRuleSets, &v1.ListRuleSetsRequest{Tenant: name, Receiver: "r"})
+		},
+		"ActivateRuleSet": func(c clients) outcome {
+			return call(c.routes.ActivateRuleSet, &v1.ActivateRuleSetRequest{Tenant: name, Receiver: "r", Version: 1})
+		},
+		"ExplainRoute": func(c clients) outcome {
+			return call(c.routes.ExplainRoute, &v1.ExplainRouteRequest{Tenant: name, Receiver: "r"})
+		},
+		"DryRunRoutes": func(c clients) outcome {
+			return call(c.routes.DryRunRoutes, &v1.DryRunRoutesRequest{Tenant: name, Receiver: "r"})
+		},
+		"GetRouteHits": func(c clients) outcome {
+			return call(c.routes.GetRouteHits, &v1.GetRouteHitsRequest{Tenant: name, Receiver: "r"})
+		},
 	}
 }
 

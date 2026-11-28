@@ -63,6 +63,11 @@ type unitRun struct {
 	stores Storages
 	bufs   [2][]byte
 	prefix []byte
+	// profile is the destination profile of the unit's job (a forward
+	// rule's), whose copy of each instance is sent in its place; zero
+	// sends each as archived. copier makes the copies; nil refuses them.
+	profile tenant.ProfileRef
+	copier  Copier
 }
 
 // work works one claimed unit to its end or until it is given back.
@@ -135,6 +140,9 @@ func (w *worker) work(p tenant.Pipeline, unit tenant.Work) {
 	u.bufs = [2][]byte{make([]byte, readBuffer), make([]byte, readBuffer)}
 	u.prefix = make([]byte, metaPrefix)
 	u.scan = start.Scan.Path
+	if u.profile = start.Job.Profile; u.copies() && sup.cfg.Copies != nil {
+		u.copier = sup.cfg.Copies(sr.t.name, p)
+	}
 	u.log = u.log.With("scan", start.Scan.Path.Subject+"/"+start.Scan.Path.Session+"/"+start.Scan.Path.Scan)
 	rec := newRecorder(p, u.fence, start.Scan.Cursor, int(sr.t.kept.Load()), sup.cfg.Now, func() { sup.cfg.Wake(sr.t.name) })
 	var out outcome

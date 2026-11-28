@@ -144,14 +144,14 @@ func (p *Pipeline) identify(ctx context.Context, w tenant.Work) error {
 	// taken, and the steps after go by it.
 	var way routed
 	if s := catalog.Session; s != nil {
-		way = routed{choice: s.Route, storage: s.Storage}
+		way = routed{choice: s.Route.Archived(), storage: s.Storage}
 	} else {
 		sibling, found, err := p.routedInFlight(ctx, r, arrivals)
 		switch {
 		case err != nil:
 			return err
 		case found:
-			way = routed{choice: sibling.Route, storage: sibling.Storage}
+			way = routed{choice: sibling.Route.Archived(), storage: sibling.Storage}
 		default:
 			if way, err = p.route(ctx, r, rcv, groups); err != nil {
 				return err
@@ -161,6 +161,12 @@ func (p *Pipeline) identify(ctx context.Context, w tenant.Work) error {
 	}
 	if way.unrouted != nil {
 		return p.holdUnrouted(ctx, w, r, groups, way.unrouted)
+	}
+	// The forward rules are each reception's own: every arrival of a
+	// session is forwarded by the rules its receiver runs now, over its
+	// own series.
+	if way.choice.ForwardRuleSet, way.choice.Forwards, err = p.forwards(ctx, rcv, groups); err != nil {
+		return err
 	}
 	left, err := p.holdBadScans(ctx, w, r, groups, catalog, rule)
 	if err != nil {

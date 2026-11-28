@@ -65,12 +65,15 @@ type Route struct {
 	// the reception named.
 	ReleasedStorage string `json:"released_storage,omitempty"`
 	ReleasedProfile string `json:"released_profile,omitempty"`
-	// Name is the route that chose, and Profile the version it chose.
+	// RuleSet is the version of the receiver's rule set that chose, Name
+	// the archive rule that chose, and Profile the version it chose.
+	RuleSet int32  `json:"rule_set,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Profile string `json:"profile,omitempty"`
-	// ReplacesForwardTo and ForwardTo are the senders it forwards to.
-	ReplacesForwardTo bool     `json:"replaces_forward_to,omitempty"`
-	ForwardTo         []string `json:"forward_to,omitempty"`
+	// CallingAE and CalledAE are the AE titles the session's first file
+	// came with (PS3.8 9.3.2).
+	CallingAE string `json:"calling_ae,omitempty"`
+	CalledAE  string `json:"called_ae,omitempty"`
 }
 
 // Values are a scan's values as the catalog keeps them (tenant.ScanValues):
@@ -113,7 +116,15 @@ func RouteOf(r tenant.ReceptionRoute) *Route {
 	if r.IsZero() {
 		return nil
 	}
-	out := &Route{ReleasedStorage: r.ReleasedStorage, Name: r.Route, ReplacesForwardTo: r.ReplacesForwardTo, ForwardTo: r.ForwardTo}
+	// A session's forwards were its first reception's own, never the
+	// session's: the sidecar keeps its archive choice.
+	if len(r.Forwards) > 0 || r.ForwardRuleSet != 0 {
+		r.Forwards, r.ForwardRuleSet = nil, 0
+		if r.IsZero() {
+			return nil
+		}
+	}
+	out := &Route{ReleasedStorage: r.ReleasedStorage, RuleSet: r.RuleSet, Name: r.Route, CallingAE: r.CallingAE, CalledAE: r.CalledAE}
 	if !r.ReleasedProfile.IsZero() {
 		out.ReleasedProfile = r.ReleasedProfile.String()
 	}
@@ -128,7 +139,7 @@ func (r *Route) Tenant() tenant.ReceptionRoute {
 	if r == nil {
 		return tenant.ReceptionRoute{}
 	}
-	out := tenant.ReceptionRoute{ReleasedStorage: r.ReleasedStorage, Route: r.Name, ReplacesForwardTo: r.ReplacesForwardTo, ForwardTo: r.ForwardTo}
+	out := tenant.ReceptionRoute{ReleasedStorage: r.ReleasedStorage, RuleSet: r.RuleSet, Route: r.Name, CallingAE: r.CallingAE, CalledAE: r.CalledAE}
 	out.ReleasedProfile = profileRef(r.ReleasedProfile)
 	out.Profile = profileRef(r.Profile)
 	return out
@@ -189,7 +200,7 @@ func (h ScanHeader) Validate() error {
 
 // IsZero reports whether the route chose nothing.
 func (r Route) IsZero() bool {
-	return r.ReleasedStorage == "" && r.ReleasedProfile == "" && r.Name == "" && r.Profile == "" && !r.ReplacesForwardTo && len(r.ForwardTo) == 0
+	return r.ReleasedStorage == "" && r.ReleasedProfile == "" && r.RuleSet == 0 && r.Name == "" && r.Profile == "" && r.CallingAE == "" && r.CalledAE == ""
 }
 
 // validReception reports whether s is a reception id.

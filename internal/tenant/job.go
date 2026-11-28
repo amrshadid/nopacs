@@ -229,8 +229,10 @@ type Job struct {
 	Sender string
 	// Mode is what a deid job does; empty for a send job.
 	Mode DeidMode
-	// Profile is the version a deid job's dry run runs; zero for a check,
-	// and for a dry run that runs each instance's own version.
+	// Profile is the version a deid job's dry run runs, or the destination
+	// profile a send job made by a forward rule applies to each copy; zero
+	// for a check, a dry run of each instance's own version, and any other
+	// send job.
 	Profile ProfileRef
 	// Target is what it sends, or judges; Whole for a deid job of the
 	// whole tenant.
@@ -292,9 +294,10 @@ type NewJob struct {
 	Sender string
 	// Mode is what a deid job does; empty for a send job.
 	Mode DeidMode
-	// Profile is the version a deid job's dry run runs, which the tenant
-	// must have; zero for a check, and for a dry run of each instance's
-	// own version.
+	// Profile is the version a deid job's dry run runs, or the destination
+	// profile a forward rule's send job applies to each copy, which the
+	// tenant must have; zero for a check, a dry run of each instance's own
+	// version, and any other send job.
 	Profile ProfileRef
 	// Target is what it sends, or judges; a deid job may name the whole
 	// tenant (JobTarget.Whole), and a scrub job names it always.

@@ -23,7 +23,7 @@ var (
 func head() ScanHeader {
 	n := int32(3)
 	return ScanHeader{StudyUID: "1.2.826.0.1", SeriesUID: "1.2.826.0.1.2", SessionReceiver: "scanner-a", Receiver: "scanner-b",
-		Route:  &Route{Name: "trial", Profile: "research@3", ReplacesForwardTo: true, ForwardTo: []string{"archive"}},
+		Route:  &Route{RuleSet: 2, Name: "trial", Profile: "research@3", CallingAE: "SCANNER1", CalledAE: "ARCHIVE"},
 		Values: Values{StudyDate: "20240131", Modality: "MR", SeriesDescription: "T1 axial", SeriesNumber: &n}, Created: t1, Updated: t2}
 }
 
@@ -94,7 +94,7 @@ func TestV3RoundTrip(t *testing.T) {
 		t.Fatalf("read back %+v", got)
 	}
 	lines := strings.Split(string(b), "\n")
-	if !strings.HasPrefix(lines[0], `{"version":3,"scan":{"study_uid":"1.2.826.0.1","series_uid":"1.2.826.0.1.2","session_receiver":"scanner-a","receiver":"scanner-b","route":{"name":"trial","profile":"research@3","replaces_forward_to":true,"forward_to":["archive"]},`) ||
+	if !strings.HasPrefix(lines[0], `{"version":3,"scan":{"study_uid":"1.2.826.0.1","series_uid":"1.2.826.0.1.2","session_receiver":"scanner-a","receiver":"scanner-b","route":{"rule_set":2,"name":"trial","profile":"research@3","calling_ae":"SCANNER1","called_ae":"ARCHIVE"},`) ||
 		!strings.HasSuffix(lines[0], `"values":{"study_date":"20240131","modality":"MR","series_description":"T1 axial","series_number":3},"created":"2026-11-20T08:30:00.123456Z","updated":"2026-11-20T11:30:00.123456Z"},"instances":[`) {
 		t.Fatalf("the first line is not the form:\n%s", lines[0])
 	}
@@ -111,8 +111,8 @@ func TestV3RoundTrip(t *testing.T) {
 	if _, h, _, err := drain(v3sidecar(t, noRoute, plain)); err != nil || h.Route != nil {
 		t.Errorf("a header without a route: %+v %v", h, err)
 	}
-	if got := h; got != nil && !reflect.DeepEqual(got.Route.Tenant(), tenant.ReceptionRoute{Route: "trial", Profile: tenant.ProfileRef{Name: "research", Version: 3}, ReplacesForwardTo: true, ForwardTo: []string{"archive"}}) {
-		t.Errorf("route as the catalog keeps it: %+v", got.Route.Tenant())
+	if got := h.Route.Tenant(); !reflect.DeepEqual(got, tenant.ReceptionRoute{RuleSet: 2, Route: "trial", Profile: tenant.ProfileRef{Name: "research", Version: 3}, CallingAE: "SCANNER1", CalledAE: "ARCHIVE"}) {
+		t.Errorf("route as the catalog keeps it: %+v", got)
 	}
 	if got := h.Values.Tenant(); got != (tenant.ScanValues{StudyDate: "20240131", Modality: "MR", SeriesDescription: "T1 axial", SeriesNumber: 3, HasSeriesNumber: true}) {
 		t.Errorf("values as the catalog keeps them: %+v", got)
@@ -223,7 +223,8 @@ func TestV3Refuses(t *testing.T) {
 		"empty route":   func(h *ScanHeader) { h.Route = &Route{} },
 		"route profile": func(h *ScanHeader) { h.Route = &Route{Profile: "x"} },
 		"route name":    func(h *ScanHeader) { h.Route = &Route{Name: "A B"} },
-		"route forward": func(h *ScanHeader) { h.Route = &Route{ForwardTo: []string{"a"}} },
+		"route caller":  func(h *ScanHeader) { h.Route = &Route{CallingAE: "A\\B"} },
+		"route version": func(h *ScanHeader) { h.Route = &Route{RuleSet: -1} },
 	}
 	for name, mod := range hdr {
 		h := head()

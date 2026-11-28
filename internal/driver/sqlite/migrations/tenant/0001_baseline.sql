@@ -527,6 +527,8 @@ CREATE TABLE sessions (
     bytes          INTEGER NOT NULL DEFAULT 0 CHECK (bytes >= 0),
     updated        INTEGER NOT NULL DEFAULT 0,
     route          TEXT    NOT NULL DEFAULT '',
+    calling_ae     TEXT    NOT NULL DEFAULT '',
+    called_ae      TEXT    NOT NULL DEFAULT '',
     UNIQUE (subject_id, folded)
 ) STRICT;
 
@@ -1625,6 +1627,8 @@ CREATE TABLE hidden_sessions (
     bytes          INTEGER NOT NULL,
     updated        INTEGER NOT NULL,
     route          TEXT    NOT NULL,
+    calling_ae     TEXT    NOT NULL DEFAULT '',
+    called_ae      TEXT    NOT NULL DEFAULT '',
     PRIMARY KEY (correction_id, id)
 ) STRICT, WITHOUT ROWID;
 
@@ -2129,3 +2133,45 @@ CREATE TABLE delete_batch_targets (
     correction_id TEXT    NOT NULL,
     PRIMARY KEY (job_id, ord)
 ) STRICT, WITHOUT ROWID;
+
+-- A receiver's routing rule sets: each version's body (the JSON of its
+-- archive and forward rules), when it was made and by which key. A version
+-- is never changed once made, which the trigger holds: a reception's
+-- record names the version it was routed by, and that must always mean
+-- the same rules. A receiver's config column copies the body of the
+-- version it runs. Versions outlive their receiver, so the records that
+-- name them still read.
+CREATE TABLE route_rule_sets (
+    receiver   TEXT    NOT NULL,
+    version    INTEGER NOT NULL CHECK (version BETWEEN 1 AND 1000000),
+    body       TEXT    NOT NULL,
+    created    INTEGER NOT NULL,
+    created_by TEXT    NOT NULL,
+    PRIMARY KEY (receiver, version)
+) STRICT, WITHOUT ROWID;
+
+CREATE TRIGGER route_rule_sets_immutable BEFORE UPDATE ON route_rule_sets BEGIN
+    SELECT RAISE(ABORT, 'a rule set version is never changed');
+END;
+
+CREATE TRIGGER route_rule_sets_undeletable BEFORE DELETE ON route_rule_sets BEGIN
+    SELECT RAISE(ABORT, 'a rule set version is never changed');
+END;
+
+-- The rules each reception was routed by, written with its identify step:
+-- its archive rule ('' for the rule set's default) and each forward rule
+-- that held, with the number of series a series filter sent (0 for every
+-- series). Hit counts group them by rule; a dry run reads a session's.
+--   by rule of a receiver's version      route_matches_by_rule
+CREATE TABLE route_matches (
+    reception_id TEXT    NOT NULL,
+    receiver     TEXT    NOT NULL,
+    version      INTEGER NOT NULL CHECK (version BETWEEN 1 AND 1000000),
+    phase        TEXT    NOT NULL CHECK (phase IN ('archive', 'forward')),
+    rule         TEXT    NOT NULL,
+    series       INTEGER NOT NULL CHECK (series >= 0),
+    matched_at   INTEGER NOT NULL,
+    PRIMARY KEY (reception_id, phase, rule)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX route_matches_by_rule ON route_matches (receiver, version, phase, rule);

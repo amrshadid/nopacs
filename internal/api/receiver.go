@@ -99,9 +99,6 @@ func (s receiverService) AddReceiver(ctx context.Context, req *v1.AddReceiverReq
 	if err := c.checkDeidentification(ctx, p, st, in); err != nil {
 		return nil, c.failIn(d, st, err)
 	}
-	if err := c.checkRouteProfiles(ctx, p, in); err != nil {
-		return nil, c.failIn(d, st, err)
-	}
 	out, err := p.AddReceiver(ctx, in, c.now(), changeEntry(d, access.Facts{Details: receiverDetails(in, true)}), c.adminGuard(d))
 	if err != nil {
 		return nil, c.failIn(d, st, fieldOf("receiver", err))
@@ -206,17 +203,16 @@ func (s receiverService) SetReceiver(ctx context.Context, req *v1.SetReceiverReq
 		// transaction.
 		change.Updated = t.AsTime()
 	}
-	// A change of the naming rule, the de-identification or the routing is
-	// checked against the others, as stored: taken alone, so two changes
-	// at once cannot each pass and together give a receiver that
-	// de-identifies a rule that puts values into labels, or routes that
-	// name a profile on a receiver that archives as received (the store
-	// refuses both too).
+	// A change of the naming rule or the de-identification is checked
+	// against the other, and against the rule set the receiver runs, as
+	// stored: taken alone, so two changes at once cannot each pass and
+	// together give a receiver that de-identifies a rule that puts values
+	// into labels, or archive rules that name a profile on a receiver that
+	// archives as received (the store refuses both too).
 	// A change of an import receiver's fields is composed from the stored
 	// ones and checked against its jobs in progress, which an import job's
 	// creation checks under the same lock, so neither passes the other.
-	if slices.Contains(fields, tenant.FieldNaming) || slices.Contains(fields, tenant.FieldDeidentification) ||
-		slices.Contains(fields, tenant.FieldRouting) || len(importPaths) > 0 {
+	if slices.Contains(fields, tenant.FieldNaming) || slices.Contains(fields, tenant.FieldDeidentification) || len(importPaths) > 0 {
 		c.places.Lock()
 		defer c.places.Unlock()
 	} else {
@@ -260,9 +256,19 @@ func (s receiverService) SetReceiver(ctx context.Context, req *v1.SetReceiverReq
 			return nil, c.failIn(d, st, err)
 		}
 	}
-	if slices.Contains(fields, tenant.FieldRouting) {
-		if err := c.checkRouteProfiles(ctx, p, result); err != nil {
+	// A new profile is a new layer under the rule set the receiver runs, whose
+	// archive and destination profiles may only tighten it (layering is
+	// judged at create and activate, which this change would otherwise
+	// bypass). A receiver that runs no rule set has nothing to loosen.
+	if slices.Contains(fields, tenant.FieldDeidentification) && result.Deidentifies() && result.Profile != stored.Profile {
+		rs, err := p.RuleSet(ctx, result.Name, 0)
+		if err != nil && fault.KindOf(err) != fault.NotFound {
 			return nil, c.failIn(d, st, err)
+		}
+		if err == nil {
+			if err := c.checkRuleSetProfiles(ctx, p, result, rs); err != nil {
+				return nil, c.layerFail(d, st, access.Facts{}, err)
+			}
 		}
 	}
 	out, err := p.SetReceiver(ctx, change, fields, c.now(), changeEntry(d, access.Facts{}), c.adminGuard(d))

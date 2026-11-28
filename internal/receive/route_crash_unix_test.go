@@ -24,11 +24,10 @@ const crashRouteEnv = "NOPACS_RECEIVE_CRASH_ROUTE"
 // route chooses, and route nothing.
 const crashUnmatchedEnv = "NOPACS_RECEIVE_CRASH_UNMATCHED"
 
-// routeTo is a routing that sends what comes from the calling AE title
-// SCANNER to the storage given, by a route of that storage's name.
-func routeTo(storage string) *tenant.Routing {
-	return &tenant.Routing{Routes: []tenant.Route{{Name: "to-" + storage, Storage: storage,
-		Conditions: []tenant.RouteCondition{{Subject: tenant.SubjectCallingAETitle, Test: tenant.TestEquals, Value: "SCANNER"}}}}}
+// routeTo is a rule set that sends what comes from the calling AE title
+// SCANNER to the storage given, by an archive rule of that storage's name.
+func routeTo(storage string) *tenant.RuleSet {
+	return &tenant.RuleSet{Archive: []tenant.ArchiveRule{{Name: "to-" + storage, Storage: storage, When: `calling_ae == "SCANNER"`}}}
 }
 
 // TestRouteCrashChild is the child of TestRouteCrash. Its first run routes
@@ -46,7 +45,7 @@ func TestRouteCrashChild(t *testing.T) {
 	if run == 1 {
 		first := routeTo("a")
 		if os.Getenv(crashUnmatchedEnv) != "" {
-			first.Routes[0].Conditions[0].Value = "NOBODY"
+			first.Archive[0].When = `calling_ae == "NOBODY"`
 			first.QuarantineUnmatched = true
 		}
 		e := newEnvAt(t, dataDir, t0.Add(time.Hour), envOptions{routing: first, hook: func(p string) {

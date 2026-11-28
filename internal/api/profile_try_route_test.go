@@ -21,9 +21,10 @@ func TestTrialAppliesTheReceiversRoutes(t *testing.T) {
 	storeVersion(t, f.env, "strict", strict)
 	r := dimseReceiver("deid", "main", 11120)
 	r.Deidentification = &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: "research", Version: 1}}
-	r.Routing = &v1.ReceiverRouting{QuarantineUnmatched: true, Routes: []*v1.Route{{Name: "lab-a", Storage: "main",
-		Conditions: []*v1.ProfileCondition{byCaller("LAB-A")}, Profile: &v1.ProfileVersionRef{Name: "strict", Version: 1}}}}
 	mustCall[*v1.AddReceiverResponse](t, "add deid", addReceiver("lab1", r)(f.as(local)))
+	mustCall[*v1.CreateRuleSetResponse](t, "rule set", call(f.as(local).routes.CreateRuleSet, &v1.CreateRuleSetRequest{Tenant: "lab1",
+		Receiver: "deid", Activate: true, RuleSet: &v1.RuleSet{QuarantineUnmatched: true, ArchiveRules: []*v1.ArchiveRule{{Name: "lab-a",
+			Storage: "main", When: `calling_ae == "LAB-A"`, Profile: &v1.ProfileVersionRef{Name: "strict", Version: 1}}}}}))
 	ct := corpusFile(t, "ct5n-2062.dcm")
 	try := func(reception *v1.TrialReception) *v1.TrialResult {
 		t.Helper()

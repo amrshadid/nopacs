@@ -65,7 +65,7 @@ func selectorFacts(ctx context.Context, tx SendingTx, s tenant.RetentionSelector
 			if err := FromJSON(config, &c); err != nil {
 				return f, err
 			}
-			for _, rc := range c.Routes {
+			for _, rc := range routingOf(c).Archive {
 				f.RouteFound = f.RouteFound || rc.Name == s.Route
 			}
 		}

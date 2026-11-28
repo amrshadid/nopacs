@@ -362,6 +362,7 @@ type PipelineParts interface {
 	ScanValueFill
 	SidecarRewrites
 	Sending
+	Routing
 	Deidentification
 	Importing
 	Scrubbing

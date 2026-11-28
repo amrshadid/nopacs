@@ -26,6 +26,7 @@ func runRebuilding(t *testing.T, open OpenEvents, scratch Scratch) {
 		name string
 		fn   func(*renv)
 	}{
+		{"RebuildKeepsAETitles", testRebuildKeepsAETitles},
 		{"RebuildCompareEqual", testRebuildCompareEqual},
 		{"RebuildCompareDiffers", testRebuildCompareDiffers},
 		{"RebuildActivates", testRebuildActivates},

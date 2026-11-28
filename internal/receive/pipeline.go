@@ -34,6 +34,7 @@ type Pipeline struct {
 	started time.Time
 
 	receivers  *receiverCache
+	ruleCache  ruleCache
 	receptions *receptionCache
 	batch      *batcher
 	scanLocks  keyedMutex

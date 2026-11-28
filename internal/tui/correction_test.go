@@ -219,9 +219,12 @@ func TestProfilesRoutesAndTheSealVerify(t *testing.T) {
 	r := newRig(t, 120, 30, func(f *fakeserver.Server) {
 		addTenants(f, 1)
 		f.AddStorage("t000", &v1.Storage{Name: "main"})
-		f.AddReceiver("t000", &v1.Receiver{Name: "scanner1", Storage: "main", Type: &v1.Receiver_Dimse{Dimse: &v1.DimseReceiver{AeTitle: "ARCHIVE", Port: 11112}},
-			Routing: &v1.ReceiverRouting{Routes: []*v1.Route{{Name: "lab-a", Storage: "main"}, {Name: "lab-b", Storage: "main"}}}})
+		f.AddReceiver("t000", &v1.Receiver{Name: "scanner1", Storage: "main", Type: &v1.Receiver_Dimse{Dimse: &v1.DimseReceiver{AeTitle: "ARCHIVE", Port: 11112}}})
 	})
+	if _, err := r.m.c.client.Routes.CreateRuleSet(context.Background(), &v1.CreateRuleSetRequest{Tenant: "t000", Receiver: "scanner1", Activate: true,
+		RuleSet: &v1.RuleSet{ArchiveRules: []*v1.ArchiveRule{{Name: "lab-a", Storage: "main"}, {Name: "lab-b", Storage: "main"}}}}); err != nil {
+		t.Fatalf("making a rule set: %v", err)
+	}
 	if _, err := r.m.c.client.Profiles.CreateProfileVersion(context.Background(), &v1.CreateProfileVersionRequest{Tenant: "t000", Name: "research",
 		Document: &v1.ProfileDocument{Bases: []string{"annex-e/basic:2026d"}}}); err != nil {
 		t.Fatalf("making a profile: %v", err)

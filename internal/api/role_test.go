@@ -175,6 +175,7 @@ var originalsWhen = map[string][]string{
 	nopacsv1connect.QuarantineServiceListQuarantinedFilesProcedure: {"study_instance_uid", "sop_instance_uid"},
 	nopacsv1connect.ProfileServiceTryProfileProcedure:              {"show_values", "quarantine_records"},
 	nopacsv1connect.ProfileServiceExplainProfileProcedure:          {"quarantine_record"},
+	nopacsv1connect.RouteServiceExplainRouteProcedure:              {"show_values"},
 	nopacsv1connect.ReceptionServiceListReceptionsProcedure:        {"study_instance_uid"},
 	nopacsv1connect.DeidServiceCodeProcedure:                       nil,
 	nopacsv1connect.DeidServiceImportLookupCodesProcedure:          nil,
@@ -229,20 +230,17 @@ var destinationWhen = map[string]func(proto.Message) bool{
 		r, _ := m.(*v1.SetReceiverRequest)
 		return forwards(r.GetReceiver())
 	},
+	nopacsv1connect.RouteServiceCreateRuleSetProcedure: func(m proto.Message) bool {
+		r, _ := m.(*v1.CreateRuleSetRequest)
+		return len(r.GetRuleSet().GetForwardRules()) > 0
+	},
+	nopacsv1connect.RouteServiceActivateRuleSetProcedure: nil,
 }
 
-// forwards reports whether a receiver names a sender to forward to, by
-// forward_to or in a route.
+// forwards reports whether a receiver names a sender to forward to by
+// forward_to.
 func forwards(r *v1.Receiver) bool {
-	if len(r.GetForwardTo()) > 0 {
-		return true
-	}
-	for _, rt := range r.GetRouting().GetRoutes() {
-		if len(rt.GetForwardTo().GetSenders()) > 0 {
-			return true
-		}
-	}
-	return false
+	return len(r.GetForwardTo()) > 0
 }
 
 // choosesDestination reports whether a request to proc chooses where

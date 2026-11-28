@@ -106,10 +106,13 @@ type Receiver struct {
 	// only where the tenant's setting receiver.allow-as-received allows it
 	// (the caller's to check too).
 	Profile ProfileRef
-	// Routing chooses, for each study, the storage, the profile version
-	// and the senders in place of Storage, Profile and ForwardTo; its zero
-	// value chooses nothing, and every study goes as those say.
-	Routing Routing
+	// Routing is the rule set version the receiver runs (Routing.Version),
+	// which chooses for each study the storage and profile version in
+	// place of Storage and Profile, and forwards copies besides ForwardTo;
+	// its zero value chooses nothing, and every study goes as those say.
+	// It is set only by a rule set's creation or activation (Routing,
+	// the store's), never by SetReceiver.
+	Routing RuleSet
 	// Created is when it was added; Updated when it last changed. In a
 	// change given to ApplyReceiver, an Updated not zero is the time the
 	// caller read: the change is made only while the stored receiver
@@ -275,13 +278,11 @@ const (
 	// FieldDeidentification sets Profile: the profile version, or the zero
 	// ref for as received.
 	FieldDeidentification ReceiverField = "deidentification"
-	// FieldRouting sets Routing, replaced whole.
-	FieldRouting ReceiverField = "routing"
 )
 
 // maxReceiverFieldCount is how many fields a receiver has that a change
 // can name (FieldImporter among them).
-const maxReceiverFieldCount = 23
+const maxReceiverFieldCount = 22
 
 // NamespaceChanges reports whether a change from stored to next moves the
 // receiver to another namespace. A store refuses such a change, with
@@ -370,21 +371,8 @@ func (r Receiver) Validate() error {
 			return err
 		}
 	}
-	if err := r.Routing.Validate(); err != nil {
+	if err := r.CheckRuleSet(r.Routing); err != nil {
 		return err
-	}
-	if !r.Deidentifies() {
-		for _, rt := range r.Routing.Routes {
-			// The receiver's choice decides how a file lands, its UIDs
-			// remapped and its checksum keyed or not, before any route is
-			// chosen; a route cannot make a file landed as received into
-			// one de-identified. A precondition: the same route is taken
-			// once the receiver de-identifies.
-			if !rt.Profile.IsZero() {
-				return Precondition("receiver.routing: route " + rt.Name + " names a profile version, and the receiver archives as received; " +
-					"a route's profile replaces the profile of a receiver that de-identifies, so make the receiver de-identify first")
-			}
-		}
 	}
 	if r.Naming != nil {
 		// An import receiver's rule may also use the parts its layout
@@ -498,6 +486,38 @@ func (d DIMSEReceiver) validate() error {
 	return nil
 }
 
+// CheckRuleSet returns an error unless the receiver may run rs: a rule set
+// of its own (rs.Validate), and an archive rule that names a profile only
+// while the receiver de-identifies, a precondition failure otherwise. The
+// zero rule set, none, it may always run.
+func (r Receiver) CheckRuleSet(rs RuleSet) error {
+	if rs.Version == 0 && rs.IsZero() {
+		return nil
+	}
+	if rs.Receiver != r.Name {
+		return invalid("a receiver runs a rule set of its own")
+	}
+	if err := rs.Validate(); err != nil {
+		return err
+	}
+	if r.Deidentifies() {
+		return nil
+	}
+	for _, a := range rs.Archive {
+		// The receiver's choice decides how a file lands, its UIDs
+		// remapped and its checksum keyed or not, before any rule is
+		// evaluated; a rule cannot make a file landed as received into
+		// one de-identified. A precondition: the same rule is taken once
+		// the receiver de-identifies.
+		if !a.Profile.IsZero() {
+			return Precondition("rule set version " + strconv.Itoa(int(rs.Version)) + ": archive rule " + a.Name +
+				" names a profile version, and the receiver archives as received; " +
+				"an archive rule's profile replaces the profile of a receiver that de-identifies, so make the receiver de-identify first")
+		}
+	}
+	return nil
+}
+
 // ApplyReceiver returns stored with the fields named set to their values in
 // change, checked by the contract's rules of a partial change and then as a
 // whole. A driver calls it inside its transaction with the row it read.
@@ -517,7 +537,7 @@ func ApplyReceiver(stored, change Receiver, fields []ReceiverField) (Receiver, e
 	out.DIMSE.TransferSyntaxes = slices.Clone(stored.DIMSE.TransferSyntaxes)
 	out.STOW.Keys = slices.Clone(stored.STOW.Keys)
 	out.ForwardTo = slices.Clone(stored.ForwardTo)
-	out.Routing = stored.Routing.clone()
+	out.Routing = stored.Routing.Clone()
 	out.Import = cloneImport(stored.Import)
 	if stored.DIMSE.TLS != nil {
 		t := *stored.DIMSE.TLS
@@ -600,8 +620,6 @@ func ApplyReceiver(stored, change Receiver, fields []ReceiverField) (Receiver, e
 			out.ForwardTo = slices.Clone(change.ForwardTo)
 		case FieldDeidentification:
 			out.Profile = change.Profile
-		case FieldRouting:
-			out.Routing = change.Routing.clone()
 		case FieldImporter:
 			if stored.Type != ReceiverImport {
 				return stored, invalid("a change of a " + string(stored.Type) + " receiver names a field of another type: " + strconv.Quote(string(f)))

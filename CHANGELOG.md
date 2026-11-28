@@ -74,6 +74,21 @@ scan, keeps it whole, and serves it through an API with keys.
   cannot be archived is quarantined with its reason, and can be released.
 - Routing of each study per receiver, a status and a live event stream per
   tenant (`MonitorService`, `nopacs watch`), and metrics (`nopacs_*`).
+- Routing rule sets: each receiver runs an immutable, numbered rule set version
+  (RouteService, `nopacs route`). Archive rules choose a new session's storage
+  and profile, the first that holds; forward rules all fire, each with senders,
+  an optional series filter and an optional destination profile applied to each
+  copy and checked after (DIMSE senders); an archive rule's or destination's
+  profile may only tighten the receiver's, checked at create, activate and on a
+  receiver's profile change. A forward rule sends only the series of the
+  reception it was judged on. Conditions use the condition language (keywords,
+  tags, value indexes, sequence paths, private tags by creator,
+  calling_ae/called_ae); an absent value is false; no condition may read a
+  patient identifier. Each reception records the version and rules that routed
+  it (hit counts); `route explain` shows the deciding comparison (values hidden
+  unless --show-values, audited, refused to a masked key); `route dry-run` tries
+  a version over the latest sessions, refused to a masked key over sessions
+  archived as received. Replaces `receiver route` and Receiver.routing.
 
 #### De-identification
 

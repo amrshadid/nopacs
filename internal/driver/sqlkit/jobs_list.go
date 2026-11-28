@@ -139,7 +139,14 @@ func (k Sending) listTarget(ctx context.Context, tx SendingTx, r jobRow) ([]list
 	j := r.job
 	var found []listedScan
 	if j.ReceptionID != "" {
-		err := tx.Query(ctx, forwardScansSQL, []any{j.ReceptionID, r.listID, tenant.JobListPage}, func(row Row) error {
+		q, args := forwardScansSQL, []any{j.ReceptionID, r.listID, tenant.JobListPage}
+		if j.Target.ScanLabel != "" {
+			// A forward rule's series filter: the one scan of the
+			// reception the job names.
+			q, args = forwardScanSQL, []any{j.ReceptionID, label.Fold(j.Target.SubjectLabel), label.Fold(j.Target.SessionLabel),
+				label.Fold(j.Target.ScanLabel), r.listID, tenant.JobListPage}
+		}
+		err := tx.Query(ctx, q, args, func(row Row) error {
 			var s listedScan
 			err := row.Scan(&s.scanID, &s.instances, &s.bytes)
 			found = append(found, s)

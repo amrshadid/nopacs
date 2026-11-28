@@ -138,6 +138,10 @@ func TestMaskedKeyIsRefusedOriginals(t *testing.T) {
 		{"an import of lookup codes", f.lab1Admin, maskedAdmin, func(c clients) outcome {
 			return call(c.deid.ImportLookupCodes, &v1.ImportLookupCodesRequest{Tenant: "lab1", Table: "sites", Entries: []*v1.LookupEntry{{Value: "12345", Code: "S1"}}})
 		}},
+		{"a routing explanation's values", f.lab1Operator, maskedAdmin, func(c clients) outcome {
+			return call(c.routes.ExplainRoute, &v1.ExplainRouteRequest{Tenant: "lab1", Receiver: "scanner1", ShowValues: true,
+				Source: &v1.ExplainRouteRequest_File{File: ct}})
+		}},
 		{"an import's files", f.lab1Operator, maskedAdmin, func(c clients) outcome {
 			return call(c.jobs.ListImportFiles, &v1.ListImportFilesRequest{Tenant: "lab1", Id: "id-0000001"})
 		}},
@@ -517,9 +521,12 @@ func TestMaskedKeyChoosesNoDestination(t *testing.T) {
 		"a receiver made to forward": func(c clients) outcome {
 			return call(c.receivers.SetReceiver, &v1.SetReceiverRequest{Tenant: "lab1", Receiver: &v1.Receiver{Name: "scanner1", ForwardTo: []string{"pacs"}}, UpdateMask: mask("forward_to")})
 		},
-		"a route that forwards": func(c clients) outcome {
-			return call(c.receivers.SetReceiver, &v1.SetReceiverRequest{Tenant: "lab1", Receiver: &v1.Receiver{Name: "scanner1", Routing: &v1.ReceiverRouting{Routes: []*v1.Route{
-				{Name: "out", ForwardTo: &v1.RouteForwardTo{Senders: []string{"pacs"}}}}}}, UpdateMask: mask("routing")})
+		"a rule set that forwards": func(c clients) outcome {
+			return call(c.routes.CreateRuleSet, &v1.CreateRuleSetRequest{Tenant: "lab1", Receiver: "scanner1",
+				RuleSet: &v1.RuleSet{ForwardRules: []*v1.ForwardRule{{Name: "out", Senders: []string{"pacs"}}}}})
+		},
+		"a rule set activated": func(c clients) outcome {
+			return call(c.routes.ActivateRuleSet, &v1.ActivateRuleSetRequest{Tenant: "lab1", Receiver: "scanner1", Version: 0})
 		},
 	}
 	for name, c := range calls {

@@ -17,10 +17,10 @@ import (
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// byAE is a route of the name and storage given for the calling AE title.
-func byAE(name, storage, ae string) tenant.Route {
-	return tenant.Route{Name: name, Storage: storage,
-		Conditions: []tenant.RouteCondition{{Subject: tenant.SubjectCallingAETitle, Test: tenant.TestEquals, Value: ae}}}
+// byAE is an archive rule of the name and storage given for the calling AE
+// title.
+func byAE(name, storage, ae string) tenant.ArchiveRule {
+	return tenant.ArchiveRule{Name: name, Storage: storage, When: `calling_ae == "` + ae + `"`}
 }
 
 // sendTo hands named corpus files, or bytes, to a receiver of the env as
@@ -87,9 +87,9 @@ func (e *env) receptionState(study string, arrival int) reception.State {
 // holds for, goes by what was chosen for the session, so every instance of
 // the session is de-identified with the route's profile version.
 func TestRouteLateArrivalTakesSessionChoice(t *testing.T) {
-	e := newEnv(t, envOptions{deid: &deidOptions{}, routing: &tenant.Routing{Routes: []tenant.Route{
-		{Name: "strict", Storage: "main", Profile: strictRef, Conditions: byAE("", "", "LAB-A").Conditions},
-	}}})
+	strict := byAE("strict", "main", "LAB-A")
+	strict.Profile = strictRef
+	e := newEnv(t, envOptions{deid: &deidOptions{}, routing: &tenant.RuleSet{Archive: []tenant.ArchiveRule{strict}}})
 	e.storeProfile(strictRef, strictProfile())
 	e.sendAs("LAB-A", studyFiles[:2]...)
 	first := e.settle(1)[0]
@@ -122,7 +122,7 @@ func TestRouteReceptionsInFlightShareARoute(t *testing.T) {
 	blocked, release := make(chan struct{}), make(chan struct{})
 	free := sync.OnceFunc(func() { close(release) })
 	var held atomic.Bool
-	e := newEnv(t, envOptions{routing: &tenant.Routing{Routes: []tenant.Route{byAE("lab-a", "lab-a", "LAB-A"), byAE("lab-b", "lab-b", "OTHER")}},
+	e := newEnv(t, envOptions{routing: &tenant.RuleSet{Archive: []tenant.ArchiveRule{byAE("lab-a", "lab-a", "LAB-A"), byAE("lab-b", "lab-b", "OTHER")}},
 		hook: func(p string) {
 			if p == "archive.before-commit" {
 				// Only the first comes here held; sync.Once would hold
@@ -175,7 +175,7 @@ func TestRouteSessionElsewhereHeld(t *testing.T) {
 	blocked, release := make(chan struct{}), make(chan struct{})
 	free := sync.OnceFunc(func() { close(release) })
 	var held atomic.Bool
-	e := newEnv(t, envOptions{routing: &tenant.Routing{Routes: []tenant.Route{byAE("lab-a", "lab-a", "LAB-A")}},
+	e := newEnv(t, envOptions{routing: &tenant.RuleSet{Archive: []tenant.ArchiveRule{byAE("lab-a", "lab-a", "LAB-A")}},
 		hook: func(p string) {
 			if p == "identify.before-step" {
 				// Only the first comes here held; sync.Once would hold
@@ -199,8 +199,11 @@ func TestRouteSessionElsewhereHeld(t *testing.T) {
 	}
 	if _, err := e.store.AddReceiver(e.ctx, tenant.Receiver{Name: "second", Type: tenant.ReceiverDIMSE, Enabled: true, Storage: "main",
 		QuietPeriod: 5 * time.Second, MaxOpenTime: time.Minute, MaxFileBytes: 1 << 30,
-		DIMSE:   tenant.DIMSEReceiver{Port: 11113, AETitle: "SECOND", AnyCaller: true},
-		Routing: tenant.Routing{Routes: []tenant.Route{byAE("lab-b", "lab-b", "OTHER")}}}, t0, e.audit(), nil); err != nil {
+		DIMSE: tenant.DIMSEReceiver{Port: 11113, AETitle: "SECOND", AnyCaller: true}}, t0, e.audit(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.store.CreateRuleSet(e.ctx, tenant.RuleSet{Receiver: "second", Archive: []tenant.ArchiveRule{byAE("lab-b", "lab-b", "OTHER")}},
+		true, t0, e.audit(), nil); err != nil {
 		t.Fatal(err)
 	}
 	study := studyOf(t, corpus(t, studyFiles[0]))
@@ -242,12 +245,15 @@ func TestRouteSessionElsewhereHeld(t *testing.T) {
 // file is de-identified with the route's version and archived on the
 // storage the release named.
 func TestRouteReleaseChoosesOnlyStorage(t *testing.T) {
-	strictOnLabA := func(extra ...tenant.RouteCondition) tenant.Routing {
+	strictOnLabA := func(extra string) tenant.RuleSet {
 		rt := byAE("strict", "lab-a", "LAB-A")
-		rt.Profile, rt.Conditions = strictRef, append(rt.Conditions, extra...)
-		return tenant.Routing{QuarantineUnmatched: true, Routes: []tenant.Route{rt}}
+		rt.Profile = strictRef
+		if extra != "" {
+			rt.When += " and " + extra
+		}
+		return tenant.RuleSet{QuarantineUnmatched: true, Archive: []tenant.ArchiveRule{rt}}
 	}
-	routing := strictOnLabA(tenant.RouteCondition{Subject: tenant.SubjectModality, Test: tenant.TestEquals, Value: "XX"})
+	routing := strictOnLabA(`Modality == "XX"`)
 	e := newEnv(t, envOptions{deid: &deidOptions{}, routing: &routing})
 	e.storeProfile(strictRef, strictProfile())
 	e.sendAs("LAB-A", studyFiles[:3]...)
@@ -255,7 +261,7 @@ func TestRouteReleaseChoosesOnlyStorage(t *testing.T) {
 	if held.State != reception.Quarantined || held.Counts.FilesQuarantined != 3 {
 		t.Fatalf("the study no route held for: %s with %+v", held.State, held.Counts)
 	}
-	e.setRouting(strictOnLabA())
+	e.setRouting(strictOnLabA(""))
 	if _, err := e.store.AddStorage(e.ctx, tenant.Storage{Name: "lab-c", Type: tenant.StorageDirectory,
 		Directory: tenant.DirectoryStorage{Root: "archive-lab-c"}}, t0, e.audit(), nil); err != nil {
 		t.Fatal(err)
@@ -286,8 +292,8 @@ func TestRouteReleaseChoosesOnlyStorage(t *testing.T) {
 // unusable, so the study is held as unrouted at once, not tested by a
 // pattern over the whole value.
 func TestRouteValueTooLongIsUnusable(t *testing.T) {
-	e := newEnv(t, envOptions{routing: &tenant.Routing{Routes: []tenant.Route{{Name: "maker", Storage: "lab-a",
-		Conditions: []tenant.RouteCondition{{Subject: tenant.SubjectManufacturer, Test: tenant.TestPattern, Value: `(a|b|c|d)*x`}}}}}})
+	e := newEnv(t, envOptions{routing: &tenant.RuleSet{Archive: []tenant.ArchiveRule{{Name: "maker", Storage: "lab-a",
+		When: `Manufacturer matches "(a|b|c|d)*x"`}}}})
 	long := rewrite(t, corpus(t, studyFiles[0]), "", func(ds *dataset.Dataset) {
 		ds.Remove(tag.New(0x0008, 0x0070))
 		if err := ds.Add(dataelem.NewDataElement(tag.New(0x0008, 0x0070), dataelem.VR("UN"), []byte(strings.Repeat("abcd", 1<<20)))); err != nil {

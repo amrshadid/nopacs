@@ -28,22 +28,27 @@ var receiverMask = maskRules{
 		string(tenant.FieldDIMSECallers), string(tenant.FieldDIMSEAnyCaller), string(tenant.FieldDIMSETLS),
 		string(tenant.FieldDIMSETLSCert), string(tenant.FieldDIMSETLSKey), string(tenant.FieldDIMSESOPClasses),
 		string(tenant.FieldDIMSESyntaxes), string(tenant.FieldSTOWKeys), string(tenant.FieldSTOWMaxRequest),
-		string(tenant.FieldForwardTo), string(tenant.FieldDeidentification), string(tenant.FieldRouting),
+		string(tenant.FieldForwardTo), string(tenant.FieldDeidentification),
 	}, importMaskFields...),
 	refused: map[string]string{
-		"dimse":                        "names a type's whole message: name its fields one by one",
-		"stow":                         "names a type's whole message: name its fields one by one",
-		"importer":                     "names a type's whole message: name its fields one by one",
-		"name":                         "is the receiver's name, which does not change",
-		"health":                       "is answered by the server and cannot be set",
-		"create_time":                  "is answered by the server and cannot be set",
-		"update_time":                  "is answered by the server and cannot be set",
-		"as_received":                  "is a member of deidentification: name the oneof, \"deidentification\"",
-		"profile":                      "is a member of deidentification: name the oneof, \"deidentification\"",
-		"routing.routes":               "is part of routing, which is replaced whole: name \"routing\"",
-		"routing.quarantine_unmatched": "is part of routing, which is replaced whole: name \"routing\"",
+		"dimse":            "names a type's whole message: name its fields one by one",
+		"stow":             "names a type's whole message: name its fields one by one",
+		"importer":         "names a type's whole message: name its fields one by one",
+		"name":             "is the receiver's name, which does not change",
+		"health":           "is answered by the server and cannot be set",
+		"create_time":      "is answered by the server and cannot be set",
+		"update_time":      "is answered by the server and cannot be set",
+		"as_received":      "is a member of deidentification: name the oneof, \"deidentification\"",
+		"profile":          "is a member of deidentification: name the oneof, \"deidentification\"",
+		"rule_set_version": "is answered by the server and changes only through RouteService",
+		"routing":          msgRouting,
 	},
 }
+
+// msgRouting is what a request that sets Receiver.routing, or names it in an
+// update mask, is told: the field is deprecated and no longer read, since a
+// receiver's routing is a rule set version.
+const msgRouting = "is no longer read: a receiver's routing is a rule set version, made with RouteService (nopacs route create)"
 
 // trimAE removes the leading and trailing spaces of an AE title, which are
 // not significant (PS3.5 6.2, value representation AE).
@@ -54,6 +59,9 @@ func trimAE(ae string) string { return strings.Trim(ae, " ") }
 // a mask names from. The durations and the size are returned as given, with
 // whether each was; the defaults are the caller's to fill.
 func receiverValues(field string, m *v1.Receiver) (r tenant.Receiver, quiet, open bool, err error) {
+	if m.GetRouting() != nil { //nolint:staticcheck // the deprecated field is refused, never read.
+		return r, false, false, invalid(field+".routing", msgRouting)
+	}
 	r = tenant.Receiver{Name: m.GetName(), Enabled: m.GetEnabled(), Storage: m.GetStorage(), MaxFileBytes: m.GetMaxFileBytes(), ForwardTo: m.GetForwardTo(),
 		Namespace: m.GetNamespace()}
 	if len(r.ForwardTo) > tenant.MaxForwardTo {
@@ -99,11 +107,6 @@ func receiverValues(field string, m *v1.Receiver) (r tenant.Receiver, quiet, ope
 		r.Profile = tenant.ProfileRef{Name: pv.GetName(), Version: pv.GetVersion()}
 		if err := r.Profile.Validate(); err != nil {
 			return r, false, false, fieldOf(field+".profile", err)
-		}
-	}
-	if rm := m.GetRouting(); rm != nil {
-		if r.Routing, err = routingValues(field+".routing", rm); err != nil {
-			return r, false, false, err
 		}
 	}
 	if n := m.GetNaming(); n != nil {
@@ -321,7 +324,7 @@ func receiverMessage(r tenant.Receiver, h Health) *v1.Receiver {
 		// caller who may read paths.
 		m.Type = &v1.Receiver_Importer{Importer: importReceiverMessage(r.Import, false)}
 	}
-	m.Routing = routingMessage(r.Routing)
+	m.RuleSetVersion = r.Routing.Version
 	if r.Deidentifies() {
 		m.Deidentification = &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: r.Profile.Name, Version: r.Profile.Version}}
 	} else {

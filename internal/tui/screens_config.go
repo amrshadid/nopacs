@@ -130,14 +130,14 @@ func newRouteList(c *ctx, tenant, receiver string) (screen, tea.Cmd) {
 		"no route: every study goes to the receiver's storage")
 	l.fetch = func(c *ctx, l listScreen, _ string) tea.Cmd { return routesPage(c, l.id, l.gen, tenant, receiver) }
 	l.open = func(c *ctx, _ listScreen, r row) tea.Cmd {
-		rt, _ := r.ref.(*v1.Route)
+		rt, _ := r.ref.(*v1.ArchiveRule)
 		d := detailScreen{base: base{c.newID()}, heading: "Route " + clean(rt.GetName()), ref: rt, pairs: func(c *ctx, ref any) []pair {
-			rt, _ := ref.(*v1.Route)
+			rt, _ := ref.(*v1.ArchiveRule)
 			ps := []pair{{"Name", rt.GetName()}, {"Storage", output.Dash(rt.GetStorage())}}
 			if p := rt.GetProfile(); p != nil {
 				ps = append(ps, pair{"Profile", p.GetName() + "@" + strconv.Itoa(int(p.GetVersion()))})
 			}
-			ps = append(ps, pair{"Conditions", strconv.Itoa(len(rt.GetConditions())) + ", all of which must hold; \"nopacs receiver route list\" words them"})
+			ps = append(ps, pair{"When", output.Dash(rt.GetWhen())})
 			return ps
 		}}
 		return push(d, nil)

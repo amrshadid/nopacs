@@ -102,12 +102,23 @@ func commitSession(ctx context.Context, tx pgx.Tx, c tenant.ScanCommit, receiver
 		// The session is made unless its study's row or its label is there;
 		// which one, the reads after say.
 		// The session keeps what the routing chose for the reception that
-		// makes it, so every later arrival goes by the same choice.
+		// makes it, so every later arrival goes by the same choice, and
+		// the AE titles its first file came with, which a dry run of rules
+		// reads.
+		var receptionRoute string
+		if _, err := findOne(ctx, tx, `SELECT route FROM receptions WHERE id = $1`, []any{c.ReceptionID}, &receptionRoute); err != nil {
+			return row, err
+		}
+		route, err := sqlkit.SessionRoute(receptionRoute)
+		if err != nil {
+			return row, err
+		}
 		if row.newSessions, err = rowsChanged(tx.Exec(ctx, `INSERT INTO sessions (study_uid, subject_id, label, folded, storage, created,
-			subject_label, subject_folded, study_date, receiver, updated, route)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $6, (SELECT route FROM receptions WHERE id = $11)) ON CONFLICT DO NOTHING`,
+			subject_label, subject_folded, study_date, receiver, updated, route, calling_ae, called_ae)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $6, $11, $12, $13) ON CONFLICT DO NOTHING`,
 			c.StudyUID, subjectID, c.SessionLabel,
-			label.Fold(c.SessionLabel), c.Storage, micros(c.At), c.SubjectLabel, folded, c.Values.StudyDate, receiver, c.ReceptionID)); err != nil {
+			label.Fold(c.SessionLabel), c.Storage, micros(c.At), c.SubjectLabel, folded, c.Values.StudyDate, receiver,
+			route.Text, route.CallingAE, route.CalledAE)); err != nil {
 			return row, err
 		}
 		if found, err = readSession(); err != nil {

@@ -76,8 +76,12 @@ func TestSidecarOfAReceptionThatNeverCommittedIsNotKept(t *testing.T) {
 	checkAgainstCatalog(t, e, paths, sidecar.FormDIMSE)
 	for _, path := range paths {
 		h, lines := sidecarOf(t, e, path)
-		if h.Receiver != "dimse" || h.SessionReceiver != "dimse" || h.Route != nil || h.Values.Modality != "CT" {
-			t.Errorf("scan %s: header %+v keeps the stale sidecar's", path.Scan, h)
+		// The header's route is the catalog's: it holds the AE titles the
+		// session's first file came with, but no rule set or archive rule,
+		// which the stale sidecar's route named.
+		if h.Receiver != "dimse" || h.SessionReceiver != "dimse" || h.Values.Modality != "CT" ||
+			(h.Route != nil && (h.Route.Name != "" || h.Route.RuleSet != 0)) {
+			t.Errorf("scan %s: header %+v (route %+v) keeps the stale sidecar's", path.Scan, h, h.Route)
 		}
 		for _, in := range lines {
 			if in.Reception != rs[0].ID {

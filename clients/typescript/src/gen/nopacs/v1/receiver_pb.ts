@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/receiver.proto.
  */
 export const file_nopacs_v1_receiver: GenFile = /*@__PURE__*/
-  fileDesc("Chhub3BhY3MvdjEvcmVjZWl2ZXIucHJvdG8SCW5vcGFjcy52MSK7BQoIUmVjZWl2ZXISDAoEbmFtZRgBIAEoCRIpCgVkaW1zZRgCIAEoCzIYLm5vcGFjcy52MS5EaW1zZVJlY2VpdmVySAASJwoEc3RvdxgMIAEoCzIXLm5vcGFjcy52MS5TdG93UmVjZWl2ZXJIABItCghpbXBvcnRlchgRIAEoCzIZLm5vcGFjcy52MS5JbXBvcnRSZWNlaXZlckgAEg8KB2VuYWJsZWQYAyABKAgSDwoHc3RvcmFnZRgEIAEoCRIlCgZuYW1pbmcYBSABKAsyFS5ub3BhY3MudjEuTmFtaW5nUnVsZRIRCgluYW1lc3BhY2UYEiABKAkSLwoMcXVpZXRfcGVyaW9kGAYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEjAKDW1heF9vcGVuX3RpbWUYByABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SFgoObWF4X2ZpbGVfYnl0ZXMYCCABKAMSKQoGaGVhbHRoGAkgASgLMhkubm9wYWNzLnYxLlJlY2VpdmVySGVhbHRoEi8KC2NyZWF0ZV90aW1lGAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKZm9yd2FyZF90bxgNIAMoCRIsCgthc19yZWNlaXZlZBgOIAEoCzIVLm5vcGFjcy52MS5Bc1JlY2VpdmVkSAESLwoHcHJvZmlsZRgPIAEoCzIcLm5vcGFjcy52MS5Qcm9maWxlVmVyc2lvblJlZkgBEisKB3JvdXRpbmcYECABKAsyGi5ub3BhY3MudjEuUmVjZWl2ZXJSb3V0aW5nQgYKBHR5cGVCEgoQZGVpZGVudGlmaWNhdGlvbiJRCg9SZWNlaXZlclJvdXRpbmcSIAoGcm91dGVzGAEgAygLMhAubm9wYWNzLnYxLlJvdXRlEhwKFHF1YXJhbnRpbmVfdW5tYXRjaGVkGAIgASgIIrUBCgVSb3V0ZRIMCgRuYW1lGAEgASgJEi8KCmNvbmRpdGlvbnMYAiADKAsyGy5ub3BhY3MudjEuUHJvZmlsZUNvbmRpdGlvbhIPCgdzdG9yYWdlGAMgASgJEi0KB3Byb2ZpbGUYBCABKAsyHC5ub3BhY3MudjEuUHJvZmlsZVZlcnNpb25SZWYSLQoKZm9yd2FyZF90bxgFIAEoCzIZLm5vcGFjcy52MS5Sb3V0ZUZvcndhcmRUbyIhCg5Sb3V0ZUZvcndhcmRUbxIPCgdzZW5kZXJzGAEgAygJIgwKCkFzUmVjZWl2ZWQiMgoRUHJvZmlsZVZlcnNpb25SZWYSDAoEbmFtZRgBIAEoCRIPCgd2ZXJzaW9uGAIgASgFIvEBCg1EaW1zZVJlY2VpdmVyEgwKBHBvcnQYASABKAUSFAoMYmluZF9hZGRyZXNzGAIgASgJEhAKCGFlX3RpdGxlGAMgASgJEjQKD2FsbG93ZWRfY2FsbGVycxgEIAEoCzIZLm5vcGFjcy52MS5BbGxvd2VkQ2FsbGVyc0gAEhQKCmFueV9jYWxsZXIYBSABKAhIABIjCgN0bHMYBiABKAsyFi5ub3BhY3MudjEuUmVjZWl2ZXJUbHMSEwoLc29wX2NsYXNzZXMYByADKAkSGQoRdHJhbnNmZXJfc3ludGF4ZXMYCCADKAlCCQoHY2FsbGVycyI6CgxTdG93UmVjZWl2ZXISDwoHa2V5X2lkcxgBIAMoCRIZChFtYXhfcmVxdWVzdF9ieXRlcxgCIAEoAyLlAQoOSW1wb3J0UmVjZWl2ZXISDAoEcm9vdBgBIAEoCRInCgZsYXlvdXQYAiABKA4yFy5ub3BhY3MudjEuSW1wb3J0TGF5b3V0EhQKDHBhdGhfcGF0dGVybhgDIAEoCRISCgp1bml0X2RlcHRoGAQgASgFEhUKCG1hcF9maWxlGAUgASgJQgOAAQESFwoPbWFwX2tleV9jb2x1bW5zGAYgAygJEhgKEG1hcF92YWx1ZV9jb2x1bW4YByABKAkSFQoNbWFwX2tleV9wYXJ0cxgIIAMoCRIRCgltYXBfZ2l2ZXMYCSABKAkiNgoOQWxsb3dlZENhbGxlcnMSJAoFcnVsZXMYASADKAsyFS5ub3BhY3MudjEuQ2FsbGVyUnVsZSI9CgpDYWxsZXJSdWxlEhgKEGNhbGxpbmdfYWVfdGl0bGUYASABKAkSFQoNYWRkcmVzc19yYW5nZRgCIAEoCSJBCgtSZWNlaXZlclRscxIYChBjZXJ0aWZpY2F0ZV9maWxlGAEgASgJEhgKEHByaXZhdGVfa2V5X2ZpbGUYAiABKAkiZwoKTmFtaW5nUnVsZRIPCgdzdWJqZWN0GAEgASgJEg8KB3Nlc3Npb24YAiABKAkSDAoEc2NhbhgDIAEoCRIpCgdwYXR0ZXJuGAQgASgLMhgubm9wYWNzLnYxLk5hbWluZ1BhdHRlcm4iNgoNTmFtaW5nUGF0dGVybhIRCglhdHRyaWJ1dGUYASABKAkSEgoKZXhwcmVzc2lvbhgCIAEoCSKoAQoOUmVjZWl2ZXJIZWFsdGgSJwoFc3RhdGUYASABKA4yGC5ub3BhY3MudjEuUmVjZWl2ZXJTdGF0ZRIyCgtkb3duX3JlYXNvbhgCIAEoDjIdLm5vcGFjcy52MS5SZWNlaXZlckRvd25SZWFzb24SDgoGZGV0YWlsGAMgASgJEikKBXNpbmNlGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJLChJBZGRSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiUKCHJlY2VpdmVyGAIgASgLMhMubm9wYWNzLnYxLlJlY2VpdmVyIjwKE0FkZFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiMgoSR2V0UmVjZWl2ZXJSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIjwKE0dldFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiTQoUTGlzdFJlY2VpdmVyc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIlgKFUxpc3RSZWNlaXZlcnNSZXNwb25zZRImCglyZWNlaXZlcnMYASADKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXISFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIrYBChJTZXRSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiUKCHJlY2VpdmVyGAIgASgLMhMubm9wYWNzLnYxLlJlY2VpdmVyEi8KC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzaxI4ChRleHBlY3RlZF91cGRhdGVfdGltZRgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiPAoTU2V0UmVjZWl2ZXJSZXNwb25zZRIlCghyZWNlaXZlchgBIAEoCzITLm5vcGFjcy52MS5SZWNlaXZlciI1ChVSZW1vdmVSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEgwKBG5hbWUYAiABKAkiPwoWUmVtb3ZlUmVjZWl2ZXJSZXNwb25zZRIlCghyZWNlaXZlchgBIAEoCzITLm5vcGFjcy52MS5SZWNlaXZlcipnCgxJbXBvcnRMYXlvdXQSHQoZSU1QT1JUX0xBWU9VVF9VTlNQRUNJRklFRBAAEhcKE0lNUE9SVF9MQVlPVVRfUExBSU4QARIZChVJTVBPUlRfTEFZT1VUX1BBVFRFUk4QAyIECAIQAiqVAQoNUmVjZWl2ZXJTdGF0ZRIeChpSRUNFSVZFUl9TVEFURV9VTlNQRUNJRklFRBAAEhsKF1JFQ0VJVkVSX1NUQVRFX1NUQVJUSU5HEAESFQoRUkVDRUlWRVJfU1RBVEVfVVAQAhIXChNSRUNFSVZFUl9TVEFURV9ET1dOEAMSFwoTUkVDRUlWRVJfU1RBVEVfSURMRRAEKr0DChJSZWNlaXZlckRvd25SZWFzb24SJAogUkVDRUlWRVJfRE9XTl9SRUFTT05fVU5TUEVDSUZJRUQQABIhCh1SRUNFSVZFUl9ET1dOX1JFQVNPTl9ESVNBQkxFRBABEicKI1JFQ0VJVkVSX0RPV05fUkVBU09OX0FERFJFU1NfSU5fVVNFEAISKgomUkVDRUlWRVJfRE9XTl9SRUFTT05fUEVSTUlTU0lPTl9ERU5JRUQQAxIuCipSRUNFSVZFUl9ET1dOX1JFQVNPTl9BRERSRVNTX05PVF9BVkFJTEFCTEUQBBIcChhSRUNFSVZFUl9ET1dOX1JFQVNPTl9UTFMQBRIkCiBSRUNFSVZFUl9ET1dOX1JFQVNPTl9ORUFSTFlfRlVMTBAGEikKJVJFQ0VJVkVSX0RPV05fUkVBU09OX1RFTkFOVF9OT1RfUkVBRFkQBxIhCh1SRUNFSVZFUl9ET1dOX1JFQVNPTl9TVE9QUElORxAIEh4KGlJFQ0VJVkVSX0RPV05fUkVBU09OX09USEVSEAkSJwojUkVDRUlWRVJfRE9XTl9SRUFTT05fSU5DT01JTkdfTElNSVQQCjK6AwoPUmVjZWl2ZXJTZXJ2aWNlEkwKC0FkZFJlY2VpdmVyEh0ubm9wYWNzLnYxLkFkZFJlY2VpdmVyUmVxdWVzdBoeLm5vcGFjcy52MS5BZGRSZWNlaXZlclJlc3BvbnNlElEKC0dldFJlY2VpdmVyEh0ubm9wYWNzLnYxLkdldFJlY2VpdmVyUmVxdWVzdBoeLm5vcGFjcy52MS5HZXRSZWNlaXZlclJlc3BvbnNlIgOQAgESVwoNTGlzdFJlY2VpdmVycxIfLm5vcGFjcy52MS5MaXN0UmVjZWl2ZXJzUmVxdWVzdBogLm5vcGFjcy52MS5MaXN0UmVjZWl2ZXJzUmVzcG9uc2UiA5ACARJRCgtTZXRSZWNlaXZlchIdLm5vcGFjcy52MS5TZXRSZWNlaXZlclJlcXVlc3QaHi5ub3BhY3MudjEuU2V0UmVjZWl2ZXJSZXNwb25zZSIDkAICEloKDlJlbW92ZVJlY2VpdmVyEiAubm9wYWNzLnYxLlJlbW92ZVJlY2VpdmVyUmVxdWVzdBohLm5vcGFjcy52MS5SZW1vdmVSZWNlaXZlclJlc3BvbnNlIgOQAgJiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp, file_nopacs_v1_profile]);
+  fileDesc("Chhub3BhY3MvdjEvcmVjZWl2ZXIucHJvdG8SCW5vcGFjcy52MSLZBQoIUmVjZWl2ZXISDAoEbmFtZRgBIAEoCRIpCgVkaW1zZRgCIAEoCzIYLm5vcGFjcy52MS5EaW1zZVJlY2VpdmVySAASJwoEc3RvdxgMIAEoCzIXLm5vcGFjcy52MS5TdG93UmVjZWl2ZXJIABItCghpbXBvcnRlchgRIAEoCzIZLm5vcGFjcy52MS5JbXBvcnRSZWNlaXZlckgAEg8KB2VuYWJsZWQYAyABKAgSDwoHc3RvcmFnZRgEIAEoCRIlCgZuYW1pbmcYBSABKAsyFS5ub3BhY3MudjEuTmFtaW5nUnVsZRIRCgluYW1lc3BhY2UYEiABKAkSLwoMcXVpZXRfcGVyaW9kGAYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEjAKDW1heF9vcGVuX3RpbWUYByABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SFgoObWF4X2ZpbGVfYnl0ZXMYCCABKAMSKQoGaGVhbHRoGAkgASgLMhkubm9wYWNzLnYxLlJlY2VpdmVySGVhbHRoEi8KC2NyZWF0ZV90aW1lGAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKZm9yd2FyZF90bxgNIAMoCRIsCgthc19yZWNlaXZlZBgOIAEoCzIVLm5vcGFjcy52MS5Bc1JlY2VpdmVkSAESLwoHcHJvZmlsZRgPIAEoCzIcLm5vcGFjcy52MS5Qcm9maWxlVmVyc2lvblJlZkgBEi8KB3JvdXRpbmcYECABKAsyGi5ub3BhY3MudjEuUmVjZWl2ZXJSb3V0aW5nQgIYARIYChBydWxlX3NldF92ZXJzaW9uGBMgASgFQgYKBHR5cGVCEgoQZGVpZGVudGlmaWNhdGlvbiJVCg9SZWNlaXZlclJvdXRpbmcSIAoGcm91dGVzGAEgAygLMhAubm9wYWNzLnYxLlJvdXRlEhwKFHF1YXJhbnRpbmVfdW5tYXRjaGVkGAIgASgIOgIYASK5AQoFUm91dGUSDAoEbmFtZRgBIAEoCRIvCgpjb25kaXRpb25zGAIgAygLMhsubm9wYWNzLnYxLlByb2ZpbGVDb25kaXRpb24SDwoHc3RvcmFnZRgDIAEoCRItCgdwcm9maWxlGAQgASgLMhwubm9wYWNzLnYxLlByb2ZpbGVWZXJzaW9uUmVmEi0KCmZvcndhcmRfdG8YBSABKAsyGS5ub3BhY3MudjEuUm91dGVGb3J3YXJkVG86AhgBIiUKDlJvdXRlRm9yd2FyZFRvEg8KB3NlbmRlcnMYASADKAk6AhgBIgwKCkFzUmVjZWl2ZWQiMgoRUHJvZmlsZVZlcnNpb25SZWYSDAoEbmFtZRgBIAEoCRIPCgd2ZXJzaW9uGAIgASgFIvEBCg1EaW1zZVJlY2VpdmVyEgwKBHBvcnQYASABKAUSFAoMYmluZF9hZGRyZXNzGAIgASgJEhAKCGFlX3RpdGxlGAMgASgJEjQKD2FsbG93ZWRfY2FsbGVycxgEIAEoCzIZLm5vcGFjcy52MS5BbGxvd2VkQ2FsbGVyc0gAEhQKCmFueV9jYWxsZXIYBSABKAhIABIjCgN0bHMYBiABKAsyFi5ub3BhY3MudjEuUmVjZWl2ZXJUbHMSEwoLc29wX2NsYXNzZXMYByADKAkSGQoRdHJhbnNmZXJfc3ludGF4ZXMYCCADKAlCCQoHY2FsbGVycyI6CgxTdG93UmVjZWl2ZXISDwoHa2V5X2lkcxgBIAMoCRIZChFtYXhfcmVxdWVzdF9ieXRlcxgCIAEoAyLlAQoOSW1wb3J0UmVjZWl2ZXISDAoEcm9vdBgBIAEoCRInCgZsYXlvdXQYAiABKA4yFy5ub3BhY3MudjEuSW1wb3J0TGF5b3V0EhQKDHBhdGhfcGF0dGVybhgDIAEoCRISCgp1bml0X2RlcHRoGAQgASgFEhUKCG1hcF9maWxlGAUgASgJQgOAAQESFwoPbWFwX2tleV9jb2x1bW5zGAYgAygJEhgKEG1hcF92YWx1ZV9jb2x1bW4YByABKAkSFQoNbWFwX2tleV9wYXJ0cxgIIAMoCRIRCgltYXBfZ2l2ZXMYCSABKAkiNgoOQWxsb3dlZENhbGxlcnMSJAoFcnVsZXMYASADKAsyFS5ub3BhY3MudjEuQ2FsbGVyUnVsZSI9CgpDYWxsZXJSdWxlEhgKEGNhbGxpbmdfYWVfdGl0bGUYASABKAkSFQoNYWRkcmVzc19yYW5nZRgCIAEoCSJBCgtSZWNlaXZlclRscxIYChBjZXJ0aWZpY2F0ZV9maWxlGAEgASgJEhgKEHByaXZhdGVfa2V5X2ZpbGUYAiABKAkiZwoKTmFtaW5nUnVsZRIPCgdzdWJqZWN0GAEgASgJEg8KB3Nlc3Npb24YAiABKAkSDAoEc2NhbhgDIAEoCRIpCgdwYXR0ZXJuGAQgASgLMhgubm9wYWNzLnYxLk5hbWluZ1BhdHRlcm4iNgoNTmFtaW5nUGF0dGVybhIRCglhdHRyaWJ1dGUYASABKAkSEgoKZXhwcmVzc2lvbhgCIAEoCSKoAQoOUmVjZWl2ZXJIZWFsdGgSJwoFc3RhdGUYASABKA4yGC5ub3BhY3MudjEuUmVjZWl2ZXJTdGF0ZRIyCgtkb3duX3JlYXNvbhgCIAEoDjIdLm5vcGFjcy52MS5SZWNlaXZlckRvd25SZWFzb24SDgoGZGV0YWlsGAMgASgJEikKBXNpbmNlGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJLChJBZGRSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiUKCHJlY2VpdmVyGAIgASgLMhMubm9wYWNzLnYxLlJlY2VpdmVyIjwKE0FkZFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiMgoSR2V0UmVjZWl2ZXJSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIjwKE0dldFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiTQoUTGlzdFJlY2VpdmVyc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIlgKFUxpc3RSZWNlaXZlcnNSZXNwb25zZRImCglyZWNlaXZlcnMYASADKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXISFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIrYBChJTZXRSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiUKCHJlY2VpdmVyGAIgASgLMhMubm9wYWNzLnYxLlJlY2VpdmVyEi8KC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzaxI4ChRleHBlY3RlZF91cGRhdGVfdGltZRgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiPAoTU2V0UmVjZWl2ZXJSZXNwb25zZRIlCghyZWNlaXZlchgBIAEoCzITLm5vcGFjcy52MS5SZWNlaXZlciI1ChVSZW1vdmVSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEgwKBG5hbWUYAiABKAkiPwoWUmVtb3ZlUmVjZWl2ZXJSZXNwb25zZRIlCghyZWNlaXZlchgBIAEoCzITLm5vcGFjcy52MS5SZWNlaXZlcipnCgxJbXBvcnRMYXlvdXQSHQoZSU1QT1JUX0xBWU9VVF9VTlNQRUNJRklFRBAAEhcKE0lNUE9SVF9MQVlPVVRfUExBSU4QARIZChVJTVBPUlRfTEFZT1VUX1BBVFRFUk4QAyIECAIQAiqVAQoNUmVjZWl2ZXJTdGF0ZRIeChpSRUNFSVZFUl9TVEFURV9VTlNQRUNJRklFRBAAEhsKF1JFQ0VJVkVSX1NUQVRFX1NUQVJUSU5HEAESFQoRUkVDRUlWRVJfU1RBVEVfVVAQAhIXChNSRUNFSVZFUl9TVEFURV9ET1dOEAMSFwoTUkVDRUlWRVJfU1RBVEVfSURMRRAEKr0DChJSZWNlaXZlckRvd25SZWFzb24SJAogUkVDRUlWRVJfRE9XTl9SRUFTT05fVU5TUEVDSUZJRUQQABIhCh1SRUNFSVZFUl9ET1dOX1JFQVNPTl9ESVNBQkxFRBABEicKI1JFQ0VJVkVSX0RPV05fUkVBU09OX0FERFJFU1NfSU5fVVNFEAISKgomUkVDRUlWRVJfRE9XTl9SRUFTT05fUEVSTUlTU0lPTl9ERU5JRUQQAxIuCipSRUNFSVZFUl9ET1dOX1JFQVNPTl9BRERSRVNTX05PVF9BVkFJTEFCTEUQBBIcChhSRUNFSVZFUl9ET1dOX1JFQVNPTl9UTFMQBRIkCiBSRUNFSVZFUl9ET1dOX1JFQVNPTl9ORUFSTFlfRlVMTBAGEikKJVJFQ0VJVkVSX0RPV05fUkVBU09OX1RFTkFOVF9OT1RfUkVBRFkQBxIhCh1SRUNFSVZFUl9ET1dOX1JFQVNPTl9TVE9QUElORxAIEh4KGlJFQ0VJVkVSX0RPV05fUkVBU09OX09USEVSEAkSJwojUkVDRUlWRVJfRE9XTl9SRUFTT05fSU5DT01JTkdfTElNSVQQCjK6AwoPUmVjZWl2ZXJTZXJ2aWNlEkwKC0FkZFJlY2VpdmVyEh0ubm9wYWNzLnYxLkFkZFJlY2VpdmVyUmVxdWVzdBoeLm5vcGFjcy52MS5BZGRSZWNlaXZlclJlc3BvbnNlElEKC0dldFJlY2VpdmVyEh0ubm9wYWNzLnYxLkdldFJlY2VpdmVyUmVxdWVzdBoeLm5vcGFjcy52MS5HZXRSZWNlaXZlclJlc3BvbnNlIgOQAgESVwoNTGlzdFJlY2VpdmVycxIfLm5vcGFjcy52MS5MaXN0UmVjZWl2ZXJzUmVxdWVzdBogLm5vcGFjcy52MS5MaXN0UmVjZWl2ZXJzUmVzcG9uc2UiA5ACARJRCgtTZXRSZWNlaXZlchIdLm5vcGFjcy52MS5TZXRSZWNlaXZlclJlcXVlc3QaHi5ub3BhY3MudjEuU2V0UmVjZWl2ZXJSZXNwb25zZSIDkAICEloKDlJlbW92ZVJlY2VpdmVyEiAubm9wYWNzLnYxLlJlbW92ZVJlY2VpdmVyUmVxdWVzdBohLm5vcGFjcy52MS5SZW1vdmVSZWNlaXZlclJlc3BvbnNlIgOQAgJiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp, file_nopacs_v1_profile]);
 
 /**
  * Receiver is a way for data to arrive at a tenant, and how what arrives is
@@ -270,19 +270,28 @@ export type Receiver = Message<"nopacs.v1.Receiver"> & {
   } | { case: undefined; value?: undefined };
 
   /**
-   * How each study is routed: the storage, the profile version and the
-   * senders chosen for it in place of storage, the profile and forward_to.
-   * Absent, or with no route and the default storage, every study goes as
-   * those fields say, which is what every receiver did before routing
-   * existed. A change applies to receptions identified from then on; one
-   * identified keeps what was chosen for it. Setting it needs what any
-   * change of a receiver needs, admin on the tenant, since it decides
-   * where the tenant's data goes and how it is de-identified; reading it,
-   * what reading a receiver needs, reader.
+   * No longer read or written: routing is a rule set version, RouteService.
+   * A request that sets it, or names it in update_mask, is refused; it is
+   * always answered empty.
    *
-   * @generated from field: nopacs.v1.ReceiverRouting routing = 16;
+   * @generated from field: nopacs.v1.ReceiverRouting routing = 16 [deprecated = true];
+   * @deprecated
    */
   routing?: ReceiverRouting | undefined;
+
+  /**
+   * The version of the routing rule set the receiver runs (RouteService),
+   * which chooses each new session's storage and profile version in place
+   * of storage and the profile, and forwards copies besides forward_to; 0
+   * when it runs none, and every study goes as those fields say. A study's
+   * choice is kept with its session, so a later arrival goes where the
+   * first did, whatever version runs by then. A storage or a sender a rule
+   * of the version it runs names cannot be removed. Answered by the
+   * server; ignored in a request: it changes only through RouteService.
+   *
+   * @generated from field: int32 rule_set_version = 19;
+   */
+  ruleSetVersion: number;
 };
 
 /**
@@ -325,7 +334,10 @@ export const ReceiverSchema: GenMessage<Receiver> = /*@__PURE__*/
  * the route's, or the receiver's when no route holds, and
  * quarantine_unmatched does not hold the study again.
  *
+ * Deprecated: No longer read or written: routing is a rule set version, RouteService.
+ *
  * @generated from message nopacs.v1.ReceiverRouting
+ * @deprecated
  */
 export type ReceiverRouting = Message<"nopacs.v1.ReceiverRouting"> & {
   /**
@@ -351,6 +363,7 @@ export type ReceiverRouting = Message<"nopacs.v1.ReceiverRouting"> & {
 /**
  * Describes the message nopacs.v1.ReceiverRouting.
  * Use `create(ReceiverRoutingSchema)` to create a new message.
+ * @deprecated
  */
 export const ReceiverRoutingSchema: GenMessage<ReceiverRouting> = /*@__PURE__*/
   messageDesc(file_nopacs_v1_receiver, 1);
@@ -358,7 +371,10 @@ export const ReceiverRoutingSchema: GenMessage<ReceiverRouting> = /*@__PURE__*/
 /**
  * Route is one rule of a receiver's routing.
  *
+ * Deprecated: No longer read or written: routing is a rule set version, RouteService.
+ *
  * @generated from message nopacs.v1.Route
+ * @deprecated
  */
 export type Route = Message<"nopacs.v1.Route"> & {
   /**
@@ -431,6 +447,7 @@ export type Route = Message<"nopacs.v1.Route"> & {
 /**
  * Describes the message nopacs.v1.Route.
  * Use `create(RouteSchema)` to create a new message.
+ * @deprecated
  */
 export const RouteSchema: GenMessage<Route> = /*@__PURE__*/
   messageDesc(file_nopacs_v1_receiver, 2);
@@ -438,7 +455,10 @@ export const RouteSchema: GenMessage<Route> = /*@__PURE__*/
 /**
  * RouteForwardTo names the senders a route forwards to.
  *
+ * Deprecated: No longer read or written: routing is a rule set version, RouteService.
+ *
  * @generated from message nopacs.v1.RouteForwardTo
+ * @deprecated
  */
 export type RouteForwardTo = Message<"nopacs.v1.RouteForwardTo"> & {
   /**
@@ -452,6 +472,7 @@ export type RouteForwardTo = Message<"nopacs.v1.RouteForwardTo"> & {
 /**
  * Describes the message nopacs.v1.RouteForwardTo.
  * Use `create(RouteForwardToSchema)` to create a new message.
+ * @deprecated
  */
 export const RouteForwardToSchema: GenMessage<RouteForwardTo> = /*@__PURE__*/
   messageDesc(file_nopacs_v1_receiver, 3);
@@ -759,9 +780,9 @@ export const StowReceiverSchema: GenMessage<StowReceiver> = /*@__PURE__*/
  * quarantined for what the pipeline finds, with the same events. The
  * receiver's quiet period completes each reception; its max_file_bytes
  * bounds each file read, and a larger file is skipped, not copied. A
- * route condition on an AE title (CONDITION_SUBJECT_CALLING_AE_TITLE,
- * CONDITION_SUBJECT_CALLED_AE_TITLE) never holds for a file an import hands in, since none
- * came by an association.
+ * routing condition on an AE title (calling_ae, called_ae: RouteService)
+ * never holds for a file an import hands in, since none came by an
+ * association.
  *
  * Labels from a path. The layout reads each file's path, relative to the
  * root, for named parts, which the naming rule's templates use as they use
@@ -1387,8 +1408,7 @@ export type SetReceiverRequest = Message<"nopacs.v1.SetReceiverRequest"> & {
    * "forward_to", "namespace" (empty returns to the tenant's default
    * namespace) or "naming" ("naming" with naming absent returns to the
    * default rule), "deidentification" (the oneof: as_received or a profile
-   * version; with neither set, as received), "routing" (replaced whole;
-   * absent, no routing; its fields cannot be named one by one), or
+   * version; with neither set, as received), or
    * a field of the receiver's type joined to it by a dot, such as
    * "dimse.port", "dimse.tls.certificate_file", "stow.key_ids" or
    * "importer.map_file". A path
@@ -1808,8 +1828,9 @@ export const ReceiverService: GenService<{
   /**
    * AddReceiver adds a receiver to a tenant. It starts listening when it is
    * enabled; its health says whether it could. A receiver that forwards
-   * (forward_to, or a route's senders) is refused to a masked key
-   * (Key.masked): where what arrives is sent on is a person's choice.
+   * (forward_to) is refused to a masked key (Key.masked): where what
+   * arrives is sent on is a person's choice. Its routing rules are kept by
+   * RouteService.
    *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the receiver's name as its
@@ -1826,11 +1847,8 @@ export const ReceiverService: GenService<{
    * tenant), conflict (the tenant has a receiver with that name, or a
    * removed receiver of that name is still named by receptions,
    * quarantined files or jobs), precondition (a storage the tenant does not have; a
-   * sender in forward_to the tenant does not have; a storage, a sender or a
-   * profile version a route names that the tenant does not have, or a
-   * profile version that cannot de-identify a receiver's files; a route
-   * that names a profile version on a receiver that archives as received;
-   * a port outside the
+   * sender in forward_to the tenant does not have; a profile version that
+   * cannot de-identify a receiver's files; a port outside the
    * tenant's allotted ports; a bind address the installation does not list;
    * another receiver of the tenant on the same port and an overlapping
    * address; a root import.roots does not name, or one import.allowed-roots
@@ -1896,9 +1914,11 @@ export const ReceiverService: GenService<{
    * fields of an import receiver (root, layout, pattern, unit depth, map
    * file) cannot change while one of its jobs is queued or running, since
    * the job's cursor and counts are read by them (precondition). A change
-   * that makes the receiver forward (forward_to, or routing with a route's
-   * senders, set to name a sender) is refused to a masked key (Key.masked),
-   * as AddReceiver; one that stops forwarding is not.
+   * that makes the receiver forward (forward_to set to name a sender) is
+   * refused to a masked key (Key.masked), as AddReceiver; one that stops
+   * forwarding is not. A change of the receiver to as_received while the
+   * rule set it runs has an archive rule naming a profile version is a
+   * precondition failure.
    *
    * Role: admin on the tenant.
    * Audit: one entry in the tenant's log, with the receiver's name as its

@@ -287,8 +287,9 @@ class ReceiverServiceServicer:
     def AddReceiver(self, request, context):
         """AddReceiver adds a receiver to a tenant. It starts listening when it is
         enabled; its health says whether it could. A receiver that forwards
-        (forward_to, or a route's senders) is refused to a masked key
-        (Key.masked): where what arrives is sent on is a person's choice.
+        (forward_to) is refused to a masked key (Key.masked): where what
+        arrives is sent on is a person's choice. Its routing rules are kept by
+        RouteService.
 
         Role: admin on the tenant.
         Audit: one entry in the tenant's log, with the receiver's name as its
@@ -305,11 +306,8 @@ class ReceiverServiceServicer:
         tenant), conflict (the tenant has a receiver with that name, or a
         removed receiver of that name is still named by receptions,
         quarantined files or jobs), precondition (a storage the tenant does not have; a
-        sender in forward_to the tenant does not have; a storage, a sender or a
-        profile version a route names that the tenant does not have, or a
-        profile version that cannot de-identify a receiver's files; a route
-        that names a profile version on a receiver that archives as received;
-        a port outside the
+        sender in forward_to the tenant does not have; a profile version that
+        cannot de-identify a receiver's files; a port outside the
         tenant's allotted ports; a bind address the installation does not list;
         another receiver of the tenant on the same port and an overlapping
         address; a root import.roots does not name, or one import.allowed-roots
@@ -366,9 +364,11 @@ class ReceiverServiceServicer:
         fields of an import receiver (root, layout, pattern, unit depth, map
         file) cannot change while one of its jobs is queued or running, since
         the job's cursor and counts are read by them (precondition). A change
-        that makes the receiver forward (forward_to, or routing with a route's
-        senders, set to name a sender) is refused to a masked key (Key.masked),
-        as AddReceiver; one that stops forwarding is not.
+        that makes the receiver forward (forward_to set to name a sender) is
+        refused to a masked key (Key.masked), as AddReceiver; one that stops
+        forwarding is not. A change of the receiver to as_received while the
+        rule set it runs has an archive rule naming a profile version is a
+        precondition failure.
 
         Role: admin on the tenant.
         Audit: one entry in the tenant's log, with the receiver's name as its

@@ -31,20 +31,12 @@ import (
 // receiverChangeNeed returns the requirement of adding the receiver rcv
 // (paths nil) or of changing the fields paths name to rcv's values, on the
 // tenant named name: admin, refused to a masked key when the change makes
-// the receiver forward, by forward_to or by a route's senders. A change
-// that empties both, or names neither, is not.
+// the receiver forward by forward_to. A change that empties it, or does not
+// name it, is not; a rule set's forward rules are RouteService's.
 func receiverChangeNeed(name string, rcv *v1.Receiver, paths []string) access.Requirement {
 	need := onTenantNamed(name, master.RoleAdmin)
 	names := func(p string) bool { return paths == nil || slices.Contains(paths, p) }
-	forwards := names("forward_to") && len(rcv.GetForwardTo()) > 0
-	if names("routing") {
-		for _, r := range rcv.GetRouting().GetRoutes() {
-			if len(r.GetForwardTo().GetSenders()) > 0 {
-				forwards = true
-			}
-		}
-	}
-	if forwards {
+	if names("forward_to") && len(rcv.GetForwardTo()) > 0 {
 		need = need.ChoosesDestination()
 	}
 	return need

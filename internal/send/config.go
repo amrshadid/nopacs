@@ -142,6 +142,10 @@ type Config struct {
 	// and fixed phrases, never a credential or a value read from a file.
 	// Nil discards them.
 	Logger *slog.Logger
+	// Copies returns what makes the copies of the tenant named name that
+	// a job naming a destination profile sends (a forward rule's); nil
+	// refuses every instance of such a job, never sending it as archived.
+	Copies func(name string, p tenant.Pipeline) Copier
 
 	// seams are what a test changes.
 	seams seams

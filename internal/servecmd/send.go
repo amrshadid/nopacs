@@ -2,16 +2,20 @@ package servecmd
 
 import (
 	"context"
+	"sync"
 
 	"github.com/amrshadid/nopacs/internal/api"
 	"github.com/amrshadid/nopacs/internal/checkedread"
 	"github.com/amrshadid/nopacs/internal/clock"
 	"github.com/amrshadid/nopacs/internal/deid/check"
+	"github.com/amrshadid/nopacs/internal/deid/engine"
 	"github.com/amrshadid/nopacs/internal/deidjob"
 	"github.com/amrshadid/nopacs/internal/dirimport"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/forward"
 	"github.com/amrshadid/nopacs/internal/place"
 	"github.com/amrshadid/nopacs/internal/rebuild"
+	"github.com/amrshadid/nopacs/internal/receive"
 	"github.com/amrshadid/nopacs/internal/registry"
 	"github.com/amrshadid/nopacs/internal/scrub"
 	"github.com/amrshadid/nopacs/internal/send"
@@ -56,7 +60,47 @@ func newSending(d Deps, reg *registry.Registry, wake func(tenantName string), re
 		TLSDir: func(tenantName string) string { return server.TLSDir(d.DataDir, tenantName) },
 		Wake:   wake,
 		Logger: d.Log,
+		Copies: destinationCopies(values, reg),
 	})
+}
+
+// destinationCopies returns the makers of the copies a forward rule's
+// destination profile asks for, one per tenant, kept so each compiles a
+// profile version once: under the tenant's keys of de-identification, as
+// its receptions, within the reception's bounds (the header limit, the
+// tenant's pixel limit) and checked after as a reception's file is.
+func destinationCopies(values settingvalue.Reader, reg *registry.Registry) func(string, tenant.Pipeline) send.Copier {
+	var mu sync.Mutex
+	made := map[string]*forward.Copies{}
+	return func(name string, p tenant.Pipeline) send.Copier {
+		mu.Lock()
+		defer mu.Unlock()
+		if c, ok := made[name]; ok {
+			return c
+		}
+		c := &forward.Copies{
+			Profiles: p,
+			Keys:     func(ctx context.Context) (engine.Keys, error) { return reg.DeidKeys(ctx, name) },
+			Options: func(ctx context.Context) (receive.TrialOptions, error) {
+				headers, err := values.HeaderLimit(ctx)
+				if err != nil {
+					return receive.TrialOptions{}, err
+				}
+				src, ok := p.(settingvalue.Source)
+				if !ok {
+					return receive.TrialOptions{}, fault.New(fault.Internal, "the tenant's database keeps no settings")
+				}
+				pixels, err := values.OnTenant(src).PixelLimit(ctx)
+				if err != nil {
+					return receive.TrialOptions{}, err
+				}
+				return receive.TrialOptions{HeaderLimit: headers, PixelLimit: pixels,
+					Check: func(n int64) receive.Checker { return check.New(check.Options{MaxFileBytes: n}) }}, nil
+			},
+		}
+		made[name] = c
+		return c
+	}
 }
 
 // newDeidJobs returns the supervisor of every tenant's deid jobs, over the

@@ -18,6 +18,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/layout"
 	"github.com/amrshadid/nopacs/internal/core/naming"
+	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/receive"
 	"github.com/amrshadid/nopacs/internal/receive/header"
@@ -212,7 +213,10 @@ func receiveArchive(t *testing.T, f *placeFixture, files [][]byte) *archive {
 // returned holds lab1's own.
 func receiveArchiveVia(t *testing.T, f *placeFixture, files [][]byte, wrap func(tenant.Pipeline) tenant.Pipeline) *archive {
 	t.Helper()
-	f.receiving(t)
+	if _, err := f.pipelineOf("lab1").Receiver(context.Background(), "scanner1"); fault.KindOf(err) == fault.NotFound {
+		// A test that set the receiver up itself (with a rule set) keeps it.
+		f.receiving(t)
+	}
 	store, err := dir.Open(filepath.Join(f.root, "lab1", "mri"))
 	if err != nil {
 		t.Fatal(err)

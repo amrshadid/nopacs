@@ -374,18 +374,23 @@ type Receiver struct {
 	//	*Receiver_AsReceived
 	//	*Receiver_Profile
 	Deidentification isReceiver_Deidentification `protobuf_oneof:"deidentification"`
-	// How each study is routed: the storage, the profile version and the
-	// senders chosen for it in place of storage, the profile and forward_to.
-	// Absent, or with no route and the default storage, every study goes as
-	// those fields say, which is what every receiver did before routing
-	// existed. A change applies to receptions identified from then on; one
-	// identified keeps what was chosen for it. Setting it needs what any
-	// change of a receiver needs, admin on the tenant, since it decides
-	// where the tenant's data goes and how it is de-identified; reading it,
-	// what reading a receiver needs, reader.
-	Routing       *ReceiverRouting `protobuf:"bytes,16,opt,name=routing,proto3" json:"routing,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// No longer read or written: routing is a rule set version, RouteService.
+	// A request that sets it, or names it in update_mask, is refused; it is
+	// always answered empty.
+	//
+	// Deprecated: Marked as deprecated in nopacs/v1/receiver.proto.
+	Routing *ReceiverRouting `protobuf:"bytes,16,opt,name=routing,proto3" json:"routing,omitempty"`
+	// The version of the routing rule set the receiver runs (RouteService),
+	// which chooses each new session's storage and profile version in place
+	// of storage and the profile, and forwards copies besides forward_to; 0
+	// when it runs none, and every study goes as those fields say. A study's
+	// choice is kept with its session, so a later arrival goes where the
+	// first did, whatever version runs by then. A storage or a sender a rule
+	// of the version it runs names cannot be removed. Answered by the
+	// server; ignored in a request: it changes only through RouteService.
+	RuleSetVersion int32 `protobuf:"varint,19,opt,name=rule_set_version,json=ruleSetVersion,proto3" json:"rule_set_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Receiver) Reset() {
@@ -561,11 +566,19 @@ func (x *Receiver) GetProfile() *ProfileVersionRef {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in nopacs/v1/receiver.proto.
 func (x *Receiver) GetRouting() *ReceiverRouting {
 	if x != nil {
 		return x.Routing
 	}
 	return nil
+}
+
+func (x *Receiver) GetRuleSetVersion() int32 {
+	if x != nil {
+		return x.RuleSetVersion
+	}
+	return 0
 }
 
 type isReceiver_Type interface {
@@ -663,6 +676,10 @@ func (*Receiver_Profile) isReceiver_Deidentification() {}
 // chooses the storage only: the profile version and the senders are still
 // the route's, or the receiver's when no route holds, and
 // quarantine_unmatched does not hold the study again.
+//
+// Deprecated: No longer read or written: routing is a rule set version, RouteService.
+//
+// Deprecated: Marked as deprecated in nopacs/v1/receiver.proto.
 type ReceiverRouting struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The routes, in order; the first that holds chooses. At most 64, each
@@ -723,6 +740,10 @@ func (x *ReceiverRouting) GetQuarantineUnmatched() bool {
 }
 
 // Route is one rule of a receiver's routing.
+//
+// Deprecated: No longer read or written: routing is a rule set version, RouteService.
+//
+// Deprecated: Marked as deprecated in nopacs/v1/receiver.proto.
 type Route struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The route's name, unique in the receiver, under the rule of a tenant's
@@ -836,6 +857,10 @@ func (x *Route) GetForwardTo() *RouteForwardTo {
 }
 
 // RouteForwardTo names the senders a route forwards to.
+//
+// Deprecated: No longer read or written: routing is a rule set version, RouteService.
+//
+// Deprecated: Marked as deprecated in nopacs/v1/receiver.proto.
 type RouteForwardTo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The senders' names.
@@ -1321,9 +1346,9 @@ func (x *StowReceiver) GetMaxRequestBytes() int64 {
 // quarantined for what the pipeline finds, with the same events. The
 // receiver's quiet period completes each reception; its max_file_bytes
 // bounds each file read, and a larger file is skipped, not copied. A
-// route condition on an AE title (CONDITION_SUBJECT_CALLING_AE_TITLE,
-// CONDITION_SUBJECT_CALLED_AE_TITLE) never holds for a file an import hands in, since none
-// came by an association.
+// routing condition on an AE title (calling_ae, called_ae: RouteService)
+// never holds for a file an import hands in, since none came by an
+// association.
 //
 // Labels from a path. The layout reads each file's path, relative to the
 // root, for named parts, which the naming rule's templates use as they use
@@ -2305,8 +2330,7 @@ type SetReceiverRequest struct {
 	// "forward_to", "namespace" (empty returns to the tenant's default
 	// namespace) or "naming" ("naming" with naming absent returns to the
 	// default rule), "deidentification" (the oneof: as_received or a profile
-	// version; with neither set, as received), "routing" (replaced whole;
-	// absent, no routing; its fields cannot be named one by one), or
+	// version; with neither set, as received), or
 	// a field of the receiver's type joined to it by a dot, such as
 	// "dimse.port", "dimse.tls.certificate_file", "stow.key_ids" or
 	// "importer.map_file". A path
@@ -2541,7 +2565,7 @@ var File_nopacs_v1_receiver_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"\n" +
-	"\x18nopacs/v1/receiver.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17nopacs/v1/profile.proto\"\xee\x06\n" +
+	"\x18nopacs/v1/receiver.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17nopacs/v1/profile.proto\"\x9c\a\n" +
 	"\bReceiver\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x120\n" +
 	"\x05dimse\x18\x02 \x01(\v2\x18.nopacs.v1.DimseReceiverH\x00R\x05dimse\x12-\n" +
@@ -2564,13 +2588,14 @@ const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"forward_to\x18\r \x03(\tR\tforwardTo\x128\n" +
 	"\vas_received\x18\x0e \x01(\v2\x15.nopacs.v1.AsReceivedH\x01R\n" +
 	"asReceived\x128\n" +
-	"\aprofile\x18\x0f \x01(\v2\x1c.nopacs.v1.ProfileVersionRefH\x01R\aprofile\x124\n" +
-	"\arouting\x18\x10 \x01(\v2\x1a.nopacs.v1.ReceiverRoutingR\aroutingB\x06\n" +
+	"\aprofile\x18\x0f \x01(\v2\x1c.nopacs.v1.ProfileVersionRefH\x01R\aprofile\x128\n" +
+	"\arouting\x18\x10 \x01(\v2\x1a.nopacs.v1.ReceiverRoutingB\x02\x18\x01R\arouting\x12(\n" +
+	"\x10rule_set_version\x18\x13 \x01(\x05R\x0eruleSetVersionB\x06\n" +
 	"\x04typeB\x12\n" +
-	"\x10deidentification\"n\n" +
+	"\x10deidentification\"r\n" +
 	"\x0fReceiverRouting\x12(\n" +
 	"\x06routes\x18\x01 \x03(\v2\x10.nopacs.v1.RouteR\x06routes\x121\n" +
-	"\x14quarantine_unmatched\x18\x02 \x01(\bR\x13quarantineUnmatched\"\xe4\x01\n" +
+	"\x14quarantine_unmatched\x18\x02 \x01(\bR\x13quarantineUnmatched:\x02\x18\x01\"\xe8\x01\n" +
 	"\x05Route\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12;\n" +
 	"\n" +
@@ -2579,9 +2604,9 @@ const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"\astorage\x18\x03 \x01(\tR\astorage\x126\n" +
 	"\aprofile\x18\x04 \x01(\v2\x1c.nopacs.v1.ProfileVersionRefR\aprofile\x128\n" +
 	"\n" +
-	"forward_to\x18\x05 \x01(\v2\x19.nopacs.v1.RouteForwardToR\tforwardTo\"*\n" +
+	"forward_to\x18\x05 \x01(\v2\x19.nopacs.v1.RouteForwardToR\tforwardTo:\x02\x18\x01\".\n" +
 	"\x0eRouteForwardTo\x12\x18\n" +
-	"\asenders\x18\x01 \x03(\tR\asenders\"\f\n" +
+	"\asenders\x18\x01 \x03(\tR\asenders:\x02\x18\x01\"\f\n" +
 	"\n" +
 	"AsReceived\"A\n" +
 	"\x11ProfileVersionRef\x12\x12\n" +

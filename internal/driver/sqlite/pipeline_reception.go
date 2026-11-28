@@ -281,6 +281,7 @@ func (t *Tenant) StepReception(ctx context.Context, step tenant.ReceptionStep, h
 		if err != nil {
 			return err
 		}
+		var chosen tenant.ReceptionRoute
 		if step.Event == reception.Identify {
 			// The storage's row is held to the commit, so its removal or
 			// move cannot pass this step unseen (lockStorage).
@@ -291,7 +292,7 @@ func (t *Tenant) StepReception(ctx context.Context, step tenant.ReceptionStep, h
 			// The routing's choice is kept with the step; a storage a
 			// release named stays, so the record says why the storage is
 			// what it is.
-			chosen := step.Route
+			chosen = step.Route
 			chosen.ReleasedStorage, chosen.ReleasedProfile = before.Route.ReleasedStorage, before.Route.ReleasedProfile
 			if routeText, err = sqlkit.ReceptionRouteText(chosen); err != nil {
 				return err
@@ -326,6 +327,13 @@ func (t *Tenant) StepReception(ctx context.Context, step tenant.ReceptionStep, h
 				return err
 			}
 			return tenant.StateChanged()
+		}
+		if step.Event == reception.Identify {
+			// The rules the reception was routed by, with the step that
+			// keeps the choice: what hit counts and a dry run read.
+			if err := sqlkit.RecordRouteMatches(ctx, sendingTx{tx: tx}, sendingDialect, step.ID, before.Receiver, chosen, step.At); err != nil {
+				return err
+			}
 		}
 		var ended []tenant.EventRecord
 		if next.Ended() {

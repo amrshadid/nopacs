@@ -37,11 +37,11 @@ type dimseConfig struct {
 	// receivers de-identified, the receiver archives as received.
 	DeidProfile string `json:"deid_profile,omitempty"`
 	DeidVersion int32  `json:"deid_version,omitempty"`
-	// Routes and RoutesQuarantineUnmatched are the receiver's routing;
-	// absent, as in every row written before receivers routed, it has
-	// none.
-	Routes                    []routeConfig `json:"routes,omitempty"`
-	RoutesQuarantineUnmatched bool          `json:"routes_quarantine_unmatched,omitempty"`
+	// RuleSet is the rule set version the receiver runs, a copy of the
+	// version's stored body (route_rule_sets) made when it was pointed at,
+	// so the reception pipeline reads a receiver's rules with the receiver;
+	// absent when it runs none.
+	RuleSet *ruleSetConfig `json:"rule_set,omitempty"`
 	// Import is an import receiver's configuration; absent for every
 	// other type, so their rows read and write back as before.
 	Import *importConfig `json:"import,omitempty"`
@@ -83,37 +83,116 @@ func importReceiverOf(c *importConfig) tenant.ImportReceiver {
 		Map: tenant.ImportMap{KeyColumns: c.MapKeyColumns, ValueColumn: c.MapValueColumn, KeyParts: c.MapKeyParts, Gives: c.MapGives}}
 }
 
-// routeConfig is one route of a receiver's routing.
-type routeConfig struct {
-	Name              string            `json:"name"`
-	Conditions        []conditionConfig `json:"conditions,omitempty"`
-	Storage           string            `json:"storage"`
-	Profile           string            `json:"profile,omitempty"`
-	Version           int32             `json:"version,omitempty"`
-	ReplacesForwardTo bool              `json:"replaces_forward_to,omitempty"`
-	ForwardTo         []string          `json:"forward_to,omitempty"`
+// ruleSetConfig is a rule set version's body: as a route_rule_sets row
+// keeps it, and as a receiver's config column copies the version it runs.
+type ruleSetConfig struct {
+	Version             int32               `json:"version"`
+	Archive             []archiveRuleConfig `json:"archive,omitempty"`
+	QuarantineUnmatched bool                `json:"quarantine_unmatched,omitempty"`
+	Forward             []forwardRuleConfig `json:"forward,omitempty"`
+	Comment             string              `json:"comment,omitempty"`
 }
 
-// conditionConfig is one condition of a route.
-type conditionConfig struct {
-	Subject string `json:"subject"`
-	Test    string `json:"test"`
-	Value   string `json:"value,omitempty"`
-	Present bool   `json:"present,omitempty"`
-	Negate  bool   `json:"negate,omitempty"`
+// archiveRuleConfig is one archive rule of a rule set.
+type archiveRuleConfig struct {
+	Name    string `json:"name"`
+	When    string `json:"when,omitempty"`
+	Storage string `json:"storage"`
+	Profile string `json:"profile,omitempty"`
+}
+
+// forwardRuleConfig is one forward rule of a rule set.
+type forwardRuleConfig struct {
+	Name    string   `json:"name"`
+	When    string   `json:"when,omitempty"`
+	Series  string   `json:"series,omitempty"`
+	Senders []string `json:"senders"`
+	Profile string   `json:"profile,omitempty"`
+}
+
+// ruleSetConfigOf returns rs as its body keeps it; nil for the zero rule
+// set of a receiver that runs none.
+func ruleSetConfigOf(rs tenant.RuleSet) *ruleSetConfig {
+	if rs.Version == 0 && rs.IsZero() {
+		return nil
+	}
+	c := &ruleSetConfig{Version: rs.Version, QuarantineUnmatched: rs.QuarantineUnmatched, Comment: rs.Comment}
+	for _, a := range rs.Archive {
+		c.Archive = append(c.Archive, archiveRuleConfig{Name: a.Name, When: a.When, Storage: a.Storage, Profile: ProfileRefText(a.Profile)})
+	}
+	for _, f := range rs.Forward {
+		c.Forward = append(c.Forward, forwardRuleConfig{Name: f.Name, When: f.When, Series: f.Series, Senders: f.Senders,
+			Profile: ProfileRefText(f.Profile)})
+	}
+	return c
+}
+
+// ruleSetOf returns the rule set of receiver that c keeps; the zero rule
+// set for nil.
+func ruleSetOf(receiver string, c *ruleSetConfig) (tenant.RuleSet, error) {
+	if c == nil {
+		return tenant.RuleSet{}, nil
+	}
+	out := tenant.RuleSet{Receiver: receiver, Version: c.Version, QuarantineUnmatched: c.QuarantineUnmatched, Comment: c.Comment}
+	for _, a := range c.Archive {
+		p, err := ReadProfileRef(a.Profile)
+		if err != nil {
+			return out, err
+		}
+		out.Archive = append(out.Archive, tenant.ArchiveRule{Name: a.Name, When: a.When, Storage: a.Storage, Profile: p})
+	}
+	for _, f := range c.Forward {
+		p, err := ReadProfileRef(f.Profile)
+		if err != nil {
+			return out, err
+		}
+		out.Forward = append(out.Forward, tenant.ForwardRule{Name: f.Name, When: f.When, Series: f.Series, Senders: f.Senders, Profile: p})
+	}
+	return out, nil
+}
+
+// RuleSetText returns the text of a rule set version's body.
+func RuleSetText(rs tenant.RuleSet) (string, error) {
+	c := ruleSetConfigOf(rs)
+	if c == nil {
+		c = &ruleSetConfig{}
+	}
+	return JSONText(c)
+}
+
+// ReadRuleSet returns the rule set of receiver a body's text holds, as
+// RuleSetText wrote it.
+func ReadRuleSet(receiver, text string) (tenant.RuleSet, error) {
+	var c ruleSetConfig
+	if err := FromJSON(text, &c); err != nil {
+		return tenant.RuleSet{}, err
+	}
+	return ruleSetOf(receiver, &c)
 }
 
 // receptionRouteConfig is what a reception's routing chose, as its route
 // column holds it; the empty text for nothing of its own.
 type receptionRouteConfig struct {
-	ReleasedStorage   string   `json:"released_storage,omitempty"`
-	ReleasedProfile   string   `json:"released_profile,omitempty"`
-	ReleasedVersion   int32    `json:"released_version,omitempty"`
-	Route             string   `json:"route,omitempty"`
-	Profile           string   `json:"profile,omitempty"`
-	Version           int32    `json:"version,omitempty"`
-	ReplacesForwardTo bool     `json:"replaces_forward_to,omitempty"`
-	ForwardTo         []string `json:"forward_to,omitempty"`
+	ReleasedStorage string                `json:"released_storage,omitempty"`
+	ReleasedProfile string                `json:"released_profile,omitempty"`
+	ReleasedVersion int32                 `json:"released_version,omitempty"`
+	RuleSet         int32                 `json:"rule_set,omitempty"`
+	Route           string                `json:"route,omitempty"`
+	Profile         string                `json:"profile,omitempty"`
+	Version         int32                 `json:"version,omitempty"`
+	ForwardRuleSet  int32                 `json:"forward_rule_set,omitempty"`
+	Forwards        []forwardChoiceConfig `json:"forwards,omitempty"`
+	CallingAE       string                `json:"calling_ae,omitempty"`
+	CalledAE        string                `json:"called_ae,omitempty"`
+}
+
+// forwardChoiceConfig is one forward rule that held for a reception.
+type forwardChoiceConfig struct {
+	Rule     string   `json:"rule"`
+	Senders  []string `json:"senders"`
+	Filtered bool     `json:"filtered,omitempty"`
+	Series   []string `json:"series,omitempty"`
+	Profile  string   `json:"profile,omitempty"`
 }
 
 // ReceptionRouteText returns the text of a reception's route column: empty
@@ -122,9 +201,14 @@ func ReceptionRouteText(r tenant.ReceptionRoute) (string, error) {
 	if r.IsZero() {
 		return "", nil
 	}
-	return JSONText(receptionRouteConfig{ReleasedStorage: r.ReleasedStorage, ReleasedProfile: r.ReleasedProfile.Name,
-		ReleasedVersion: r.ReleasedProfile.Version, Route: r.Route, Profile: r.Profile.Name,
-		Version: r.Profile.Version, ReplacesForwardTo: r.ReplacesForwardTo, ForwardTo: r.ForwardTo})
+	c := receptionRouteConfig{ReleasedStorage: r.ReleasedStorage, ReleasedProfile: r.ReleasedProfile.Name,
+		ReleasedVersion: r.ReleasedProfile.Version, RuleSet: r.RuleSet, Route: r.Route, Profile: r.Profile.Name,
+		Version: r.Profile.Version, ForwardRuleSet: r.ForwardRuleSet, CallingAE: r.CallingAE, CalledAE: r.CalledAE}
+	for _, f := range r.Forwards {
+		c.Forwards = append(c.Forwards, forwardChoiceConfig{Rule: f.Rule, Senders: f.Senders, Filtered: f.Filtered, Series: f.Series,
+			Profile: ProfileRefText(f.Profile)})
+	}
+	return JSONText(c)
 }
 
 // ReadReceptionRoute returns the route a reception's route column holds,
@@ -137,10 +221,37 @@ func ReadReceptionRoute(text string) (tenant.ReceptionRoute, error) {
 	if err := FromJSON(text, &c); err != nil {
 		return tenant.ReceptionRoute{}, err
 	}
-	return tenant.ReceptionRoute{ReleasedStorage: c.ReleasedStorage,
-		ReleasedProfile: tenant.ProfileRef{Name: c.ReleasedProfile, Version: c.ReleasedVersion}, Route: c.Route,
-		Profile: tenant.ProfileRef{Name: c.Profile, Version: c.Version}, ReplacesForwardTo: c.ReplacesForwardTo,
-		ForwardTo: c.ForwardTo}, nil
+	out := tenant.ReceptionRoute{ReleasedStorage: c.ReleasedStorage,
+		ReleasedProfile: tenant.ProfileRef{Name: c.ReleasedProfile, Version: c.ReleasedVersion}, RuleSet: c.RuleSet, Route: c.Route,
+		Profile: tenant.ProfileRef{Name: c.Profile, Version: c.Version}, ForwardRuleSet: c.ForwardRuleSet,
+		CallingAE: c.CallingAE, CalledAE: c.CalledAE}
+	for _, f := range c.Forwards {
+		p, err := ReadProfileRef(f.Profile)
+		if err != nil {
+			return out, err
+		}
+		out.Forwards = append(out.Forwards, tenant.ForwardChoice{Rule: f.Rule, Senders: f.Senders, Filtered: f.Filtered, Series: f.Series, Profile: p})
+	}
+	return out, nil
+}
+
+// SessionRouting is what a new session keeps of the routing of the
+// reception that makes it: its route column's text and its AE titles.
+type SessionRouting struct {
+	Text, CallingAE, CalledAE string
+}
+
+// SessionRoute returns what a new session keeps of the route column's text
+// of the reception that makes it: the archive choice a later arrival takes
+// (tenant.ReceptionRoute.Archived), never that reception's forwards, and
+// the AE titles of its first file.
+func SessionRoute(receptionRoute string) (SessionRouting, error) {
+	r, err := ReadReceptionRoute(receptionRoute)
+	if err != nil {
+		return SessionRouting{}, err
+	}
+	text, err := ReceptionRouteText(r.Archived())
+	return SessionRouting{Text: text, CallingAE: r.CallingAE, CalledAE: r.CalledAE}, err
 }
 
 // ReleasedRoute returns the route a reception still receiving keeps once a
@@ -228,16 +339,7 @@ func ReceiverConfigText(r tenant.Receiver) (config, namingText string, err error
 		SOPClasses: r.DIMSE.SOPClasses, TransferSyntaxes: r.DIMSE.TransferSyntaxes,
 		STOWKeys: r.STOW.Keys, MaxRequestBytes: r.STOW.MaxRequestBytes, ForwardTo: r.ForwardTo,
 		DeidProfile: r.Profile.Name, DeidVersion: r.Profile.Version,
-		RoutesQuarantineUnmatched: r.Routing.QuarantineUnmatched, Namespace: r.Namespace}
-	for _, rt := range r.Routing.Routes {
-		rc := routeConfig{Name: rt.Name, Storage: rt.Storage, Profile: rt.Profile.Name, Version: rt.Profile.Version,
-			ReplacesForwardTo: rt.ReplacesForwardTo, ForwardTo: rt.ForwardTo}
-		for _, cd := range rt.Conditions {
-			rc.Conditions = append(rc.Conditions, conditionConfig{Subject: string(cd.Subject), Test: string(cd.Test),
-				Value: cd.Value, Present: cd.Present, Negate: cd.Negate})
-		}
-		c.Routes = append(c.Routes, rc)
-	}
+		RuleSet: ruleSetConfigOf(r.Routing), Namespace: r.Namespace}
 	for _, cr := range r.DIMSE.Callers {
 		c.Callers = append(c.Callers, callerRuleConfig(cr))
 	}
@@ -272,7 +374,11 @@ func ReadReceiverConfig(r *tenant.Receiver, config, namingText string) error {
 	r.ForwardTo = c.ForwardTo
 	r.Namespace = c.Namespace
 	r.Profile = tenant.ProfileRef{Name: c.DeidProfile, Version: c.DeidVersion}
-	r.Routing = routingOf(c)
+	routing, err := ruleSetOf(r.Name, c.RuleSet)
+	if err != nil {
+		return err
+	}
+	r.Routing = routing
 	r.DIMSE.Callers = nil
 	for _, cr := range c.Callers {
 		r.DIMSE.Callers = append(r.DIMSE.Callers, tenant.CallerRule(cr))
@@ -309,22 +415,18 @@ func ReceiverDeidentifies(config string) (bool, error) {
 	return c.DeidProfile != "", nil
 }
 
-// routingOf returns the routing a receiver's config column holds.
-func routingOf(c dimseConfig) tenant.Routing {
-	out := tenant.Routing{QuarantineUnmatched: c.RoutesQuarantineUnmatched}
-	for _, rc := range c.Routes {
-		rt := tenant.Route{Name: rc.Name, Storage: rc.Storage, Profile: tenant.ProfileRef{Name: rc.Profile, Version: rc.Version},
-			ReplacesForwardTo: rc.ReplacesForwardTo, ForwardTo: rc.ForwardTo}
-		for _, cd := range rc.Conditions {
-			rt.Conditions = append(rt.Conditions, tenant.RouteCondition{Subject: tenant.RouteSubject(cd.Subject),
-				Test: tenant.RouteTest(cd.Test), Value: cd.Value, Present: cd.Present, Negate: cd.Negate})
-		}
-		out.Routes = append(out.Routes, rt)
+// routingOf returns the rule set a receiver's config column holds, the
+// zero rule set for one whose body cannot be read (a check that reads it
+// for what it names errs toward the receiver's own fields then).
+func routingOf(c dimseConfig) tenant.RuleSet {
+	rs, err := ruleSetOf("", c.RuleSet)
+	if err != nil {
+		return tenant.RuleSet{}
 	}
-	return out
+	return rs
 }
 
-// ReceiverRoutingTo returns the name of a receiver one of whose routes
+// ReceiverRoutingTo returns the name of a receiver one of whose archive rules
 // archives to the storage, or "": the receivers are read whole, since a
 // receiver's routes are in its configuration's text and a tenant's
 // receivers are few. A driver calls it in the transaction that removes a

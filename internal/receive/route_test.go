@@ -16,9 +16,10 @@ import (
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// setRouting gives the env's receiver its routing, with the storages and
-// senders it names added first.
-func (e *env) setRouting(r tenant.Routing) {
+// setRouting makes r the env's receiver's next rule set version and
+// activates it, with the storages and senders it names added first, and
+// returns the version made.
+func (e *env) setRouting(r tenant.RuleSet) tenant.RuleSet {
 	e.t.Helper()
 	for _, s := range r.Storages() {
 		if _, err := e.store.AddStorage(e.ctx, tenant.Storage{Name: s, Type: tenant.StorageDirectory,
@@ -29,10 +30,12 @@ func (e *env) setRouting(r tenant.Routing) {
 	for _, s := range r.Senders() {
 		e.addSender(s)
 	}
-	if _, err := e.store.SetReceiver(e.ctx, tenant.Receiver{Name: "dimse", Routing: r},
-		[]tenant.ReceiverField{tenant.FieldRouting}, t0, e.audit(), nil); err != nil {
+	r.Receiver = "dimse"
+	made, err := e.store.CreateRuleSet(e.ctx, r, true, t0, e.audit(), nil)
+	if err != nil {
 		e.t.Fatal(err)
 	}
+	return made
 }
 
 // addSender adds a DIMSE sender, unless the tenant has it.
@@ -111,20 +114,16 @@ func receptionOf(t *testing.T, rs []tenant.Reception, study string, arrival int)
 	return tenant.Reception{}
 }
 
-// TestRouteChoosesInOrder guards a receiver's routes over a real pipeline:
-// the first route whose conditions hold chooses the storage of a new
-// session (an AE title before a header pattern that holds too); a later
+// TestRouteChoosesInOrder guards a receiver's archive rules over a real
+// pipeline: the first rule whose condition holds chooses the storage of a
+// new session (an AE title before a header pattern that holds too); a later
 // arrival of that session goes by what was chosen for the session (its
-// storage and route), whatever route would hold for it; a study no route
-// holds for goes to the receiver's storage.
+// storage and rule), whatever rule would hold for it; a study no rule holds
+// for goes to the receiver's storage, recorded as the version's default.
 func TestRouteChoosesInOrder(t *testing.T) {
-	e := newEnv(t, envOptions{routing: &tenant.Routing{Routes: []tenant.Route{
-		{Name: "lab-a", Storage: "lab-a", Conditions: []tenant.RouteCondition{
-			{Subject: tenant.SubjectCallingAETitle, Test: tenant.TestEquals, Value: "LAB-A"}}},
-		{Name: "ct", Storage: "lab-b", Conditions: []tenant.RouteCondition{
-			{Subject: tenant.SubjectModality, Test: tenant.TestPattern, Value: "C."},
-			{Subject: tenant.SubjectSOPClassUID, Test: tenant.TestPrefix, Value: "1.2.840.10008.5.1.4.1.1."},
-			{Subject: tenant.SubjectCalledAETitle, Test: tenant.TestPresent, Present: true}}},
+	e := newEnv(t, envOptions{routing: &tenant.RuleSet{Archive: []tenant.ArchiveRule{
+		{Name: "lab-a", Storage: "lab-a", When: `calling_ae == "LAB-A"`},
+		{Name: "ct", Storage: "lab-b", When: `Modality matches "^C.$" and SOPClassUID prefix "1.2.840.10008.5.1.4.1.1." and called_ae present`},
 	}}})
 	ct := studyOf(t, corpus(t, studyFiles[0]))
 	e.sendAs("LAB-A", studyFiles[:3]...)
@@ -148,8 +147,19 @@ func TestRouteChoosesInOrder(t *testing.T) {
 	}
 	e.sendAs("OTHER", "MR_small.dcm")
 	mr := receptionOf(t, e.settle(3), studyOf(t, corpus(t, "MR_small.dcm")), 1)
-	if !done(mr) || mr.Storage != "main" || !mr.Route.IsZero() {
-		t.Errorf("a study no route holds for: %s on %s by %+v, want done on main by none", mr.State, mr.Storage, mr.Route)
+	if !done(mr) || mr.Storage != "main" || mr.Route.Route != "" || mr.Route.RuleSet != 1 || mr.Route.CallingAE != "OTHER" {
+		t.Errorf("a study no rule holds for: %s on %s by %+v, want done on main by version 1's default", mr.State, mr.Storage, mr.Route)
+	}
+	hits, err := e.store.RouteHits(e.ctx, "dimse", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int64{}
+	for _, h := range hits {
+		got[string(h.Phase)+"/"+h.Rule] = h.Receptions
+	}
+	if got["archive/lab-a"] != 2 || got["archive/"] != 1 || len(got) != 2 {
+		t.Errorf("the hits: %v, want lab-a twice (the session's two arrivals) and the default once", got)
 	}
 }
 
@@ -167,16 +177,17 @@ func strictProfile() *v1.ProfileDocument {
 	return doc
 }
 
-// TestRouteProfileAndSenders guards what a route chooses besides the
-// storage: its profile version de-identifies the study in place of the
-// receiver's, and each instance records it; its senders replace the
-// receiver's forward_to. A study no route holds for keeps the receiver's
-// profile and senders.
+// TestRouteProfileAndSenders guards what an archive rule chooses besides
+// the storage: its profile version de-identifies the study in place of the
+// receiver's, and each instance records it; and a forward rule's senders,
+// which a reception it holds for is forwarded to beside the receiver's
+// forward_to. A study no rule holds for keeps the receiver's profile and
+// senders alone.
 func TestRouteProfileAndSenders(t *testing.T) {
-	e := newEnv(t, envOptions{deid: &deidOptions{}, routing: &tenant.Routing{Routes: []tenant.Route{
-		{Name: "strict", Storage: "main", Profile: strictRef, ReplacesForwardTo: true, ForwardTo: []string{"pacs"},
-			Conditions: []tenant.RouteCondition{{Subject: tenant.SubjectCallingAETitle, Test: tenant.TestEquals, Value: "LAB-A"}}},
-	}}})
+	e := newEnv(t, envOptions{deid: &deidOptions{}, routing: &tenant.RuleSet{
+		Archive: []tenant.ArchiveRule{{Name: "strict", Storage: "main", Profile: strictRef, When: `calling_ae == "LAB-A"`}},
+		Forward: []tenant.ForwardRule{{Name: "to-pacs", When: `calling_ae == "LAB-A"`, Senders: []string{"pacs"}}},
+	}})
 	e.storeProfile(strictRef, strictProfile())
 	e.addSender("orthanc")
 	if _, err := e.store.SetReceiver(e.ctx, tenant.Receiver{Name: "dimse", ForwardTo: []string{"orthanc"}},
@@ -218,26 +229,29 @@ func TestRouteProfileAndSenders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{routed.ID: "pacs", other.ID: "orthanc"}
-	if len(jobs) != len(want) {
-		t.Errorf("%d forwards, want one per reception", len(jobs))
-	}
+	got := map[string]bool{}
 	for _, j := range jobs {
-		if want[j.ReceptionID] != j.Sender {
-			t.Errorf("reception %s forwarded to %s, want %s", j.ReceptionID, j.Sender, want[j.ReceptionID])
+		got[j.ReceptionID+"/"+j.Sender] = true
+	}
+	want := map[string]bool{routed.ID + "/pacs": true, routed.ID + "/orthanc": true, other.ID + "/orthanc": true}
+	if len(got) != len(want) || len(jobs) != len(want) {
+		t.Errorf("forwards %v, want %v", got, want)
+	}
+	for k := range want {
+		if !got[k] {
+			t.Errorf("no forward %s", k)
 		}
 	}
 }
 
-// TestRouteUnroutedHeldAndReleased guards a routing that holds what no
-// route chooses: every file of the study is held as unrouted, with the
-// cause, its bytes kept; a release naming a storage the tenant does not
-// have is refused; a release naming one it has archives the study there,
-// with no route evaluated again.
+// TestRouteUnroutedHeldAndReleased guards a rule set that holds what no
+// archive rule chooses: every file of the study is held as unrouted, with
+// the cause, its bytes kept; a release naming a storage the tenant does
+// not have is refused; a release naming one it has archives the study
+// there, with no rule evaluated again.
 func TestRouteUnroutedHeldAndReleased(t *testing.T) {
-	e := newEnv(t, envOptions{routing: &tenant.Routing{QuarantineUnmatched: true, Routes: []tenant.Route{
-		{Name: "nobody", Storage: "lab-a", Conditions: []tenant.RouteCondition{
-			{Subject: tenant.SubjectCallingAETitle, Test: tenant.TestEquals, Value: "NOBODY"}}},
+	e := newEnv(t, envOptions{routing: &tenant.RuleSet{QuarantineUnmatched: true, Archive: []tenant.ArchiveRule{
+		{Name: "nobody", Storage: "lab-a", When: `calling_ae == "NOBODY"`},
 	}}})
 	e.sendAs("SCANNER", studyFiles[:2]...)
 	r := e.settle(1)[0]

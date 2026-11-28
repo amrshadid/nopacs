@@ -36,10 +36,8 @@ func routingCT(t *testing.T) []byte {
 	return b
 }
 
-// byCallingAE is a route condition on the calling AE title.
-func byCallingAE(ae string) tenant.RouteCondition {
-	return tenant.RouteCondition{Subject: tenant.SubjectCallingAETitle, Test: tenant.TestEquals, Value: ae}
-}
+// byCallingAE is a routing condition on the calling AE title.
+func byCallingAE(ae string) string { return `calling_ae == "` + ae + `"` }
 
 // TestATrialOfAHeldFileGoesByItsSessionsChoice guards a held file of a
 // study the catalog already has a session for: it is tried by the
@@ -50,8 +48,8 @@ func byCallingAE(ae string) tenant.RouteCondition {
 func TestATrialOfAHeldFileGoesByItsSessionsChoice(t *testing.T) {
 	const study = "2.25.1234"
 	rcv := tenant.Receiver{Name: "deid", Profile: tenant.ProfileRef{Name: "research", Version: 1},
-		Routing: tenant.Routing{QuarantineUnmatched: true, Routes: []tenant.Route{{Name: "lab-a", Storage: "main",
-			Conditions: []tenant.RouteCondition{byCallingAE("LAB-A")}}}}}
+		Routing: tenant.RuleSet{Receiver: "deid", Version: 1, QuarantineUnmatched: true, Archive: []tenant.ArchiveRule{{Name: "lab-a", Storage: "main",
+			When: byCallingAE("LAB-A")}}}}
 	cat := &sessionsByStudy{sessions: map[string]tenant.SessionLabels{study: {Storage: "main", Route: tenant.ReceptionRoute{Route: "lab-a"}}}}
 	tr := &trialRouting{catalog: cat, en: &engine.Engine{}, limit: 64 << 20, routed: map[tenant.ProfileRef]routedEngine{}}
 	in := trialInput{record: "q1", file: routingCT(t), study: study, receiver: &rcv, received: engine.Reception{CallingAETitle: "OTHER"}}
@@ -85,8 +83,8 @@ func TestATrialAtAnAsReceivedReceiverUsesNoRouteProfile(t *testing.T) {
 	strict := tenant.ProfileRef{Name: "strict", Version: 1}
 	// Stored past the validation that refuses it, as a receiver changed
 	// meanwhile would be read.
-	rcv := tenant.Receiver{Name: "raw", Routing: tenant.Routing{Routes: []tenant.Route{{Name: "lab-a", Storage: "main",
-		Conditions: []tenant.RouteCondition{byCallingAE("LAB-A")}, Profile: strict}}}}
+	rcv := tenant.Receiver{Name: "raw", Routing: tenant.RuleSet{Receiver: "raw", Version: 1, Archive: []tenant.ArchiveRule{{Name: "lab-a", Storage: "main",
+		When: byCallingAE("LAB-A"), Profile: strict}}}}
 	cat := &sessionsByStudy{sessions: map[string]tenant.SessionLabels{study: {Storage: "main", Route: tenant.ReceptionRoute{Route: "lab-a", Profile: strict}}}}
 	asked := &engine.Engine{}
 	tr := &trialRouting{catalog: cat, en: asked, limit: 64 << 20, routed: map[tenant.ProfileRef]routedEngine{}}

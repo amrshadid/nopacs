@@ -35,6 +35,11 @@ const (
 	// key.
 	forwardScansSQL = `SELECT scan_id, instances, bytes FROM reception_scans WHERE reception_id = ? AND scan_id > ?
 		ORDER BY scan_id LIMIT ?`
+	// forwardScanSQL lists the one scan of a reception a forward rule's
+	// series filter chose, by its labels, after one.
+	forwardScanSQL = `SELECT r.scan_id, r.instances, r.bytes FROM reception_scans AS r JOIN scans AS s ON s.id = r.scan_id
+		WHERE r.reception_id = ? AND s.subject_folded = ? AND s.session_folded = ? AND s.folded = ? AND r.scan_id > ?
+		ORDER BY r.scan_id LIMIT ?`
 	// targetScansColumns are what a listing reads of a scan of the catalog.
 	targetScansColumns = `SELECT id, instances, bytes, session_folded, folded, updated FROM scans WHERE `
 	// tenantScansSQL lists the tenant's scans after one, for a deid job of

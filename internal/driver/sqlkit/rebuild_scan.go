@@ -286,8 +286,8 @@ func (k Rebuild) shadowSession(ctx context.Context, tx SendingTx, p string, s *t
 			}
 		}
 		if s.Created.Before(created.T) {
-			if _, err := tx.Exec(ctx, `UPDATE `+p+`sessions SET receiver = ?, route = ?, created = ? WHERE id = ?`, s.SessionReceiver, route,
-				k.D.Time(s.Created), id); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE `+p+`sessions SET receiver = ?, route = ?, calling_ae = ?, called_ae = ?, created = ? WHERE id = ?`,
+				s.SessionReceiver, route, s.Route.CallingAE, s.Route.CalledAE, k.D.Time(s.Created), id); err != nil {
 				return 0, err
 			}
 		}
@@ -306,9 +306,9 @@ func (k Rebuild) shadowSession(ctx context.Context, tx SendingTx, p string, s *t
 		return 0, tenant.LabelConflictError("session", tenant.FaultCaseCollision)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO `+p+`sessions (study_uid, subject_id, label, folded, storage, created, subject_label,
-		subject_folded, study_date, receiver, updated, route) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		subject_folded, study_date, receiver, updated, route, calling_ae, called_ae) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.StudyUID, subjectID, s.Path.Session, folded, s.Storage, k.D.Time(s.Created), s.Path.Subject, label.Fold(s.Path.Subject),
-		s.Values.StudyDate, s.SessionReceiver, k.D.Time(s.Updated), route); err != nil {
+		s.Values.StudyDate, s.SessionReceiver, k.D.Time(s.Updated), route, s.Route.CallingAE, s.Route.CalledAE); err != nil {
 		return 0, err
 	}
 	if _, err := tx.QueryRow(ctx, `SELECT id FROM `+p+`sessions WHERE study_uid = ?`, []any{s.StudyUID}, &id); err != nil {

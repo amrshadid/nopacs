@@ -104,8 +104,25 @@ func (s *dimseSession) send(in tenant.ScanInstance) (result, *outcome) {
 		return result{}, &out
 	}
 	defer func() { _ = st.Close() }()
-	m, ds, err := dataSetOf(st, in.Length, u.prefix)
-	if err == nil && m.sopInstance != "" && m.sopInstance != in.SOPInstanceUID {
+	size, sopInstance := in.Length, in.SOPInstanceUID
+	if u.copies() {
+		// The copy a destination profile makes is sent in the archived
+		// file's place, under the UIDs it remapped; the job records the
+		// answer under the archived instance.
+		cp, n, res, out := s.copyOf(st, in)
+		if res != nil || out != nil {
+			if res == nil {
+				return result{}, out
+			}
+			return *res, out
+		}
+		st, size = cp, n
+	}
+	m, ds, err := dataSetOf(st, size, u.prefix)
+	if err == nil && u.copies() && m.sopInstance != "" {
+		sopInstance = m.sopInstance
+	}
+	if err == nil && m.sopInstance != "" && m.sopInstance != sopInstance {
 		err = errMetaDisagrees
 	}
 	if errors.Is(err, errNoMeta) || errors.Is(err, errMetaDisagrees) {
@@ -135,7 +152,7 @@ func (s *dimseSession) send(in tenant.ScanInstance) (result, *outcome) {
 	// is slow but steady is never cut.
 	ictx := newStallCtx(u.ctx, u.row.ResponseTimeout)
 	status, err := s.scu.StoreStream(ictx, network.StoreStreamRequest{
-		SOPClassUID: m.sopClass, SOPInstanceUID: in.SOPInstanceUID, TransferSyntaxUID: m.syntax,
+		SOPClassUID: m.sopClass, SOPInstanceUID: sopInstance, TransferSyntaxUID: m.syntax,
 		DataSet: &progressReader{r: &paced{ctx: u.ctx, r: ds, rate: &u.sr.rate}, ctx: ictx},
 	})
 	if err != nil {

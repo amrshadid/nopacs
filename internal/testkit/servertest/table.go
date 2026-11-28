@@ -228,6 +228,17 @@ func Contract() Table {
 		nopacsv1connect.ReceiverServiceSetReceiverProcedure:    onTenant(func() *nopacsv1.SetReceiverRequest { return &nopacsv1.SetReceiverRequest{} }, master.RoleAdmin),
 		nopacsv1connect.ReceiverServiceRemoveReceiverProcedure: onTenant(func() *nopacsv1.RemoveReceiverRequest { return &nopacsv1.RemoveReceiverRequest{} }, master.RoleAdmin),
 
+		// RouteService: "admin on the tenant." to make or activate a rule
+		// set, "reader on the tenant." to read one and its hits, "operator
+		// on the tenant." to explain or dry-run one.
+		nopacsv1connect.RouteServiceCreateRuleSetProcedure:   onTenant(func() *nopacsv1.CreateRuleSetRequest { return &nopacsv1.CreateRuleSetRequest{} }, master.RoleAdmin),
+		nopacsv1connect.RouteServiceGetRuleSetProcedure:      onTenant(func() *nopacsv1.GetRuleSetRequest { return &nopacsv1.GetRuleSetRequest{} }, master.RoleReader),
+		nopacsv1connect.RouteServiceListRuleSetsProcedure:    onTenant(func() *nopacsv1.ListRuleSetsRequest { return &nopacsv1.ListRuleSetsRequest{} }, master.RoleReader),
+		nopacsv1connect.RouteServiceActivateRuleSetProcedure: onTenant(func() *nopacsv1.ActivateRuleSetRequest { return &nopacsv1.ActivateRuleSetRequest{} }, master.RoleAdmin),
+		nopacsv1connect.RouteServiceExplainRouteProcedure:    onTenant(func() *nopacsv1.ExplainRouteRequest { return &nopacsv1.ExplainRouteRequest{} }, master.RoleOperator),
+		nopacsv1connect.RouteServiceDryRunRoutesProcedure:    onTenant(func() *nopacsv1.DryRunRoutesRequest { return &nopacsv1.DryRunRoutesRequest{} }, master.RoleOperator),
+		nopacsv1connect.RouteServiceGetRouteHitsProcedure:    onTenant(func() *nopacsv1.GetRouteHitsRequest { return &nopacsv1.GetRouteHitsRequest{} }, master.RoleReader),
+
 		// ReceptionService: reader to read, operator to filter by Study
 		// Instance UID and to settle a failed reception.
 		nopacsv1connect.ReceptionServiceListReceptionsProcedure: byMessage(

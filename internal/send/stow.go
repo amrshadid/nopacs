@@ -451,6 +451,15 @@ func (u *unitRun) stowRequest(peer *stowPeer, req []*item) *outcome {
 				continue
 			}
 			x.in, x.rev = m.Instance, m.Revision
+			if u.copies() {
+				// A peer's answer names each instance by the UIDs it was
+				// sent with, which a copy changes: a destination profile
+				// is a DIMSE sender's only, and the instance is refused,
+				// never sent as archived.
+				r := refused(tenant.FailureWouldHold, 0, detailCopyStow)
+				x.res = &r
+				continue
+			}
 			st, err := openStream(ctx, u.stores, u.scan, x.in, u.bufs, u.log)
 			switch {
 			case errors.Is(err, errMissing):

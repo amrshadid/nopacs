@@ -24,6 +24,7 @@ func runCorrections(t *testing.T, open OpenEvents) {
 		fn   func(*cenv)
 	}{
 		{"DeleteSubjectAndUndo", testDeleteSubjectAndUndo},
+		{"DeleteUndoKeepsAETitles", testDeleteUndoKeepsAETitles},
 		{"DeleteRefusals", testDeleteRefusals},
 		{"DeleteInstance", testDeleteInstance},
 		{"DeleteLastInstanceIsTheScan", testDeleteLastInstance},
@@ -222,6 +223,33 @@ func testDeleteSubjectAndUndo(e *cenv) {
 	}
 	_, err = e.p.StartPurge(e.ctx, c.ID, at(900), nil, nil)
 	e.wantKind("StartPurge of an undone delete", err, fault.Precondition)
+}
+
+// testDeleteUndoKeepsAETitles guards the AE titles a session keeps from the
+// first file that made it: a delete hides the session with them and its
+// undo shows them again, so a dry run of routing reads the same titles
+// before and after.
+func testDeleteUndoKeepsAETitles(e *cenv) {
+	e.addReceiver("recv", "store", 11112)
+	route := tenant.ReceptionRoute{CallingAE: "SCANNER1", CalledAE: "ARCHIVE"}
+	e.finish(e.archiveRouted("recv", 1, 1, 1, 0, at(0), "ses-1", route))
+	titles := func(when string) {
+		e.Helper()
+		got, err := e.p.RecentSessions(e.ctx, "recv", 10)
+		e.ok("RecentSessions", err)
+		if len(got) != 1 || got[0].Route.CallingAE != "SCANNER1" || got[0].Route.CalledAE != "ARCHIVE" {
+			e.Fatalf("%s the session reads %+v, want the AE titles SCANNER1 and ARCHIVE", when, got)
+		}
+	}
+	titles("before the delete")
+	c := e.prepareDelete(tenant.CorrectionTarget{Subject: "sub-01"}, 500)
+	c = e.commit(c.ID, 600, nil)
+	if got, err := e.p.RecentSessions(e.ctx, "recv", 10); err != nil || len(got) != 0 {
+		e.Fatalf("after the delete the receiver's sessions are %+v (%v), want none", got, err)
+	}
+	_, err := e.p.UndoCorrection(e.ctx, c.ID, "the wrong subject", at(800), e.audit(), nil)
+	e.ok("UndoCorrection", err)
+	titles("after the undo")
 }
 
 // testDeleteRefusals guards what a delete refuses: a token of another

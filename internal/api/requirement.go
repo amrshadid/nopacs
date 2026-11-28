@@ -337,6 +337,44 @@ var rules = map[string]rule{
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetName()}
 	}),
 
+	// RouteService: admin on the tenant to make or point at a rule set,
+	// reader to read one and its hits, operator to explain or dry-run one
+	// (each reads files' headers). A rule set with a forward rule sends
+	// what the receiver archives to peers, and activating any version may,
+	// which a masked key may not choose; an explanation with show_values
+	// answers a file's values, which a masked key is refused. A change's
+	// object is set by the store to the receiver and its version.
+	nopacsv1connect.RouteServiceCreateRuleSetProcedure: byMessage(func(r *v1.CreateRuleSetRequest) (access.Requirement, access.Request) {
+		need := onTenantNamed(r.GetTenant(), master.RoleAdmin)
+		if len(r.GetRuleSet().GetForwardRules()) > 0 {
+			need = need.ChoosesDestination()
+		}
+		return need, access.Request{Details: map[string]string{detailActivate: strconv.FormatBool(r.GetActivate())}}
+	}),
+	nopacsv1connect.RouteServiceGetRuleSetProcedure: byMessage(func(r *v1.GetRuleSetRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: receiverObject(r.GetReceiver())}
+	}),
+	nopacsv1connect.RouteServiceListRuleSetsProcedure: byMessage(func(r *v1.ListRuleSetsRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: receiverObject(r.GetReceiver())}
+	}),
+	nopacsv1connect.RouteServiceActivateRuleSetProcedure: byMessage(func(r *v1.ActivateRuleSetRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{}
+	}),
+	nopacsv1connect.RouteServiceExplainRouteProcedure: byMessage(func(r *v1.ExplainRouteRequest) (access.Requirement, access.Request) {
+		need := onTenantNamed(r.GetTenant(), master.RoleOperator)
+		if r.GetShowValues() {
+			need = need.AnswersOriginals()
+		}
+		return need, access.Request{Object: receiverObject(r.GetReceiver()), Details: explainDetails(r)}
+	}),
+	nopacsv1connect.RouteServiceDryRunRoutesProcedure: byMessage(func(r *v1.DryRunRoutesRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: receiverObject(r.GetReceiver()),
+			Details: map[string]string{detailVersion: strconv.Itoa(int(r.GetVersion())), detailSessions: strconv.Itoa(int(r.GetSessions()))}}
+	}),
+	nopacsv1connect.RouteServiceGetRouteHitsProcedure: byMessage(func(r *v1.GetRouteHitsRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleReader), access.Request{Object: receiverObject(r.GetReceiver())}
+	}),
+
 	// ReceptionService: reader to read, operator to settle a failed
 	// reception, and operator to look a study up by its UID. A reception's
 	// Study Instance UID is the one received, so a search by it tells

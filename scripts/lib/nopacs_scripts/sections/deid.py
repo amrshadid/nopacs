@@ -1,7 +1,7 @@
 """The proof of de-identification, from outside the binary.
 
 It builds and runs the real program, sets it up with its own command line
-only (profile create, receiver add --profile, receiver route, quarantine
+only (profile create, receiver add --profile, route create, quarantine
 release, profile try, explain and diff, deid check and dry-run), and sends
 it public corpus files (pydicom's test files, its character set files, this
 repository's receive corpus) and files this script builds with pydicom, in
@@ -315,16 +315,20 @@ def setup(p):
         "--profile", research4, *common)
     p.m("receiver", "add", "lab", "plain", "--storage", "main", "--port", str(p.ports["plain"]), "--allow-aet", "PROVE",
         "--as-received", *common)
-    p.m("receiver", "route", "add", "lab", "routed", "site-a", "--storage", "a", "--equals", "calling-aet=SITE_A",
-        "--profile", research1)
-    p.m("receiver", "route", "add", "lab", "routed", "site-b", "--storage", "b", "--equals", "calling-aet=SITE_B",
-        "--profile", basic1)
-    p.m("receiver", "route", "default", "lab", "routed", "quarantine")
+    def ref(r):
+        name, version = r.split("@")
+        return {"name": name, "version": int(version)}
+    rules = os.path.join(p.work, "routed-rules.json")
+    with open(rules, "w") as f:
+        json.dump({"quarantineUnmatched": True, "archiveRules": [
+            {"name": "site-a", "when": 'calling_ae == "SITE_A"', "storage": "a", "profile": ref(research1)},
+            {"name": "site-b", "when": 'calling_ae == "SITE_B"', "storage": "b", "profile": ref(basic1)}]}, f)
+    p.m("route", "create", "lab", "routed", rules, "--activate")
     for r in RECEIVERS:
         p.wait_up(r)
-    p.note("the tenant: storages main, a, b; versions %s; receivers %s; routes of routed:\n%s"
+    p.note("the tenant: storages main, a, b; versions %s; receivers %s; the rule set of routed:\n%s"
            % (", ".join("%s (id %d)" % kv for kv in p.versions.items()), ", ".join(RECEIVERS),
-              "\n".join("       " + line for line in p.m("receiver", "route", "list", "lab", "routed").rstrip().splitlines())))
+              "\n".join("       " + line for line in p.m("route", "get", "lab", "routed").rstrip().splitlines())))
     return research1, research2, research3, basic1, basic2
 
 

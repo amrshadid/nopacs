@@ -184,9 +184,10 @@ const (
 	// an element the file holds. Details: "rule", the rule's name (or "rule"
 	// and its position).
 	QuarantineReason_QUARANTINE_REASON_PROFILE_REFUSED QuarantineReason = 16
-	// The study's receiver routes each study by its routes, and this one was
-	// not routed: no route chose it and the routing holds what none chooses
-	// (Receiver.routing), a route could not be evaluated, or another
+	// The study's receiver routes each study by the archive rules of the
+	// rule set it runs (RouteService), and this one was not routed: no rule
+	// chose it and the rule set holds what none chooses
+	// (RuleSet.quarantine_unmatched), a rule could not be evaluated, or another
 	// reception of the study made its session on another storage while this
 	// one was in flight, or the reception's receiver was removed before its
 	// study had a session: a new subject is named under the receiver's

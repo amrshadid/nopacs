@@ -566,6 +566,8 @@ CREATE TABLE sessions (
     bytes          bigint      NOT NULL DEFAULT 0,
     updated        timestamptz NOT NULL DEFAULT 'epoch',
     route          text        NOT NULL DEFAULT '',
+    calling_ae     text        COLLATE "C" NOT NULL DEFAULT '',
+    called_ae      text        COLLATE "C" NOT NULL DEFAULT '',
     CONSTRAINT sessions_pkey PRIMARY KEY (id),
     CONSTRAINT sessions_study_uid_key UNIQUE (study_uid),
     CONSTRAINT sessions_folded_key UNIQUE (subject_id, folded),
@@ -1778,6 +1780,8 @@ CREATE TABLE hidden_sessions (
     bytes          bigint      NOT NULL,
     updated        timestamptz NOT NULL,
     route          text        NOT NULL,
+    calling_ae     text        COLLATE "C" NOT NULL DEFAULT '',
+    called_ae      text        COLLATE "C" NOT NULL DEFAULT '',
     PRIMARY KEY (correction_id, id)
 );
 
@@ -2330,3 +2334,48 @@ CREATE TABLE delete_batch_targets (
     CONSTRAINT delete_batch_targets_outcome_check CHECK (outcome IN ('', 'deleted', 'skipped|held', 'skipped|kept',
         'skipped|changed', 'skipped|gone', 'skipped|overlap', 'skipped|refused'))
 );
+
+-- A receiver's routing rule sets: each version's body (the JSON of its
+-- archive and forward rules), when it was made and by which key. A version
+-- is never changed once made, which the trigger holds: a reception's
+-- record names the version it was routed by, and that must always mean
+-- the same rules. A receiver's config column copies the body of the
+-- version it runs. Versions outlive their receiver, so the records that
+-- name them still read.
+CREATE TABLE route_rule_sets (
+    receiver   text        COLLATE "C" NOT NULL,
+    version    integer     NOT NULL,
+    body       text        NOT NULL,
+    created    timestamptz NOT NULL,
+    created_by text        COLLATE "C" NOT NULL,
+    CONSTRAINT route_rule_sets_pkey PRIMARY KEY (receiver, version),
+    CONSTRAINT route_rule_sets_version_check CHECK (version BETWEEN 1 AND 1000000)
+);
+
+CREATE FUNCTION route_rule_sets_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'a rule set version is never changed' USING ERRCODE = 'restrict_violation';
+END;
+$$;
+
+CREATE TRIGGER route_rule_sets_immutable BEFORE UPDATE OR DELETE ON route_rule_sets
+    FOR EACH ROW EXECUTE FUNCTION route_rule_sets_immutable();
+
+-- The rules each reception was routed by, written with its identify step:
+-- its archive rule ('' for the rule set's default) and each forward rule
+-- that held, with the number of series a series filter sent (0 for every
+-- series). Hit counts group them by rule; a dry run reads a session's.
+--   by rule of a receiver's version      route_matches_by_rule
+CREATE TABLE route_matches (
+    reception_id text        COLLATE "C" NOT NULL,
+    receiver     text        COLLATE "C" NOT NULL,
+    version      integer     NOT NULL,
+    phase        text        COLLATE "C" NOT NULL,
+    rule         text        COLLATE "C" NOT NULL,
+    series       integer     NOT NULL,
+    matched_at   timestamptz NOT NULL,
+    CONSTRAINT route_matches_pkey PRIMARY KEY (reception_id, phase, rule),
+    CONSTRAINT route_matches_check CHECK (version BETWEEN 1 AND 1000000 AND phase IN ('archive', 'forward') AND series >= 0)
+);
+
+CREATE INDEX route_matches_by_rule ON route_matches (receiver, version, phase, rule);

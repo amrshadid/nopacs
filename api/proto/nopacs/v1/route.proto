@@ -1,0 +1,674 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "google/protobuf/timestamp.proto";
+import "nopacs/v1/receiver.proto";
+
+// RouteService keeps each receiver's routing rule sets: which storage and
+// profile each study goes to, and which copies are forwarded to which
+// senders. It answers what the rules decide for a file (ExplainRoute), what
+// they would have decided for the receiver's latest sessions (DryRunRoutes),
+// and how often each rule routed (GetRouteHits).
+//
+// A rule set is a version, numbered from 1 per receiver, never changed once
+// made: a change is a new version, and a receiver runs the one it points at
+// (Receiver.rule_set_version), so the version a reception records always
+// means the rules it was routed by. A version outlives its receiver.
+//
+// Two phases. Archive rules run in order over the first file of the first
+// reception of a new session (the first file, by SOP Instance UID, of its
+// first series, by Series Instance UID), as received, before any byte of it
+// is de-identified: the first whose condition holds chooses the session's
+// storage, and the profile version its files are de-identified with in
+// place of the receiver's. A study is routed once, for its session: every
+// later arrival of the session goes where the first did, whatever the
+// rules say by then. None holds, and quarantine_unmatched decides: the
+// receiver's storage and profile, or every file held as
+// QUARANTINE_REASON_UNROUTED. An archive rule that cannot be evaluated
+// holds the study as unrouted, whatever rules come after it. Forward rules
+// are each reception's own: every one is evaluated over the reception's
+// first file, and each whose condition holds makes, when the reception
+// reaches done, a send job (JobService) per sender it names, for the whole
+// session or, with a series filter, one per series whose first file the
+// filter holds for; each copy is de-identified with the rule's destination
+// profile when it names one. Forwards never delay a reception or change how
+// it ends, and every send obeys the sender's own eligibility rule and byte
+// rate (SenderService).
+//
+// Conditions. A condition is text in the condition language a search uses
+// too: "and", "or", "not" and parentheses over comparisons such as
+// Modality in ("CT", "MR"), SeriesDescription contains "t1",
+// ImageType[2] == "LOCALIZER", ReferencedImageSequence.ReferencedSOPClassUID
+// present (any item of the sequence), (0018,0050) < 2.5,
+// (0029,"SIEMENS CSA HEADER",10) present (a private element by its creator),
+// calling_ae == "SCANNER1" and called_ae prefix "ARCH". "=" compares text
+// with case and accents folded, "==" exactly; "matches" takes an RE2
+// pattern. An attribute the file does not hold makes a comparison false,
+// never an error. A value longer than 1024 bytes cannot be evaluated. The
+// catalog fields are calling_ae and called_ae, absent for a file not
+// received by DIMSE. No condition may name an attribute that names or
+// identifies the patient (Patient's Name and ID, other patient IDs, birth
+// date and time, addresses and telephone numbers, and any attribute whose
+// VR is PN), at any depth: refused as invalid. "has" and "every", which
+// look at other levels of the catalog, are a search's only. A condition is
+// at most 16 KiB, 16 levels deep and 64 comparisons; a rule set's
+// conditions together at most 256 KiB.
+service RouteService {
+  // CreateRuleSet stores a receiver's next rule set version and, with
+  // activate, points the receiver at it in the same transaction. An
+  // activation is checked as a receiver's change is: each archive rule's
+  // storage is the tenant's and neither a replica nor of the archive tier,
+  // each forward rule's sender is the tenant's, an archive rule names a
+  // profile only on a receiver that de-identifies, and each profile
+  // version, archive or destination, is the tenant's and can de-identify;
+  // a destination profile may only tighten what each profile the archive
+  // may hold the study under did (the receiver's, and each archive rule's):
+  // a rule of it that would keep more of an element, or that cannot be
+  // compared with the rule below, is refused with the reason
+  // loosens_lower_layer or incomparable_actions in the error's details. A
+  // version that fails is not stored.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver and the new
+  // version ("recv@3") as its object, and whether it was activated in
+  // details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant; a masked key
+  // with a forward rule), invalid (a rule set out of its bounds, a condition
+  // that does not read or names a patient's attribute, two rules of one
+  // name), not found (the tenant has no such receiver; a tenant that does not
+  // exist, for a caller who may list every tenant), precondition (with
+  // activate: a storage, sender or profile version the tenant does not have,
+  // a storage that is a replica or of the archive tier, a profile on a
+  // receiver that archives as received, a destination profile that loosens;
+  // the receiver's last version made; the tenant moved or fenced),
+  // unavailable (the tenant's database does not answer, or the tenant is
+  // not ready).
+  rpc CreateRuleSet(CreateRuleSetRequest) returns (CreateRuleSetResponse);
+
+  // GetRuleSet answers one version of a receiver's rule set, or the one it
+  // runs.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (the tenant has no such receiver; the receiver has no such
+  // version, or runs none; a tenant that does not exist, for a caller who
+  // may list every tenant), unavailable (the tenant's database does not
+  // answer, or the tenant is not ready).
+  rpc GetRuleSet(GetRuleSetRequest) returns (GetRuleSetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListRuleSets answers a page of a receiver's rule set versions, the
+  // newest first.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (also a page token of another receiver), not found (a tenant that does
+  // not exist, for a caller who may list every tenant), unavailable (the
+  // tenant's database does not answer, or the tenant is not ready).
+  rpc ListRuleSets(ListRuleSetsRequest) returns (ListRuleSetsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ActivateRuleSet points a receiver at one of its versions, an older one
+  // to go back to it, or at none (version 0), under every check
+  // CreateRuleSet's activation makes. It applies to receptions identified
+  // from then on.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver and the version
+  // ("recv@2") as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant; a masked
+  // key), invalid, not found (the tenant has no such receiver, or the
+  // receiver no such version; a tenant that does not exist, for a caller who
+  // may list every tenant), precondition (as CreateRuleSet's activation; the
+  // tenant moved or fenced), unavailable (the tenant's database does not
+  // answer, or the tenant is not ready).
+  rpc ActivateRuleSet(ActivateRuleSetRequest) returns (ActivateRuleSetResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ExplainRoute answers what a rule set decides for one file, rule by
+  // rule: each rule's result, and the comparison that decided it, with the
+  // attribute's tag and VR and whether it is present. The file is one sent
+  // with the request (as the receiver would receive it), or an instance the
+  // archive holds, read from its scan's metadata file: that header is
+  // de-identified, so a comparison on an attribute its profile removes or
+  // replaces is unknown, and so is a rule it decides. The values the
+  // comparison saw are left out unless show_values is set, which the audit
+  // entry records.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver as its object,
+  // the source ("file" or the instance's path of labels) and show_values in
+  // details; never a value of the file.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant; a masked key
+  // with show_values), invalid (no file and no instance, a file larger than
+  // 64 MiB or whose header cannot be read, a malformed AE title), not found
+  // (the tenant has no such receiver, version or instance; a tenant that
+  // does not exist, for a caller who may list every tenant), data loss (the
+  // instance's metadata file is missing or damaged), unavailable (the
+  // tenant's database or the storage does not answer, or the tenant is not
+  // ready).
+  rpc ExplainRoute(ExplainRouteRequest) returns (ExplainRouteResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // DryRunRoutes answers what a rule set would decide for the receiver's
+  // latest sessions, newest first, beside what the rules that routed them
+  // decided: one metadata file read per scan (its first instance, by SOP
+  // Instance UID: the study's first scan for the archive rules and the
+  // forward rules' conditions, each scan for the series filters), and the
+  // session's AE titles. The headers read are the archive's, de-identified,
+  // so a comparison on an attribute the session's profile removes or
+  // replaces is unknown, and a session whose result depends on one is
+  // counted as unknown, never as matching or not. Nothing changes.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver as its object,
+  // and the version and the number of sessions in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid
+  // (sessions out of 1 to 1000), not found (the tenant has no such receiver
+  // or version; a tenant that does not exist, for a caller who may list
+  // every tenant), unavailable (the tenant's database or a storage does not
+  // answer, or the tenant is not ready).
+  rpc DryRunRoutes(DryRunRoutesRequest) returns (DryRunRoutesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // GetRouteHits answers how many receptions each rule of a receiver
+  // routed, from the record each reception keeps of its rule set version
+  // and the rules that chose for it: of one version, or of every version.
+  //
+  // Role: reader on the tenant.
+  // Audit: one entry in the tenant's log, with the receiver as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid,
+  // not found (a tenant that does not exist, for a caller who may list every
+  // tenant), unavailable (the tenant's database does not answer, or the
+  // tenant is not ready).
+  rpc GetRouteHits(GetRouteHitsRequest) returns (GetRouteHitsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// RuleSet is one version of a receiver's routing rules.
+message RuleSet {
+  // The receiver it belongs to. Answered by the server; ignored in a
+  // request, where the request names the receiver.
+  string receiver = 1;
+
+  // Its version, from 1. Answered by the server; ignored in a request.
+  int32 version = 2;
+
+  // The archive rules, in order: the first that holds chooses. At most 64.
+  repeated ArchiveRule archive_rules = 3;
+
+  // What happens to a new session no archive rule chooses. False, the
+  // default: it goes as the receiver says, to its storage, with its
+  // profile. True: every file of the study is held as
+  // QUARANTINE_REASON_UNROUTED, and a person decides where it goes, by
+  // releasing its files naming a storage.
+  bool quarantine_unmatched = 4;
+
+  // The forward rules: every one is evaluated. At most 64. A rule's name is
+  // unique across both phases.
+  repeated ForwardRule forward_rules = 5;
+
+  // Why the version was made: at most 1024 bytes of text on one line. It
+  // is the caller's own text; never put a value of a file in it.
+  string comment = 6;
+
+  // When the version was made. Answered by the server.
+  google.protobuf.Timestamp create_time = 7;
+
+  // The id of the key that made it, empty for one made on the local
+  // socket. Answered by the server.
+  string created_by_key = 8;
+
+  // Whether the receiver runs this version now. Answered by the server.
+  bool active = 9;
+}
+
+// ArchiveRule is one rule of a rule set's archive phase.
+message ArchiveRule {
+  // The rule's name, under the rule of a tenant's name. Required. It names
+  // the rule in a reception's record and in a quarantine record that names
+  // it.
+  string name = 1;
+
+  // The condition, in the condition language (the service says what it
+  // reads). Empty holds for every study.
+  string when = 2;
+
+  // The tenant's storage a new session the rule chooses is archived to.
+  // Required.
+  string storage = 3;
+
+  // The profile version the files of a study the rule chooses are
+  // de-identified with, in place of the receiver's. Optional; only a
+  // receiver that de-identifies may run a rule that names one, since the
+  // receiver's choice decides how each file lands (its UIDs remapped and
+  // its checksum keyed, or not) before any rule is evaluated: a rule can
+  // replace the profile, never turn de-identification off or on.
+  ProfileVersionRef profile = 4;
+}
+
+// ForwardRule is one rule of a rule set's forward phase.
+message ForwardRule {
+  // The rule's name, under the rule of a tenant's name. Required.
+  string name = 1;
+
+  // The condition over the reception's first file. Empty holds for every
+  // reception.
+  string when = 2;
+
+  // A condition over each series' first file, by SOP Instance UID: only the
+  // series it holds for are forwarded, a send job each. Empty forwards the
+  // whole session in one job. A series filter forwards per series, so a
+  // destination can hold a study in part.
+  string series = 3;
+
+  // The tenant's senders it forwards to: at least one, at most 16, each
+  // once. A sender a rule the receiver runs names cannot be removed.
+  repeated string senders = 4;
+
+  // The profile version each copy is de-identified with before it is
+  // sent, over the archived file, with the check after run on the copy; a
+  // copy that cannot be made so is refused, never sent as archived.
+  // Optional: absent sends the archived file.
+  ProfileVersionRef destination_profile = 5;
+}
+
+// The phase a rule's result belongs to.
+enum RulePhase {
+  // Never answered.
+  RULE_PHASE_UNSPECIFIED = 0;
+  // An archive rule.
+  RULE_PHASE_ARCHIVE = 1;
+  // A forward rule's condition.
+  RULE_PHASE_FORWARD = 2;
+  // A forward rule's series filter.
+  RULE_PHASE_SERIES = 3;
+}
+
+// The result of a condition.
+enum RouteTruth {
+  // Never answered.
+  ROUTE_TRUTH_UNSPECIFIED = 0;
+  // The condition holds.
+  ROUTE_TRUTH_TRUE = 1;
+  // The condition does not hold.
+  ROUTE_TRUTH_FALSE = 2;
+  // Whether it holds cannot be known: a value it reads was removed or
+  // replaced by de-identification before the header was kept.
+  ROUTE_TRUTH_UNKNOWN = 3;
+  // It could not be evaluated (unusable says why).
+  ROUTE_TRUTH_UNUSABLE = 4;
+}
+
+// CreateRuleSetRequest names the receiver and the rules of its next
+// version.
+message CreateRuleSetRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver, by name. Required.
+  string receiver = 2;
+
+  // The rules. Required.
+  RuleSet rule_set = 3;
+
+  // Point the receiver at the new version in the same transaction.
+  bool activate = 4;
+}
+
+// CreateRuleSetResponse is the version stored.
+message CreateRuleSetResponse {
+  // The version, with its number and time.
+  RuleSet rule_set = 1;
+}
+
+// GetRuleSetRequest names a receiver and one of its versions.
+message GetRuleSetRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver, by name. Required.
+  string receiver = 2;
+
+  // The version; 0 for the one the receiver runs.
+  int32 version = 3;
+}
+
+// GetRuleSetResponse is one version.
+message GetRuleSetResponse {
+  // The version.
+  RuleSet rule_set = 1;
+}
+
+// ListRuleSetsRequest asks for a page of a receiver's versions.
+message ListRuleSetsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver, by name. Required.
+  string receiver = 2;
+
+  // The most versions to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 3;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant or receiver
+  // other than those it was made with.
+  string page_token = 4;
+}
+
+// ListRuleSetsResponse is a page of versions.
+message ListRuleSetsResponse {
+  // The versions of this page, the newest first.
+  repeated RuleSet rule_sets = 1;
+
+  // The token of the next page; empty after the last.
+  string next_page_token = 2;
+}
+
+// ActivateRuleSetRequest names the version a receiver is to run.
+message ActivateRuleSetRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver, by name. Required.
+  string receiver = 2;
+
+  // The version; 0 to run none.
+  int32 version = 3;
+}
+
+// ActivateRuleSetResponse is the version the receiver runs after.
+message ActivateRuleSetResponse {
+  // The version it runs; absent when it runs none.
+  RuleSet rule_set = 1;
+}
+
+// ExplainRouteRequest names a file and the rule set to explain it with.
+message ExplainRouteRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver, by name. Required.
+  string receiver = 2;
+
+  // The version; 0 for the one the receiver runs.
+  int32 version = 3;
+
+  // The file. Exactly one is required.
+  oneof source {
+    // A DICOM Part 10 file sent with the request, at most 64 MiB, as the
+    // receiver would receive it.
+    bytes file = 4;
+
+    // An instance the archive holds, by its scan's labels and its SOP
+    // Instance UID; or the scan's first instance, by SOP Instance UID,
+    // with no instance_id.
+    RouteInstance instance = 5;
+  }
+
+  // The calling AE title a file sent with the request is explained as
+  // received with; empty for none. An instance of the archive is explained
+  // with its session's.
+  string calling_ae_title = 6;
+
+  // The called AE title, as calling_ae_title.
+  string called_ae_title = 7;
+
+  // Answer the values each deciding comparison saw. Off by default: each
+  // comparison answers its attribute's tag and VR and whether it is
+  // present, never its value.
+  bool show_values = 8;
+}
+
+// RouteInstance names an instance of the archive.
+message RouteInstance {
+  // The scan's subject label. Required.
+  string subject_label = 1;
+
+  // The scan's session label. Required.
+  string session_label = 2;
+
+  // The scan's label. Required.
+  string scan_label = 3;
+
+  // The instance's SOP Instance UID; empty for the scan's first.
+  string instance_id = 4;
+}
+
+// ExplainRouteResponse is what a rule set decides for a file.
+message ExplainRouteResponse {
+  // The version explained.
+  int32 version = 1;
+
+  // What the archive phase decides.
+  RouteDecision decision = 2;
+
+  // Each rule evaluated: the archive rules in order up to the one that
+  // decided the phase, then every forward rule and, for one with a series
+  // filter, its filter over the file.
+  repeated RuleResult rules = 3;
+}
+
+// RouteDecision is what a rule set's phases decide for a file.
+message RouteDecision {
+  // The archive rule that chooses; empty when none does.
+  string archive_rule = 1;
+
+  // The storage the study goes to; empty when it is held.
+  string storage = 2;
+
+  // The archive rule's profile version; absent for the receiver's, and
+  // when the study is held.
+  ProfileVersionRef profile = 3;
+
+  // Why the study is held as unrouted, when it is: "no_match" (no rule
+  // holds and quarantine_unmatched is set) or "route_unusable" (the rule
+  // named in archive_rule cannot be evaluated); empty otherwise.
+  string unrouted = 4;
+
+  // Whether an archive rule before any that holds is unknown, so which
+  // rule chooses cannot be known from this header.
+  bool archive_unknown = 5;
+
+  // The forward rules whose condition holds.
+  repeated string forward_rules = 6;
+
+  // The forward rules whose condition is unknown.
+  repeated string forward_unknown = 7;
+}
+
+// RuleResult is one rule's result over a file.
+message RuleResult {
+  // The rule's phase.
+  RulePhase phase = 1;
+
+  // The rule's name.
+  string rule = 2;
+
+  // Its result.
+  RouteTruth truth = 3;
+
+  // Why it could not be evaluated, naming a field, never a value; empty
+  // when it was.
+  string unusable = 4;
+
+  // The comparison that decided it: absent for a rule with no condition,
+  // and for one that could not be evaluated.
+  DecidingComparison decided_by = 5;
+}
+
+// DecidingComparison is the comparison that decided a rule's result.
+message DecidingComparison {
+  // The comparison as the condition language writes it, with the rule's
+  // own values, never the file's.
+  string comparison = 1;
+
+  // The field compared, as the language writes it ("Modality",
+  // "(0008,0060)", "calling_ae").
+  string field = 2;
+
+  // The attribute's tag as "(gggg,eeee)"; empty for a catalog field and
+  // for a private element by its creator.
+  string tag = 3;
+
+  // The attribute's VR by the data dictionary; empty where tag is.
+  string vr = 4;
+
+  // Whether the file holds a value of the field.
+  bool present = 5;
+
+  // The comparison's own result, which is the rule's or its negation's.
+  RouteTruth truth = 6;
+
+  // The values of the field the comparison saw, each that is not empty;
+  // only with show_values, and empty otherwise.
+  repeated string values = 7;
+}
+
+// DryRunRoutesRequest names the rule set and how many sessions to try it
+// on.
+message DryRunRoutesRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver, by name. Required.
+  string receiver = 2;
+
+  // The version; 0 for the one the receiver runs.
+  int32 version = 3;
+
+  // How many of the receiver's latest sessions: 1 to 1000; zero means 100.
+  int32 sessions = 4;
+}
+
+// DryRunRoutesResponse is what a rule set would decide for the sessions.
+message DryRunRoutesResponse {
+  // The version tried.
+  int32 version = 1;
+
+  // Each session, newest first.
+  repeated DryRunSession sessions = 2;
+
+  // How many sessions would go as they went.
+  int32 same = 3;
+
+  // How many would go otherwise.
+  int32 changed = 4;
+
+  // How many cannot be known from the archive's headers.
+  int32 unknown = 5;
+}
+
+// DryRunSession is one session's routing, as it went and as it would go.
+message DryRunSession {
+  // The session's subject label.
+  string subject_label = 1;
+
+  // The session's label.
+  string session_label = 2;
+
+  // The rule set version that chose its archive rule, from its record; 0
+  // when no rule set did.
+  int32 recorded_version = 3;
+
+  // The archive rule that chose for it, empty for none.
+  string recorded_archive_rule = 4;
+
+  // The forward rules its receptions were forwarded by.
+  repeated string recorded_forward_rules = 5;
+
+  // The archive rule the version tried chooses; empty for none.
+  string archive_rule = 6;
+
+  // Whether which archive rule it chooses is unknown from the header.
+  bool archive_unknown = 7;
+
+  // The forward rules of the version tried whose condition holds, with
+  // each series filter holding for at least one scan.
+  repeated string forward_rules = 8;
+
+  // The forward rules whose condition or filter is unknown.
+  repeated string forward_unknown = 9;
+
+  // How the session compares: SAME, CHANGED or UNKNOWN.
+  DryRunOutcome outcome = 10;
+
+  // Why a session could not be read (its metadata file missing or
+  // damaged), naming no value; empty when it was.
+  string unreadable = 11;
+}
+
+// How a session's routing by the version tried compares with how it went.
+enum DryRunOutcome {
+  // Never answered.
+  DRY_RUN_OUTCOME_UNSPECIFIED = 0;
+  // The same archive rule and forward rules.
+  DRY_RUN_OUTCOME_SAME = 1;
+  // Another archive rule, or other forward rules.
+  DRY_RUN_OUTCOME_CHANGED = 2;
+  // A result that depends on a value the archive's header does not hold,
+  // or a session that could not be read.
+  DRY_RUN_OUTCOME_UNKNOWN = 3;
+}
+
+// GetRouteHitsRequest names a receiver and a version.
+message GetRouteHitsRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver, by name. Required.
+  string receiver = 2;
+
+  // The version; 0 for every version.
+  int32 version = 3;
+}
+
+// GetRouteHitsResponse is how often each rule routed.
+message GetRouteHitsResponse {
+  // Each rule that routed a reception, in order of version, phase and name.
+  repeated RouteHit hits = 1;
+}
+
+// RouteHit is how often one rule routed.
+message RouteHit {
+  // The rule set version.
+  int32 version = 1;
+
+  // The rule's phase: archive or forward.
+  RulePhase phase = 2;
+
+  // The rule's name; empty in the archive phase for the version's default,
+  // a reception no archive rule chose.
+  string rule = 3;
+
+  // How many receptions it routed.
+  int64 receptions = 4;
+
+  // How many series its forwards sent: 0 for an archive rule, and for a
+  // forward of whole sessions.
+  int64 series = 5;
+
+  // When it last routed a reception.
+  google.protobuf.Timestamp last_time = 6;
+}
