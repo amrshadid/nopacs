@@ -234,22 +234,60 @@ func TestABackupStopsAtItsMaxDuration(t *testing.T) {
 	gate := holdLab1(f)
 	done := make(chan backedUp, 1)
 	go func() { done <- createBackup(f.as(f.instAdmin)) }()
-	<-gate.reached
-	time.Sleep(600 * time.Millisecond)
-	close(gate.release)
-	x := <-done
+	// On a loaded machine the 300 ms bound can pass before the backup has
+	// read lab1's first row: the backup then ends at its bound without ever
+	// reaching the gate, which is the same outcome this test asserts.
+	// Waiting on the gate alone would wait forever.
+	var x backedUp
+	select {
+	case <-gate.reached:
+		time.Sleep(600 * time.Millisecond)
+		close(gate.release)
+		x = <-done
+	case x = <-done:
+	}
 	if x.summary != nil || connect.CodeOf(x.err) != connect.CodeResourceExhausted || !strings.Contains(x.err.Error(), "backup.max-duration") {
 		t.Fatalf("a backup past its max duration: %v, summary %v", x.err, x.summary != nil)
 	}
-	end := streamEntries(f.masterLog(), x.requestID)["ended"]
-	if end.Outcome != master.OutcomeFailed || end.Details["ended"] != "max_duration" || !strings.Contains(end.Reason, "backup.max-duration") {
-		t.Fatalf("the entry that ends it: %+v", end)
-	}
+	assertStoppedAtBound(t, f, x)
 	api.SetBackupDatabases(f.handlers, nil)
 	api.SetBackupLimit(f.handlers, 0)
 	if again := createBackup(f.as(f.instAdmin)); again.err != nil || again.summary == nil {
 		t.Fatalf("a backup after one stopped at its max duration: %v", again.err)
 	}
+}
+
+// assertStoppedAtBound checks the audit of a backup stopped by
+// backup.max-duration: once its stream opened, the entry that ends the
+// stream says max_duration; stopped before, the request's one entry is a
+// failure naming the setting.
+func assertStoppedAtBound(t *testing.T, f *fixture, x backedUp) {
+	t.Helper()
+	entries := streamEntries(f.masterLog(), x.requestID)
+	if end, streamed := entries["ended"]; streamed {
+		if end.Outcome != master.OutcomeFailed || end.Details["ended"] != "max_duration" || !strings.Contains(end.Reason, "backup.max-duration") {
+			t.Fatalf("the entry that ends it: %+v", end)
+		}
+		return
+	}
+	if early := entries[""]; early.Outcome != master.OutcomeFailed || !strings.Contains(early.Reason, "backup.max-duration") {
+		t.Fatalf("the entry of a backup stopped before its stream: %+v", early)
+	}
+}
+
+// TestABackupStoppedBeforeItsStreamNamesTheBound guards a backup whose
+// bound passes before anything is streamed (a master or tenant list read
+// slowly): it is answered resource exhausted naming backup.max-duration,
+// as one stopped mid-stream is, and its entry says so, rather than an
+// unavailable audit log or a cut read.
+func TestABackupStoppedBeforeItsStreamNamesTheBound(t *testing.T) {
+	f := newFixture(t)
+	api.SetBackupLimit(f.handlers, time.Microsecond)
+	x := createBackup(f.as(f.instAdmin))
+	if x.summary != nil || connect.CodeOf(x.err) != connect.CodeResourceExhausted || !strings.Contains(x.err.Error(), "backup.max-duration") {
+		t.Fatalf("a backup past its bound before its stream: %v, summary %v", x.err, x.summary != nil)
+	}
+	assertStoppedAtBound(t, f, x)
 }
 
 // TestABackupIsRefusedWhenItsOpeningEntryCannotBeWritten guards the entry

@@ -95,13 +95,13 @@ func (s backupService) CreateBackup(ctx context.Context, _ *v1.CreateBackupReque
 	if c.sealPause != nil {
 		resume, err := c.sealPause(ctx)
 		if err != nil {
-			return c.fail(d, err)
+			return c.failBackupEarly(ctx, d, err)
 		}
 		defer resume()
 	}
 	tenants, err := c.backupTenants(ctx)
 	if err != nil {
-		return c.fail(d, err)
+		return c.failBackupEarly(ctx, d, err)
 	}
 	mdb := sm
 	if wrap := c.seams.backupDatabase; wrap != nil {
@@ -113,6 +113,10 @@ func (s backupService) CreateBackup(ctx context.Context, _ *v1.CreateBackupReque
 	held := tenantDetails(tenants)
 	opened := d.Entry(master.OutcomeDone, "", access.Facts{Details: withDetails(held, map[string]string{detailStream: "opened"})})
 	if err := c.master.AppendAudit(ctx, opened); err != nil {
+		var past errPastMaxDuration
+		if errors.As(context.Cause(ctx), &past) {
+			return c.failBackupEarly(ctx, d, err)
+		}
 		c.log.Error("api: the entry that opens a backup could not be written; the backup was refused",
 			"request_id", opened.RequestID, "method", opened.Method, "error", err.Error())
 		return c.toAPI(d, fault.New(fault.Unavailable, "the installation's audit log cannot be written now; no backup was made"))
@@ -155,6 +159,20 @@ func (s backupService) CreateBackup(ctx context.Context, _ *v1.CreateBackupReque
 		return c.toAPI(d, fault.Wrap(fault.Unavailable, ctx.Err(), "the backup ended before its summary"))
 	}
 	return c.failWith(d, nil, end(strings.ReplaceAll(fault.KindOf(err).String(), " ", "_"), nil), err)
+}
+
+// failBackupEarly ends a backup that failed before its stream opened. The
+// bound of backup.max-duration runs from the start, so a master or tenant
+// list read slowly can pass it before anything is streamed: the answer
+// then names the setting, as it does when the bound ends the stream, and
+// not the read the bound cut short.
+func (c *core) failBackupEarly(ctx context.Context, d access.Decision, err error) error {
+	var past errPastMaxDuration
+	if errors.As(context.Cause(ctx), &past) {
+		bound := fault.New(fault.Exhausted, past.Error())
+		return c.fail(d, bound)
+	}
+	return c.fail(d, err)
 }
 
 // errPastMaxDuration is the cause of a backup's context ended by
