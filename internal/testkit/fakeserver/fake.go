@@ -43,6 +43,9 @@ type Server struct {
 	// CallerKeyID is the id of the key RequireKey stands for, which WhoAmI
 	// reports.
 	CallerKeyID string
+	// Version is the server version WhoAmI reports; empty reports the build
+	// of the test binary, as the real server does.
+	Version string
 	// Delay is how long each call waits before it is answered, for a test of
 	// the client's deadline.
 	Delay time.Duration

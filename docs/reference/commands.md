@@ -217,7 +217,11 @@ Usage: `nopacs context add <name> --server URL --key-file PATH [--ca-file PATH] 
 
 List the contexts, the current one marked
 
-Usage: `nopacs context list`
+Usage: `nopacs context list [--check] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--check` | bool |  | ask every context's server who its key is, and show whether it answered, the key, its grants and the server's version |
 
 #### `nopacs context remove`
 

@@ -29,8 +29,8 @@ This table says what each command is for. Every command and every flag, with its
 | Command | Verbs and what they do |
 |---|---|
 | `nopacs-server init`, `nopacs-server serve` | Make an installation; run its server. See [Running NoPACs](../operate/running.md) |
-| `nopacs context` | `add <name> --server URL --key-file PATH [--ca-file PATH] [--tls-client-cert PATH --tls-client-key PATH] [--tenant NAME] [--replace]`, `list`, `show <name>`, `use <name>`, `remove <name>`. See [Contexts](#contexts) |
-| `nopacs version`, `nopacs whoami` | The build; who the server takes the caller to be and what it may do |
+| `nopacs context` | `add <name> --server URL --key-file PATH [--ca-file PATH] [--tls-client-cert PATH --tls-client-key PATH] [--tenant NAME] [--replace]`, `list [--check]`, `show <name>`, `use <name>`, `remove <name>`. See [Contexts](#contexts) |
+| `nopacs version`, `nopacs whoami` | The build; who the server takes the caller to be and what it may do, with the server's version (a warning on standard error when it differs from the program's, see [Contexts](#contexts)) |
 | `nopacs agent-guide` | Every command with its usage and flags, the shape of `--json`, the exit codes and what a masked key is refused, for an AI agent to read (`--json` for one document); made from the command tree, no server needed |
 | `nopacs tenant` | `create <name> [--db-env VAR \| --db-file PATH]`, `list`, `show`, `status <name>` (its receivers, storages, jobs in progress and senders with their health), `remove <name> --yes` |
 | `nopacs key` | `create --holder TEXT [--masked] [--expires 90d \| --no-expiry] [--network CIDR]... [--client-cert FILE \| --client-cert-sha256 HEX]`, `list`, `show`, `rotate <id> [--overlap 24h]`, `set <id>` (networks, client certificate), `revoke <id> [--with-successors]`, `reinstate (--all \| <id>...)` (local operator only: lets keys a restore suspended work again; see [Backup](../operate/backup.md#keys-come-back-suspended)) |
@@ -259,18 +259,62 @@ secret, and a file with a field this program does not know is refused.
   is refused (exit 2), so an exported key never travels to whichever context is
   current. `--ca-file`, `--tls-client-cert` and `--tls-client-key` and their
   variables override the context's files.
-- **The default tenant** fills `--tenant` only where it is optional: `setting get`,
-  `set`, `unset` and `list`, and `audit list`, `verify`, `checkpoints` and
-  `export`. Without `--tenant` those act on the
-  installation, so with a default tenant they act on the tenant instead, which
-  the command says on standard error ("using tenant lab1 from context prod");
-  `--tenant ""` says the installation. A command that takes the tenant as an
-  argument (`storage list <tenant>`) is unchanged.
+- **The default tenant** stands in for the tenant of every command that can take
+  it, and the command says which tenant it used on standard error ("using tenant
+  lab1 from context prod"), so a person never acts on a tenant unknowingly. A
+  tenant named on the command line always wins, and then nothing is said.
+  - Where `--tenant` is optional (`setting get`, `set`, `unset` and `list`, and
+    `audit list`, `verify`, `checkpoints` and `export`) it fills `--tenant` when
+    the flag is absent. Those act on the installation without a tenant, so with
+    a default tenant they act on the tenant instead; `--tenant ""` says the
+    installation.
+  - Where the tenant is the first argument (`storage list <tenant>`, `job show
+    <tenant> <id>`, `tenant show <name>`, `catalog subjects <tenant>`) it is filled
+    when the arguments given are not a whole set and become one with the tenant
+    put in front: `nopacs storage show main` is `storage show <default> main`.
+    When the arguments given are already a whole set they are read as they
+    always were, so a command with an optional argument after the tenant
+    (`catalog sessions <tenant> [<subject>]`, `search <tenant> [<condition>]`)
+    reads its one argument as the tenant, and needs the tenant named to take no
+    subject or condition. Giving the tenant is always right.
+  - A command that removes something or changes archived data never takes the
+    default: `remove`, `delete`, `delete-batch`, `purge`, `cancel`, `discard`,
+    `reject`, `detach`, `rebuild`, `dispose`, `switch`, `edit`, `move`, `merge`,
+    `relabel`, `replace`, `undo`, `allow`, `rerun` and `release`, and any command
+    with `--yes` or `--confirm`
+    (`transfer create` among them) keep requiring the tenant to be named, and
+    refuse with exit 2 when it is not.
+  - Commands that name a tenant with `--tenant` to choose between it and the
+    installation or a key (`grant`, `key list`) are not filled.
+- **`list --check`** asks every context's server who its key is, with a `WhoAmI`
+  call, up to 8 servers at a time and each for at most 5 seconds (`--timeout`
+  changes that), and shows for each context whether it answered or why it did
+  not, the key's id and holder, when the key expires, its grants and the server's
+  version. A context that does not answer is shown with its reason and never
+  stops the others. A key is read from its context's own file only, never from
+  `NOPACS_KEY`, and no reason shows a key. The exit code is 0 when every context
+  answered and 1 when any did not, with one line on standard error saying how
+  many; `--json` gives the same as one document (`contexts`, each with
+  `reachable`, `error`, `keyId`, `holder`, `expireTime`, `grants`,
+  `serverVersion`, `serverCommit` and `versionDiffers`, and the counts
+  `reachable` and `failed`).
+- **The server's version.** `whoami` shows the server's version and commit, and
+  `whoami`, `context add` and `context list --check` warn, with one line on
+  standard error and no change to the exit code, when it differs from the
+  program's: when both are releases (`vMAJOR.MINOR.PATCH`) the warning is for a
+  different major or minor number, since a patch release changes nothing a
+  client relies on; when either is a development build (a pseudo-version, a
+  pre-release, a build with changes, or `unknown`) there is no number to trust,
+  so it is for any difference, the commit included. A server too old to report a
+  version is never warned about. The version is the one `nopacs-server version`
+  prints.
 
 ```sh
 nopacs context add lab1 --server https://archive.example.org:8443 \
     --key-file ~/.nopacs/lab1.key --ca-file ~/.nopacs/ca.pem --tenant lab1
 nopacs context list
+nopacs context list --check
+nopacs --context lab1 storage list
 nopacs --context lab1 tenant list
 ```
 

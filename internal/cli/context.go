@@ -51,9 +51,27 @@ the file, which "context use" sets. --server, --data-dir, --key-file, --ca-file,
 NOPACS_DATA_DIR, NOPACS_KEY, NOPACS_CA_FILE, NOPACS_TLS_CLIENT_CERT and
 NOPACS_TLS_CLIENT_KEY, win over what a context holds. A context's key, authorities and
 certificate are used only for the context's own server, never sent to another.
-A context's default tenant fills --tenant of the commands where it is optional
-(setting get, set, unset and list, audit list); --tenant "" says the installation
-instead.`,
+A context's default tenant stands in for the tenant a command would otherwise
+need or lack, and the command says which one on standard error ("using tenant
+lab1 from context prod"):
+  - where --tenant is optional (setting get, set, unset and list, audit list,
+    verify, checkpoints and export) it fills --tenant when the flag is not given;
+    --tenant "" says the installation instead;
+  - where the tenant is the first argument (storage list <tenant>, job show
+    <tenant> <id>, tenant show <name>) it is filled when the arguments given are
+    one short of what the command needs, so "nopacs storage show main" means
+    "storage show <default tenant> main". A command whose one argument could be
+    the tenant or its next argument (catalog sessions <tenant> [<subject>],
+    search) takes it as the tenant, as ever, and needs the tenant named;
+  - a command that removes something or changes archived data never takes it:
+    the verbs remove, delete, delete-batch, purge, cancel, discard, reject,
+    detach, rebuild, dispose, switch, edit, move, merge, relabel, replace, undo,
+    allow, rerun and release, and any command with --yes or --confirm (a
+    transfer included) need the tenant named.
+A tenant named on the command line always wins.
+
+"context list --check" asks every context's server who its key is and shows the
+answers (see its help).`,
 		a.newContextAdd(), a.newContextList(), a.newContextShow(), a.newContextUse(), a.newContextRemove())
 }
 
@@ -142,6 +160,7 @@ is what is saved.`,
 				a.line("context add: the key file of context " + name + " does not work with " + c.Server + ", so nothing was saved")
 				return err
 			}
+			a.warnVersion(res, name)
 			if file.Contexts == nil {
 				file.Contexts = map[string]contexts.Context{}
 			}
@@ -173,7 +192,7 @@ is what is saved.`,
 				if _, err := fmt.Fprintln(w); err != nil {
 					return err
 				}
-				return a.whoamiTable(w, res.GetPrincipal())
+				return a.whoamiTable(w, res)
 			})
 		}),
 	}
@@ -215,15 +234,26 @@ func (a *app) contextTable(w io.Writer, name string, c contexts.Context, current
 
 // newContextList builds "context list".
 func (a *app) newContextList() *cobra.Command {
-	return &cobra.Command{
-		Use:   "list",
+	var check bool
+	cmd := &cobra.Command{
+		Use:   "list [--check]",
 		Short: "List the contexts, the current one marked",
-		Long: `List the contexts in the file, with the current one marked "*". It reads only
-the file and does not contact any server.`,
+		Long: `List the contexts in the file, with the current one marked "*". Without --check
+it reads only the file and does not contact any server.
+
+With --check it asks every context's server who its key is (WhoAmI), up to 8 at
+a time, each for at most 5 seconds (or --timeout), and shows for each: whether the
+server answered, or why not; the key's id and holder; when it expires; its
+grants; and the server's version. A context that does not answer never stops the
+others from being shown. The exit code is 0 when every context answered and 1
+when any did not; with --json the same facts are one document. A key is read
+from its context's own file only, never from NOPACS_KEY, and a reason never
+shows a key.`,
 		Example: `  nopacs context list
-  nopacs context list --json`,
+  nopacs context list --json
+  nopacs context list --check`,
 		Args: exactArgs(0),
-		RunE: a.run(func(_ context.Context, _ *cobra.Command, _ []string) error {
+		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, _ []string) error {
 			loc, err := a.location()
 			if err != nil {
 				return err
@@ -233,6 +263,9 @@ the file and does not contact any server.`,
 				return err
 			}
 			names := file.Names()
+			if check {
+				return a.checkOut(a.checkAll(ctx, a.checkTimeoutFor(cmd), names, file), file.Current, loc.Path)
+			}
 			if a.opts.json {
 				docs := make([]contextDoc, 0, len(names))
 				for _, n := range names {
@@ -261,6 +294,8 @@ the file and does not contact any server.`,
 			})
 		}),
 	}
+	cmd.Flags().BoolVar(&check, "check", false, "ask every context's server who its key is, and show whether it answered, the key, its grants and the server's version")
+	return cmd
 }
 
 // named loads the file and finds a context by name, with the errors that name

@@ -780,6 +780,16 @@ message WhoAmIRequest {}
 message WhoAmIResponse {
   // Who made the request, with what it may do.
   Principal principal = 1;
+
+  // The version of the server that answered, as the server's own version
+  // command prints it: a release such as v1.2.0, a module pseudo-version, or
+  // "unknown" for a build that recorded none. A client compares it with its
+  // own to warn when the two differ; it is never a reason to refuse a call.
+  string server_version = 2;
+
+  // The commit the server was built from, shortened, with "-dirty" when the
+  // tree had changes, or "unknown".
+  string server_commit = 3;
 }
 
 // RotateKeyRequest names the key to rotate.

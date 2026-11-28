@@ -25,8 +25,12 @@ A call by `curl` on a server's local socket, with no key:
 curl --unix-socket /var/lib/nopacs/run/nopacs.sock \
   -X POST http://local/nopacs.v1.AccessService/WhoAmI \
   -H 'content-type: application/json' -d '{}'
-# {"principal":{"localOperator":{"userId":"502"}}}
+# {"principal":{"localOperator":{"userId":"502"}},"serverVersion":"v1.2.0","serverCommit":"0123456789ab"}
 ```
+
+The answer also names the server's build, `serverVersion` and `serverCommit`, as
+`nopacs-server version` prints them, so a client can warn when its own version is
+not one the server is meant to serve.
 
 Over the network the same call is made to `https://host:port` with the key as a
 bearer token:

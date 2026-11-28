@@ -357,6 +357,7 @@ that can no longer be answered, 7 a bound of the server reached.`,
 		a.newDownload(),
 		a.newBackup(),
 	)
+	a.fillTenantArg(root)
 	return root
 }
 

@@ -284,6 +284,16 @@ scan, keeps it whole, and serves it through an API with keys.
   Every method of the contract is served (`api/not-served.txt` lists none).
 - The command line `nopacs` for every service, with `--json` output and named
   client contexts, and an interactive program (`nopacs` with no arguments).
+  `whoami` shows the server's version and commit, and warns on one line of
+  standard error when the server's version differs from the program's (a
+  different major or minor release, or any difference between development
+  builds). A context's default tenant stands in for the tenant of every
+  command that takes it as its first argument or as an optional `--tenant`,
+  and says which tenant it used; a command that removes something or changes
+  archived data always needs the tenant named. `nopacs context list --check`
+  asks every context's server who its key is, in parallel, and shows whether
+  it answered, the key, its grants and the server's version, exiting 1 when
+  any context does not answer.
 - `nopacs job scrub`, `job rebuild` (`--mode compare|replace`; a replace needs
   `--yes` and says what it does), `job findings` and `job finding` make and
   read scrub and rebuild jobs; `job show`, `list` and `watch` follow them in

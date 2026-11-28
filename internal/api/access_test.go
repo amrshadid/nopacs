@@ -10,6 +10,7 @@ import (
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/version"
 )
 
 // day is a day, for key lifetimes.
@@ -385,7 +386,7 @@ func testRemoveGrant(t *testing.T) {
 }
 
 // testWhoAmI guards WhoAmI: any authenticated caller, the key with its
-// grants, the local operator with none.
+// grants and the server's version, the local operator with none.
 func testWhoAmI(t *testing.T) {
 	f := newFixture(t)
 	who := func(c clients) outcome { return call(c.access.WhoAmI, &v1.WhoAmIRequest{}) }
@@ -405,6 +406,12 @@ func testWhoAmI(t *testing.T) {
 				g := p.GetGrants()
 				if p.GetKey().GetId() != f.lab1ReaderID || len(g) != 1 || g[0].GetScope().GetTenant() != "lab1" || g[0].GetRole() != v1.Role_ROLE_READER || g[0].GetKeyId() != f.lab1ReaderID {
 					t.Errorf("got %v", p)
+				}
+				// The answer names the build, as the server's version command
+				// prints it, so a client can warn on a mismatch.
+				res := o.res.(*v1.WhoAmIResponse)
+				if info := version.Get(); res.GetServerVersion() != info.Version || res.GetServerCommit() != info.Commit || res.GetServerVersion() == "" {
+					t.Errorf("server version %q commit %q, want %q %q", res.GetServerVersion(), res.GetServerCommit(), info.Version, info.Commit)
 				}
 			}},
 		{name: "the local operator", as: local, call: who,

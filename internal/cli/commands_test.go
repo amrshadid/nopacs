@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
+	"github.com/amrshadid/nopacs/internal/version"
 )
 
 // expect fails the test unless the run ended with the exit code and wrote
@@ -79,14 +80,19 @@ func TestVersion(t *testing.T) {
 }
 
 // TestWhoami guards whoami as the local operator and as a key with grants, in
-// the table form and in --json.
+// the table form and in --json, with the server's build on its own line.
 func TestWhoami(t *testing.T) {
+	info := version.Get()
+	server := info.Version + " (commit " + info.Commit + ")"
 	r := newRig(t)
 	expect(t, r.run("whoami"), 0,
-		"Caller: local operator (user 501)\nAccess: admin on the installation and on every tenant\n", "")
+		"Caller: local operator (user 501)\nAccess: admin on the installation and on every tenant\nServer: "+server+"\n", "")
 	doc := document(t, r.run("whoami", "--json"))
 	if _, ok := doc["principal"].(map[string]any)["localOperator"]; !ok {
 		t.Errorf("no localOperator in %v", doc)
+	}
+	if doc["serverVersion"] != info.Version {
+		t.Errorf("whoami --json serverVersion = %v, want %q", doc["serverVersion"], info.Version)
 	}
 
 	n := newNetworkRig(t)
@@ -95,7 +101,7 @@ func TestWhoami(t *testing.T) {
 	n.must("grant", "set", "k00000000001", "--role", "reader", "--tenant", "lab1")
 	n.must("grant", "set", "k00000000001", "--role", "admin", "--installation")
 	expect(t, n.run("whoami"), 0,
-		"Caller:  key k00000000001 (ci)\nExpires: 2026-12-17 15:00:00 +03:00\n\n"+
+		"Caller:  key k00000000001 (ci)\nExpires: 2026-12-17 15:00:00 +03:00\nServer:  "+server+"\n\n"+
 			"SCOPE         ROLE\ninstallation  admin\ntenant lab1   reader\n", "")
 	doc = document(t, n.run("whoami", "--json"))
 	if grants := doc["principal"].(map[string]any)["grants"].([]any); len(grants) != 2 {

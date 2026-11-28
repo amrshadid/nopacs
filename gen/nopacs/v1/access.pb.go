@@ -1668,7 +1668,15 @@ func (*WhoAmIRequest) Descriptor() ([]byte, []int) {
 type WhoAmIResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Who made the request, with what it may do.
-	Principal     *Principal `protobuf:"bytes,1,opt,name=principal,proto3" json:"principal,omitempty"`
+	Principal *Principal `protobuf:"bytes,1,opt,name=principal,proto3" json:"principal,omitempty"`
+	// The version of the server that answered, as the server's own version
+	// command prints it: a release such as v1.2.0, a module pseudo-version, or
+	// "unknown" for a build that recorded none. A client compares it with its
+	// own to warn when the two differ; it is never a reason to refuse a call.
+	ServerVersion string `protobuf:"bytes,2,opt,name=server_version,json=serverVersion,proto3" json:"server_version,omitempty"`
+	// The commit the server was built from, shortened, with "-dirty" when the
+	// tree had changes, or "unknown".
+	ServerCommit  string `protobuf:"bytes,3,opt,name=server_commit,json=serverCommit,proto3" json:"server_commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1708,6 +1716,20 @@ func (x *WhoAmIResponse) GetPrincipal() *Principal {
 		return x.Principal
 	}
 	return nil
+}
+
+func (x *WhoAmIResponse) GetServerVersion() string {
+	if x != nil {
+		return x.ServerVersion
+	}
+	return ""
+}
+
+func (x *WhoAmIResponse) GetServerCommit() string {
+	if x != nil {
+		return x.ServerCommit
+	}
+	return ""
 }
 
 // RotateKeyRequest names the key to rotate.
@@ -2142,9 +2164,11 @@ const file_nopacs_v1_access_proto_rawDesc = "" +
 	"\x05scope\x18\x02 \x01(\v2\x10.nopacs.v1.ScopeR\x05scope\"K\n" +
 	"\x13RemoveGrantResponse\x124\n" +
 	"\rprevious_role\x18\x01 \x01(\x0e2\x0f.nopacs.v1.RoleR\fpreviousRole\"\x0f\n" +
-	"\rWhoAmIRequest\"D\n" +
+	"\rWhoAmIRequest\"\x90\x01\n" +
 	"\x0eWhoAmIResponse\x122\n" +
-	"\tprincipal\x18\x01 \x01(\v2\x14.nopacs.v1.PrincipalR\tprincipal\"W\n" +
+	"\tprincipal\x18\x01 \x01(\v2\x14.nopacs.v1.PrincipalR\tprincipal\x12%\n" +
+	"\x0eserver_version\x18\x02 \x01(\tR\rserverVersion\x12#\n" +
+	"\rserver_commit\x18\x03 \x01(\tR\fserverCommit\"W\n" +
 	"\x10RotateKeyRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x123\n" +
 	"\aoverlap\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\aoverlap\"|\n" +

@@ -12,6 +12,7 @@ import (
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/version"
 )
 
 // accessHandler implements AccessService.
@@ -255,10 +256,15 @@ func (h accessHandler) WhoAmI(context.Context, *v1.WhoAmIRequest) (*v1.WhoAmIRes
 	s := h.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	ver, commit := s.Version, "unknown"
+	if ver == "" {
+		info := version.Get()
+		ver, commit = info.Version, info.Commit
+	}
 	if s.RequireKey == "" {
 		return &v1.WhoAmIResponse{Principal: &v1.Principal{
 			Caller: &v1.Principal_LocalOperator{LocalOperator: &v1.LocalOperator{UserId: "501"}},
-		}}, nil
+		}, ServerVersion: ver, ServerCommit: commit}, nil
 	}
 	p := &v1.Principal{}
 	if k, err := s.findKey(s.CallerKeyID); err == nil {
@@ -271,5 +277,5 @@ func (h accessHandler) WhoAmI(context.Context, *v1.WhoAmIRequest) (*v1.WhoAmIRes
 			p.Grants = append(p.Grants, g)
 		}
 	}
-	return &v1.WhoAmIResponse{Principal: p}, nil
+	return &v1.WhoAmIResponse{Principal: p, ServerVersion: ver, ServerCommit: commit}, nil
 }

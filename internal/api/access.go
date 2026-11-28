@@ -9,6 +9,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/access"
 	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/version"
 )
 
 // accessService is AccessService. Every change and read goes through package
@@ -277,7 +278,11 @@ func (s accessService) WhoAmI(ctx context.Context, _ *v1.WhoAmIRequest) (*v1.Who
 	for _, g := range grants {
 		out.Grants = append(out.Grants, grantMessage(g))
 	}
-	return &v1.WhoAmIResponse{Principal: out}, nil
+	// The build is read from the same place as "nopacs-server version", so a
+	// client's comparison names the build that answered, not a copy that can
+	// drift.
+	info := version.Get()
+	return &v1.WhoAmIResponse{Principal: out, ServerVersion: info.Version, ServerCommit: info.Commit}, nil
 }
 
 // grantFilterDetail returns the filter of a ListGrants request as its audit

@@ -204,10 +204,14 @@ class WhoAmIRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class WhoAmIResponse(_message.Message):
-    __slots__ = ("principal",)
+    __slots__ = ("principal", "server_version", "server_commit")
     PRINCIPAL_FIELD_NUMBER: _ClassVar[int]
+    SERVER_VERSION_FIELD_NUMBER: _ClassVar[int]
+    SERVER_COMMIT_FIELD_NUMBER: _ClassVar[int]
     principal: Principal
-    def __init__(self, principal: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
+    server_version: str
+    server_commit: str
+    def __init__(self, principal: _Optional[_Union[Principal, _Mapping]] = ..., server_version: _Optional[str] = ..., server_commit: _Optional[str] = ...) -> None: ...
 
 class RotateKeyRequest(_message.Message):
     __slots__ = ("id", "overlap")

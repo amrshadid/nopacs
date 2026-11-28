@@ -357,9 +357,86 @@ func TestContextDefaultTenant(t *testing.T) {
 	if res.code != 0 || strings.Contains(res.stdout, "req-tenant") || !strings.Contains(res.stdout, "req-install") {
 		t.Errorf("audit list --tenant \"\": %+v", res)
 	}
-	// A tenant argument is not filled and not needed: the grammar is as it was.
-	if res := runWith(env, "storage", "list"); res.code != 2 || !strings.Contains(res.stderr, "wrong number of arguments") {
-		t.Errorf("storage list without a tenant: %+v", res)
+}
+
+// TestContextDefaultTenantArgument guards the default tenant where the tenant
+// is the first argument: a command whose arguments are incomplete without it
+// takes the context's tenant and says so; a tenant named wins and nothing is
+// said; a command whose one argument could be the tenant or the next argument
+// keeps requiring the tenant; and every command that removes something or
+// changes archived data refuses to take the tenant from the context, leaving
+// the data in place.
+func TestContextDefaultTenantArgument(t *testing.T) {
+	n := newNetworkRig(t)
+	env, _ := ctxEnv(t)
+	addContext(t, env, n, "t", "--tenant", "lab1")
+	n.must("tenant", "create", "lab1")
+	n.must("storage", "add", "lab1", "main", "--type", "dir", "--root", "fast")
+	say := "nopacs: using tenant lab1 from context t\n"
+
+	// Filled, with the tenant said.
+	res := runWith(env, "storage", "list")
+	if res.code != 0 || !strings.Contains(res.stdout, "main") || res.stderr != say {
+		t.Errorf("storage list: %+v", res)
+	}
+	res = runWith(env, "storage", "show", "main")
+	if res.code != 0 || !strings.Contains(res.stdout, "main") || res.stderr != say {
+		t.Errorf("storage show main: %+v", res)
+	}
+	res = runWith(env, "tenant", "show")
+	if res.code != 0 || !strings.Contains(res.stdout, "lab1") || res.stderr != say {
+		t.Errorf("tenant show: %+v", res)
+	}
+	res = runWith(env, "catalog", "subjects")
+	if res.code != 0 || !strings.HasPrefix(res.stderr, say) {
+		t.Errorf("catalog subjects: %+v", res)
+	}
+
+	// Named: the named tenant is used, and nothing is said about a default.
+	res = runWith(env, "storage", "list", "lab1")
+	if res.code != 0 || res.stderr != "" {
+		t.Errorf("storage list lab1: %+v", res)
+	}
+	res = runWith(env, "storage", "show", "lab1", "main")
+	if res.code != 0 || res.stderr != "" {
+		t.Errorf("storage show lab1 main: %+v", res)
+	}
+
+	// One argument that could be the tenant or the subject stays the tenant.
+	res = runWith(env, "catalog", "sessions", "subject1")
+	if res.code == 0 || strings.Contains(res.stderr, "using tenant") {
+		t.Errorf("catalog sessions subject1 took the default: %+v", res)
+	}
+
+	// Destructive commands name their tenant: with the default they refuse
+	// before anything is sent, and the storage is still there.
+	for _, args := range [][]string{
+		{"storage", "remove", "main", "--yes"},
+		{"receiver", "remove", "scanner1", "--yes"},
+		{"correction", "purge", "7", "--yes"},
+		{"correction", "delete", "subject1", "--reason", "x", "--yes"},
+		{"job", "cancel", "7"},
+		{"transfer", "create", "subject1", "--to", "lab2", "--reason", "x", "--move", "--yes"},
+		{"correction", "edit", "subject1", "--set", "StudyDescription=x", "--reason", "x"},
+		{"correction", "move", "subject1/session1", "--to", "subject2", "--reason", "x"},
+		{"correction", "undo", "7", "--reason", "x"},
+		{"deid", "rerun", "--reason", "x"},
+		{"quarantine", "release", "7"},
+	} {
+		res := runWith(env, args...)
+		if res.code != 2 || strings.Contains(res.stderr, "using tenant") || !strings.Contains(res.stderr, "wrong number of arguments") {
+			t.Errorf("%v: %+v", args, res)
+		}
+	}
+	if got := n.run("storage", "list", "lab1"); !strings.Contains(got.stdout, "main") {
+		t.Errorf("the storage is gone: %+v", got)
+	}
+
+	// Without a default tenant nothing is filled.
+	bare, _ := ctxEnv(t)
+	addContext(t, bare, n, "u")
+	if res := runWith(bare, "storage", "list"); res.code != 2 || !strings.Contains(res.stderr, "wrong number of arguments") {
+		t.Errorf("storage list without a default: %+v", res)
 	}
 }
 
