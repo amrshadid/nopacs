@@ -217,7 +217,7 @@ CREATE TABLE storage_owners (
 -- each has port 0 and an empty bind address.
 CREATE TABLE receivers (
     name           TEXT    NOT NULL PRIMARY KEY,
-    type           TEXT    NOT NULL CHECK (type IN ('dimse', 'stow', 'import')),
+    type           TEXT    NOT NULL CHECK (type IN ('dimse', 'stow', 'import', 'job')),
     enabled        INTEGER NOT NULL CHECK (enabled IN (0, 1)),
     storage        TEXT    NOT NULL,
     port           INTEGER NOT NULL,
@@ -229,7 +229,7 @@ CREATE TABLE receivers (
     max_file_bytes INTEGER NOT NULL,
     created        INTEGER NOT NULL,
     updated        INTEGER NOT NULL,
-    CHECK ((type = 'dimse' AND port BETWEEN 1 AND 65535) OR (type IN ('stow', 'import') AND port = 0 AND bind_address = ''))
+    CHECK ((type = 'dimse' AND port BETWEEN 1 AND 65535) OR (type IN ('stow', 'import', 'job') AND port = 0 AND bind_address = ''))
 ) STRICT;
 
 -- Removing a storage asks whether a receiver names it; adding or changing a
@@ -884,7 +884,7 @@ CREATE TABLE senders (
 -- progress event, which is written at most once in a period.
 CREATE TABLE jobs (
     id                  TEXT    NOT NULL PRIMARY KEY,
-    kind                TEXT    NOT NULL CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch')),
+    kind                TEXT    NOT NULL CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch', 'transfer')),
     sender              TEXT    NOT NULL,
     subject_label       TEXT    NOT NULL,
     session_label       TEXT    NOT NULL,
@@ -2196,3 +2196,64 @@ CREATE TABLE route_matches (
 ) STRICT, WITHOUT ROWID;
 
 CREATE INDEX route_matches_by_rule ON route_matches (receiver, version, phase, rule);
+
+-- A transfer job's own part: the tenant it copies into, that tenant's
+-- receiver of type job (named, not enforced here: the job's runner reads
+-- it again at each step), whether the source is deleted once every copy is
+-- confirmed (move), the reason, the step the job has reached and the delete
+-- a move made ('' for none), which a restart finds and never makes again.
+-- The job's items are its instance list; they stay in the source, so the
+-- target never stores a UID of the source.
+CREATE TABLE transfer_jobs (
+    job_id            TEXT    NOT NULL PRIMARY KEY,
+    target_tenant     TEXT    NOT NULL,
+    target_tenant_id  TEXT    NOT NULL,
+    receiver          TEXT    NOT NULL,
+    move              INTEGER NOT NULL CHECK (move IN (0, 1)),
+    reason            TEXT    NOT NULL,
+    step              TEXT    NOT NULL CHECK (step IN ('listing', 'copying', 'confirming', 'deleting', 'ended')),
+    delete_correction TEXT    NOT NULL
+) STRICT;
+
+-- The instances a transfer job copies: the scan labels and SOP Instance UID
+-- in this tenant, the file's size and the SHA-256 of its archived bytes when
+-- listed, the revision it had, whether it was archived as received, where
+-- it is (listed, copied, confirmed, failed), the UID it has in the target
+-- once copied and when the target took it.
+--   by state and order                  transfer_items_by_state
+CREATE TABLE transfer_items (
+    job_id           TEXT    NOT NULL,
+    subject_label    TEXT    NOT NULL,
+    session_label    TEXT    NOT NULL,
+    scan_label       TEXT    NOT NULL,
+    sop_instance_uid TEXT    NOT NULL,
+    size             INTEGER NOT NULL CHECK (size >= 0),
+    sha256           BLOB    NOT NULL CHECK (length(sha256) = 32),
+    revision         INTEGER NOT NULL CHECK (revision >= 1),
+    as_received      INTEGER NOT NULL CHECK (as_received IN (0, 1)),
+    state            TEXT    NOT NULL CHECK (state IN ('listed', 'copied', 'confirmed', 'failed')),
+    target_uid       TEXT    NOT NULL,
+    copied_at        INTEGER,
+    PRIMARY KEY (job_id, subject_label, session_label, scan_label, sop_instance_uid)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX transfer_items_by_state ON transfer_items (job_id, state, subject_label, session_label, scan_label, sop_instance_uid);
+
+-- Where an instance of this tenant came from by a transfer, keyed by its
+-- SOP Instance UID here: the source tenant's id, the labels it had there
+-- ('' for an instance the source archived as received, whose labels may be
+-- an original identifier), its revision there and the source's job. It holds
+-- no UID of the source and no original identifier.
+--   of a source job                     transfer_provenance_by_job
+CREATE TABLE transfer_provenance (
+    sop_instance_uid TEXT    NOT NULL PRIMARY KEY,
+    source_tenant_id TEXT    NOT NULL,
+    subject_label    TEXT    NOT NULL,
+    session_label    TEXT    NOT NULL,
+    scan_label       TEXT    NOT NULL,
+    revision         INTEGER NOT NULL CHECK (revision >= 1),
+    job_id           TEXT    NOT NULL,
+    recorded         INTEGER NOT NULL
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX transfer_provenance_by_job ON transfer_provenance (job_id, sop_instance_uid);

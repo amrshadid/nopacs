@@ -40,6 +40,16 @@ type Arrival struct {
 	// receiver of type import (AcceptImport's rules apply); nil for every
 	// other source. Its Size is set from the bytes landed.
 	Import *tenant.ImportArrival
+	// RequireDeidentified says the file must not be archived as received: a
+	// transfer sets it for an instance the source archived as received (or
+	// whose image a pixel rule accepted at risk), so a receiver changed to
+	// archive as received after the job checked it takes none (the file is
+	// Failed with ReasonNotDeidentified, and nothing lands).
+	RequireDeidentified bool
+	// transfer says a transfer job handed the file in (AcceptTransfer): only
+	// then does a receiver of type job take it. Unexported, so no source
+	// outside this package can claim it.
+	transfer bool
 	// Body yields the file's bytes, a DICOM file (PS3.10 7.1). It is read
 	// to its end or to the receiver's largest file and one byte more.
 	Body io.Reader

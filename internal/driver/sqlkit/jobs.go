@@ -513,6 +513,9 @@ func (k Sending) RetryJob(ctx context.Context, id, newID string, now time.Time, 
 		if first.job.Kind == tenant.JobReplicate {
 			return tenant.Precondition("a replicate job is not retried; a new backfill of the replica copies what it still lacks")
 		}
+		if first.job.Kind == tenant.JobTransfer {
+			return tenant.Precondition("a transfer job is not retried; a new transfer copies what the target still lacks")
+		}
 		if first.job.Kind == tenant.JobDeleteBatch {
 			return tenant.Precondition("a batch delete job is not retried; a new preview and batch delete what is still to delete")
 		}

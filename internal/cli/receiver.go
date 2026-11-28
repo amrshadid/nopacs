@@ -65,6 +65,11 @@ also hold writer or more on the tenant. One added with no key takes nothing. A
 key is listed by one stow receiver of a tenant at most. Each part is bounded by
 --max-file-size and each request by --max-request-size.
 
+With --type job the receiver never listens either: only the server's own jobs
+hand it files, the transfers between tenants (nopacs transfer create). Its
+routing, --profile and checks apply to them as to any receiver, so what it
+archives is this tenant's own.
+
 With --type import the receiver never listens: it takes the files its import
 jobs (nopacs job import) read from a directory under an import root the
 installation allotted to the tenant (--root; the settings import.roots and
@@ -202,6 +207,8 @@ func (a *app) receiverDetails(w io.Writer, r *v1.Receiver) error {
 		typ = "stow"
 	case r.GetImporter() != nil:
 		typ = "import"
+	case r.GetJob() != nil:
+		typ = "job"
 	}
 	pairs := []output.Pair{
 		{Label: "Name", Value: r.GetName()},

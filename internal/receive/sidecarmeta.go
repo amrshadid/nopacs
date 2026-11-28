@@ -119,7 +119,7 @@ func (p *Pipeline) sidecarMetaFor(ctx context.Context, r tenant.Reception, c sca
 		switch rc.Type {
 		case tenant.ReceiverDIMSE:
 			m.form = sidecar.FormDIMSE
-		case tenant.ReceiverSTOW, tenant.ReceiverImport:
+		case tenant.ReceiverSTOW, tenant.ReceiverImport, tenant.ReceiverJob:
 			m.form = sidecar.FormPart10
 		}
 	}

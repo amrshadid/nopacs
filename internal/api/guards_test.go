@@ -242,6 +242,15 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		"DeleteBatch": func(c clients) outcome {
 			return call(c.corrections.DeleteBatch, &v1.DeleteBatchRequest{Tenant: name, Targets: []*v1.CorrectionTarget{{SubjectLabel: "S1"}}, Reason: "x", ValidateOnly: true})
 		},
+		"CreateTransfer": func(c clients) outcome {
+			return call(c.transfers.CreateTransfer, &v1.CreateTransferRequest{Tenant: name, SubjectLabel: "S1", TargetTenant: "lab2", Reason: "x", ValidateOnly: true})
+		},
+		"GetTransfer": func(c clients) outcome {
+			return call(c.transfers.GetTransfer, &v1.GetTransferRequest{Tenant: name, Id: "j1"})
+		},
+		"ListTransfers": func(c clients) outcome {
+			return call(c.transfers.ListTransfers, &v1.ListTransfersRequest{Tenant: name})
+		},
 		"ListDeleteBatchTargets": func(c clients) outcome {
 			return call(c.corrections.ListDeleteBatchTargets, &v1.ListDeleteBatchTargetsRequest{Tenant: name, JobId: "j1"})
 		},

@@ -239,6 +239,13 @@ func Contract() Table {
 		nopacsv1connect.RouteServiceDryRunRoutesProcedure:    onTenant(func() *nopacsv1.DryRunRoutesRequest { return &nopacsv1.DryRunRoutesRequest{} }, master.RoleOperator),
 		nopacsv1connect.RouteServiceGetRouteHitsProcedure:    onTenant(func() *nopacsv1.GetRouteHitsRequest { return &nopacsv1.GetRouteHitsRequest{} }, master.RoleReader),
 
+		// TransferService: "admin on the tenant, and writer on the target
+		// tenant" to make a transfer (the table holds the source's role), and
+		// "operator on the tenant." to read one.
+		nopacsv1connect.TransferServiceCreateTransferProcedure: onTenant(func() *nopacsv1.CreateTransferRequest { return &nopacsv1.CreateTransferRequest{} }, master.RoleAdmin),
+		nopacsv1connect.TransferServiceGetTransferProcedure:    onTenant(func() *nopacsv1.GetTransferRequest { return &nopacsv1.GetTransferRequest{} }, master.RoleOperator),
+		nopacsv1connect.TransferServiceListTransfersProcedure:  onTenant(func() *nopacsv1.ListTransfersRequest { return &nopacsv1.ListTransfersRequest{} }, master.RoleOperator),
+
 		// ReceptionService: reader to read, operator to filter by Study
 		// Instance UID and to settle a failed reception.
 		nopacsv1connect.ReceptionServiceListReceptionsProcedure: byMessage(

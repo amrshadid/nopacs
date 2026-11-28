@@ -460,7 +460,8 @@ func TestSettingCommands(t *testing.T) {
 			"storage.directory-roots                          built-in default\n"+
 			"storage.reserve                 10%,10GiB        built-in default\n"+
 			"storage.s3-endpoints                             built-in default\n"+
-			"test.retention                  400d             installation\n", "")
+			"test.retention                  400d             installation\n"+
+			"transfer.wait                   24h              built-in default\n", "")
 	expect(t, r.run("setting", "unset", "test.retention", "--tenant", "lab1"), 0,
 		"tenant lab1 has no override of test.retention; now applies: 400d (installation)\n", "")
 	expect(t, r.run("setting", "list", "--tenant", "lab1"), 0, "NAME  VALUE  FROM\n", "")
@@ -472,7 +473,7 @@ func TestSettingCommands(t *testing.T) {
 		t.Errorf("get --json: %v", doc)
 	}
 	document(t, r.run("setting", "set", "key.default-lifetime", "30d", "--json"))
-	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 58 {
+	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 59 {
 		t.Errorf("list --json: %v", ss)
 	}
 	document(t, r.run("setting", "unset", "test.retention", "--tenant", "lab1", "--json"))

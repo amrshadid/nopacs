@@ -58,10 +58,13 @@ type tenantWork struct {
 	// owner names this process in the claims of the replicas' scans and of
 	// the repair jobs: host:pid, so a claim another server left is told
 	// from one of this server's.
-	owner    string
-	engines  atomic.Pointer[correct.Engines]
-	log      *slog.Logger
-	interval time.Duration
+	owner   string
+	engines atomic.Pointer[correct.Engines]
+	// transfers is what the tenants' transfer jobs share (setTransferDeps);
+	// until it is set they wait.
+	transfers atomic.Pointer[transferDeps]
+	log       *slog.Logger
+	interval  time.Duration
 	// now is the clock every worker records its times from: clock.Now,
 	// which a build for the proofs of retention moves.
 	now func() time.Time
@@ -564,6 +567,7 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	ret := &tenantRetention{w: w, name: name, st: db, base: st, log: log}
 	run(ret.run)
 	run((&tenantBatches{w: w, name: name, st: db, base: st, log: log}).run)
+	run((&tenantTransfers{w: w, name: name, st: db, base: st, log: log}).run)
 	run(w.holdRecords(id, name, db, open, sw.Gate(), log))
 	return nil
 }

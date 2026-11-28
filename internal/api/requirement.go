@@ -625,6 +625,19 @@ var rules = map[string]rule{
 		access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetJobId())}
 	}),
+	// A transfer chooses which tenant archived data goes to, which a masked
+	// key may not (access.Requirement.ChoosesDestination); its preview is the
+	// same request. The writer role on the target is checked by the handler,
+	// which reads the second tenant's grants.
+	nopacsv1connect.TransferServiceCreateTransferProcedure: byMessage(func(r *v1.CreateTransferRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{Details: transferDetails(r)}
+	}),
+	nopacsv1connect.TransferServiceGetTransferProcedure: byMessage(func(r *v1.GetTransferRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: jobObject(r.GetId())}
+	}),
+	nopacsv1connect.TransferServiceListTransfersProcedure: byMessage(func(r *v1.ListTransfersRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
+	}),
 	nopacsv1connect.CorrectionServiceRelabelProcedure: byMessage(func(r *v1.RelabelRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: relabelDetails(r)}
 	}),

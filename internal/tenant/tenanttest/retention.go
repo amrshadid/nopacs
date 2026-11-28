@@ -49,6 +49,11 @@ func runRetention(t *testing.T, open OpenEvents) {
 		{"BatchPreview", testBatchPreview},
 		{"BatchQueue", testBatchQueue},
 		{"BatchDeletes", testBatchDeletes},
+		{"TransferQueue", testTransferQueue},
+		{"TransferItems", testTransferItems},
+		{"TransferRecords", testTransferRecords},
+		{"TransferMoveGate", testTransferMoveGate},
+		{"TransferProvenance", testTransferProvenance},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

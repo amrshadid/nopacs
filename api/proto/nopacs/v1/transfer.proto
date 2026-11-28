@@ -1,0 +1,297 @@
+syntax = "proto3";
+
+// Package nopacs.v1: what holds for the whole package (callers, roles, error
+// kinds, limits, paging, secrets, partial updates) is said on the package in
+// access.proto.
+package nopacs.v1;
+
+import "nopacs/v1/job.proto";
+
+// TransferService copies or moves a subject or a session of a tenant into
+// another tenant of the installation.
+//
+// The bytes go through the target's own door. The server reads each archived
+// instance of the source (every byte counted and its SHA-256 compared with
+// the catalog's, from a replica in step when the primary cannot serve it)
+// and hands it to a receiver of the target of type job, which only the
+// server's own jobs feed. So the target's routing, its de-identification
+// profile, its naming rule and its checks apply, its labels are its own, and
+// its storage quota admits each file as any other. What the target archives
+// is the target's: nothing of the source's identity is carried but the
+// provenance row below.
+//
+// A transfer is one job, of the source tenant, that JobService shows with
+// the id this service answers (its kind is one a client that does not know
+// it shows by state and counts alone). It has four steps the tenant's
+// database saves, so a restart goes on where the last instance was
+// recorded and copies none twice:
+//
+//  1. listing reads the catalog into the job's items; the instance list
+//     stays in the source, so the target never stores a UID of the source;
+//  2. copying hands each item to the target's receiver, a few at a time;
+//  3. confirming finds each instance in the target by the UID its receiver
+//     gives it (the source's UID when the receiver archives as received,
+//     its keyed remapping when it de-identifies) and compares the checksum
+//     the target received it with to the SHA-256 of the source's archived
+//     bytes, or the keyed form of that when the receiver de-identifies; an
+//     instance that does not agree is failed, never confirmed, and one the
+//     target does not hold within an hour is failed as unaccounted;
+//  4. deleting, for a move only, runs once every item is confirmed and the
+//     source still holds exactly the instances that were copied: the
+//     source's ordinary preview and delete, with the reason "moved to
+//     <target>", so a hold, a retention rule's keep-at-least, undo, grace
+//     and purge apply as to any delete. A hold or a rule that stops it ends
+//     the job partial, and the copy stays.
+//
+// What may leave. The copy obeys the rule every path that hands archived
+// bytes to someone outside the tenant obeys (SenderService): an instance
+// archived as received, or whose image a pixel rule accepted at risk of
+// burned-in text, is copied only into a receiver that de-identifies, and is
+// otherwise failed with JOB_FAILURE_CODE_AS_RECEIVED or
+// JOB_FAILURE_CODE_PIXEL_RISK_ACCEPTED while the job goes on with the rest.
+// Other failures reuse the job codes: DAMAGED_IN_STORAGE (the source's bytes
+// are not what the catalog records), NOT_ONLINE, DELETED_IN_ARCHIVE (the
+// instance changed or went after the job listed it), PEER_REFUSED (the
+// target's receiver did not take the file, or its catalog holds another
+// checksum) and PEER_UNACCOUNTED (the target does not hold it).
+//
+// Provenance. For each instance confirmed, the target records, keyed by its
+// own SOP Instance UID, the source tenant's id, the labels the instance had
+// in the source, its revision there and the job's id; the labels are left
+// out for an instance the source archived as received, whose labels may be
+// an original identifier. It holds no UID of the source and no original
+// identifier.
+//
+// Access. A transfer needs admin on the source and writer on the target; the
+// server checks both when the job is made and again each time it runs, and a
+// key that may no longer do either ends the job failed rather than go on in
+// its name. A masked key never makes one: where archived data goes is a
+// person's choice. Each tenant's audit log gets its own entry.
+service TransferService {
+  // CreateTransfer previews, or makes, a transfer of a subject or a session
+  // of the tenant into another tenant, as a copy or, with move, as a move.
+  // With validate_only it answers what would be transferred and whether the
+  // target's receiver would take it, and makes nothing. Otherwise it makes
+  // the job, which the server runs in the background (watch it with
+  // GetTransfer, JobService.GetJob or the event feed) and answers it queued.
+  // One transfer of a subject runs at a time.
+  //
+  // The target's receiver is the one named by receiver, or, when it is
+  // empty, the only enabled receiver of type job the target has.
+  //
+  // Role: admin on the tenant, and writer on the target tenant, never a
+  // masked key: where archived data goes is a person's choice.
+  // Audit: one entry in the source's log and one in the target's, with the
+  // job's id in details (none for validate_only), the target tenant, move,
+  // validate_only and the reason.
+  // Errors: unauthenticated, permission denied (no grant on the source; also
+  // a tenant that does not exist, for a caller who may not list every
+  // tenant; no writer grant on the target, which is never told apart from a
+  // target that does not exist; a masked key), invalid (a label that does
+  // not pass the label rule, a session named without its subject, a scan, a
+  // target tenant that is the source, a missing or too long reason), not
+  // found (the subject or session is not held by the source; for a caller who
+  // may list every tenant, a tenant that does not exist), precondition (the
+  // target has no enabled receiver of type job, or none by that name, or
+  // several and none is named; a transfer of the subject has not ended; a
+  // rebuild is running; either tenant is moved or fenced, with the reason
+  // TENANT_MOVED or TENANT_FENCED), unavailable (a database does not
+  // answer, or the tenant is not ready).
+  rpc CreateTransfer(CreateTransferRequest) returns (CreateTransferResponse);
+
+  // GetTransfer answers one transfer of the tenant: its job, where it goes,
+  // its step and how many items are in each state.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, the transfer's id as the object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid (a
+  // missing or malformed id), not found (no transfer with that id; a tenant
+  // that does not exist, for a caller who may list every tenant),
+  // unavailable (the tenant's database does not answer, or the tenant is not
+  // ready).
+  rpc GetTransfer(GetTransferRequest) returns (GetTransferResponse);
+
+  // ListTransfers answers a page of the tenant's transfers, newest first.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant), invalid (a
+  // page size or a page token this list did not return), not found (a
+  // tenant that does not exist, for a caller who may list every tenant),
+  // unavailable (the tenant's database does not answer, or the tenant is not
+  // ready).
+  rpc ListTransfers(ListTransfersRequest) returns (ListTransfersResponse);
+}
+
+// TransferStep is where a transfer is, in the order it goes through.
+enum TransferStep {
+  // Never set by the server.
+  TRANSFER_STEP_UNSPECIFIED = 0;
+  // The source's catalog is being read into the job's items.
+  TRANSFER_STEP_LISTING = 1;
+  // The items are being handed to the target's receiver.
+  TRANSFER_STEP_COPYING = 2;
+  // The target's catalog is being compared with the source's bytes.
+  TRANSFER_STEP_CONFIRMING = 3;
+  // A move's source is being deleted.
+  TRANSFER_STEP_DELETING = 4;
+  // The transfer ended; its job's state says how.
+  TRANSFER_STEP_ENDED = 5;
+}
+
+// TransferItemCounts is how many instances of a transfer are in each state.
+message TransferItemCounts {
+  // Listed instances not yet handed to the target.
+  int64 listed = 1;
+  // Instances the target's receiver took, not yet found in its catalog.
+  int64 copied = 2;
+  // Instances found in the target with the checksum the source's bytes give.
+  int64 confirmed = 3;
+  // Instances that were not copied or whose copy was not confirmed; the
+  // job's failures (JobService.ListJobFailures) say why, instance by
+  // instance.
+  int64 failed = 4;
+}
+
+// Transfer is a transfer of a subject or a session into another tenant.
+message Transfer {
+  // The job, of the source tenant: its id, state, counts (instances and
+  // bytes listed; sent are those confirmed in the target; refused those that
+  // failed), reason, key and times. It has no kind-specific part.
+  Job job = 1;
+
+  // The subject transferred, by its label in the source.
+  string subject_label = 2;
+
+  // Its session when one is named; empty for every session of the subject.
+  string session_label = 3;
+
+  // The tenant it goes to.
+  string target_tenant = 4;
+
+  // That tenant's receiver of type job it goes through.
+  string receiver = 5;
+
+  // Whether the source is deleted once every copy is confirmed.
+  bool move = 6;
+
+  // The reason the transfer was made with.
+  string reason = 7;
+
+  // Where the transfer is.
+  TransferStep step = 8;
+
+  // How many of its instances are in each state.
+  TransferItemCounts items = 9;
+
+  // The id of the delete a move made of its source; empty for a copy and
+  // until the delete is made (CorrectionService.GetCorrection).
+  string delete_correction_id = 10;
+}
+
+// TransferPreview is what a transfer would do, as the catalog and the
+// target's receiver stand now.
+message TransferPreview {
+  // The sessions it covers in the source.
+  int64 sessions = 1;
+
+  // The scans it covers.
+  int64 scans = 2;
+
+  // The instances it covers.
+  int64 instances = 3;
+
+  // The bytes of those instances' files.
+  int64 bytes = 4;
+
+  // The receiver of the target it would go through.
+  string receiver = 5;
+
+  // Whether that receiver de-identifies.
+  bool receiver_deidentifies = 6;
+
+  // How many instances the rule of what may leave would fail: those
+  // archived as received, or whose image a pixel rule accepted at risk of
+  // burned-in text, when the receiver does not de-identify. Counted only
+  // while the transfer covers no more than 100000 instances.
+  int64 refused_instances = 7;
+
+  // Whether refused_instances was counted.
+  bool refusals_counted = 8;
+}
+
+// CreateTransferRequest asks for a transfer, or its preview.
+message CreateTransferRequest {
+  // The source tenant, by name. Required.
+  string tenant = 1;
+
+  // The subject, by label. Required.
+  string subject_label = 2;
+
+  // One of its sessions, by label; empty transfers every session of the
+  // subject.
+  string session_label = 3;
+
+  // The tenant to transfer into, by name. Required; not the source.
+  string target_tenant = 4;
+
+  // The target's receiver of type job to go through; empty for the only
+  // enabled one the target has.
+  string receiver = 5;
+
+  // Whether to delete the source once every copy is confirmed.
+  bool move = 6;
+
+  // Why. Required, 1 to 1024 bytes of UTF-8 without control characters.
+  string reason = 7;
+
+  // Preview only: make nothing.
+  bool validate_only = 8;
+}
+
+// CreateTransferResponse answers a preview, or the transfer made.
+message CreateTransferResponse {
+  // What the transfer would do; set for a preview and for a transfer made.
+  TransferPreview preview = 1;
+
+  // The transfer made, queued; unset for a preview.
+  Transfer transfer = 2;
+}
+
+// GetTransferRequest asks for one transfer.
+message GetTransferRequest {
+  // The source tenant, by name. Required.
+  string tenant = 1;
+
+  // The transfer's id, the id of its job. Required.
+  string id = 2;
+}
+
+// GetTransferResponse answers one transfer.
+message GetTransferResponse {
+  // The transfer.
+  Transfer transfer = 1;
+}
+
+// ListTransfersRequest asks for a page of transfers.
+message ListTransfersRequest {
+  // The source tenant, by name. Required.
+  string tenant = 1;
+
+  // Page size, 1 to 1000; zero is 100.
+  int32 page_size = 2;
+
+  // The next_page_token of a previous answer.
+  string page_token = 3;
+}
+
+// ListTransfersResponse answers a page of transfers.
+message ListTransfersResponse {
+  // The page, newest first.
+  repeated Transfer transfers = 1;
+
+  // Pass it as page_token for the next page; empty after the last.
+  string next_page_token = 2;
+}

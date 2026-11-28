@@ -55,6 +55,14 @@ func (p *Pipeline) Accept(ctx context.Context, a Arrival) Outcome {
 		return Outcome{Status: Refused, Reason: reasonUnavailable}
 	case !rcv.Enabled:
 		return Outcome{Status: Failed, Reason: reasonNoReceiver}
+	case a.RequireDeidentified && !rcv.Deidentifies():
+		// The receiver was changed to archive as received since the sender
+		// judged it: what must be de-identified is never archived as it is.
+		return Outcome{Status: Failed, Reason: ReasonNotDeidentified}
+	case !transferAdmitted(rcv, a):
+		// A job receiver takes the files of the archive's own transfer jobs
+		// only, and those go to no other receiver.
+		return Outcome{Status: Failed, Reason: reasonNoReceiver}
 	case (rcv.Type == tenant.ReceiverImport) != (a.Import != nil):
 		// An import receiver takes files from its import jobs only, and
 		// those go to no other receiver.

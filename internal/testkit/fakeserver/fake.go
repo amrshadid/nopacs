@@ -77,6 +77,7 @@ type Server struct {
 	repl      replicas
 	ret       retention
 	rts       routes
+	xfers     transfers
 }
 
 // keyRecord is a key and the secret it was made with.
@@ -202,6 +203,7 @@ func (s *Server) Register(srv *connect.Server) {
 	s.registerReplicas(srv)
 	s.registerRetention(srv)
 	s.registerRoutes(srv)
+	s.registerTransfers(srv)
 	nopacsv1connect.RegisterBackupServiceHandler(srv, backupHandler{s})
 }
 

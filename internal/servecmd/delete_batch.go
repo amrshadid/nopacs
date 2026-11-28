@@ -144,27 +144,5 @@ func (w *tenantWork) keyGuard(ctx context.Context, name, keyID string) (tenant.G
 	if err != nil {
 		return nil, err
 	}
-	by := master.ActingKey(keyID, master.TenantScope(tenantID), master.RoleAdmin, w.now)
-	return func(ctx context.Context) error {
-		err := w.d.Master.CheckActor(ctx, by)
-		if ref, ok := master.RefusalOf(err); ok {
-			return &correct.KeyRefused{Why: ref.Reason, Err: err}
-		}
-		if err != nil {
-			return err
-		}
-		// A suspended key is refused by the access check, not by
-		// CheckActor: a restore suspends every key it brings back until the
-		// local operator reinstates them.
-		k, err := w.d.Master.Key(ctx, keyID)
-		switch {
-		case fault.KindOf(err) == fault.NotFound:
-			return &correct.KeyRefused{Why: master.RefusedUnknownKey, Err: err}
-		case err != nil:
-			return err
-		case !k.Suspended.IsZero():
-			return &correct.KeyRefused{Why: "key suspended", Err: fault.New(fault.Unauthenticated, "the acting key is suspended")}
-		}
-		return nil
-	}, nil
+	return w.roleGuard(tenantID, keyID, master.RoleAdmin), nil
 }

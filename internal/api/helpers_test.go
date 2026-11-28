@@ -641,6 +641,8 @@ type clients struct {
 	retention nopacsv1connect.RetentionServiceClient
 	// routes is RouteService's client.
 	routes nopacsv1connect.RouteServiceClient
+	// transfers is TransferService's client.
+	transfers nopacsv1connect.TransferServiceClient
 }
 
 // as returns clients that call as c.
@@ -683,6 +685,7 @@ func (e *env) as(c caller) clients {
 		replicas:    nopacsv1connect.NewReplicaServiceClient(cl),
 		retention:   nopacsv1connect.NewRetentionServiceClient(cl),
 		routes:      nopacsv1connect.NewRouteServiceClient(cl),
+		transfers:   nopacsv1connect.NewTransferServiceClient(cl),
 	}
 }
 

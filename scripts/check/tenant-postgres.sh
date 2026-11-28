@@ -77,7 +77,7 @@ echo
 echo "== the tenant's tables"
 tables_hold "$(q "SELECT string_agg(table_name, ' ' ORDER BY table_name COLLATE \"C\") FROM information_schema.tables WHERE table_schema = '$schema'")" \
 	subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles tenant_secrets tenant_identity \
-	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs replicate_jobs repair_outcomes delete_batch_jobs delete_batch_targets route_rule_sets route_matches purge_totals storage_switches \
+	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs replicate_jobs repair_outcomes delete_batch_jobs delete_batch_targets transfer_jobs transfer_items transfer_provenance route_rule_sets route_matches purge_totals storage_switches \
 	scrub_verified scan_sidecars \
 	correction_keys correction_objects correction_records_owed correction_copies_abandoned \
 	retention_rules retention_sessions retention_state holds hold_records dispose_jobs dispose_sessions
@@ -91,8 +91,8 @@ echo
 mig="$(migrations_in internal/driver/postgres/migrations/tenant)"
 want "schema_migrations rows" "$(printf '%s' "$mig" | wc -w | awk '{print $1 / 2}')" "$(q "SELECT count(*) FROM $t.schema_migrations")"
 want "the newest migration" "$(printf '%s' "$mig" | awk '{print $(NF-1), $NF}')" "$(q "SELECT version || ' ' || name FROM $t.schema_migrations ORDER BY version DESC LIMIT 1")"
-# A receiver is of type dimse, on a port of its own, or stow or import, on no port.
-want "the receivers' rules of types and ports" "CHECK ((((type = 'dimse'::text) AND ((port >= 1) AND (port <= 65535))) OR ((type = ANY (ARRAY['stow'::text, 'import'::text])) AND (port = 0) AND (bind_address = ''::text)))) CHECK ((type = ANY (ARRAY['dimse'::text, 'stow'::text, 'import'::text])))" \
+# A receiver is of type dimse, on a port of its own, or stow, import or job, on no port.
+want "the receivers' rules of types and ports" "CHECK ((((type = 'dimse'::text) AND ((port >= 1) AND (port <= 65535))) OR ((type = ANY (ARRAY['stow'::text, 'import'::text, 'job'::text])) AND (port = 0) AND (bind_address = ''::text)))) CHECK ((type = ANY (ARRAY['dimse'::text, 'stow'::text, 'import'::text, 'job'::text])))" \
 	"$(q "SELECT string_agg(pg_get_constraintdef(oid), ' ' ORDER BY conname) FROM pg_constraint WHERE conname IN ('receivers_type_check', 'receivers_port_check') AND connamespace = '$schema'::regnamespace")"
 want "the schema records the tenant's id" sample-tenant "$(q "SELECT id FROM $t.tenant_identity")"
 # A repair holds its scan only while it runs: an ended one holds nothing.

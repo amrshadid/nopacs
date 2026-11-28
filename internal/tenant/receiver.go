@@ -409,8 +409,13 @@ func (r Receiver) Validate() error {
 			return invalid("an import receiver has no dimse or stow configuration")
 		}
 		return r.Import.validate()
+	case ReceiverJob:
+		if !r.DIMSE.isZero() || !r.STOW.isZero() || !r.Import.isZero() {
+			return invalid("a job receiver has no dimse, stow or import configuration")
+		}
+		return nil
 	}
-	return invalid("a receiver's type is dimse, stow or import")
+	return invalid("a receiver's type is dimse, stow, import or job")
 }
 
 // isZero reports whether d holds nothing, as a receiver of another type

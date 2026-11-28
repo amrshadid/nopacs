@@ -103,6 +103,9 @@ func receiverValues(field string, m *v1.Receiver) (r tenant.Receiver, quiet, ope
 		r.Type = tenant.ReceiverImport
 		r.Import = importReceiverValues(im)
 	}
+	if m.GetJob() != nil {
+		r.Type = tenant.ReceiverJob
+	}
 	if pv := m.GetProfile(); pv != nil {
 		r.Profile = tenant.ProfileRef{Name: pv.GetName(), Version: pv.GetVersion()}
 		if err := r.Profile.Validate(); err != nil {
@@ -138,8 +141,8 @@ func receiverFromRequest(field string, m *v1.Receiver) (tenant.Receiver, error) 
 	if err := itemName(field+".name", m.GetName()); err != nil {
 		return tenant.Receiver{}, err
 	}
-	if m.GetDimse() == nil && m.GetStow() == nil && m.GetImporter() == nil {
-		return tenant.Receiver{}, invalid(field, "has a type: dimse, stow or importer")
+	if m.GetDimse() == nil && m.GetStow() == nil && m.GetImporter() == nil && m.GetJob() == nil {
+		return tenant.Receiver{}, invalid(field, "has a type: dimse, stow, importer or job")
 	}
 	if err := checkImportLayoutGiven(field, m); err != nil {
 		return tenant.Receiver{}, err
@@ -324,6 +327,9 @@ func receiverMessage(r tenant.Receiver, h Health) *v1.Receiver {
 		// caller who may read paths.
 		m.Type = &v1.Receiver_Importer{Importer: importReceiverMessage(r.Import, false)}
 	}
+	if r.Type == tenant.ReceiverJob {
+		m.Type = &v1.Receiver_Job{Job: &v1.JobReceiver{}}
+	}
 	m.RuleSetVersion = r.Routing.Version
 	if r.Deidentifies() {
 		m.Deidentification = &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: r.Profile.Name, Version: r.Profile.Version}}
@@ -368,6 +374,8 @@ func requestReceiverDetails(m *v1.Receiver) map[string]string {
 		typ = string(tenant.ReceiverSTOW)
 	case m.GetImporter() != nil:
 		typ = string(tenant.ReceiverImport)
+	case m.GetJob() != nil:
+		typ = string(tenant.ReceiverJob)
 	}
 	return map[string]string{
 		detailType: typ, detailPort: strconv.Itoa(int(m.GetDimse().GetPort())),

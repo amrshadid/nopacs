@@ -32,7 +32,7 @@ The pages are grouped by what you came to do:
 **You work with the data.**
 [The command line](use/command-line.md) (with contexts for many installations, and the
 interactive program), [receiving](use/receiving.md), [reading](use/reading.md),
-[sending on](use/sending.md), [importing](use/importing.md), [correcting](use/correcting.md) and
+[sending on](use/sending.md), [importing](use/importing.md), [copying and moving between tenants](use/transferring.md), [correcting](use/correcting.md) and
 [retention rules and holds](use/retention.md).
 
 **You build on the API.**
@@ -63,6 +63,7 @@ and the guides: [a database driver](develop/guides/database-driver.md), [a stora
 | read the archive back | [Reading the archive](use/reading.md), [DICOMweb](api/dicomweb.md) |
 | send archived data on to a PACS | [Sending data on](use/sending.md) |
 | bring in a directory of existing files | [Importing a directory](use/importing.md) |
+| copy or move a subject or a session to another tenant | [Copying and moving data between tenants](use/transferring.md) |
 | delete, relabel or replace archived data | [Correcting archived data](use/correcting.md) |
 | back up, restore, or move a tenant | [Backup, restore and moving a tenant](operate/backup.md) |
 | keep a second copy of a tenant's files | [Replica storages](operate/replicas.md) |

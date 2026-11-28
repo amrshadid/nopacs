@@ -195,6 +195,9 @@ func (f *receiverFlags) receiver(cmd *cobra.Command, name string) (*v1.Receiver,
 		r.Type = &v1.Receiver_Importer{Importer: im}
 		paths = append(paths, importPaths...)
 	}
+	if f.typ == "job" {
+		r.Type = &v1.Receiver_Job{Job: &v1.JobReceiver{}}
+	}
 	touch := func(flag, path string) bool {
 		if fl.Changed(flag) {
 			paths = append(paths, path)
@@ -324,8 +327,9 @@ func (f *receiverFlags) isStow(cmd *cobra.Command, stowFlags bool) (bool, error)
 			stow = true
 		case "import":
 			imp = true
+		case "job":
 		default:
-			return false, fault.New(fault.Invalid, fmt.Sprintf("--type %q is not a receiver type; use dimse, stow or import", output.Clean(f.typ)))
+			return false, fault.New(fault.Invalid, fmt.Sprintf("--type %q is not a receiver type; use dimse, stow, import or job", output.Clean(f.typ)))
 		}
 		if stowFlags && f.typ != "stow" {
 			return false, fault.New(fault.Invalid, "--allow-key and --max-request-size are a stow receiver's: give --type stow")

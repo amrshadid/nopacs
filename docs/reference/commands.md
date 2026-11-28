@@ -1817,6 +1817,44 @@ Show a tenant's state now: receivers, storages, jobs and senders
 
 Usage: `nopacs tenant status <tenant>`
 
+### `nopacs transfer`
+
+Copy or move a subject or a session into another tenant
+
+Usage: `nopacs transfer`
+
+#### `nopacs transfer create`
+
+Copy or move a subject or a session into another tenant, as a job
+
+Usage: `nopacs transfer create <tenant> <subject>[/<session>] --to TENANT --reason TEXT [--move] [--via RECEIVER] [--preview] [--yes] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--move` | bool |  | delete the source once every instance is confirmed in the target |
+| `--preview` | bool |  | show what the transfer would do and stop |
+| `--reason` | string |  | why, in your own words, kept with the job and with a move's delete (required) |
+| `--to` | string |  | the tenant to transfer into (required) |
+| `--via` | string |  | the target's receiver of type job to go through; default its only enabled one |
+| `--yes` | bool |  | do not ask for the tenant's name before a move |
+
+#### `nopacs transfer list`
+
+List a tenant's transfers, newest first
+
+Usage: `nopacs transfer list <tenant> [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+
+#### `nopacs transfer show`
+
+Show one transfer: where it goes, its step and how many instances are in each state
+
+Usage: `nopacs transfer show <tenant> <id>`
+
 ### `nopacs version`
 
 Print the version of this program

@@ -376,4 +376,6 @@ type PipelineParts interface {
 	Holds
 	Disposal
 	DeleteBatches
+	Transfers
+	TransferTargets
 }

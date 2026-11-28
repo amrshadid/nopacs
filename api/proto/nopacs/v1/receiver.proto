@@ -272,6 +272,12 @@ message Receiver {
     // installation names. Named importer, not import, since import is a
     // keyword of Python, whose generated client could not name the field.
     ImportReceiver importer = 17;
+
+    // A receiver that never listens: the archive's own jobs hand it files
+    // as files that arrived (TransferService copies and moves between
+    // tenants through one), so its routing, profile and checks apply to
+    // them.
+    JobReceiver job = 20;
   }
 
   // Whether the receiver accepts data. False, the default, keeps it
@@ -1207,3 +1213,8 @@ message RemoveReceiverResponse {
   // The receiver as it was, stopped.
   Receiver receiver = 1;
 }
+
+// JobReceiver is the configuration of a receiver of type job: none. The
+// receiver takes files only from the server's own jobs, never from a network
+// caller, and has no port, address or keys.
+message JobReceiver {}

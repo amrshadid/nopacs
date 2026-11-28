@@ -278,9 +278,9 @@ CREATE TABLE receivers (
     created        timestamptz NOT NULL,
     updated        timestamptz NOT NULL,
     CONSTRAINT receivers_pkey PRIMARY KEY (name),
-    CONSTRAINT receivers_type_check CHECK (type IN ('dimse', 'stow', 'import')),
+    CONSTRAINT receivers_type_check CHECK (type IN ('dimse', 'stow', 'import', 'job')),
     CONSTRAINT receivers_port_check CHECK ((type = 'dimse' AND port BETWEEN 1 AND 65535)
-        OR (type IN ('stow', 'import') AND port = 0 AND bind_address = ''))
+        OR (type IN ('stow', 'import', 'job') AND port = 0 AND bind_address = ''))
 );
 
 -- Removing a storage asks whether a receiver names it; adding or changing a
@@ -1026,7 +1026,7 @@ CREATE TABLE jobs (
     profile_version     integer     NOT NULL DEFAULT 0,
     CONSTRAINT jobs_pkey PRIMARY KEY (id),
     CONSTRAINT jobs_key UNIQUE (unique_key),
-    CONSTRAINT jobs_kind_check CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch')),
+    CONSTRAINT jobs_kind_check CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch', 'transfer')),
     CONSTRAINT jobs_state_check CHECK (state IN ('queued', 'running', 'done', 'partial', 'failed', 'canceled')),
     CONSTRAINT jobs_scans_check CHECK (scans >= 0 AND scans_done >= 0 AND scans_done <= scans),
     CONSTRAINT jobs_counts_check CHECK (sent >= 0 AND warned >= 0 AND refused >= 0 AND sent + warned + refused <= instances),
@@ -2403,3 +2403,70 @@ CREATE TABLE route_matches (
 );
 
 CREATE INDEX route_matches_by_rule ON route_matches (receiver, version, phase, rule);
+
+-- A transfer job's own part: the tenant it copies into, that tenant's
+-- receiver of type job (named, not enforced here: the job's runner reads
+-- it again at each step), whether the source is deleted once every copy is
+-- confirmed (move), the reason, the step the job has reached and the delete
+-- a move made ('' for none), which a restart finds and never makes again.
+-- The job's items are its instance list; they stay in the source, so the
+-- target never stores a UID of the source.
+CREATE TABLE transfer_jobs (
+    job_id            text    COLLATE "C" NOT NULL,
+    target_tenant     text    COLLATE "C" NOT NULL,
+    target_tenant_id  text    COLLATE "C" NOT NULL,
+    receiver          text    COLLATE "C" NOT NULL,
+    move              boolean NOT NULL,
+    reason            text    NOT NULL,
+    step              text    COLLATE "C" NOT NULL,
+    delete_correction text    COLLATE "C" NOT NULL,
+    CONSTRAINT transfer_jobs_pkey PRIMARY KEY (job_id),
+    CONSTRAINT transfer_jobs_step_check CHECK (step IN ('listing', 'copying', 'confirming', 'deleting', 'ended'))
+);
+
+-- The instances a transfer job copies: the scan labels and SOP Instance UID
+-- in this tenant, the file's size and the SHA-256 of its archived bytes when
+-- listed, the revision it had, whether it was archived as received, where
+-- it is (listed, copied, confirmed, failed), the UID it has in the target
+-- once copied and when the target took it.
+--   by state and order                  transfer_items_by_state
+CREATE TABLE transfer_items (
+    job_id           text        COLLATE "C" NOT NULL,
+    subject_label    text        COLLATE "C" NOT NULL,
+    session_label    text        COLLATE "C" NOT NULL,
+    scan_label       text        COLLATE "C" NOT NULL,
+    sop_instance_uid text        COLLATE "C" NOT NULL,
+    size             bigint      NOT NULL,
+    sha256           bytea       NOT NULL,
+    revision         integer     NOT NULL,
+    as_received      boolean     NOT NULL,
+    state            text        COLLATE "C" NOT NULL,
+    target_uid       text        COLLATE "C" NOT NULL,
+    copied_at        timestamptz,
+    CONSTRAINT transfer_items_pkey PRIMARY KEY (job_id, subject_label, session_label, scan_label, sop_instance_uid),
+    CONSTRAINT transfer_items_check CHECK (size >= 0 AND octet_length(sha256) = 32 AND revision >= 1
+        AND state IN ('listed', 'copied', 'confirmed', 'failed'))
+);
+
+CREATE INDEX transfer_items_by_state ON transfer_items (job_id, state, subject_label, session_label, scan_label, sop_instance_uid);
+
+-- Where an instance of this tenant came from by a transfer, keyed by its
+-- SOP Instance UID here: the source tenant's id, the labels it had there
+-- ('' for an instance the source archived as received, whose labels may be
+-- an original identifier), its revision there and the source's job. It holds
+-- no UID of the source and no original identifier.
+--   of a source job                     transfer_provenance_by_job
+CREATE TABLE transfer_provenance (
+    sop_instance_uid text        COLLATE "C" NOT NULL,
+    source_tenant_id text        COLLATE "C" NOT NULL,
+    subject_label    text        COLLATE "C" NOT NULL,
+    session_label    text        COLLATE "C" NOT NULL,
+    scan_label       text        COLLATE "C" NOT NULL,
+    revision         integer     NOT NULL,
+    job_id           text        COLLATE "C" NOT NULL,
+    recorded         timestamptz NOT NULL,
+    CONSTRAINT transfer_provenance_pkey PRIMARY KEY (sop_instance_uid),
+    CONSTRAINT transfer_provenance_check CHECK (revision >= 1)
+);
+
+CREATE INDEX transfer_provenance_by_job ON transfer_provenance (job_id, sop_instance_uid);

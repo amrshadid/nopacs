@@ -71,6 +71,7 @@ var settingForms = map[string]string{
 	"storage.directory-roots":        "One `name=path` per line. The roots directory storages may lie under. Empty: no directory storage.",
 	"storage.reserve":                "One or two sizes or percentages, comma-separated, such as `10%,10GiB`; the larger applies. The free space kept on every disk or store data is written to.",
 	"storage.s3-endpoints":           "One URL per line, optionally followed by `plain-http` and `private-address`. Empty: no S3 storage.",
+	"transfer.wait":                  "A period. How long a transfer between tenants may wait on refusals that pass by themselves (the target's receiver busy or over its quota, a tenant not ready); past it the transfer's job ends failed and the subject is free again.",
 }
 
 // settingBounds holds, for a setting with a range, four values: one just
@@ -116,6 +117,7 @@ var settingBounds = map[string][4]string{
 	"scrub.rate":                     {"1023KiB", "1MiB", "64GiB", "65GiB"},
 	"sender.max-associations":        {"0", "1", "1024", "1025"},
 	"sender.tenant-max-associations": {"0", "1", "1024", "1025"},
+	"transfer.wait":                  {"59m", "1h", "30d", "31d"},
 }
 
 // scopeOf says where a setting may hold a value.

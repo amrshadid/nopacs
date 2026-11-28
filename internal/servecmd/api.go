@@ -213,6 +213,9 @@ func APIServices(d Deps) (Built, error) {
 	// metrics, counted by the API, the senders and the deid jobs alike, and
 	// warned of in the server's log at most once a minute a primary storage.
 	readCounts := &checkedread.Counts{Log: d.Log}
+	// The transfers copy into other tenants through their running pipelines,
+	// reading under the same bound on reads open.
+	work.setTransferDeps(pipes, reads, readCounts)
 	senders, err := newSending(d, reg, feeds.Wake, reads, readCounts)
 	if err != nil {
 		_ = feeds.Close()

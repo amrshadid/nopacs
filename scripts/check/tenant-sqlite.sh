@@ -70,7 +70,7 @@ echo "== tables"
 "$SQLITE3" -batch "$db" '.tables'
 tables_hold "$(q "SELECT group_concat(name, ' ') FROM (SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name)")" \
 	subjects sessions scans instances receptions quarantine storages receivers senders corrections audit storage_owners schema_migrations settings events jobs profiles tenant_secrets reception_steps \
-	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs replicate_jobs repair_outcomes delete_batch_jobs delete_batch_targets route_rule_sets route_matches purge_totals storage_switches \
+	storage_generations replica_totals replica_scans replica_damage recalls repairs repair_jobs replicate_jobs repair_outcomes delete_batch_jobs delete_batch_targets transfer_jobs transfer_items transfer_provenance route_rule_sets route_matches purge_totals storage_switches \
 	scrub_verified scan_sidecars \
 	correction_keys correction_objects correction_records_owed correction_copies_abandoned \
 	retention_rules retention_sessions retention_state holds hold_records dispose_jobs dispose_sessions
@@ -83,9 +83,9 @@ echo
 mig="$(migrations_in internal/driver/sqlite/migrations/tenant)"
 want "schema_migrations rows" "$(printf '%s' "$mig" | wc -w | awk '{print $1 / 2}')" "$(q 'SELECT count(*) FROM schema_migrations')"
 want "the newest migration" "$(printf '%s' "$mig" | awk '{print $(NF-1), $NF}')" "$(q "SELECT version || ' ' || name FROM schema_migrations ORDER BY version DESC LIMIT 1")"
-# A receiver is of type dimse, on a port of its own, or stow or import, on no port.
+# A receiver is of type dimse, on a port of its own, or stow, import or job, on no port.
 want "the receivers' rule of types and ports" 1 \
-	"$(q "SELECT instr(sql, 'CHECK ((type = ''dimse'' AND port BETWEEN 1 AND 65535) OR (type IN (''stow'', ''import'') AND port = 0 AND bind_address = ''''))') > 0 FROM sqlite_schema WHERE type = 'table' AND name = 'receivers'")"
+	"$(q "SELECT instr(sql, 'CHECK ((type = ''dimse'' AND port BETWEEN 1 AND 65535) OR (type IN (''stow'', ''import'', ''job'') AND port = 0 AND bind_address = ''''))') > 0 FROM sqlite_schema WHERE type = 'table' AND name = 'receivers'")"
 # A repair holds its scan only while it runs: an ended one holds nothing.
 want "the repairs' rule of an ended repair's hold" 1 \
 	"$(q "SELECT instr(sql, 'CHECK (repaired_at IS NULL OR open_work IS NULL)') > 0 FROM sqlite_schema WHERE type = 'table' AND name = 'repairs'")"

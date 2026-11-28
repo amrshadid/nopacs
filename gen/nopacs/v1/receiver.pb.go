@@ -272,6 +272,7 @@ type Receiver struct {
 	//	*Receiver_Dimse
 	//	*Receiver_Stow
 	//	*Receiver_Importer
+	//	*Receiver_Job
 	Type isReceiver_Type `protobuf_oneof:"type"`
 	// Whether the receiver accepts data. False, the default, keeps it
 	// stopped, so a receiver receives only once it is enabled in so many
@@ -464,6 +465,15 @@ func (x *Receiver) GetImporter() *ImportReceiver {
 	return nil
 }
 
+func (x *Receiver) GetJob() *JobReceiver {
+	if x != nil {
+		if x, ok := x.Type.(*Receiver_Job); ok {
+			return x.Job
+		}
+	}
+	return nil
+}
+
 func (x *Receiver) GetEnabled() bool {
 	if x != nil {
 		return x.Enabled
@@ -602,11 +612,21 @@ type Receiver_Importer struct {
 	Importer *ImportReceiver `protobuf:"bytes,17,opt,name=importer,proto3,oneof"`
 }
 
+type Receiver_Job struct {
+	// A receiver that never listens: the archive's own jobs hand it files
+	// as files that arrived (TransferService copies and moves between
+	// tenants through one), so its routing, profile and checks apply to
+	// them.
+	Job *JobReceiver `protobuf:"bytes,20,opt,name=job,proto3,oneof"`
+}
+
 func (*Receiver_Dimse) isReceiver_Type() {}
 
 func (*Receiver_Stow) isReceiver_Type() {}
 
 func (*Receiver_Importer) isReceiver_Type() {}
+
+func (*Receiver_Job) isReceiver_Type() {}
 
 type isReceiver_Deidentification interface {
 	isReceiver_Deidentification()
@@ -2561,16 +2581,56 @@ func (x *RemoveReceiverResponse) GetReceiver() *Receiver {
 	return nil
 }
 
+// JobReceiver is the configuration of a receiver of type job: none. The
+// receiver takes files only from the server's own jobs, never from a network
+// caller, and has no port, address or keys.
+type JobReceiver struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobReceiver) Reset() {
+	*x = JobReceiver{}
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobReceiver) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobReceiver) ProtoMessage() {}
+
+func (x *JobReceiver) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobReceiver.ProtoReflect.Descriptor instead.
+func (*JobReceiver) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_receiver_proto_rawDescGZIP(), []int{25}
+}
+
 var File_nopacs_v1_receiver_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"\n" +
-	"\x18nopacs/v1/receiver.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17nopacs/v1/profile.proto\"\x9c\a\n" +
+	"\x18nopacs/v1/receiver.proto\x12\tnopacs.v1\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17nopacs/v1/profile.proto\"\xc8\a\n" +
 	"\bReceiver\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x120\n" +
 	"\x05dimse\x18\x02 \x01(\v2\x18.nopacs.v1.DimseReceiverH\x00R\x05dimse\x12-\n" +
 	"\x04stow\x18\f \x01(\v2\x17.nopacs.v1.StowReceiverH\x00R\x04stow\x127\n" +
-	"\bimporter\x18\x11 \x01(\v2\x19.nopacs.v1.ImportReceiverH\x00R\bimporter\x12\x18\n" +
+	"\bimporter\x18\x11 \x01(\v2\x19.nopacs.v1.ImportReceiverH\x00R\bimporter\x12*\n" +
+	"\x03job\x18\x14 \x01(\v2\x16.nopacs.v1.JobReceiverH\x00R\x03job\x12\x18\n" +
 	"\aenabled\x18\x03 \x01(\bR\aenabled\x12\x18\n" +
 	"\astorage\x18\x04 \x01(\tR\astorage\x12-\n" +
 	"\x06naming\x18\x05 \x01(\v2\x15.nopacs.v1.NamingRuleR\x06naming\x12\x1c\n" +
@@ -2694,7 +2754,8 @@ const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"I\n" +
 	"\x16RemoveReceiverResponse\x12/\n" +
-	"\breceiver\x18\x01 \x01(\v2\x13.nopacs.v1.ReceiverR\breceiver*g\n" +
+	"\breceiver\x18\x01 \x01(\v2\x13.nopacs.v1.ReceiverR\breceiver\"\r\n" +
+	"\vJobReceiver*g\n" +
 	"\fImportLayout\x12\x1d\n" +
 	"\x19IMPORT_LAYOUT_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13IMPORT_LAYOUT_PLAIN\x10\x01\x12\x19\n" +
@@ -2740,7 +2801,7 @@ func file_nopacs_v1_receiver_proto_rawDescGZIP() []byte {
 }
 
 var file_nopacs_v1_receiver_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_nopacs_v1_receiver_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_nopacs_v1_receiver_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_nopacs_v1_receiver_proto_goTypes = []any{
 	(ImportLayout)(0),              // 0: nopacs.v1.ImportLayout
 	(ReceiverState)(0),             // 1: nopacs.v1.ReceiverState
@@ -2770,60 +2831,62 @@ var file_nopacs_v1_receiver_proto_goTypes = []any{
 	(*SetReceiverResponse)(nil),    // 25: nopacs.v1.SetReceiverResponse
 	(*RemoveReceiverRequest)(nil),  // 26: nopacs.v1.RemoveReceiverRequest
 	(*RemoveReceiverResponse)(nil), // 27: nopacs.v1.RemoveReceiverResponse
-	(*durationpb.Duration)(nil),    // 28: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),  // 29: google.protobuf.Timestamp
-	(*ProfileCondition)(nil),       // 30: nopacs.v1.ProfileCondition
-	(*fieldmaskpb.FieldMask)(nil),  // 31: google.protobuf.FieldMask
+	(*JobReceiver)(nil),            // 28: nopacs.v1.JobReceiver
+	(*durationpb.Duration)(nil),    // 29: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),  // 30: google.protobuf.Timestamp
+	(*ProfileCondition)(nil),       // 31: nopacs.v1.ProfileCondition
+	(*fieldmaskpb.FieldMask)(nil),  // 32: google.protobuf.FieldMask
 }
 var file_nopacs_v1_receiver_proto_depIdxs = []int32{
 	9,  // 0: nopacs.v1.Receiver.dimse:type_name -> nopacs.v1.DimseReceiver
 	10, // 1: nopacs.v1.Receiver.stow:type_name -> nopacs.v1.StowReceiver
 	11, // 2: nopacs.v1.Receiver.importer:type_name -> nopacs.v1.ImportReceiver
-	15, // 3: nopacs.v1.Receiver.naming:type_name -> nopacs.v1.NamingRule
-	28, // 4: nopacs.v1.Receiver.quiet_period:type_name -> google.protobuf.Duration
-	28, // 5: nopacs.v1.Receiver.max_open_time:type_name -> google.protobuf.Duration
-	17, // 6: nopacs.v1.Receiver.health:type_name -> nopacs.v1.ReceiverHealth
-	29, // 7: nopacs.v1.Receiver.create_time:type_name -> google.protobuf.Timestamp
-	29, // 8: nopacs.v1.Receiver.update_time:type_name -> google.protobuf.Timestamp
-	7,  // 9: nopacs.v1.Receiver.as_received:type_name -> nopacs.v1.AsReceived
-	8,  // 10: nopacs.v1.Receiver.profile:type_name -> nopacs.v1.ProfileVersionRef
-	4,  // 11: nopacs.v1.Receiver.routing:type_name -> nopacs.v1.ReceiverRouting
-	5,  // 12: nopacs.v1.ReceiverRouting.routes:type_name -> nopacs.v1.Route
-	30, // 13: nopacs.v1.Route.conditions:type_name -> nopacs.v1.ProfileCondition
-	8,  // 14: nopacs.v1.Route.profile:type_name -> nopacs.v1.ProfileVersionRef
-	6,  // 15: nopacs.v1.Route.forward_to:type_name -> nopacs.v1.RouteForwardTo
-	12, // 16: nopacs.v1.DimseReceiver.allowed_callers:type_name -> nopacs.v1.AllowedCallers
-	14, // 17: nopacs.v1.DimseReceiver.tls:type_name -> nopacs.v1.ReceiverTls
-	0,  // 18: nopacs.v1.ImportReceiver.layout:type_name -> nopacs.v1.ImportLayout
-	13, // 19: nopacs.v1.AllowedCallers.rules:type_name -> nopacs.v1.CallerRule
-	16, // 20: nopacs.v1.NamingRule.pattern:type_name -> nopacs.v1.NamingPattern
-	1,  // 21: nopacs.v1.ReceiverHealth.state:type_name -> nopacs.v1.ReceiverState
-	2,  // 22: nopacs.v1.ReceiverHealth.down_reason:type_name -> nopacs.v1.ReceiverDownReason
-	29, // 23: nopacs.v1.ReceiverHealth.since:type_name -> google.protobuf.Timestamp
-	3,  // 24: nopacs.v1.AddReceiverRequest.receiver:type_name -> nopacs.v1.Receiver
-	3,  // 25: nopacs.v1.AddReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
-	3,  // 26: nopacs.v1.GetReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
-	3,  // 27: nopacs.v1.ListReceiversResponse.receivers:type_name -> nopacs.v1.Receiver
-	3,  // 28: nopacs.v1.SetReceiverRequest.receiver:type_name -> nopacs.v1.Receiver
-	31, // 29: nopacs.v1.SetReceiverRequest.update_mask:type_name -> google.protobuf.FieldMask
-	29, // 30: nopacs.v1.SetReceiverRequest.expected_update_time:type_name -> google.protobuf.Timestamp
-	3,  // 31: nopacs.v1.SetReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
-	3,  // 32: nopacs.v1.RemoveReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
-	18, // 33: nopacs.v1.ReceiverService.AddReceiver:input_type -> nopacs.v1.AddReceiverRequest
-	20, // 34: nopacs.v1.ReceiverService.GetReceiver:input_type -> nopacs.v1.GetReceiverRequest
-	22, // 35: nopacs.v1.ReceiverService.ListReceivers:input_type -> nopacs.v1.ListReceiversRequest
-	24, // 36: nopacs.v1.ReceiverService.SetReceiver:input_type -> nopacs.v1.SetReceiverRequest
-	26, // 37: nopacs.v1.ReceiverService.RemoveReceiver:input_type -> nopacs.v1.RemoveReceiverRequest
-	19, // 38: nopacs.v1.ReceiverService.AddReceiver:output_type -> nopacs.v1.AddReceiverResponse
-	21, // 39: nopacs.v1.ReceiverService.GetReceiver:output_type -> nopacs.v1.GetReceiverResponse
-	23, // 40: nopacs.v1.ReceiverService.ListReceivers:output_type -> nopacs.v1.ListReceiversResponse
-	25, // 41: nopacs.v1.ReceiverService.SetReceiver:output_type -> nopacs.v1.SetReceiverResponse
-	27, // 42: nopacs.v1.ReceiverService.RemoveReceiver:output_type -> nopacs.v1.RemoveReceiverResponse
-	38, // [38:43] is the sub-list for method output_type
-	33, // [33:38] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	28, // 3: nopacs.v1.Receiver.job:type_name -> nopacs.v1.JobReceiver
+	15, // 4: nopacs.v1.Receiver.naming:type_name -> nopacs.v1.NamingRule
+	29, // 5: nopacs.v1.Receiver.quiet_period:type_name -> google.protobuf.Duration
+	29, // 6: nopacs.v1.Receiver.max_open_time:type_name -> google.protobuf.Duration
+	17, // 7: nopacs.v1.Receiver.health:type_name -> nopacs.v1.ReceiverHealth
+	30, // 8: nopacs.v1.Receiver.create_time:type_name -> google.protobuf.Timestamp
+	30, // 9: nopacs.v1.Receiver.update_time:type_name -> google.protobuf.Timestamp
+	7,  // 10: nopacs.v1.Receiver.as_received:type_name -> nopacs.v1.AsReceived
+	8,  // 11: nopacs.v1.Receiver.profile:type_name -> nopacs.v1.ProfileVersionRef
+	4,  // 12: nopacs.v1.Receiver.routing:type_name -> nopacs.v1.ReceiverRouting
+	5,  // 13: nopacs.v1.ReceiverRouting.routes:type_name -> nopacs.v1.Route
+	31, // 14: nopacs.v1.Route.conditions:type_name -> nopacs.v1.ProfileCondition
+	8,  // 15: nopacs.v1.Route.profile:type_name -> nopacs.v1.ProfileVersionRef
+	6,  // 16: nopacs.v1.Route.forward_to:type_name -> nopacs.v1.RouteForwardTo
+	12, // 17: nopacs.v1.DimseReceiver.allowed_callers:type_name -> nopacs.v1.AllowedCallers
+	14, // 18: nopacs.v1.DimseReceiver.tls:type_name -> nopacs.v1.ReceiverTls
+	0,  // 19: nopacs.v1.ImportReceiver.layout:type_name -> nopacs.v1.ImportLayout
+	13, // 20: nopacs.v1.AllowedCallers.rules:type_name -> nopacs.v1.CallerRule
+	16, // 21: nopacs.v1.NamingRule.pattern:type_name -> nopacs.v1.NamingPattern
+	1,  // 22: nopacs.v1.ReceiverHealth.state:type_name -> nopacs.v1.ReceiverState
+	2,  // 23: nopacs.v1.ReceiverHealth.down_reason:type_name -> nopacs.v1.ReceiverDownReason
+	30, // 24: nopacs.v1.ReceiverHealth.since:type_name -> google.protobuf.Timestamp
+	3,  // 25: nopacs.v1.AddReceiverRequest.receiver:type_name -> nopacs.v1.Receiver
+	3,  // 26: nopacs.v1.AddReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
+	3,  // 27: nopacs.v1.GetReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
+	3,  // 28: nopacs.v1.ListReceiversResponse.receivers:type_name -> nopacs.v1.Receiver
+	3,  // 29: nopacs.v1.SetReceiverRequest.receiver:type_name -> nopacs.v1.Receiver
+	32, // 30: nopacs.v1.SetReceiverRequest.update_mask:type_name -> google.protobuf.FieldMask
+	30, // 31: nopacs.v1.SetReceiverRequest.expected_update_time:type_name -> google.protobuf.Timestamp
+	3,  // 32: nopacs.v1.SetReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
+	3,  // 33: nopacs.v1.RemoveReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
+	18, // 34: nopacs.v1.ReceiverService.AddReceiver:input_type -> nopacs.v1.AddReceiverRequest
+	20, // 35: nopacs.v1.ReceiverService.GetReceiver:input_type -> nopacs.v1.GetReceiverRequest
+	22, // 36: nopacs.v1.ReceiverService.ListReceivers:input_type -> nopacs.v1.ListReceiversRequest
+	24, // 37: nopacs.v1.ReceiverService.SetReceiver:input_type -> nopacs.v1.SetReceiverRequest
+	26, // 38: nopacs.v1.ReceiverService.RemoveReceiver:input_type -> nopacs.v1.RemoveReceiverRequest
+	19, // 39: nopacs.v1.ReceiverService.AddReceiver:output_type -> nopacs.v1.AddReceiverResponse
+	21, // 40: nopacs.v1.ReceiverService.GetReceiver:output_type -> nopacs.v1.GetReceiverResponse
+	23, // 41: nopacs.v1.ReceiverService.ListReceivers:output_type -> nopacs.v1.ListReceiversResponse
+	25, // 42: nopacs.v1.ReceiverService.SetReceiver:output_type -> nopacs.v1.SetReceiverResponse
+	27, // 43: nopacs.v1.ReceiverService.RemoveReceiver:output_type -> nopacs.v1.RemoveReceiverResponse
+	39, // [39:44] is the sub-list for method output_type
+	34, // [34:39] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_receiver_proto_init() }
@@ -2836,6 +2899,7 @@ func file_nopacs_v1_receiver_proto_init() {
 		(*Receiver_Dimse)(nil),
 		(*Receiver_Stow)(nil),
 		(*Receiver_Importer)(nil),
+		(*Receiver_Job)(nil),
 		(*Receiver_AsReceived)(nil),
 		(*Receiver_Profile)(nil),
 	}
@@ -2849,7 +2913,7 @@ func file_nopacs_v1_receiver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_receiver_proto_rawDesc), len(file_nopacs_v1_receiver_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   25,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

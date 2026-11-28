@@ -605,6 +605,17 @@ scan, keeps it whole, and serves it through an API with keys.
   `QUOTA` event per crossing and keeps the gauges `nopacs_quota_*`; `nopacs
   tenant show`, `tenant status`, `GetTenant` and `GetStatus` show use and bound.
 - The catalog answers a masked key a session or scan archived as received without the values read from its files (UIDs, dates, modality, descriptions), with `values_withheld` set; a filter or order on such a value never matches or leads with those rows, and a DICOMweb search never finds them. The server's log carries no request or answer content at any level. A test starts a real server, receives synthetic files with unmistakable identifiers and drives the API, the DICOMweb and download routes and the command line as masked keys of every grant level, and requires that no original value appears in any answer, error, log, audit entry, event or command output.
+- Copy or move a subject or a session to another tenant (`TransferService`,
+  `nopacs transfer`): a job in the source tenant reads the archived bytes
+  through the checked read and hands them to the target's receiver of type
+  `job`, so the target's routing, profile, checks and quota apply; each
+  instance is confirmed in the target by checksum, an instance archived as
+  received is sent only to a receiver that de-identifies (checked as each file
+  is accepted), and the target records its provenance (never a source UID). A
+  move deletes the source by the ordinary delete once every instance is
+  confirmed, the target is checked again and the delete covers exactly what was
+  copied; a hold ends it partial with the copy kept; `transfer.wait` bounds
+  waiting on a busy target.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

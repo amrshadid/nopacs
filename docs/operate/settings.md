@@ -156,6 +156,12 @@ is the share of the online objects of an archive-tier storage that a scrub reads
 (`0%` by default: presence only). Each of the four may be set on the installation and
 overridden for a tenant, by that tenant's admin too.
 
+`transfer.wait` (24 hours by default, from `1h` to `30d`) is how long a
+[transfer](../use/transferring.md) between tenants may wait on refusals that pass by
+themselves (the target's receiver busy or over its quota); past it the transfer's job
+ends failed and its subject is free for another. A tenant's admin may set it for the
+tenant.
+
 `retention.shorten-notice` and `retention.max-clock-step` guard retention against a
 mistyped rule and a clock set wrong. `retention.max-clock-step` has one value, the
 installation's, since the clock is the server's. `retention.shorten-notice` and
@@ -251,6 +257,7 @@ when it starts do not change until it is started again.
 | `replica.lag-alert` | At the next look at the replicas, at most a minute away |
 | `replica.rate` | At the next claim of scans to copy |
 | `recall.wait` | At the next pass of the recall worker |
+| `transfer.wait` | At the next pass of the tenant's transfers, at most five seconds away |
 | `scrub.archive-sample` | At the start of the next unit of a scrub |
 | `retention.max-clock-step`, `retention.shorten-notice` | At the next check of the tenant's clock, at most an hour away, and at the next change of a rule |
 | `retention.max-per-pass` | At the next daily pass |
