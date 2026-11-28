@@ -30,6 +30,9 @@ type landed struct {
 	// releasedFrom is the quarantine record whose release put it back in
 	// line, empty otherwise.
 	releasedFrom string
+	// quota is the file's admission against the tenant's quota, marked
+	// written once its row is (quota.go); nil for none.
+	quota *quotaTicket
 }
 
 // decision is what the check of a landed file decided: a received file to

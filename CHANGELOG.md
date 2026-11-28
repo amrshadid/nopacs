@@ -594,6 +594,15 @@ scan, keeps it whole, and serves it through an API with keys.
   oldest held file passes `quarantine.warn-age` or the bytes held pass
   `quarantine.warn-bytes`, with gauges and an event when a warning starts and
   when it ends.
+- Storage quotas per tenant: `quota.bytes` and `quota.instances`, set on a
+  tenant by the installation's admin only and never by a masked key, bound what
+  a tenant holds on its storages, counted in its database as files are recorded
+  and purged (deleted instances and superseded revisions count until their
+  purge). At the bound a new file is refused as a temporary failure (C-STORE
+  A700H, STOW-RS 507, an import waits with "quota reached"); a reception in
+  progress finishes; an unreadable count refuses. `quota.warn` (90%) writes one
+  `QUOTA` event per crossing and keeps the gauges `nopacs_quota_*`; `nopacs
+  tenant show`, `tenant status`, `GetTenant` and `GetStatus` show use and bound.
 - Proofs from outside the binary (`make prove` and its sections) with tools
   that are not NoPACs: pydicom, dcmtk, curl, openssl, sqlite3, psql,
   dicomweb-client and a viewer.

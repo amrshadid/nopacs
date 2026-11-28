@@ -430,12 +430,16 @@ func heldQuarantine(ctx context.Context, tx SendingTx, id string) (heldFile, boo
 // instance's history as superseded by it.
 func (k Sending) ownSuperseded(ctx context.Context, tx SendingTx, id, storage string, p label.Path, uid, key, raw string, size int64,
 	sum tenant.SHA256, revision int) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
+	owned, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
 		sop_instance_uid, storage_key, size, sha256, outcome) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, '') ON CONFLICT DO NOTHING`,
-		id, storage, p.Subject, p.Session, p.Scan, uid, raw, size, sum[:]); err != nil {
+		id, storage, p.Subject, p.Session, p.Scan, uid, raw, size, sum[:])
+	if err != nil {
 		return err
 	}
-	_, err := tx.Exec(ctx, `INSERT INTO instance_revisions (sop_instance_uid, revision, sha256, size, storage, storage_key,
+	if err := movePurgeTotals(ctx, tx, owned, owned*size); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO instance_revisions (sop_instance_uid, revision, sha256, size, storage, storage_key,
 		correction_id, fate, purged) VALUES (?, ?, ?, ?, ?, ?, ?, 'superseded', ?) ON CONFLICT (sop_instance_uid, revision)
 		DO UPDATE SET sha256 = excluded.sha256, size = excluded.size, storage = excluded.storage, storage_key = excluded.storage_key,
 		correction_id = excluded.correction_id, fate = excluded.fate, purged = excluded.purged`,

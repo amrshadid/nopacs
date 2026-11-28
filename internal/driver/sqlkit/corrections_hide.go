@@ -44,13 +44,15 @@ func (k Sending) hideRows(ctx context.Context, tx SendingTx, id, table, where st
 // labels now: one statement, whatever the number of instances.
 func ownInstances(ctx context.Context, tx SendingTx, id string, r targetRows) error {
 	scope, arg := r.scanScope()
-	// #nosec G202 -- the scope is a constant of resolveTarget; values are parameters.
-	_, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
-		sop_instance_uid, storage_key, size, sha256, outcome)
-		SELECT ?, 1, s.storage, s.subject_label, s.session_label, s.label, i.sop_instance_uid, i.storage_key, i.size,
-			coalesce(i.archived_sha256, i.sha256), ''
-		FROM instances AS i JOIN scans AS s ON s.id = i.scan_id WHERE i.scan_id IN `+scope+` ON CONFLICT DO NOTHING`, id, arg)
-	return err
+	return countOwned(ctx, tx, id, func() error {
+		// #nosec G202 -- the scope is a constant of resolveTarget; values are parameters.
+		_, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
+			sop_instance_uid, storage_key, size, sha256, outcome)
+			SELECT ?, 1, s.storage, s.subject_label, s.session_label, s.label, i.sop_instance_uid, i.storage_key, i.size,
+				coalesce(i.archived_sha256, i.sha256), ''
+			FROM instances AS i JOIN scans AS s ON s.id = i.scan_id WHERE i.scan_id IN `+scope+` ON CONFLICT DO NOTHING`, id, arg)
+		return err
+	})
 }
 
 // ownSnapshots records, as objects the correction owns, each scan's
@@ -163,9 +165,13 @@ func moveStorageBytes(ctx context.Context, tx SendingTx, storage string, delta i
 func (k Sending) hideInstance(ctx context.Context, tx SendingTx, id string, r targetRows) error {
 	in := r.instance
 	s := r.scans[0]
-	if _, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
+	owned, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
 		sop_instance_uid, storage_key, size, sha256, outcome) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, '') ON CONFLICT DO NOTHING`,
-		id, s.storage, s.path.Subject, s.path.Session, s.path.Scan, in.uid, in.raw, in.size, in.archived[:]); err != nil {
+		id, s.storage, s.path.Subject, s.path.Session, s.path.Scan, in.uid, in.raw, in.size, in.archived[:])
+	if err != nil {
+		return err
+	}
+	if err := movePurgeTotals(ctx, tx, owned, owned*in.size); err != nil {
 		return err
 	}
 	n, err := k.hideRows(ctx, tx, id, "instances", `scan_id = ? AND sop_instance_uid = ?`, in.scanID, in.uid)
@@ -418,7 +424,10 @@ func (k Sending) showTarget(ctx context.Context, tx SendingTx, c tenant.Correcti
 		}
 	}
 	// The objects are the catalog's again; an undone delete owns none.
-	if _, err := tx.Exec(ctx, `DELETE FROM correction_keys WHERE correction_id = ?`, id); err != nil {
+	if err := countOwned(ctx, tx, id, func() error {
+		_, err := tx.Exec(ctx, `DELETE FROM correction_keys WHERE correction_id = ?`, id)
+		return err
+	}); err != nil {
 		return err
 	}
 	return dropHidden(ctx, tx, id)

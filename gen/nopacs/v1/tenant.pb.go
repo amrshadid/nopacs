@@ -186,6 +186,70 @@ func (DatabaseType) EnumDescriptor() ([]byte, []int) {
 	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{1}
 }
 
+// QuotaState is where a tenant's use stands against its storage quota
+// (the settings quota.bytes and quota.instances, set on a tenant by the
+// installation's admin only, and quota.warn).
+type QuotaState int32
+
+const (
+	// Never answered by the server.
+	QuotaState_QUOTA_STATE_UNSPECIFIED QuotaState = 0
+	// Under quota.warn of every bound, or no bound set.
+	QuotaState_QUOTA_STATE_UNDER QuotaState = 1
+	// At or past quota.warn of a bound, under every bound.
+	QuotaState_QUOTA_STATE_WARNED QuotaState = 2
+	// At or past a bound. New files are refused as a temporary failure: a
+	// C-STORE is answered A700H (out of resources), a STOW-RS request whose
+	// parts are all refused for it is answered 507 with each part's A700H,
+	// and an import job waits with the reason "quota reached". Files already
+	// received are archived: a reception in progress finishes what it was
+	// sent.
+	QuotaState_QUOTA_STATE_REACHED QuotaState = 3
+)
+
+// Enum value maps for QuotaState.
+var (
+	QuotaState_name = map[int32]string{
+		0: "QUOTA_STATE_UNSPECIFIED",
+		1: "QUOTA_STATE_UNDER",
+		2: "QUOTA_STATE_WARNED",
+		3: "QUOTA_STATE_REACHED",
+	}
+	QuotaState_value = map[string]int32{
+		"QUOTA_STATE_UNSPECIFIED": 0,
+		"QUOTA_STATE_UNDER":       1,
+		"QUOTA_STATE_WARNED":      2,
+		"QUOTA_STATE_REACHED":     3,
+	}
+)
+
+func (x QuotaState) Enum() *QuotaState {
+	p := new(QuotaState)
+	*p = x
+	return p
+}
+
+func (x QuotaState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (QuotaState) Descriptor() protoreflect.EnumDescriptor {
+	return file_nopacs_v1_tenant_proto_enumTypes[2].Descriptor()
+}
+
+func (QuotaState) Type() protoreflect.EnumType {
+	return &file_nopacs_v1_tenant_proto_enumTypes[2]
+}
+
+func (x QuotaState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use QuotaState.Descriptor instead.
+func (QuotaState) EnumDescriptor() ([]byte, []int) {
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{2}
+}
+
 // Tenant is an independent archive of the installation. It never carries its
 // database's address: that is a secret, sent in once by CreateTenant and kept
 // sealed by the server.
@@ -208,7 +272,11 @@ type Tenant struct {
 	// began: the check that first found the tenant in this state. Absent when
 	// the server holds no view of the tenant yet (for a moment while it starts
 	// or creates the tenant), and then state is the master's record.
-	StateTime     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=state_time,json=stateTime,proto3" json:"state_time,omitempty"`
+	StateTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=state_time,json=stateTime,proto3" json:"state_time,omitempty"`
+	// What the tenant holds against its storage quota, read from its
+	// database. Answered by GetTenant alone, and absent when the tenant's
+	// database does not answer; ListTenants leaves it out.
+	Quota         *TenantQuota `protobuf:"bytes,7,opt,name=quota,proto3" json:"quota,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -285,6 +353,134 @@ func (x *Tenant) GetStateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Tenant) GetQuota() *TenantQuota {
+	if x != nil {
+		return x.Quota
+	}
+	return nil
+}
+
+// TenantQuota is what a tenant holds on its storages against its quota.
+// Its use is counted in the tenant's database as files are archived and
+// purged, never by reading the storages: instance files only (a scan's
+// manifest and metadata files are not counted), each revision of an
+// instance its own file. A file counts from the moment its reception
+// records it until its purge removes it, so a deleted instance, or a
+// revision a replace or an edit superseded, counts until its purge. A bound
+// is checked as each new file starts: an instance bound is never passed;
+// a bytes bound can be passed by the files being received when it is
+// reached, at most one for each store in flight then, each at most its
+// receiver's largest file.
+type TenantQuota struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The bytes of every file the tenant holds or has received.
+	UsedBytes int64 `protobuf:"varint,1,opt,name=used_bytes,json=usedBytes,proto3" json:"used_bytes,omitempty"`
+	// Those files.
+	UsedInstances int64 `protobuf:"varint,2,opt,name=used_instances,json=usedInstances,proto3" json:"used_instances,omitempty"`
+	// The setting quota.bytes; 0 for no bound.
+	BytesBound int64 `protobuf:"varint,3,opt,name=bytes_bound,json=bytesBound,proto3" json:"bytes_bound,omitempty"`
+	// The setting quota.instances; 0 for no bound.
+	InstancesBound int64 `protobuf:"varint,4,opt,name=instances_bound,json=instancesBound,proto3" json:"instances_bound,omitempty"`
+	// The setting quota.warn: the share of a bound, in percent, past which
+	// the tenant is warned.
+	WarnPercent int32 `protobuf:"varint,5,opt,name=warn_percent,json=warnPercent,proto3" json:"warn_percent,omitempty"`
+	// Where the use stands.
+	State QuotaState `protobuf:"varint,6,opt,name=state,proto3,enum=nopacs.v1.QuotaState" json:"state,omitempty"`
+	// The bytes of the files corrections own and their purges have not
+	// removed yet, counted in used_bytes: what the purges will give back.
+	PurgeBytes int64 `protobuf:"varint,7,opt,name=purge_bytes,json=purgeBytes,proto3" json:"purge_bytes,omitempty"`
+	// Those files, counted in used_instances.
+	PurgeInstances int64 `protobuf:"varint,8,opt,name=purge_instances,json=purgeInstances,proto3" json:"purge_instances,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *TenantQuota) Reset() {
+	*x = TenantQuota{}
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TenantQuota) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TenantQuota) ProtoMessage() {}
+
+func (x *TenantQuota) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TenantQuota.ProtoReflect.Descriptor instead.
+func (*TenantQuota) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *TenantQuota) GetUsedBytes() int64 {
+	if x != nil {
+		return x.UsedBytes
+	}
+	return 0
+}
+
+func (x *TenantQuota) GetUsedInstances() int64 {
+	if x != nil {
+		return x.UsedInstances
+	}
+	return 0
+}
+
+func (x *TenantQuota) GetBytesBound() int64 {
+	if x != nil {
+		return x.BytesBound
+	}
+	return 0
+}
+
+func (x *TenantQuota) GetInstancesBound() int64 {
+	if x != nil {
+		return x.InstancesBound
+	}
+	return 0
+}
+
+func (x *TenantQuota) GetWarnPercent() int32 {
+	if x != nil {
+		return x.WarnPercent
+	}
+	return 0
+}
+
+func (x *TenantQuota) GetState() QuotaState {
+	if x != nil {
+		return x.State
+	}
+	return QuotaState_QUOTA_STATE_UNSPECIFIED
+}
+
+func (x *TenantQuota) GetPurgeBytes() int64 {
+	if x != nil {
+		return x.PurgeBytes
+	}
+	return 0
+}
+
+func (x *TenantQuota) GetPurgeInstances() int64 {
+	if x != nil {
+		return x.PurgeInstances
+	}
+	return 0
+}
+
 // CreateTenantRequest is the tenant to create.
 type CreateTenantRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -310,7 +506,7 @@ type CreateTenantRequest struct {
 
 func (x *CreateTenantRequest) Reset() {
 	*x = CreateTenantRequest{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[1]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -322,7 +518,7 @@ func (x *CreateTenantRequest) String() string {
 func (*CreateTenantRequest) ProtoMessage() {}
 
 func (x *CreateTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[1]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -335,7 +531,7 @@ func (x *CreateTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTenantRequest.ProtoReflect.Descriptor instead.
 func (*CreateTenantRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{1}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateTenantRequest) GetName() string {
@@ -370,7 +566,7 @@ type CreateTenantResponse struct {
 
 func (x *CreateTenantResponse) Reset() {
 	*x = CreateTenantResponse{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[2]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -382,7 +578,7 @@ func (x *CreateTenantResponse) String() string {
 func (*CreateTenantResponse) ProtoMessage() {}
 
 func (x *CreateTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[2]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -395,7 +591,7 @@ func (x *CreateTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTenantResponse.ProtoReflect.Descriptor instead.
 func (*CreateTenantResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{2}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateTenantResponse) GetTenant() *Tenant {
@@ -416,7 +612,7 @@ type GetTenantRequest struct {
 
 func (x *GetTenantRequest) Reset() {
 	*x = GetTenantRequest{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[3]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -428,7 +624,7 @@ func (x *GetTenantRequest) String() string {
 func (*GetTenantRequest) ProtoMessage() {}
 
 func (x *GetTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[3]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -441,7 +637,7 @@ func (x *GetTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTenantRequest.ProtoReflect.Descriptor instead.
 func (*GetTenantRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{3}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetTenantRequest) GetName() string {
@@ -462,7 +658,7 @@ type GetTenantResponse struct {
 
 func (x *GetTenantResponse) Reset() {
 	*x = GetTenantResponse{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[4]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -474,7 +670,7 @@ func (x *GetTenantResponse) String() string {
 func (*GetTenantResponse) ProtoMessage() {}
 
 func (x *GetTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[4]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +683,7 @@ func (x *GetTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTenantResponse.ProtoReflect.Descriptor instead.
 func (*GetTenantResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{4}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetTenantResponse) GetTenant() *Tenant {
@@ -512,7 +708,7 @@ type ListTenantsRequest struct {
 
 func (x *ListTenantsRequest) Reset() {
 	*x = ListTenantsRequest{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[5]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -524,7 +720,7 @@ func (x *ListTenantsRequest) String() string {
 func (*ListTenantsRequest) ProtoMessage() {}
 
 func (x *ListTenantsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[5]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -537,7 +733,7 @@ func (x *ListTenantsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTenantsRequest.ProtoReflect.Descriptor instead.
 func (*ListTenantsRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{5}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListTenantsRequest) GetPageSize() int32 {
@@ -567,7 +763,7 @@ type ListTenantsResponse struct {
 
 func (x *ListTenantsResponse) Reset() {
 	*x = ListTenantsResponse{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[6]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -579,7 +775,7 @@ func (x *ListTenantsResponse) String() string {
 func (*ListTenantsResponse) ProtoMessage() {}
 
 func (x *ListTenantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[6]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -592,7 +788,7 @@ func (x *ListTenantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTenantsResponse.ProtoReflect.Descriptor instead.
 func (*ListTenantsResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{6}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListTenantsResponse) GetTenants() []*Tenant {
@@ -623,7 +819,7 @@ type RemoveTenantRequest struct {
 
 func (x *RemoveTenantRequest) Reset() {
 	*x = RemoveTenantRequest{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[7]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -635,7 +831,7 @@ func (x *RemoveTenantRequest) String() string {
 func (*RemoveTenantRequest) ProtoMessage() {}
 
 func (x *RemoveTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[7]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -648,7 +844,7 @@ func (x *RemoveTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTenantRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTenantRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{7}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RemoveTenantRequest) GetName() string {
@@ -680,7 +876,7 @@ type RemoveTenantResponse struct {
 
 func (x *RemoveTenantResponse) Reset() {
 	*x = RemoveTenantResponse{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[8]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -692,7 +888,7 @@ func (x *RemoveTenantResponse) String() string {
 func (*RemoveTenantResponse) ProtoMessage() {}
 
 func (x *RemoveTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[8]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -705,7 +901,7 @@ func (x *RemoveTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTenantResponse.ProtoReflect.Descriptor instead.
 func (*RemoveTenantResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{8}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RemoveTenantResponse) GetDatabaseType() DatabaseType {
@@ -734,7 +930,7 @@ type ReclaimTenantRequest struct {
 
 func (x *ReclaimTenantRequest) Reset() {
 	*x = ReclaimTenantRequest{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[9]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -746,7 +942,7 @@ func (x *ReclaimTenantRequest) String() string {
 func (*ReclaimTenantRequest) ProtoMessage() {}
 
 func (x *ReclaimTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[9]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -759,7 +955,7 @@ func (x *ReclaimTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReclaimTenantRequest.ProtoReflect.Descriptor instead.
 func (*ReclaimTenantRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{9}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ReclaimTenantRequest) GetName() string {
@@ -780,7 +976,7 @@ type ReclaimTenantResponse struct {
 
 func (x *ReclaimTenantResponse) Reset() {
 	*x = ReclaimTenantResponse{}
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[10]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -792,7 +988,7 @@ func (x *ReclaimTenantResponse) String() string {
 func (*ReclaimTenantResponse) ProtoMessage() {}
 
 func (x *ReclaimTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_tenant_proto_msgTypes[10]
+	mi := &file_nopacs_v1_tenant_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -805,7 +1001,7 @@ func (x *ReclaimTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReclaimTenantResponse.ProtoReflect.Descriptor instead.
 func (*ReclaimTenantResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{10}
+	return file_nopacs_v1_tenant_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ReclaimTenantResponse) GetTenant() *Tenant {
@@ -819,7 +1015,7 @@ var File_nopacs_v1_tenant_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_tenant_proto_rawDesc = "" +
 	"\n" +
-	"\x16nopacs/v1/tenant.proto\x12\tnopacs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa3\x02\n" +
+	"\x16nopacs/v1/tenant.proto\x12\tnopacs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd1\x02\n" +
 	"\x06Tenant\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
 	"\rdatabase_type\x18\x02 \x01(\x0e2\x17.nopacs.v1.DatabaseTypeR\fdatabaseType\x12,\n" +
@@ -828,7 +1024,20 @@ const file_nopacs_v1_tenant_proto_rawDesc = "" +
 	"\vcreate_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x129\n" +
 	"\n" +
-	"state_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstateTime\"\x97\x01\n" +
+	"state_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstateTime\x12,\n" +
+	"\x05quota\x18\a \x01(\v2\x16.nopacs.v1.TenantQuotaR\x05quota\"\xb7\x02\n" +
+	"\vTenantQuota\x12\x1d\n" +
+	"\n" +
+	"used_bytes\x18\x01 \x01(\x03R\tusedBytes\x12%\n" +
+	"\x0eused_instances\x18\x02 \x01(\x03R\rusedInstances\x12\x1f\n" +
+	"\vbytes_bound\x18\x03 \x01(\x03R\n" +
+	"bytesBound\x12'\n" +
+	"\x0finstances_bound\x18\x04 \x01(\x03R\x0einstancesBound\x12!\n" +
+	"\fwarn_percent\x18\x05 \x01(\x05R\vwarnPercent\x12+\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x15.nopacs.v1.QuotaStateR\x05state\x12\x1f\n" +
+	"\vpurge_bytes\x18\a \x01(\x03R\n" +
+	"purgeBytes\x12'\n" +
+	"\x0fpurge_instances\x18\b \x01(\x03R\x0epurgeInstances\"\x97\x01\n" +
 	"\x13CreateTenantRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
 	"\rdatabase_type\x18\x02 \x01(\x0e2\x17.nopacs.v1.DatabaseTypeR\fdatabaseType\x12.\n" +
@@ -868,7 +1077,13 @@ const file_nopacs_v1_tenant_proto_rawDesc = "" +
 	"\fDatabaseType\x12\x1d\n" +
 	"\x19DATABASE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DATABASE_TYPE_SQLITE\x10\x01\x12\x1a\n" +
-	"\x16DATABASE_TYPE_POSTGRES\x10\x022\xaf\x03\n" +
+	"\x16DATABASE_TYPE_POSTGRES\x10\x02*q\n" +
+	"\n" +
+	"QuotaState\x12\x1b\n" +
+	"\x17QUOTA_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11QUOTA_STATE_UNDER\x10\x01\x12\x16\n" +
+	"\x12QUOTA_STATE_WARNED\x10\x02\x12\x17\n" +
+	"\x13QUOTA_STATE_REACHED\x10\x032\xaf\x03\n" +
 	"\rTenantService\x12O\n" +
 	"\fCreateTenant\x12\x1e.nopacs.v1.CreateTenantRequest\x1a\x1f.nopacs.v1.CreateTenantResponse\x12K\n" +
 	"\tGetTenant\x12\x1b.nopacs.v1.GetTenantRequest\x1a\x1c.nopacs.v1.GetTenantResponse\"\x03\x90\x02\x01\x12Q\n" +
@@ -890,50 +1105,54 @@ func file_nopacs_v1_tenant_proto_rawDescGZIP() []byte {
 	return file_nopacs_v1_tenant_proto_rawDescData
 }
 
-var file_nopacs_v1_tenant_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_nopacs_v1_tenant_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_nopacs_v1_tenant_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_nopacs_v1_tenant_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_nopacs_v1_tenant_proto_goTypes = []any{
 	(TenantState)(0),              // 0: nopacs.v1.TenantState
 	(DatabaseType)(0),             // 1: nopacs.v1.DatabaseType
-	(*Tenant)(nil),                // 2: nopacs.v1.Tenant
-	(*CreateTenantRequest)(nil),   // 3: nopacs.v1.CreateTenantRequest
-	(*CreateTenantResponse)(nil),  // 4: nopacs.v1.CreateTenantResponse
-	(*GetTenantRequest)(nil),      // 5: nopacs.v1.GetTenantRequest
-	(*GetTenantResponse)(nil),     // 6: nopacs.v1.GetTenantResponse
-	(*ListTenantsRequest)(nil),    // 7: nopacs.v1.ListTenantsRequest
-	(*ListTenantsResponse)(nil),   // 8: nopacs.v1.ListTenantsResponse
-	(*RemoveTenantRequest)(nil),   // 9: nopacs.v1.RemoveTenantRequest
-	(*RemoveTenantResponse)(nil),  // 10: nopacs.v1.RemoveTenantResponse
-	(*ReclaimTenantRequest)(nil),  // 11: nopacs.v1.ReclaimTenantRequest
-	(*ReclaimTenantResponse)(nil), // 12: nopacs.v1.ReclaimTenantResponse
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
+	(QuotaState)(0),               // 2: nopacs.v1.QuotaState
+	(*Tenant)(nil),                // 3: nopacs.v1.Tenant
+	(*TenantQuota)(nil),           // 4: nopacs.v1.TenantQuota
+	(*CreateTenantRequest)(nil),   // 5: nopacs.v1.CreateTenantRequest
+	(*CreateTenantResponse)(nil),  // 6: nopacs.v1.CreateTenantResponse
+	(*GetTenantRequest)(nil),      // 7: nopacs.v1.GetTenantRequest
+	(*GetTenantResponse)(nil),     // 8: nopacs.v1.GetTenantResponse
+	(*ListTenantsRequest)(nil),    // 9: nopacs.v1.ListTenantsRequest
+	(*ListTenantsResponse)(nil),   // 10: nopacs.v1.ListTenantsResponse
+	(*RemoveTenantRequest)(nil),   // 11: nopacs.v1.RemoveTenantRequest
+	(*RemoveTenantResponse)(nil),  // 12: nopacs.v1.RemoveTenantResponse
+	(*ReclaimTenantRequest)(nil),  // 13: nopacs.v1.ReclaimTenantRequest
+	(*ReclaimTenantResponse)(nil), // 14: nopacs.v1.ReclaimTenantResponse
+	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
 }
 var file_nopacs_v1_tenant_proto_depIdxs = []int32{
 	1,  // 0: nopacs.v1.Tenant.database_type:type_name -> nopacs.v1.DatabaseType
 	0,  // 1: nopacs.v1.Tenant.state:type_name -> nopacs.v1.TenantState
-	13, // 2: nopacs.v1.Tenant.create_time:type_name -> google.protobuf.Timestamp
-	13, // 3: nopacs.v1.Tenant.state_time:type_name -> google.protobuf.Timestamp
-	1,  // 4: nopacs.v1.CreateTenantRequest.database_type:type_name -> nopacs.v1.DatabaseType
-	2,  // 5: nopacs.v1.CreateTenantResponse.tenant:type_name -> nopacs.v1.Tenant
-	2,  // 6: nopacs.v1.GetTenantResponse.tenant:type_name -> nopacs.v1.Tenant
-	2,  // 7: nopacs.v1.ListTenantsResponse.tenants:type_name -> nopacs.v1.Tenant
-	1,  // 8: nopacs.v1.RemoveTenantResponse.database_type:type_name -> nopacs.v1.DatabaseType
-	2,  // 9: nopacs.v1.ReclaimTenantResponse.tenant:type_name -> nopacs.v1.Tenant
-	3,  // 10: nopacs.v1.TenantService.CreateTenant:input_type -> nopacs.v1.CreateTenantRequest
-	5,  // 11: nopacs.v1.TenantService.GetTenant:input_type -> nopacs.v1.GetTenantRequest
-	7,  // 12: nopacs.v1.TenantService.ListTenants:input_type -> nopacs.v1.ListTenantsRequest
-	9,  // 13: nopacs.v1.TenantService.RemoveTenant:input_type -> nopacs.v1.RemoveTenantRequest
-	11, // 14: nopacs.v1.TenantService.ReclaimTenant:input_type -> nopacs.v1.ReclaimTenantRequest
-	4,  // 15: nopacs.v1.TenantService.CreateTenant:output_type -> nopacs.v1.CreateTenantResponse
-	6,  // 16: nopacs.v1.TenantService.GetTenant:output_type -> nopacs.v1.GetTenantResponse
-	8,  // 17: nopacs.v1.TenantService.ListTenants:output_type -> nopacs.v1.ListTenantsResponse
-	10, // 18: nopacs.v1.TenantService.RemoveTenant:output_type -> nopacs.v1.RemoveTenantResponse
-	12, // 19: nopacs.v1.TenantService.ReclaimTenant:output_type -> nopacs.v1.ReclaimTenantResponse
-	15, // [15:20] is the sub-list for method output_type
-	10, // [10:15] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	15, // 2: nopacs.v1.Tenant.create_time:type_name -> google.protobuf.Timestamp
+	15, // 3: nopacs.v1.Tenant.state_time:type_name -> google.protobuf.Timestamp
+	4,  // 4: nopacs.v1.Tenant.quota:type_name -> nopacs.v1.TenantQuota
+	2,  // 5: nopacs.v1.TenantQuota.state:type_name -> nopacs.v1.QuotaState
+	1,  // 6: nopacs.v1.CreateTenantRequest.database_type:type_name -> nopacs.v1.DatabaseType
+	3,  // 7: nopacs.v1.CreateTenantResponse.tenant:type_name -> nopacs.v1.Tenant
+	3,  // 8: nopacs.v1.GetTenantResponse.tenant:type_name -> nopacs.v1.Tenant
+	3,  // 9: nopacs.v1.ListTenantsResponse.tenants:type_name -> nopacs.v1.Tenant
+	1,  // 10: nopacs.v1.RemoveTenantResponse.database_type:type_name -> nopacs.v1.DatabaseType
+	3,  // 11: nopacs.v1.ReclaimTenantResponse.tenant:type_name -> nopacs.v1.Tenant
+	5,  // 12: nopacs.v1.TenantService.CreateTenant:input_type -> nopacs.v1.CreateTenantRequest
+	7,  // 13: nopacs.v1.TenantService.GetTenant:input_type -> nopacs.v1.GetTenantRequest
+	9,  // 14: nopacs.v1.TenantService.ListTenants:input_type -> nopacs.v1.ListTenantsRequest
+	11, // 15: nopacs.v1.TenantService.RemoveTenant:input_type -> nopacs.v1.RemoveTenantRequest
+	13, // 16: nopacs.v1.TenantService.ReclaimTenant:input_type -> nopacs.v1.ReclaimTenantRequest
+	6,  // 17: nopacs.v1.TenantService.CreateTenant:output_type -> nopacs.v1.CreateTenantResponse
+	8,  // 18: nopacs.v1.TenantService.GetTenant:output_type -> nopacs.v1.GetTenantResponse
+	10, // 19: nopacs.v1.TenantService.ListTenants:output_type -> nopacs.v1.ListTenantsResponse
+	12, // 20: nopacs.v1.TenantService.RemoveTenant:output_type -> nopacs.v1.RemoveTenantResponse
+	14, // 21: nopacs.v1.TenantService.ReclaimTenant:output_type -> nopacs.v1.ReclaimTenantResponse
+	17, // [17:22] is the sub-list for method output_type
+	12, // [12:17] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_tenant_proto_init() }
@@ -946,8 +1165,8 @@ func file_nopacs_v1_tenant_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_tenant_proto_rawDesc), len(file_nopacs_v1_tenant_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   11,
+			NumEnums:      3,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -2111,8 +2111,10 @@ type Job struct {
 	// person, from a fixed set of phrases the server has, such as "sender
 	// down", "sender disabled" or "attempts ran out"; for an import job
 	// also "receiver disabled", "root unavailable", "settling" (running,
-	// every walk ended, some files without an outcome yet) and "settling
-	// timed out" (ended partial with files still processing); for a unit
+	// every walk ended, some files without an outcome yet), "settling
+	// timed out" (ended partial with files still processing) and "quota
+	// reached" (its tenant at its storage quota, TenantQuota: its files are
+	// refused for now and its units wait, their place kept); for a unit
 	// waiting for an object's recall, "recalling"; for a dispose job of the
 	// daily pass while retention is paused, "clock jumped"; at most 256
 	// bytes. Empty while nothing holds it back, and for a job done.

@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16nopacs/v1/tenant.proto\x12\tnopacs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe4\x01\n\x06Tenant\x12\x0c\n\x04name\x18\x01 \x01(\t\x12.\n\rdatabase_type\x18\x02 \x01(\x0e\x32\x17.nopacs.v1.DatabaseType\x12%\n\x05state\x18\x03 \x01(\x0e\x32\x16.nopacs.v1.TenantState\x12\x14\n\x0cstate_reason\x18\x04 \x01(\t\x12/\n\x0b\x63reate_time\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nstate_time\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"r\n\x13\x43reateTenantRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12.\n\rdatabase_type\x18\x02 \x01(\x0e\x32\x17.nopacs.v1.DatabaseType\x12\x1d\n\x10\x64\x61tabase_address\x18\x03 \x01(\tB\x03\x80\x01\x01\"9\n\x14\x43reateTenantResponse\x12!\n\x06tenant\x18\x01 \x01(\x0b\x32\x11.nopacs.v1.Tenant\" \n\x10GetTenantRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"6\n\x11GetTenantResponse\x12!\n\x06tenant\x18\x01 \x01(\x0b\x32\x11.nopacs.v1.Tenant\";\n\x12ListTenantsRequest\x12\x11\n\tpage_size\x18\x01 \x01(\x05\x12\x12\n\npage_token\x18\x02 \x01(\t\"R\n\x13ListTenantsResponse\x12\"\n\x07tenants\x18\x01 \x03(\x0b\x32\x11.nopacs.v1.Tenant\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"9\n\x13RemoveTenantRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0c\x63onfirm_name\x18\x02 \x01(\t\"]\n\x14RemoveTenantResponse\x12.\n\rdatabase_type\x18\x01 \x01(\x0e\x32\x17.nopacs.v1.DatabaseType\x12\x15\n\rdata_location\x18\x02 \x01(\t\"$\n\x14ReclaimTenantRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\":\n\x15ReclaimTenantResponse\x12!\n\x06tenant\x18\x01 \x01(\x0b\x32\x11.nopacs.v1.Tenant*\xe3\x01\n\x0bTenantState\x12\x1c\n\x18TENANT_STATE_UNSPECIFIED\x10\x00\x12\x16\n\x12TENANT_STATE_READY\x10\x01\x12\x1c\n\x18TENANT_STATE_UNREACHABLE\x10\x02\x12\x1a\n\x16TENANT_STATE_UPGRADING\x10\x03\x12\x17\n\x13TENANT_STATE_FAILED\x10\x04\x12\x1a\n\x16TENANT_STATE_RESTORING\x10\x05\x12\x16\n\x12TENANT_STATE_MOVED\x10\x06\x12\x17\n\x13TENANT_STATE_FENCED\x10\x07*c\n\x0c\x44\x61tabaseType\x12\x1d\n\x19\x44\x41TABASE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n\x14\x44\x41TABASE_TYPE_SQLITE\x10\x01\x12\x1a\n\x16\x44\x41TABASE_TYPE_POSTGRES\x10\x02\x32\xaf\x03\n\rTenantService\x12O\n\x0c\x43reateTenant\x12\x1e.nopacs.v1.CreateTenantRequest\x1a\x1f.nopacs.v1.CreateTenantResponse\x12K\n\tGetTenant\x12\x1b.nopacs.v1.GetTenantRequest\x1a\x1c.nopacs.v1.GetTenantResponse\"\x03\x90\x02\x01\x12Q\n\x0bListTenants\x12\x1d.nopacs.v1.ListTenantsRequest\x1a\x1e.nopacs.v1.ListTenantsResponse\"\x03\x90\x02\x01\x12T\n\x0cRemoveTenant\x12\x1e.nopacs.v1.RemoveTenantRequest\x1a\x1f.nopacs.v1.RemoveTenantResponse\"\x03\x90\x02\x02\x12W\n\rReclaimTenant\x12\x1f.nopacs.v1.ReclaimTenantRequest\x1a .nopacs.v1.ReclaimTenantResponse\"\x03\x90\x02\x02\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16nopacs/v1/tenant.proto\x12\tnopacs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8b\x02\n\x06Tenant\x12\x0c\n\x04name\x18\x01 \x01(\t\x12.\n\rdatabase_type\x18\x02 \x01(\x0e\x32\x17.nopacs.v1.DatabaseType\x12%\n\x05state\x18\x03 \x01(\x0e\x32\x16.nopacs.v1.TenantState\x12\x14\n\x0cstate_reason\x18\x04 \x01(\t\x12/\n\x0b\x63reate_time\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nstate_time\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12%\n\x05quota\x18\x07 \x01(\x0b\x32\x16.nopacs.v1.TenantQuota\"\xd1\x01\n\x0bTenantQuota\x12\x12\n\nused_bytes\x18\x01 \x01(\x03\x12\x16\n\x0eused_instances\x18\x02 \x01(\x03\x12\x13\n\x0b\x62ytes_bound\x18\x03 \x01(\x03\x12\x17\n\x0finstances_bound\x18\x04 \x01(\x03\x12\x14\n\x0cwarn_percent\x18\x05 \x01(\x05\x12$\n\x05state\x18\x06 \x01(\x0e\x32\x15.nopacs.v1.QuotaState\x12\x13\n\x0bpurge_bytes\x18\x07 \x01(\x03\x12\x17\n\x0fpurge_instances\x18\x08 \x01(\x03\"r\n\x13\x43reateTenantRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12.\n\rdatabase_type\x18\x02 \x01(\x0e\x32\x17.nopacs.v1.DatabaseType\x12\x1d\n\x10\x64\x61tabase_address\x18\x03 \x01(\tB\x03\x80\x01\x01\"9\n\x14\x43reateTenantResponse\x12!\n\x06tenant\x18\x01 \x01(\x0b\x32\x11.nopacs.v1.Tenant\" \n\x10GetTenantRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"6\n\x11GetTenantResponse\x12!\n\x06tenant\x18\x01 \x01(\x0b\x32\x11.nopacs.v1.Tenant\";\n\x12ListTenantsRequest\x12\x11\n\tpage_size\x18\x01 \x01(\x05\x12\x12\n\npage_token\x18\x02 \x01(\t\"R\n\x13ListTenantsResponse\x12\"\n\x07tenants\x18\x01 \x03(\x0b\x32\x11.nopacs.v1.Tenant\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"9\n\x13RemoveTenantRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0c\x63onfirm_name\x18\x02 \x01(\t\"]\n\x14RemoveTenantResponse\x12.\n\rdatabase_type\x18\x01 \x01(\x0e\x32\x17.nopacs.v1.DatabaseType\x12\x15\n\rdata_location\x18\x02 \x01(\t\"$\n\x14ReclaimTenantRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\":\n\x15ReclaimTenantResponse\x12!\n\x06tenant\x18\x01 \x01(\x0b\x32\x11.nopacs.v1.Tenant*\xe3\x01\n\x0bTenantState\x12\x1c\n\x18TENANT_STATE_UNSPECIFIED\x10\x00\x12\x16\n\x12TENANT_STATE_READY\x10\x01\x12\x1c\n\x18TENANT_STATE_UNREACHABLE\x10\x02\x12\x1a\n\x16TENANT_STATE_UPGRADING\x10\x03\x12\x17\n\x13TENANT_STATE_FAILED\x10\x04\x12\x1a\n\x16TENANT_STATE_RESTORING\x10\x05\x12\x16\n\x12TENANT_STATE_MOVED\x10\x06\x12\x17\n\x13TENANT_STATE_FENCED\x10\x07*c\n\x0c\x44\x61tabaseType\x12\x1d\n\x19\x44\x41TABASE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n\x14\x44\x41TABASE_TYPE_SQLITE\x10\x01\x12\x1a\n\x16\x44\x41TABASE_TYPE_POSTGRES\x10\x02*q\n\nQuotaState\x12\x1b\n\x17QUOTA_STATE_UNSPECIFIED\x10\x00\x12\x15\n\x11QUOTA_STATE_UNDER\x10\x01\x12\x16\n\x12QUOTA_STATE_WARNED\x10\x02\x12\x17\n\x13QUOTA_STATE_REACHED\x10\x03\x32\xaf\x03\n\rTenantService\x12O\n\x0c\x43reateTenant\x12\x1e.nopacs.v1.CreateTenantRequest\x1a\x1f.nopacs.v1.CreateTenantResponse\x12K\n\tGetTenant\x12\x1b.nopacs.v1.GetTenantRequest\x1a\x1c.nopacs.v1.GetTenantResponse\"\x03\x90\x02\x01\x12Q\n\x0bListTenants\x12\x1d.nopacs.v1.ListTenantsRequest\x1a\x1e.nopacs.v1.ListTenantsResponse\"\x03\x90\x02\x01\x12T\n\x0cRemoveTenant\x12\x1e.nopacs.v1.RemoveTenantRequest\x1a\x1f.nopacs.v1.RemoveTenantResponse\"\x03\x90\x02\x02\x12W\n\rReclaimTenant\x12\x1f.nopacs.v1.ReclaimTenantRequest\x1a .nopacs.v1.ReclaimTenantResponse\"\x03\x90\x02\x02\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -42,32 +42,36 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TENANTSERVICE'].methods_by_name['RemoveTenant']._serialized_options = b'\220\002\002'
   _globals['_TENANTSERVICE'].methods_by_name['ReclaimTenant']._loaded_options = None
   _globals['_TENANTSERVICE'].methods_by_name['ReclaimTenant']._serialized_options = b'\220\002\002'
-  _globals['_TENANTSTATE']._serialized_start=964
-  _globals['_TENANTSTATE']._serialized_end=1191
-  _globals['_DATABASETYPE']._serialized_start=1193
-  _globals['_DATABASETYPE']._serialized_end=1292
+  _globals['_TENANTSTATE']._serialized_start=1215
+  _globals['_TENANTSTATE']._serialized_end=1442
+  _globals['_DATABASETYPE']._serialized_start=1444
+  _globals['_DATABASETYPE']._serialized_end=1543
+  _globals['_QUOTASTATE']._serialized_start=1545
+  _globals['_QUOTASTATE']._serialized_end=1658
   _globals['_TENANT']._serialized_start=71
-  _globals['_TENANT']._serialized_end=299
-  _globals['_CREATETENANTREQUEST']._serialized_start=301
-  _globals['_CREATETENANTREQUEST']._serialized_end=415
-  _globals['_CREATETENANTRESPONSE']._serialized_start=417
-  _globals['_CREATETENANTRESPONSE']._serialized_end=474
-  _globals['_GETTENANTREQUEST']._serialized_start=476
-  _globals['_GETTENANTREQUEST']._serialized_end=508
-  _globals['_GETTENANTRESPONSE']._serialized_start=510
-  _globals['_GETTENANTRESPONSE']._serialized_end=564
-  _globals['_LISTTENANTSREQUEST']._serialized_start=566
-  _globals['_LISTTENANTSREQUEST']._serialized_end=625
-  _globals['_LISTTENANTSRESPONSE']._serialized_start=627
-  _globals['_LISTTENANTSRESPONSE']._serialized_end=709
-  _globals['_REMOVETENANTREQUEST']._serialized_start=711
-  _globals['_REMOVETENANTREQUEST']._serialized_end=768
-  _globals['_REMOVETENANTRESPONSE']._serialized_start=770
-  _globals['_REMOVETENANTRESPONSE']._serialized_end=863
-  _globals['_RECLAIMTENANTREQUEST']._serialized_start=865
-  _globals['_RECLAIMTENANTREQUEST']._serialized_end=901
-  _globals['_RECLAIMTENANTRESPONSE']._serialized_start=903
-  _globals['_RECLAIMTENANTRESPONSE']._serialized_end=961
-  _globals['_TENANTSERVICE']._serialized_start=1295
-  _globals['_TENANTSERVICE']._serialized_end=1726
+  _globals['_TENANT']._serialized_end=338
+  _globals['_TENANTQUOTA']._serialized_start=341
+  _globals['_TENANTQUOTA']._serialized_end=550
+  _globals['_CREATETENANTREQUEST']._serialized_start=552
+  _globals['_CREATETENANTREQUEST']._serialized_end=666
+  _globals['_CREATETENANTRESPONSE']._serialized_start=668
+  _globals['_CREATETENANTRESPONSE']._serialized_end=725
+  _globals['_GETTENANTREQUEST']._serialized_start=727
+  _globals['_GETTENANTREQUEST']._serialized_end=759
+  _globals['_GETTENANTRESPONSE']._serialized_start=761
+  _globals['_GETTENANTRESPONSE']._serialized_end=815
+  _globals['_LISTTENANTSREQUEST']._serialized_start=817
+  _globals['_LISTTENANTSREQUEST']._serialized_end=876
+  _globals['_LISTTENANTSRESPONSE']._serialized_start=878
+  _globals['_LISTTENANTSRESPONSE']._serialized_end=960
+  _globals['_REMOVETENANTREQUEST']._serialized_start=962
+  _globals['_REMOVETENANTREQUEST']._serialized_end=1019
+  _globals['_REMOVETENANTRESPONSE']._serialized_start=1021
+  _globals['_REMOVETENANTRESPONSE']._serialized_end=1114
+  _globals['_RECLAIMTENANTREQUEST']._serialized_start=1116
+  _globals['_RECLAIMTENANTREQUEST']._serialized_end=1152
+  _globals['_RECLAIMTENANTRESPONSE']._serialized_start=1154
+  _globals['_RECLAIMTENANTRESPONSE']._serialized_end=1212
+  _globals['_TENANTSERVICE']._serialized_start=1661
+  _globals['_TENANTSERVICE']._serialized_end=2092
 # @@protoc_insertion_point(module_scope)

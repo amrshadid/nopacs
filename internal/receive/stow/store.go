@@ -98,6 +98,9 @@ type outcome struct {
 	reason uint16
 	// listed says the part has the UIDs an item of the answer needs.
 	listed bool
+	// overQuota says the part was refused because the tenant is at its
+	// storage quota (receive.ReasonOverQuota).
+	overQuota bool
 }
 
 // tally is what became of a request's parts: the outcomes the answer
@@ -106,6 +109,8 @@ type outcome struct {
 type tally struct {
 	listed          []outcome
 	stored, refused int
+	// overQuota counts the parts refused for the tenant's quota.
+	overQuota int
 }
 
 // add counts one part's outcome and keeps it when it is listed.
@@ -114,6 +119,9 @@ func (t *tally) add(o outcome) {
 		t.stored++
 	} else {
 		t.refused++
+	}
+	if o.overQuota {
+		t.overQuota++
 	}
 	if o.listed {
 		t.listed = append(t.listed, o)
@@ -125,7 +133,8 @@ func (t *tally) parts() int { return t.stored + t.refused }
 
 // Serve reads a STOW-RS request (PS3.18 10.5.1) part by part, hands each
 // part it can place to the Sink, and writes the answer (PS3.18 10.5.3): 200
-// when every part was stored, 202 when some were, 409 when none was, each
+// when every part was stored, 202 when some were, 409 when none was (507
+// when none was because the tenant is at its storage quota), each
 // stored instance with its Retrieve URL and each refused one with its
 // Failure Reason. A request refused whole is answered as plain text: 415
 // for a body of another media type, 400 for one that is not well-formed
@@ -216,9 +225,15 @@ func (e *Endpoint) Serve(ctx context.Context, w http.ResponseWriter, r *http.Req
 		return plain(w, http.StatusBadRequest, phraseNoParts)
 	}
 	stored, refused := t.stored, t.refused
-	// PS3.18 10.5.3, Table 10.5.3-1.
+	// PS3.18 10.5.3, Table 10.5.3-1. A request none of whose parts was
+	// stored because the tenant is at its storage quota is answered 507
+	// (RFC 4918 11.5, Insufficient Storage): the archive has no room for
+	// the tenant now, a temporary state the client waits out, as each
+	// part's A700H says too.
 	status := http.StatusOK
 	switch {
+	case stored == 0 && t.overQuota > 0:
+		status = http.StatusInsufficientStorage
 	case stored == 0:
 		status = http.StatusConflict
 	case refused > 0:
@@ -377,6 +392,7 @@ func (e *Endpoint) storePart(ctx context.Context, part *multipart.Part, req Requ
 	case out.Status == receive.Received:
 	case out.Status == receive.Refused, body.n > limit:
 		o.reason = ReasonOutOfResources
+		o.overQuota = out.Reason == receive.ReasonOverQuota
 	default:
 		o.reason = ReasonProcessingFailure
 	}

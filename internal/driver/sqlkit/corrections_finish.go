@@ -60,8 +60,10 @@ func (k Sending) FinishPurge(ctx context.Context, f tenant.PurgeFinish) (tenant.
 		}
 		// What it did not settle (a target a stop left between its purge
 		// and its record) was asked of its storage; it owns nothing more.
-		if _, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = 'purged' WHERE correction_id = ? AND outcome = ''`,
-			c.ID); err != nil {
+		if err := countOwned(ctx, tx, c.ID, func() error {
+			_, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = 'purged' WHERE correction_id = ? AND outcome = ''`, c.ID)
+			return err
+		}); err != nil {
 			return err
 		}
 		if err := k.setState(ctx, tx, c, corr.StatePurged, f.Now, ""); err != nil {

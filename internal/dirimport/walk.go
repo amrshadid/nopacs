@@ -399,6 +399,11 @@ func (w *walker) handIn(f *os.File, p string, size int64, parts map[string]strin
 		return outcome{end: endStopped}, true
 	case w.u.ctx.Err() != nil:
 		return w.u.canceled(), true
+	case out.Status == receive.Refused && out.Reason == receive.ReasonOverQuota:
+		// The tenant is at its storage quota: the unit waits, its place
+		// kept and no attempt spent, until a purge or a raised bound makes
+		// room, looking again as a unit whose receiver is disabled does.
+		return outcome{end: endRelease, reason: out.Reason, due: now.Add(WaitDelay)}, true
 	case out.Status == receive.Refused:
 		// Not the unit's own cause: the archive takes no file for now.
 		return outcome{end: endRelease, reason: out.Reason, due: now.Add(RefusedDelay)}, true

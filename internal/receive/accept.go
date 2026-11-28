@@ -27,8 +27,9 @@ const (
 // file's row is written afterwards, in a batch, and a crash between the two
 // leaves the file landed, which Recover records. It answers Refused, keeping
 // nothing, while the pipeline is stopping, the tenant is over its incoming
-// limit, the disk is below its reserve, the database cannot be reached, or
-// the file could not be written; and Failed for a receiver that does not
+// limit, the disk is below its reserve, the tenant is at its storage quota
+// (ReasonOverQuota), the database cannot be reached, or the file could not
+// be written; and Failed for a receiver that does not
 // take files or a file too large for it, which is held in quarantine without
 // its bytes so a person sees that it came.
 func (p *Pipeline) Accept(ctx context.Context, a Arrival) Outcome {
@@ -72,6 +73,20 @@ func (p *Pipeline) Accept(ctx context.Context, a Arrival) Outcome {
 			return Outcome{Status: Refused, Reason: c.reason}
 		}
 	}
+	ticket, why := p.admitQuota(ctx)
+	if why != "" {
+		p.stats.Refused.Add(1)
+		return Outcome{Status: Refused, Reason: why}
+	}
+	// The admission is given back on every way out but the batcher's, which
+	// marks it written once the file's row is, the gate dropping it after
+	// its next read of the use.
+	batched := false
+	defer func() {
+		if !batched {
+			ticket.release()
+		}
+	}()
 	f, err := p.area.Land(ctx, a.Receiver, a.Body, rcv.MaxFileBytes)
 	var tl *incoming.TooLargeError
 	if errors.As(err, &tl) {
@@ -89,14 +104,26 @@ func (p *Pipeline) Accept(ctx context.Context, a Arrival) Outcome {
 	}
 	p.stats.Landed.Add(1)
 	p.meter.received(p.cfg.Clock.Now(), f.Size)
+	ticket.landed(f.Size)
 	p.at("accept.landed")
 	l := landed{file: f, receiver: a.Receiver, caller: a.Caller, association: a.Association, told: a}
 	l.told.Body, l.told.Import = nil, nil
 	if a.Import != nil {
+		// Recorded before it answers: its admission ends with it.
 		imp := *a.Import
 		imp.Size = f.Size
-		return p.intakeImport(ctx, l, imp)
+		out := p.intakeImport(ctx, l, imp)
+		if out.Status == Received {
+			// Its row is written, but the cached use may predate it:
+			// giving the admission back now would let every import of the
+			// same interval see the same room. The gate drops it once a
+			// read of the use has counted the row (quota.go).
+			ticket.written()
+			batched = true
+		}
+		return out
 	}
+	l.quota, batched = ticket, true
 	p.intake(ctx, l)
 	return Outcome{Status: Received}
 }

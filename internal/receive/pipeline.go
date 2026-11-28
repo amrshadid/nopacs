@@ -40,6 +40,8 @@ type Pipeline struct {
 	scanLocks  keyedMutex
 	// deid keeps the keys and engines of de-identification (deid.go).
 	deid deid
+	// quota admits new files against the tenant's quota (quota.go).
+	quota quotaGate
 
 	// mu guards stopping and accepting, so Stop's wait cannot pass an
 	// Accept, or a decision (enterDecision), that has just begun.

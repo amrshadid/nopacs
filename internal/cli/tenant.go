@@ -55,7 +55,24 @@ func (a *app) tenantDetails(w io.Writer, t *v1.Tenant) error {
 		pairs = append(pairs, output.Pair{Label: "Since", Value: a.when(t.GetStateTime())})
 	}
 	pairs = append(pairs, output.Pair{Label: "Created", Value: a.when(t.GetCreateTime())})
-	return output.Details(w, a.style(), pairs)
+	return output.Details(w, a.style(), append(pairs, quotaPairs(t.GetQuota())...))
+}
+
+// quotaPairs returns the labeled lines of a tenant's storage quota: its use
+// against its bounds, what its purges will give back, and its warning;
+// none when the server sent no quota.
+func quotaPairs(q *v1.TenantQuota) []output.Pair {
+	if q == nil {
+		return nil
+	}
+	pairs := []output.Pair{{Label: "Quota", Value: output.Quota(q)}}
+	if purge := output.QuotaPurge(q); purge != "" {
+		pairs = append(pairs, output.Pair{Label: "To purge", Value: purge})
+	}
+	if warn := output.QuotaWarning(q); warn != "" {
+		pairs = append(pairs, output.Pair{Label: "Warning", Value: warn})
+	}
+	return pairs
 }
 
 // newTenantCreate builds "tenant create".
@@ -179,7 +196,8 @@ func (a *app) newTenantShow() *cobra.Command {
 		Short: "Show one tenant, whatever its state",
 		Long: `Show one tenant from the master database: its database type, its state and,
 when it is not ready, why. It answers even when the tenant's own database is
-down.`,
+down. When that database answers, it also shows what the tenant holds against
+its storage quota (quota.bytes, quota.instances) and where that stands.`,
 		Example: `  nopacs tenant show lab1`,
 		Args:    exactArgs(1),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {

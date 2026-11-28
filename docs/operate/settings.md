@@ -167,6 +167,51 @@ works the disposals a person queued within the hour. `quarantine.warn-age` and
 many bytes held. They warn and nothing more: only a quarantine retention rule
 removes a held file.
 
+## Storage quotas
+
+One tenant must not fill a storage that others share. `quota.bytes` and
+`quota.instances` bound what a tenant holds on its storages: empty, the default, is
+no bound. Only an admin on the installation sets them, for the installation (every
+tenant's default) or for one tenant; a tenant's own admin cannot, and neither can a
+masked key, whatever its grants.
+
+What a tenant holds is counted in its database as files are recorded and purged,
+never by reading the storages: the instance files only (a scan's manifest and
+metadata files are the archive's own), each revision of an instance its own file. A
+file counts from the moment its reception records it, so files received and not yet
+archived count, and until its purge removes it, so a deleted instance, a revision a
+replace or an edit superseded, and a relabel's old key count until their purge.
+`nopacs tenant show` and `nopacs tenant status` print the use against the bounds,
+with what the purges will give back.
+
+The bound is checked as each new file starts, against the database's count (read at
+most once a second) plus the files taken since, one tenant's files decided one after
+the other, so two files at the edge never both see the same room. A file that cannot
+be checked, because the bounds or the count cannot be read, is refused the same way.
+A file can briefly count twice just after its batch is written, once in the database
+and once among the files taken since, which can only refuse early. A relabel's
+copies count only from their publish, not while they are being made. At the
+bound a new file is refused as a temporary failure: a C-STORE is answered `A700`
+(out of resources), a STOW-RS request whose parts are all refused for it is
+answered `507` with each part `A700`, and an import job waits, its place kept, with
+the reason `quota reached`. Nothing received is lost: a file taken before the bound
+is archived, so a reception in progress finishes what it was sent. An instance bound
+is never passed; a bytes bound can be passed by the files being received when it is
+reached, at most one for each store then in flight, each at most its receiver's
+largest file, since a C-STORE does not say its size first.
+
+`quota.warn` (`90%` by default) is the share of a bound past which the tenant is
+warned: every minute the server measures each tenant, writes one `QUOTA` event when
+the state changes (under, past the warning, at a bound, or back), and keeps the
+metrics `nopacs_quota_used_bytes`, `nopacs_quota_bound_bytes`,
+`nopacs_quota_used_instances`, `nopacs_quota_bound_instances` and
+`nopacs_quota_state`. A tenant's own admin may set `quota.warn` for the tenant. After
+a restart a state other than under that still stands is reported once more.
+
+A tenant at its bound gets room back by a purge (a delete's bytes count until its
+grace ends and its purge runs; `nopacs correction purge` runs it sooner) or by a
+raised bound.
+
 A period is a whole number followed by `s`, `m`, `h` or `d`; a size is a whole number
 of bytes, or a number followed by `KiB`, `MiB`, `GiB`, `TiB` or `PiB`.
 
@@ -186,6 +231,8 @@ when it starts do not change until it is started again.
 | `receiver.bind-addresses` | When a receiver that names no address of its own is started or started again (the first address listed is used); a listener that is running keeps the address it has |
 | `storage.reserve` | Within five seconds, by default: the free space of the incoming area and of each storage a receiver writes to is checked on that interval |
 | `incoming.limit` | Within five seconds, by default, on the same check |
+| `quota.bytes`, `quota.instances` | Within a second, for the next file received; within a minute for the warning, the event and the metrics |
+| `quota.warn` | Within a minute, at the next measure of the tenant's use |
 | `receiver.header-limit` | Within a second, for the next file read |
 | `deid.pixel-limit` | Within a second, for the next file de-identified; a file held as `pixels_too_large` is archived by its release once the setting is raised |
 | `deid.memory` | Within a second, for the next file checked or tried; work that waits for room reads it again each second, and a file held as `check_too_large` is archived by its release once the setting is raised |

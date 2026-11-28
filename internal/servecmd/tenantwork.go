@@ -89,6 +89,9 @@ type tenantWork struct {
 	// background work wrote events, so a watcher reads them at once.
 	wakeFeed func(name string)
 
+	// quota holds the running quota watches, for the metrics.
+	quota quotaWatches
+
 	create sync.Mutex
 
 	mu        sync.Mutex
@@ -555,6 +558,7 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	}
 	r := &tenantRepairs{w: w, name: name, st: db, open: open, gate: sw.Gate(), wake: s.repairs, log: log}
 	run(w.quarantine.watch(w, name, st, log))
+	run(w.quota.watch(w, name, st, log))
 	run(r.run)
 	run(r.autoLoop)
 	ret := &tenantRetention{w: w, name: name, st: db, base: st, log: log}

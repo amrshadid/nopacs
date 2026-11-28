@@ -185,6 +185,12 @@ func (k Rebuild) ActivateCatalog(ctx context.Context, fence tenant.WorkFence, no
 		if err := k.copyShadow(ctx, tx, sp); err != nil {
 			return err
 		}
+		// What corrections own and have not purged is counted again with
+		// the catalog's totals, so a rebuild makes every running total of
+		// a tenant's use (tenant.Quotas) right.
+		if err := RecountPurgeTotals(ctx, tx); err != nil {
+			return err
+		}
 		// A replica's state is not the catalog's, but it names the
 		// catalog's scans: it is made to agree with the new catalog in the
 		// same transaction (tenant.Replication, "Rebuilds and restores").

@@ -84,6 +84,7 @@ func (a *app) tenantStatusText(w io.Writer, st *v1.TenantStatus) error {
 	if warn := output.QuarantineWarning(st.GetQuarantine()); warn != "" {
 		pairs = append(pairs, output.Pair{Label: "Warning", Value: warn})
 	}
+	pairs = append(pairs, quotaPairs(st.GetQuota())...)
 	if err := output.Details(w, a.style(), pairs); err != nil {
 		return err
 	}

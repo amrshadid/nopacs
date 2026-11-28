@@ -189,7 +189,7 @@ func TestShippedTenantMigrationsUnchanged(t *testing.T) {
 
 // shippedTenantBaseline is the SHA-256 of migrations/tenant/0001_baseline.sql
 // as this change ships it.
-const shippedTenantBaseline = "07d46c33d561fb0b08441a1c66b95464e12d661f0fa8e173ee191064ede68ff8"
+const shippedTenantBaseline = "352cbba8f881de5a8a3ee0138ed157bd2240b117b82883e8e7aebe916b9d8758"
 
 // TestTenantNotMigrated guards that a tenant store used before Migrate
 // fails as Unavailable with a message that says so, instead of a SQL error,

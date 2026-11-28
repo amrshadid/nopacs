@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/tenant.proto.
  */
 export const file_nopacs_v1_tenant: GenFile = /*@__PURE__*/
-  fileDesc("ChZub3BhY3MvdjEvdGVuYW50LnByb3RvEglub3BhY3MudjEi5AEKBlRlbmFudBIMCgRuYW1lGAEgASgJEi4KDWRhdGFiYXNlX3R5cGUYAiABKA4yFy5ub3BhY3MudjEuRGF0YWJhc2VUeXBlEiUKBXN0YXRlGAMgASgOMhYubm9wYWNzLnYxLlRlbmFudFN0YXRlEhQKDHN0YXRlX3JlYXNvbhgEIAEoCRIvCgtjcmVhdGVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKc3RhdGVfdGltZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicgoTQ3JlYXRlVGVuYW50UmVxdWVzdBIMCgRuYW1lGAEgASgJEi4KDWRhdGFiYXNlX3R5cGUYAiABKA4yFy5ub3BhY3MudjEuRGF0YWJhc2VUeXBlEh0KEGRhdGFiYXNlX2FkZHJlc3MYAyABKAlCA4ABASI5ChRDcmVhdGVUZW5hbnRSZXNwb25zZRIhCgZ0ZW5hbnQYASABKAsyES5ub3BhY3MudjEuVGVuYW50IiAKEEdldFRlbmFudFJlcXVlc3QSDAoEbmFtZRgBIAEoCSI2ChFHZXRUZW5hbnRSZXNwb25zZRIhCgZ0ZW5hbnQYASABKAsyES5ub3BhY3MudjEuVGVuYW50IjsKEkxpc3RUZW5hbnRzUmVxdWVzdBIRCglwYWdlX3NpemUYASABKAUSEgoKcGFnZV90b2tlbhgCIAEoCSJSChNMaXN0VGVuYW50c1Jlc3BvbnNlEiIKB3RlbmFudHMYASADKAsyES5ub3BhY3MudjEuVGVuYW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSI5ChNSZW1vdmVUZW5hbnRSZXF1ZXN0EgwKBG5hbWUYASABKAkSFAoMY29uZmlybV9uYW1lGAIgASgJIl0KFFJlbW92ZVRlbmFudFJlc3BvbnNlEi4KDWRhdGFiYXNlX3R5cGUYASABKA4yFy5ub3BhY3MudjEuRGF0YWJhc2VUeXBlEhUKDWRhdGFfbG9jYXRpb24YAiABKAkiJAoUUmVjbGFpbVRlbmFudFJlcXVlc3QSDAoEbmFtZRgBIAEoCSI6ChVSZWNsYWltVGVuYW50UmVzcG9uc2USIQoGdGVuYW50GAEgASgLMhEubm9wYWNzLnYxLlRlbmFudCrjAQoLVGVuYW50U3RhdGUSHAoYVEVOQU5UX1NUQVRFX1VOU1BFQ0lGSUVEEAASFgoSVEVOQU5UX1NUQVRFX1JFQURZEAESHAoYVEVOQU5UX1NUQVRFX1VOUkVBQ0hBQkxFEAISGgoWVEVOQU5UX1NUQVRFX1VQR1JBRElORxADEhcKE1RFTkFOVF9TVEFURV9GQUlMRUQQBBIaChZURU5BTlRfU1RBVEVfUkVTVE9SSU5HEAUSFgoSVEVOQU5UX1NUQVRFX01PVkVEEAYSFwoTVEVOQU5UX1NUQVRFX0ZFTkNFRBAHKmMKDERhdGFiYXNlVHlwZRIdChlEQVRBQkFTRV9UWVBFX1VOU1BFQ0lGSUVEEAASGAoUREFUQUJBU0VfVFlQRV9TUUxJVEUQARIaChZEQVRBQkFTRV9UWVBFX1BPU1RHUkVTEAIyrwMKDVRlbmFudFNlcnZpY2USTwoMQ3JlYXRlVGVuYW50Eh4ubm9wYWNzLnYxLkNyZWF0ZVRlbmFudFJlcXVlc3QaHy5ub3BhY3MudjEuQ3JlYXRlVGVuYW50UmVzcG9uc2USSwoJR2V0VGVuYW50Ehsubm9wYWNzLnYxLkdldFRlbmFudFJlcXVlc3QaHC5ub3BhY3MudjEuR2V0VGVuYW50UmVzcG9uc2UiA5ACARJRCgtMaXN0VGVuYW50cxIdLm5vcGFjcy52MS5MaXN0VGVuYW50c1JlcXVlc3QaHi5ub3BhY3MudjEuTGlzdFRlbmFudHNSZXNwb25zZSIDkAIBElQKDFJlbW92ZVRlbmFudBIeLm5vcGFjcy52MS5SZW1vdmVUZW5hbnRSZXF1ZXN0Gh8ubm9wYWNzLnYxLlJlbW92ZVRlbmFudFJlc3BvbnNlIgOQAgISVwoNUmVjbGFpbVRlbmFudBIfLm5vcGFjcy52MS5SZWNsYWltVGVuYW50UmVxdWVzdBogLm5vcGFjcy52MS5SZWNsYWltVGVuYW50UmVzcG9uc2UiA5ACAmIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChZub3BhY3MvdjEvdGVuYW50LnByb3RvEglub3BhY3MudjEiiwIKBlRlbmFudBIMCgRuYW1lGAEgASgJEi4KDWRhdGFiYXNlX3R5cGUYAiABKA4yFy5ub3BhY3MudjEuRGF0YWJhc2VUeXBlEiUKBXN0YXRlGAMgASgOMhYubm9wYWNzLnYxLlRlbmFudFN0YXRlEhQKDHN0YXRlX3JlYXNvbhgEIAEoCRIvCgtjcmVhdGVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKc3RhdGVfdGltZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoFcXVvdGEYByABKAsyFi5ub3BhY3MudjEuVGVuYW50UXVvdGEi0QEKC1RlbmFudFF1b3RhEhIKCnVzZWRfYnl0ZXMYASABKAMSFgoOdXNlZF9pbnN0YW5jZXMYAiABKAMSEwoLYnl0ZXNfYm91bmQYAyABKAMSFwoPaW5zdGFuY2VzX2JvdW5kGAQgASgDEhQKDHdhcm5fcGVyY2VudBgFIAEoBRIkCgVzdGF0ZRgGIAEoDjIVLm5vcGFjcy52MS5RdW90YVN0YXRlEhMKC3B1cmdlX2J5dGVzGAcgASgDEhcKD3B1cmdlX2luc3RhbmNlcxgIIAEoAyJyChNDcmVhdGVUZW5hbnRSZXF1ZXN0EgwKBG5hbWUYASABKAkSLgoNZGF0YWJhc2VfdHlwZRgCIAEoDjIXLm5vcGFjcy52MS5EYXRhYmFzZVR5cGUSHQoQZGF0YWJhc2VfYWRkcmVzcxgDIAEoCUIDgAEBIjkKFENyZWF0ZVRlbmFudFJlc3BvbnNlEiEKBnRlbmFudBgBIAEoCzIRLm5vcGFjcy52MS5UZW5hbnQiIAoQR2V0VGVuYW50UmVxdWVzdBIMCgRuYW1lGAEgASgJIjYKEUdldFRlbmFudFJlc3BvbnNlEiEKBnRlbmFudBgBIAEoCzIRLm5vcGFjcy52MS5UZW5hbnQiOwoSTGlzdFRlbmFudHNSZXF1ZXN0EhEKCXBhZ2Vfc2l6ZRgBIAEoBRISCgpwYWdlX3Rva2VuGAIgASgJIlIKE0xpc3RUZW5hbnRzUmVzcG9uc2USIgoHdGVuYW50cxgBIAMoCzIRLm5vcGFjcy52MS5UZW5hbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjkKE1JlbW92ZVRlbmFudFJlcXVlc3QSDAoEbmFtZRgBIAEoCRIUCgxjb25maXJtX25hbWUYAiABKAkiXQoUUmVtb3ZlVGVuYW50UmVzcG9uc2USLgoNZGF0YWJhc2VfdHlwZRgBIAEoDjIXLm5vcGFjcy52MS5EYXRhYmFzZVR5cGUSFQoNZGF0YV9sb2NhdGlvbhgCIAEoCSIkChRSZWNsYWltVGVuYW50UmVxdWVzdBIMCgRuYW1lGAEgASgJIjoKFVJlY2xhaW1UZW5hbnRSZXNwb25zZRIhCgZ0ZW5hbnQYASABKAsyES5ub3BhY3MudjEuVGVuYW50KuMBCgtUZW5hbnRTdGF0ZRIcChhURU5BTlRfU1RBVEVfVU5TUEVDSUZJRUQQABIWChJURU5BTlRfU1RBVEVfUkVBRFkQARIcChhURU5BTlRfU1RBVEVfVU5SRUFDSEFCTEUQAhIaChZURU5BTlRfU1RBVEVfVVBHUkFESU5HEAMSFwoTVEVOQU5UX1NUQVRFX0ZBSUxFRBAEEhoKFlRFTkFOVF9TVEFURV9SRVNUT1JJTkcQBRIWChJURU5BTlRfU1RBVEVfTU9WRUQQBhIXChNURU5BTlRfU1RBVEVfRkVOQ0VEEAcqYwoMRGF0YWJhc2VUeXBlEh0KGURBVEFCQVNFX1RZUEVfVU5TUEVDSUZJRUQQABIYChREQVRBQkFTRV9UWVBFX1NRTElURRABEhoKFkRBVEFCQVNFX1RZUEVfUE9TVEdSRVMQAipxCgpRdW90YVN0YXRlEhsKF1FVT1RBX1NUQVRFX1VOU1BFQ0lGSUVEEAASFQoRUVVPVEFfU1RBVEVfVU5ERVIQARIWChJRVU9UQV9TVEFURV9XQVJORUQQAhIXChNRVU9UQV9TVEFURV9SRUFDSEVEEAMyrwMKDVRlbmFudFNlcnZpY2USTwoMQ3JlYXRlVGVuYW50Eh4ubm9wYWNzLnYxLkNyZWF0ZVRlbmFudFJlcXVlc3QaHy5ub3BhY3MudjEuQ3JlYXRlVGVuYW50UmVzcG9uc2USSwoJR2V0VGVuYW50Ehsubm9wYWNzLnYxLkdldFRlbmFudFJlcXVlc3QaHC5ub3BhY3MudjEuR2V0VGVuYW50UmVzcG9uc2UiA5ACARJRCgtMaXN0VGVuYW50cxIdLm5vcGFjcy52MS5MaXN0VGVuYW50c1JlcXVlc3QaHi5ub3BhY3MudjEuTGlzdFRlbmFudHNSZXNwb25zZSIDkAIBElQKDFJlbW92ZVRlbmFudBIeLm5vcGFjcy52MS5SZW1vdmVUZW5hbnRSZXF1ZXN0Gh8ubm9wYWNzLnYxLlJlbW92ZVRlbmFudFJlc3BvbnNlIgOQAgISVwoNUmVjbGFpbVRlbmFudBIfLm5vcGFjcy52MS5SZWNsYWltVGVuYW50UmVxdWVzdBogLm5vcGFjcy52MS5SZWNsYWltVGVuYW50UmVzcG9uc2UiA5ACAmIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * Tenant is an independent archive of the installation. It never carries its
@@ -72,6 +72,15 @@ export type Tenant = Message<"nopacs.v1.Tenant"> & {
    * @generated from field: google.protobuf.Timestamp state_time = 6;
    */
   stateTime?: Timestamp | undefined;
+
+  /**
+   * What the tenant holds against its storage quota, read from its
+   * database. Answered by GetTenant alone, and absent when the tenant's
+   * database does not answer; ListTenants leaves it out.
+   *
+   * @generated from field: nopacs.v1.TenantQuota quota = 7;
+   */
+  quota?: TenantQuota | undefined;
 };
 
 /**
@@ -80,6 +89,88 @@ export type Tenant = Message<"nopacs.v1.Tenant"> & {
  */
 export const TenantSchema: GenMessage<Tenant> = /*@__PURE__*/
   messageDesc(file_nopacs_v1_tenant, 0);
+
+/**
+ * TenantQuota is what a tenant holds on its storages against its quota.
+ * Its use is counted in the tenant's database as files are archived and
+ * purged, never by reading the storages: instance files only (a scan's
+ * manifest and metadata files are not counted), each revision of an
+ * instance its own file. A file counts from the moment its reception
+ * records it until its purge removes it, so a deleted instance, or a
+ * revision a replace or an edit superseded, counts until its purge. A bound
+ * is checked as each new file starts: an instance bound is never passed;
+ * a bytes bound can be passed by the files being received when it is
+ * reached, at most one for each store in flight then, each at most its
+ * receiver's largest file.
+ *
+ * @generated from message nopacs.v1.TenantQuota
+ */
+export type TenantQuota = Message<"nopacs.v1.TenantQuota"> & {
+  /**
+   * The bytes of every file the tenant holds or has received.
+   *
+   * @generated from field: int64 used_bytes = 1;
+   */
+  usedBytes: bigint;
+
+  /**
+   * Those files.
+   *
+   * @generated from field: int64 used_instances = 2;
+   */
+  usedInstances: bigint;
+
+  /**
+   * The setting quota.bytes; 0 for no bound.
+   *
+   * @generated from field: int64 bytes_bound = 3;
+   */
+  bytesBound: bigint;
+
+  /**
+   * The setting quota.instances; 0 for no bound.
+   *
+   * @generated from field: int64 instances_bound = 4;
+   */
+  instancesBound: bigint;
+
+  /**
+   * The setting quota.warn: the share of a bound, in percent, past which
+   * the tenant is warned.
+   *
+   * @generated from field: int32 warn_percent = 5;
+   */
+  warnPercent: number;
+
+  /**
+   * Where the use stands.
+   *
+   * @generated from field: nopacs.v1.QuotaState state = 6;
+   */
+  state: QuotaState;
+
+  /**
+   * The bytes of the files corrections own and their purges have not
+   * removed yet, counted in used_bytes: what the purges will give back.
+   *
+   * @generated from field: int64 purge_bytes = 7;
+   */
+  purgeBytes: bigint;
+
+  /**
+   * Those files, counted in used_instances.
+   *
+   * @generated from field: int64 purge_instances = 8;
+   */
+  purgeInstances: bigint;
+};
+
+/**
+ * Describes the message nopacs.v1.TenantQuota.
+ * Use `create(TenantQuotaSchema)` to create a new message.
+ */
+export const TenantQuotaSchema: GenMessage<TenantQuota> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_tenant, 1);
 
 /**
  * CreateTenantRequest is the tenant to create.
@@ -124,7 +215,7 @@ export type CreateTenantRequest = Message<"nopacs.v1.CreateTenantRequest"> & {
  * Use `create(CreateTenantRequestSchema)` to create a new message.
  */
 export const CreateTenantRequestSchema: GenMessage<CreateTenantRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 1);
+  messageDesc(file_nopacs_v1_tenant, 2);
 
 /**
  * CreateTenantResponse is the tenant created.
@@ -145,7 +236,7 @@ export type CreateTenantResponse = Message<"nopacs.v1.CreateTenantResponse"> & {
  * Use `create(CreateTenantResponseSchema)` to create a new message.
  */
 export const CreateTenantResponseSchema: GenMessage<CreateTenantResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 2);
+  messageDesc(file_nopacs_v1_tenant, 3);
 
 /**
  * GetTenantRequest names a tenant.
@@ -166,7 +257,7 @@ export type GetTenantRequest = Message<"nopacs.v1.GetTenantRequest"> & {
  * Use `create(GetTenantRequestSchema)` to create a new message.
  */
 export const GetTenantRequestSchema: GenMessage<GetTenantRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 3);
+  messageDesc(file_nopacs_v1_tenant, 4);
 
 /**
  * GetTenantResponse is the tenant named.
@@ -187,7 +278,7 @@ export type GetTenantResponse = Message<"nopacs.v1.GetTenantResponse"> & {
  * Use `create(GetTenantResponseSchema)` to create a new message.
  */
 export const GetTenantResponseSchema: GenMessage<GetTenantResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 4);
+  messageDesc(file_nopacs_v1_tenant, 5);
 
 /**
  * ListTenantsRequest asks for a page of tenants.
@@ -217,7 +308,7 @@ export type ListTenantsRequest = Message<"nopacs.v1.ListTenantsRequest"> & {
  * Use `create(ListTenantsRequestSchema)` to create a new message.
  */
 export const ListTenantsRequestSchema: GenMessage<ListTenantsRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 5);
+  messageDesc(file_nopacs_v1_tenant, 6);
 
 /**
  * ListTenantsResponse is a page of tenants.
@@ -245,7 +336,7 @@ export type ListTenantsResponse = Message<"nopacs.v1.ListTenantsResponse"> & {
  * Use `create(ListTenantsResponseSchema)` to create a new message.
  */
 export const ListTenantsResponseSchema: GenMessage<ListTenantsResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 6);
+  messageDesc(file_nopacs_v1_tenant, 7);
 
 /**
  * RemoveTenantRequest names the tenant to remove, twice.
@@ -274,7 +365,7 @@ export type RemoveTenantRequest = Message<"nopacs.v1.RemoveTenantRequest"> & {
  * Use `create(RemoveTenantRequestSchema)` to create a new message.
  */
 export const RemoveTenantRequestSchema: GenMessage<RemoveTenantRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 7);
+  messageDesc(file_nopacs_v1_tenant, 8);
 
 /**
  * RemoveTenantResponse says where the removed tenant's data was left, so a
@@ -304,7 +395,7 @@ export type RemoveTenantResponse = Message<"nopacs.v1.RemoveTenantResponse"> & {
  * Use `create(RemoveTenantResponseSchema)` to create a new message.
  */
 export const RemoveTenantResponseSchema: GenMessage<RemoveTenantResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 8);
+  messageDesc(file_nopacs_v1_tenant, 9);
 
 /**
  * ReclaimTenantRequest names the moved tenant to take back.
@@ -326,7 +417,7 @@ export type ReclaimTenantRequest = Message<"nopacs.v1.ReclaimTenantRequest"> & {
  * Use `create(ReclaimTenantRequestSchema)` to create a new message.
  */
 export const ReclaimTenantRequestSchema: GenMessage<ReclaimTenantRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 9);
+  messageDesc(file_nopacs_v1_tenant, 10);
 
 /**
  * ReclaimTenantResponse is the tenant taken back.
@@ -347,7 +438,7 @@ export type ReclaimTenantResponse = Message<"nopacs.v1.ReclaimTenantResponse"> &
  * Use `create(ReclaimTenantResponseSchema)` to create a new message.
  */
 export const ReclaimTenantResponseSchema: GenMessage<ReclaimTenantResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_tenant, 10);
+  messageDesc(file_nopacs_v1_tenant, 11);
 
 /**
  * TenantState is whether a tenant can serve requests. The server checks each
@@ -488,6 +579,54 @@ export const DatabaseTypeSchema: GenEnum<DatabaseType> = /*@__PURE__*/
   enumDesc(file_nopacs_v1_tenant, 1);
 
 /**
+ * QuotaState is where a tenant's use stands against its storage quota
+ * (the settings quota.bytes and quota.instances, set on a tenant by the
+ * installation's admin only, and quota.warn).
+ *
+ * @generated from enum nopacs.v1.QuotaState
+ */
+export enum QuotaState {
+  /**
+   * Never answered by the server.
+   *
+   * @generated from enum value: QUOTA_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Under quota.warn of every bound, or no bound set.
+   *
+   * @generated from enum value: QUOTA_STATE_UNDER = 1;
+   */
+  UNDER = 1,
+
+  /**
+   * At or past quota.warn of a bound, under every bound.
+   *
+   * @generated from enum value: QUOTA_STATE_WARNED = 2;
+   */
+  WARNED = 2,
+
+  /**
+   * At or past a bound. New files are refused as a temporary failure: a
+   * C-STORE is answered A700H (out of resources), a STOW-RS request whose
+   * parts are all refused for it is answered 507 with each part's A700H,
+   * and an import job waits with the reason "quota reached". Files already
+   * received are archived: a reception in progress finishes what it was
+   * sent.
+   *
+   * @generated from enum value: QUOTA_STATE_REACHED = 3;
+   */
+  REACHED = 3,
+}
+
+/**
+ * Describes the enum nopacs.v1.QuotaState.
+ */
+export const QuotaStateSchema: GenEnum<QuotaState> = /*@__PURE__*/
+  enumDesc(file_nopacs_v1_tenant, 2);
+
+/**
  * TenantService creates, reads, lists and removes tenants: the independent
  * archives of an installation, each with its own database. A tenant's
  * registration (its name, database type and creation time) is kept in the
@@ -525,7 +664,9 @@ export const TenantService: GenService<{
   },
   /**
    * GetTenant answers one tenant, whatever its state: its registration from
-   * the master, its state from the server's current view.
+   * the master, its state from the server's current view, and what it holds
+   * against its storage quota (Tenant.quota), read from its database when
+   * that answers and left out when it does not.
    *
    * Role: reader on that tenant, or reader on the installation.
    * Audit: one entry in the installation's log, with the tenant's name.

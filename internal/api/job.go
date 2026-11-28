@@ -41,6 +41,10 @@ type jobViews struct {
 	p          tenant.Pipeline
 	tenantName string
 	held       map[string]string
+	// quota is the phrase of an import held back by the tenant's storage
+	// quota, read once (quotaRead) for the jobs of one answer.
+	quota     string
+	quotaRead bool
 }
 
 // newJobViews returns the views of the jobs of the tenant named tenantName,
@@ -72,6 +76,15 @@ func (v *jobViews) message(ctx context.Context, j tenant.Job) *v1.Job {
 	}
 	if j.Kind == tenant.JobReplicate {
 		return jobMessage(j, replicaHeld(ctx, v.p, j))
+	}
+	if j.Kind == tenant.JobImport && !j.State.Ended() && j.Reason == "" {
+		// An import waits while its tenant is at its storage quota: its
+		// files are refused for now and its units look again later. Read
+		// once for the jobs of one answer.
+		if !v.quotaRead {
+			v.quota, v.quotaRead = v.c.quotaHeld(ctx, v.p), true
+		}
+		return jobMessage(j, v.quota)
 	}
 	if j.State.Ended() || j.Reason != "" || j.Sender == "" {
 		return jobMessage(j, "")

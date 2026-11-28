@@ -32,7 +32,9 @@ service TenantService {
   rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse);
 
   // GetTenant answers one tenant, whatever its state: its registration from
-  // the master, its state from the server's current view.
+  // the master, its state from the server's current view, and what it holds
+  // against its storage quota (Tenant.quota), read from its database when
+  // that answers and left out when it does not.
   //
   // Role: reader on that tenant, or reader on the installation.
   // Audit: one entry in the installation's log, with the tenant's name.
@@ -204,6 +206,72 @@ message Tenant {
   // the server holds no view of the tenant yet (for a moment while it starts
   // or creates the tenant), and then state is the master's record.
   google.protobuf.Timestamp state_time = 6;
+
+  // What the tenant holds against its storage quota, read from its
+  // database. Answered by GetTenant alone, and absent when the tenant's
+  // database does not answer; ListTenants leaves it out.
+  TenantQuota quota = 7;
+}
+
+// QuotaState is where a tenant's use stands against its storage quota
+// (the settings quota.bytes and quota.instances, set on a tenant by the
+// installation's admin only, and quota.warn).
+enum QuotaState {
+  // Never answered by the server.
+  QUOTA_STATE_UNSPECIFIED = 0;
+
+  // Under quota.warn of every bound, or no bound set.
+  QUOTA_STATE_UNDER = 1;
+
+  // At or past quota.warn of a bound, under every bound.
+  QUOTA_STATE_WARNED = 2;
+
+  // At or past a bound. New files are refused as a temporary failure: a
+  // C-STORE is answered A700H (out of resources), a STOW-RS request whose
+  // parts are all refused for it is answered 507 with each part's A700H,
+  // and an import job waits with the reason "quota reached". Files already
+  // received are archived: a reception in progress finishes what it was
+  // sent.
+  QUOTA_STATE_REACHED = 3;
+}
+
+// TenantQuota is what a tenant holds on its storages against its quota.
+// Its use is counted in the tenant's database as files are archived and
+// purged, never by reading the storages: instance files only (a scan's
+// manifest and metadata files are not counted), each revision of an
+// instance its own file. A file counts from the moment its reception
+// records it until its purge removes it, so a deleted instance, or a
+// revision a replace or an edit superseded, counts until its purge. A bound
+// is checked as each new file starts: an instance bound is never passed;
+// a bytes bound can be passed by the files being received when it is
+// reached, at most one for each store in flight then, each at most its
+// receiver's largest file.
+message TenantQuota {
+  // The bytes of every file the tenant holds or has received.
+  int64 used_bytes = 1;
+
+  // Those files.
+  int64 used_instances = 2;
+
+  // The setting quota.bytes; 0 for no bound.
+  int64 bytes_bound = 3;
+
+  // The setting quota.instances; 0 for no bound.
+  int64 instances_bound = 4;
+
+  // The setting quota.warn: the share of a bound, in percent, past which
+  // the tenant is warned.
+  int32 warn_percent = 5;
+
+  // Where the use stands.
+  QuotaState state = 6;
+
+  // The bytes of the files corrections own and their purges have not
+  // removed yet, counted in used_bytes: what the purges will give back.
+  int64 purge_bytes = 7;
+
+  // Those files, counted in used_instances.
+  int64 purge_instances = 8;
 }
 
 // CreateTenantRequest is the tenant to create.

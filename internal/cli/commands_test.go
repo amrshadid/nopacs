@@ -433,6 +433,9 @@ func TestSettingCommands(t *testing.T) {
 			"key.max-lifetime                3650d            built-in default\n"+
 			"quarantine.warn-age             30d              built-in default\n"+
 			"quarantine.warn-bytes           0                built-in default\n"+
+			"quota.bytes                                      built-in default\n"+
+			"quota.instances                                  built-in default\n"+
+			"quota.warn                      90%              built-in default\n"+
 			"read.per-caller                 16               built-in default\n"+
 			"read.per-server                 256              built-in default\n"+
 			"recall.wait                     48h              built-in default\n"+
@@ -469,7 +472,7 @@ func TestSettingCommands(t *testing.T) {
 		t.Errorf("get --json: %v", doc)
 	}
 	document(t, r.run("setting", "set", "key.default-lifetime", "30d", "--json"))
-	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 55 {
+	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 58 {
 		t.Errorf("list --json: %v", ss)
 	}
 	document(t, r.run("setting", "unset", "test.retention", "--tenant", "lab1", "--json"))

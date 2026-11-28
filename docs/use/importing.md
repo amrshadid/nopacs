@@ -312,6 +312,12 @@ then ends. If files are still in a reception an hour past the receiver's longest
 open time after the last walk, it ends `partial` with the reason "settling timed
 out" and says how many were left; its counts keep moving until they are decided.
 
+While its tenant is at its storage quota (`quota.bytes`, `quota.instances`), a job
+waits with the reason "quota reached": each unit gives its folder back with its
+place kept, no attempt spent, and looks again every 30 seconds, so the import goes
+on by itself once a purge or a raised bound makes room
+([storage quotas](../operate/settings.md#storage-quotas)).
+
 The final state is:
 
 - **done**: every file found has an outcome and none was quarantined, lost, failed

@@ -97,7 +97,9 @@ type TenantServiceClient interface {
 	// database does not answer).
 	CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.CreateTenantResponse, error)
 	// GetTenant answers one tenant, whatever its state: its registration from
-	// the master, its state from the server's current view.
+	// the master, its state from the server's current view, and what it holds
+	// against its storage quota (Tenant.quota), read from its database when
+	// that answers and left out when it does not.
 	//
 	// Role: reader on that tenant, or reader on the installation.
 	// Audit: one entry in the installation's log, with the tenant's name.
@@ -179,7 +181,9 @@ type TenantServiceHandler interface {
 	// database does not answer).
 	CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.CreateTenantResponse, error)
 	// GetTenant answers one tenant, whatever its state: its registration from
-	// the master, its state from the server's current view.
+	// the master, its state from the server's current view, and what it holds
+	// against its storage quota (Tenant.quota), read from its database when
+	// that answers and left out when it does not.
 	//
 	// Role: reader on that tenant, or reader on the installation.
 	// Audit: one entry in the installation's log, with the tenant's name.

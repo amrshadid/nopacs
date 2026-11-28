@@ -95,7 +95,9 @@ type SettingsServiceClient interface {
 	GetSetting(context.Context, *v1.GetSettingRequest) (*v1.GetSettingResponse, error)
 	// SetSetting sets the installation's value of a setting, or a tenant's
 	// override of it when the setting allows one. The change and its audit
-	// entry are written together or not at all.
+	// entry are written together or not at all. A storage quota (quota.bytes,
+	// quota.instances) is never set by a masked key, whatever its grants:
+	// permission denied.
 	//
 	// Role: admin on the scope set; for a setting set on a tenant by the
 	// installation's admin only, admin on the installation, whatever the
@@ -114,7 +116,8 @@ type SettingsServiceClient interface {
 	// UnsetSetting removes a value set on a scope: a tenant's override, so what
 	// applies on the installation applies to the tenant again, or the
 	// installation's value, so the built-in default applies again. Removing a
-	// value that is not set changes nothing and succeeds.
+	// value that is not set changes nothing and succeeds. A storage quota is
+	// never unset by a masked key, whatever its grants: permission denied.
 	//
 	// Role: admin on the scope; for a setting set on a tenant by the
 	// installation's admin only, admin on the installation, whatever the
@@ -174,7 +177,9 @@ type SettingsServiceHandler interface {
 	GetSetting(context.Context, *v1.GetSettingRequest) (*v1.GetSettingResponse, error)
 	// SetSetting sets the installation's value of a setting, or a tenant's
 	// override of it when the setting allows one. The change and its audit
-	// entry are written together or not at all.
+	// entry are written together or not at all. A storage quota (quota.bytes,
+	// quota.instances) is never set by a masked key, whatever its grants:
+	// permission denied.
 	//
 	// Role: admin on the scope set; for a setting set on a tenant by the
 	// installation's admin only, admin on the installation, whatever the
@@ -193,7 +198,8 @@ type SettingsServiceHandler interface {
 	// UnsetSetting removes a value set on a scope: a tenant's override, so what
 	// applies on the installation applies to the tenant again, or the
 	// installation's value, so the built-in default applies again. Removing a
-	// value that is not set changes nothing and succeeds.
+	// value that is not set changes nothing and succeeds. A storage quota is
+	// never unset by a masked key, whatever its grants: permission denied.
 	//
 	// Role: admin on the scope; for a setting set on a tenant by the
 	// installation's admin only, admin on the installation, whatever the

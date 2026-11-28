@@ -118,7 +118,9 @@ func (s tenantService) GetTenant(ctx context.Context, req *v1.GetTenantRequest) 
 		return nil, c.fail(d, err)
 	}
 	c.done(d, nil)
-	return &v1.GetTenantResponse{Tenant: c.tenantView(t)}, nil
+	m := c.tenantView(t)
+	m.Quota = c.namedTenantQuota(ctx, t.Name)
+	return &v1.GetTenantResponse{Tenant: m}, nil
 }
 
 // ListTenants answers the tenants the caller may see, ordered by name: every

@@ -26,6 +26,13 @@ class DatabaseType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     DATABASE_TYPE_UNSPECIFIED: _ClassVar[DatabaseType]
     DATABASE_TYPE_SQLITE: _ClassVar[DatabaseType]
     DATABASE_TYPE_POSTGRES: _ClassVar[DatabaseType]
+
+class QuotaState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    QUOTA_STATE_UNSPECIFIED: _ClassVar[QuotaState]
+    QUOTA_STATE_UNDER: _ClassVar[QuotaState]
+    QUOTA_STATE_WARNED: _ClassVar[QuotaState]
+    QUOTA_STATE_REACHED: _ClassVar[QuotaState]
 TENANT_STATE_UNSPECIFIED: TenantState
 TENANT_STATE_READY: TenantState
 TENANT_STATE_UNREACHABLE: TenantState
@@ -37,22 +44,48 @@ TENANT_STATE_FENCED: TenantState
 DATABASE_TYPE_UNSPECIFIED: DatabaseType
 DATABASE_TYPE_SQLITE: DatabaseType
 DATABASE_TYPE_POSTGRES: DatabaseType
+QUOTA_STATE_UNSPECIFIED: QuotaState
+QUOTA_STATE_UNDER: QuotaState
+QUOTA_STATE_WARNED: QuotaState
+QUOTA_STATE_REACHED: QuotaState
 
 class Tenant(_message.Message):
-    __slots__ = ("name", "database_type", "state", "state_reason", "create_time", "state_time")
+    __slots__ = ("name", "database_type", "state", "state_reason", "create_time", "state_time", "quota")
     NAME_FIELD_NUMBER: _ClassVar[int]
     DATABASE_TYPE_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
     STATE_REASON_FIELD_NUMBER: _ClassVar[int]
     CREATE_TIME_FIELD_NUMBER: _ClassVar[int]
     STATE_TIME_FIELD_NUMBER: _ClassVar[int]
+    QUOTA_FIELD_NUMBER: _ClassVar[int]
     name: str
     database_type: DatabaseType
     state: TenantState
     state_reason: str
     create_time: _timestamp_pb2.Timestamp
     state_time: _timestamp_pb2.Timestamp
-    def __init__(self, name: _Optional[str] = ..., database_type: _Optional[_Union[DatabaseType, str]] = ..., state: _Optional[_Union[TenantState, str]] = ..., state_reason: _Optional[str] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    quota: TenantQuota
+    def __init__(self, name: _Optional[str] = ..., database_type: _Optional[_Union[DatabaseType, str]] = ..., state: _Optional[_Union[TenantState, str]] = ..., state_reason: _Optional[str] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., quota: _Optional[_Union[TenantQuota, _Mapping]] = ...) -> None: ...
+
+class TenantQuota(_message.Message):
+    __slots__ = ("used_bytes", "used_instances", "bytes_bound", "instances_bound", "warn_percent", "state", "purge_bytes", "purge_instances")
+    USED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    USED_INSTANCES_FIELD_NUMBER: _ClassVar[int]
+    BYTES_BOUND_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_BOUND_FIELD_NUMBER: _ClassVar[int]
+    WARN_PERCENT_FIELD_NUMBER: _ClassVar[int]
+    STATE_FIELD_NUMBER: _ClassVar[int]
+    PURGE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    PURGE_INSTANCES_FIELD_NUMBER: _ClassVar[int]
+    used_bytes: int
+    used_instances: int
+    bytes_bound: int
+    instances_bound: int
+    warn_percent: int
+    state: QuotaState
+    purge_bytes: int
+    purge_instances: int
+    def __init__(self, used_bytes: _Optional[int] = ..., used_instances: _Optional[int] = ..., bytes_bound: _Optional[int] = ..., instances_bound: _Optional[int] = ..., warn_percent: _Optional[int] = ..., state: _Optional[_Union[QuotaState, str]] = ..., purge_bytes: _Optional[int] = ..., purge_instances: _Optional[int] = ...) -> None: ...
 
 class CreateTenantRequest(_message.Message):
     __slots__ = ("name", "database_type", "database_address")

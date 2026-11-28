@@ -43,6 +43,7 @@ func runRebuilding(t *testing.T, open OpenEvents, scratch Scratch) {
 		{"RebuildPauseEndsAnyWay", testRebuildPauseEndsAnyWay},
 		{"RebuildHoldsCorrections", testRebuildHoldsCorrections},
 		{"RebuildHoldsPurges", testRebuildHoldsPurges},
+		{"QuotaRebuilt", testQuotaRebuilt},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

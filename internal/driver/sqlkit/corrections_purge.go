@@ -119,10 +119,16 @@ func (k Sending) AddPurgeTargets(ctx context.Context, id string, targets []tenan
 			if !t.SHA256.IsZero() {
 				sum = t.SHA256[:]
 			}
-			if _, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
+			added, err := tx.Exec(ctx, `INSERT INTO correction_keys (correction_id, ord, storage, subject_label, session_label, scan_label,
 				sop_instance_uid, storage_key, size, sha256, outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '') ON CONFLICT DO NOTHING`,
-				id, t.Ord, t.Storage, t.Path.Subject, t.Path.Session, t.Path.Scan, t.UID, t.StorageKey, t.Size, sum); err != nil {
+				id, t.Ord, t.Storage, t.Path.Subject, t.Path.Session, t.Path.Scan, t.UID, t.StorageKey, t.Size, sum)
+			if err != nil {
 				return err
+			}
+			if t.Ord == tenant.TargetInstance {
+				if err := movePurgeTotals(ctx, tx, added, added*t.Size); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -170,8 +176,20 @@ func (k Sending) SettlePurgeTargets(ctx context.Context, id string, settled []te
 			t := s.Target
 			key := []any{id, t.Ord, t.Storage, t.Path.Subject, t.Path.Session, t.Path.Scan, t.UID}
 			if s.Outcome != tenant.OutcomePending {
+				// The object's size as the correction recorded it, which
+				// leaves what corrections own with the outcome.
+				var size int64
+				found, err := tx.QueryRow(ctx, `SELECT size FROM correction_keys`+where, key, &size)
+				if err != nil {
+					return err
+				}
 				if _, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = ?`+where, append([]any{string(s.Outcome)}, key...)...); err != nil {
 					return err
+				}
+				if found && t.Ord == tenant.TargetInstance {
+					if err := movePurgeTotals(ctx, tx, -1, -size); err != nil {
+						return err
+					}
 				}
 				continue
 			}
@@ -439,7 +457,10 @@ func (k Sending) MarkSwept(ctx context.Context, id string) error {
 			if _, err := tx.Exec(ctx, `UPDATE correction_edits SET restore_line = NULL, new_line = NULL WHERE correction_id = ?`, id); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = 'purged' WHERE correction_id = ? AND outcome = ''`, id); err != nil {
+			if err := countOwned(ctx, tx, id, func() error {
+				_, err := tx.Exec(ctx, `UPDATE correction_keys SET outcome = 'purged' WHERE correction_id = ? AND outcome = ''`, id)
+				return err
+			}); err != nil {
 				return err
 			}
 			if _, err := tx.Exec(ctx, `UPDATE instance_revisions SET purged = ? WHERE correction_id = ?`, k.D.Bool(true), id); err != nil {

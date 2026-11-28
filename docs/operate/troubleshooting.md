@@ -89,6 +89,12 @@ and `nopacs receiver show <tenant> <name>`.
 - **Rejected as nearly full.** The incoming area or the storage has less free space than
   `storage.reserve`, or the tenant holds as many incoming bytes as `incoming.limit`
   allows. Free space, or raise the setting.
+- **Stores answered A700, STOW-RS answered 507, an import waits with `quota
+  reached`.** The tenant is at its storage quota (`quota.bytes` or
+  `quota.instances`): `nopacs tenant show <tenant>` prints its use against the bounds
+  and what its purges will give back. Purge what is deleted, or raise the bound
+  (an admin on the installation); the senders' next attempt is taken
+  ([storage quotas](settings.md#storage-quotas)).
 - **The file is accepted and never arrives in the catalog.** A reception is complete
   only after its quiet period without a file (default a minute). `nopacs reception
   list <tenant>` shows its step. A file the pipeline cannot take is in

@@ -119,6 +119,10 @@ type Config struct {
 	// LowDisk says the incoming area's disk is below its reserve; a new
 	// file is then refused as a temporary failure. Nil never refuses.
 	LowDisk Check
+	// Quota reads the tenant's storage quota; a new file is refused as a
+	// temporary failure while the tenant is at or past a bound (quota.go).
+	// Nil never refuses.
+	Quota QuotaBounds
 	// HeaderLimit reads the most bytes of a file read as its header,
 	// everything before its pixel data (the setting
 	// receiver.header-limit); it is read again at most every

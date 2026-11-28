@@ -102,7 +102,7 @@ func TestJSONMessage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := "{\n  \"schemaVersion\": 1,\n  \"tenant\": {\n    \"name\": \"lab1\",\n    \"databaseType\": \"DATABASE_TYPE_SQLITE\",\n    \"state\": \"TENANT_STATE_UNSPECIFIED\",\n    \"stateReason\": \"\",\n    \"createTime\": null,\n    \"stateTime\": null\n  }\n}\n"
+	want := "{\n  \"schemaVersion\": 1,\n  \"tenant\": {\n    \"name\": \"lab1\",\n    \"databaseType\": \"DATABASE_TYPE_SQLITE\",\n    \"state\": \"TENANT_STATE_UNSPECIFIED\",\n    \"stateReason\": \"\",\n    \"createTime\": null,\n    \"stateTime\": null,\n    \"quota\": null\n  }\n}\n"
 	if a.String() != want || b.String() != want {
 		t.Errorf("document:\n%s\nwant:\n%s", a.String(), want)
 	}

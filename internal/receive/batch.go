@@ -82,6 +82,13 @@ func (b *batcher) run(stop <-chan struct{}) {
 	flush := func() {
 		if len(pending) > 0 {
 			b.flush(ctx, pending)
+			// Each file's row is written, and the database counts it
+			// against the tenant's quota from now on; the gate keeps
+			// counting it in memory until its next read of the use
+			// has seen the row (quota.go).
+			for _, it := range pending {
+				it.l.quota.written()
+			}
 			b.queued.Add(-int64(len(pending)))
 			pending = nil
 		}

@@ -60,7 +60,10 @@ func (k Sending) UndoEdit(ctx context.Context, u tenant.EditUndo) (tenant.Correc
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM correction_keys WHERE correction_id = ?`, c.ID); err != nil {
+		if err := countOwned(ctx, tx, c.ID, func() error {
+			_, err := tx.Exec(ctx, `DELETE FROM correction_keys WHERE correction_id = ?`, c.ID)
+			return err
+		}); err != nil {
 			return err
 		}
 		for _, row := range rows {

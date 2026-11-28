@@ -488,6 +488,10 @@ message TenantStatus {
   // quarantine.warn-age or quarantine.warn-bytes. Absent when its database
   // did not answer.
   QuarantineWarnings quarantine = 22;
+
+  // What it holds against its storage quota. Absent when its database did
+  // not answer.
+  TenantQuota quota = 23;
 }
 
 // QuarantineWarnings is what a tenant holds in quarantine against its two
@@ -652,6 +656,10 @@ enum EventType {
   // A sender's allow_identified was set or cleared (SenderService), or a
   // sender was added with it set.
   EVENT_TYPE_SENDER_ALLOW_IDENTIFIED = 19;
+
+  // What the tenant holds against its storage quota passed quota.warn or
+  // reached a bound, or fell back.
+  EVENT_TYPE_QUOTA = 20;
 }
 
 // AssociationFailure is why a DIMSE receiver turned a caller away. Each
@@ -1141,6 +1149,28 @@ message SenderAllowIdentifiedChanged {
   bool allow_identified = 2;
 }
 
+// QuotaChanged is what a tenant holds against its storage quota moving to
+// another state (TenantQuota): passing quota.warn, reaching a bound, or
+// falling back under either. One event for each change of state, never
+// one per file; the server looks about every minute, and after a restart
+// a state that still stands is reported once more.
+message QuotaChanged {
+  // The state after the change.
+  QuotaState state = 1;
+
+  // The bytes of every file the tenant held or had received then.
+  int64 used_bytes = 2;
+
+  // Those files.
+  int64 used_instances = 3;
+
+  // The setting quota.bytes then; 0 for no bound.
+  int64 bytes_bound = 4;
+
+  // The setting quota.instances then; 0 for no bound.
+  int64 instances_bound = 5;
+}
+
 // CatalogRebuilt is a catalog made again from the storages and put in use
 // in one transaction. When it begins a new history (after a restore, an
 // import or a load), it is that history's first event, and a consumer that
@@ -1233,6 +1263,9 @@ message Event {
 
     // A sender's allow_identified was set or cleared.
     SenderAllowIdentifiedChanged sender_allow_identified = 23;
+
+    // What the tenant holds against its storage quota changed state.
+    QuotaChanged quota = 24;
   }
 }
 

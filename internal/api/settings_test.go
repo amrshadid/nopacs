@@ -263,6 +263,7 @@ func testListSettings(t *testing.T) {
 					"import.allowed-roots=@/BUILT_IN,import.max-dir-entries=200000@/BUILT_IN,import.max-units=4@/BUILT_IN,import.roots=@/BUILT_IN,import.server-max-units=8@/BUILT_IN," +
 					"incoming.limit=0@/BUILT_IN,job.failures-kept=10000@/BUILT_IN,key.default-lifetime=90d@/BUILT_IN," +
 					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN,quarantine.warn-age=30d@/BUILT_IN,quarantine.warn-bytes=0@/BUILT_IN," +
+					"quota.bytes=@/BUILT_IN,quota.instances=@/BUILT_IN,quota.warn=90%@/BUILT_IN," +
 					"read.per-caller=16@/BUILT_IN,read.per-server=256@/BUILT_IN,recall.wait=48h@/BUILT_IN,receiver.allow-as-received=false@/BUILT_IN," +
 					"receiver.bind-addresses=@/BUILT_IN,receiver.header-limit=64MiB@/BUILT_IN,receiver.ports=@/BUILT_IN," +
 					"replica.lag-alert=1h@/BUILT_IN,replica.rate=0@/BUILT_IN," +

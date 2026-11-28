@@ -106,6 +106,14 @@ func newReception(d Deps, reg *registry.Registry, wake, forwarded func(tenantNam
 					return values.OnTenant(src).PixelLimit(ctx)
 				},
 				LowDisk: g.LowDisk, OverLimit: g.OverLimit, Pause: pause, Wake: committed,
+				// The tenant's storage quota as it applies on it, read live.
+				Quota: func(ctx context.Context) (tenant.QuotaBounds, error) {
+					src, ok := st.(settingvalue.Source)
+					if !ok {
+						return tenant.QuotaBounds{}, fault.New(fault.Internal, "the tenant's database keeps no settings")
+					}
+					return values.OnTenant(src).QuotaBounds(ctx)
+				},
 				Forwarded: func() { forwarded(name) },
 				// The keys of a receiver that de-identifies, read when its
 				// first file comes and kept by the pipeline; never logged.

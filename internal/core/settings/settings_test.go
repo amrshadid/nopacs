@@ -91,6 +91,9 @@ func TestBuiltin(t *testing.T) {
 		CorrectionBatchMax:     {SetByInstallation, "10000", false},
 		QuarantineWarnAge:      {Ordinary, "30d", false},
 		QuarantineWarnBytes:    {Ordinary, "0", false},
+		QuotaBytes:             {SetByInstallation, "", false},
+		QuotaInstances:         {SetByInstallation, "", false},
+		QuotaWarn:              {Ordinary, "90%", false},
 	}
 	if got := tab.Names(); len(got) != len(want) {
 		t.Errorf("names %v, want the %d this test knows", got, len(want))

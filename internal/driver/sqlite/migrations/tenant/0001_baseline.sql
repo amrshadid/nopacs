@@ -1445,6 +1445,20 @@ CREATE TABLE correction_keys (
 -- What a purge has left to do, in order.
 CREATE INDEX correction_keys_pending ON correction_keys (correction_id, ord) WHERE outcome = '';
 
+-- The instance objects corrections own that their purges have not settled
+-- (correction_keys of ord 1 with no outcome): deleted instances, revisions
+-- a replace or an edit superseded, a relabel's old keys. They stay on the
+-- storage until the purge, so they count against the tenant's quota until
+-- then. A running total changed in the transaction of every change of
+-- those keys, so a read of the tenant's use never sums them; a rebuild
+-- counts it again. One row, made here.
+CREATE TABLE purge_totals (
+    one       INTEGER NOT NULL PRIMARY KEY CHECK (one = 1),
+    instances INTEGER NOT NULL CHECK (instances >= 0),
+    bytes     INTEGER NOT NULL CHECK (bytes >= 0)
+) STRICT;
+INSERT INTO purge_totals (one, instances, bytes) VALUES (1, 0, 0);
+
 -- The last time the server's clock was trusted for a purge: an automatic
 -- purge is refused when the clock reads earlier than a time the
 -- corrections recorded, and paused when it jumped forward too far since.

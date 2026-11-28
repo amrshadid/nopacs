@@ -238,9 +238,12 @@ Things that are easy to get wrong:
   part. Metadata sent as `application/dicom+json` with its bulk data in other
   parts is refused with 415 in this version.
 - The answer is written once every part is synced on the server's disk: 200
-  when all were stored, 202 when some were, 409 when none was, each refused
+  when all were stored, 202 when some were, 409 when none was (507 when none
+  was because the tenant is at its storage quota, `quota.bytes` or
+  `quota.instances`), each refused
   instance in the Failed SOP Sequence with its reason (A900H of another study
-  than the path names, A700H too large or the archive full, C000H not a file
+  than the path names, A700H too large, the archive full or the tenant at its
+  quota, C000H not a file
   whose UIDs can be read). What the pipeline finds later is quarantined after
   the answer, as for a C-STORE answered success: a different file under a UID
   the tenant holds is answered stored, then held as `different_file` (or

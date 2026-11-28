@@ -283,6 +283,9 @@ func (c *core) settingToChange(d access.Decision, scope access.Scope, prefix, na
 		// ever differ.
 		return settings.Definition{}, fault.New(fault.Denied, access.MessageDenied)
 	}
+	if quotaSettings[name] && d.Masked() {
+		return settings.Definition{}, fault.New(fault.Denied, messageQuotaMasked)
+	}
 	return def, nil
 }
 

@@ -127,7 +127,7 @@ func scrubGauges(covs []scrub.TenantCoverage) []obs.Gauge {
 func copyGauges(work *tenantWork, scrubs *scrub.Supervisor) []obs.Gauge {
 	var out []obs.Gauge
 	if work != nil {
-		out = append(work.replicaGauges(), work.quarantine.gauges()...)
+		out = append(append(work.replicaGauges(), work.quarantine.gauges()...), work.quota.gauges()...)
 	}
 	return append(out, scrubGaugesOf(scrubs)...)
 }
