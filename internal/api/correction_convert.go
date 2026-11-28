@@ -19,6 +19,7 @@ var (
 		record.KindRelabel: v1.CorrectionKind_CORRECTION_KIND_RELABEL,
 		record.KindReplace: v1.CorrectionKind_CORRECTION_KIND_REPLACE,
 		record.KindEdit:    v1.CorrectionKind_CORRECTION_KIND_EDIT,
+		record.KindMove:    v1.CorrectionKind_CORRECTION_KIND_MOVE,
 	}
 	correctionStates = map[record.State]v1.CorrectionState{
 		record.StatePrepared:  v1.CorrectionState_CORRECTION_STATE_PREPARED,
@@ -115,6 +116,7 @@ func correctionMessage(c tenant.Correction, withHolds bool) *v1.Correction {
 		StateReason: c.StateReason, ArrivalsAllowed: c.ArrivalsAllowed, UndoReason: c.UndoReason,
 		Unresolved: c.Unresolved, Origin: v1.CorrectionOrigin_CORRECTION_ORIGIN_PERSON, Swept: c.Swept,
 		OverrideRetention: c.OverrideRetention, OverrideReason: c.OverrideReason, CopiesAbandoned: c.CopiesAbandoned,
+		IdentityRewriteRefused: c.IdentityRefused,
 	}
 	if c.Origin == tenant.OriginRetention {
 		m.Origin, m.RetentionRule, m.RetentionDueTime = v1.CorrectionOrigin_CORRECTION_ORIGIN_RETENTION, c.RetentionRule, timestamp(c.RetentionDue)

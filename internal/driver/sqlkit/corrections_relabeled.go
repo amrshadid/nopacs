@@ -7,12 +7,25 @@ import (
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
-// Where the relabels of a tenant moved labels asked for after them.
+// Where the relabels and moves of a tenant moved labels asked for after
+// them.
 
-// relabelRow is a committed relabel of the table relabels.
+// relabelRow is a committed relabel or move of the table relabels: a move
+// of one session names the subject it went under as newSubject; a merge is
+// a subject's row, its new label the subject merged into.
 type relabelRow struct {
-	id, level, to string
-	old           label.Path
+	id, level, to, newSubject string
+	old                       label.Path
+}
+
+// moves reports whether the row moved the labels p, and returns p as it
+// left them (tenant.RelabelMoves, then a move's new subject).
+func (r relabelRow) moves(p label.Path) (label.Path, bool) {
+	at, ok := tenant.RelabelMoves(r.level, r.old, r.to, p)
+	if ok && r.newSubject != "" {
+		at.Subject = r.newSubject
+	}
+	return at, ok
 }
 
 // RelabeledTo implements tenant.Corrections. It reads in one transaction,
@@ -39,7 +52,7 @@ func (k Sending) RelabeledTo(ctx context.Context, p label.Path) (tenant.Relabele
 		// answers. Every relabel read counts against one bound.
 		budget := tenant.MaxRelabelSteps
 		for i := len(first) - 1; i >= 0 && budget > 0; i-- {
-			at, _ := tenant.RelabelMoves(first[i].level, first[i].old, first[i].to, p)
+			at, _ := first[i].moves(p)
 			last := first[i].id
 			budget--
 			for budget > 0 {
@@ -50,7 +63,7 @@ func (k Sending) RelabeledTo(ctx context.Context, p label.Path) (tenant.Relabele
 				if len(next) == 0 {
 					break
 				}
-				at, _ = tenant.RelabelMoves(next[0].level, next[0].old, next[0].to, at)
+				at, _ = next[0].moves(at)
 				last = next[0].id
 				budget--
 			}
@@ -74,15 +87,15 @@ func (k Sending) RelabeledTo(ctx context.Context, p label.Path) (tenant.Relabele
 // committed, so it ends.
 func relabelsMoving(ctx context.Context, tx SendingTx, p label.Path, after string) ([]relabelRow, error) {
 	var out []relabelRow
-	err := tx.Query(ctx, `SELECT r.correction_id, r.level, r.old_subject, r.old_session, r.old_scan, r.new_label
+	err := tx.Query(ctx, `SELECT r.correction_id, r.level, r.old_subject, r.old_session, r.old_scan, r.new_label, r.new_subject
 		FROM relabels AS r JOIN corrections AS c ON c.id = r.correction_id
 		WHERE r.old_subject = ? AND r.correction_id > ? AND c.state IN ('committed', 'purging', 'purged')
 		ORDER BY r.correction_id`, []any{p.Subject, after}, func(row Row) error {
 		var r relabelRow
-		if err := row.Scan(&r.id, &r.level, &r.old.Subject, &r.old.Session, &r.old.Scan, &r.to); err != nil {
+		if err := row.Scan(&r.id, &r.level, &r.old.Subject, &r.old.Session, &r.old.Scan, &r.to, &r.newSubject); err != nil {
 			return err
 		}
-		if _, moves := tenant.RelabelMoves(r.level, r.old, r.to, p); moves {
+		if _, moves := r.moves(p); moves {
 			out = append(out, r)
 		}
 		return nil

@@ -67,7 +67,9 @@ sender wrote and the same patient gets the same label whenever it arrives. A rul
 can instead build a label from a value in the file, or from a path (for an import);
 a rule that would put a patient's identifier into a label unhashed is refused on a
 receiver that de-identifies. A label can be changed later with
-`nopacs correction relabel` ([correcting](../use/correcting.md)).
+`nopacs correction relabel`, a session filed under another subject with
+`nopacs correction move`, and a subject merged into another with
+`nopacs correction merge` ([correcting](../use/correcting.md)).
 
 ## Storage, receiver, sender
 

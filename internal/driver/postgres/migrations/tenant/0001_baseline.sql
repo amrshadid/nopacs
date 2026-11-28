@@ -1493,12 +1493,16 @@ CREATE TABLE corrections (
     override_retention boolean     NOT NULL DEFAULT false,
     override_reason    text        NOT NULL DEFAULT '',
     copies_in_flight_until timestamptz,
+    -- A move's identity rewrite asked and not yet made.
+    rewrite_identity   boolean     NOT NULL DEFAULT false,
+    -- Why a move's identity rewrite was refused for good ('' for none): a fixed phrase, never a value.
+    identity_refused   text        NOT NULL DEFAULT '',
     CONSTRAINT corrections_pkey PRIMARY KEY (id),
     CONSTRAINT corrections_retention_check CHECK ((origin = 'retention') = (retention_rule <> '')),
     CONSTRAINT corrections_retention_due_check CHECK ((retention_rule = '') = (retention_due IS NULL)),
     CONSTRAINT corrections_override_check CHECK (override_retention = (override_reason <> '')),
     CONSTRAINT corrections_id_check CHECK (length(id) = 26),
-    CONSTRAINT corrections_kind_check CHECK (kind IN ('delete', 'relabel', 'replace', 'edit')),
+    CONSTRAINT corrections_kind_check CHECK (kind IN ('delete', 'relabel', 'replace', 'edit', 'move')),
     CONSTRAINT corrections_level_check CHECK (level IN ('subject', 'session', 'scan', 'instance')),
     CONSTRAINT corrections_state_check CHECK (state IN ('prepared', 'committed', 'purging', 'purged', 'undone', 'abandoned')),
     CONSTRAINT corrections_origin_check CHECK (origin IN ('person', 'retention')),
@@ -1752,6 +1756,9 @@ CREATE TABLE relabels (
     old_session   text COLLATE "C" NOT NULL,
     old_scan      text COLLATE "C" NOT NULL,
     new_label     text COLLATE "C" NOT NULL,
+    -- A move's row: a session's move names the subject it went under (new_subject),
+    -- its new_label the session's own; a merge is a subject's row.
+    new_subject   text COLLATE "C" NOT NULL DEFAULT '',
     CONSTRAINT relabels_pkey PRIMARY KEY (correction_id),
     CONSTRAINT relabels_level_check CHECK (level IN ('subject', 'session', 'scan'))
 );

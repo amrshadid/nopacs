@@ -141,6 +141,7 @@ var rolePhrases = map[string]roleShape{
 	"operator on the tenant.": tenantOperator,
 	"admin on the tenant.":    tenantAdmin,
 	"admin on the tenant, never a masked key: a person decides how much of the archive goes at once.":                                                                                   tenantAdmin,
+	"admin on the tenant, never a masked key: where archived data is filed is a person's choice.":                                                                                       tenantAdmin,
 	"reader on the tenant; operator on the tenant to filter by Study Instance UID, since looking a study up by an identifier the caller already holds is a search for a person's data.": tenantReaderOrOperator,
 	"reader on the tenant; operator on the tenant to filter by a UID, since looking a file up by an identifier the caller already holds is a search for a person's data.":               tenantReaderOrOperator,
 	"reader on the tenant; operator on the tenant with include_header, since the header holds what the sender sent, identifying data included.":                                         tenantReaderOrOperator,
@@ -218,6 +219,8 @@ var destinationWhen = map[string]func(proto.Message) bool{
 	nopacsv1connect.SenderServiceSetSenderProcedure:        nil,
 	nopacsv1connect.ReplicaServiceAttachReplicaProcedure:   nil,
 	nopacsv1connect.ReplicaServiceBackfillReplicaProcedure: nil,
+	nopacsv1connect.CorrectionServiceMoveProcedure:         nil,
+	nopacsv1connect.CorrectionServiceMergeProcedure:        nil,
 	nopacsv1connect.JobServiceCreateJobProcedure: func(m proto.Message) bool {
 		r, _ := m.(*v1.CreateJobRequest)
 		return r.GetSend() != nil

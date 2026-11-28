@@ -448,8 +448,9 @@ func (k Sending) ClearWithdrawn(ctx context.Context, id string) ([]string, error
 func (k Sending) MarkSwept(ctx context.Context, id string) error {
 	return k.stepRow(ctx, id, "the correction's sweep cannot be recorded", func(tx SendingTx, c *tenant.Correction) error {
 		edit := c.Kind == corr.KindEdit && c.State == corr.StateUndone
-		if !edit && (c.Kind != corr.KindRelabel || c.State != corr.StateAbandoned) {
-			return tenant.Precondition("the correction is neither an abandoned relabel nor an undone edit")
+		moved := c.Kind == corr.KindMove && c.State == corr.StateUndone
+		if !edit && !moved && (!c.Kind.CopiesObjects() || c.State != corr.StateAbandoned) {
+			return tenant.Precondition("the correction is neither an abandoned relabel or move nor an undone edit or move")
 		}
 		if edit {
 			// The new revisions the undo took back are removed from every
@@ -583,16 +584,24 @@ func correctionHold(ctx context.Context, tx SendingTx, p label.Path, study, seri
 		}
 	}
 	var out tenant.CorrectionHold
-	err := tx.Query(ctx, `SELECT c.id, c.level, c.state, cs.subject_label, cs.session_label, cs.scan_label, cs.new_subject,
+	err := tx.Query(ctx, `SELECT c.id, c.kind, c.level, c.state, cs.subject_label, cs.session_label, cs.scan_label, cs.new_subject,
 		cs.new_session, cs.new_scan FROM correction_scans AS cs JOIN corrections AS c ON c.id = cs.correction_id
-		WHERE c.kind = 'relabel' AND c.state IN ('prepared', 'committed', 'purging')
+		WHERE c.kind IN ('relabel', 'move') AND c.state IN ('prepared', 'committed', 'purging')
 		AND (lower(cs.subject_label) = ? OR lower(cs.new_subject) = ?) ORDER BY c.id`, []any{fs, fs}, func(r Row) error {
-		var cid, level, state string
+		var cid, kind, level, state string
 		var old, nw label.Path
-		if err := r.Scan(&cid, &level, &state, &old.Subject, &old.Session, &old.Scan, &nw.Subject, &nw.Session, &nw.Scan); err != nil {
+		if err := r.Scan(&cid, &kind, &level, &state, &old.Subject, &old.Session, &old.Scan, &nw.Subject, &nw.Session,
+			&nw.Scan); err != nil {
 			return err
 		}
-		if out.Correction == "" && (atLevel(old, p, level) || state == string(corr.StatePrepared) && atLevel(nw, p, level)) {
+		// A move's new labels are each session it files under the
+		// destination, never the whole destination, which takes its own
+		// arrivals meanwhile.
+		newLevel := level
+		if kind == string(corr.KindMove) {
+			newLevel = corr.LevelSession
+		}
+		if out.Correction == "" && (atLevel(old, p, level) || state == string(corr.StatePrepared) && atLevel(nw, p, newLevel)) {
 			out = tenant.CorrectionHold{Correction: cid, Level: level}
 		}
 		return nil

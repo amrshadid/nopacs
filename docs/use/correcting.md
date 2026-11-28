@@ -7,7 +7,8 @@ person gave, and kept as a record for as long as the tenant is: a **delete** of 
 subject, a session, a scan or one instance; a **relabel** of a subject, a
 session or a scan; a **replace** of an archived instance by the corrected file a
 sender sent again; an **edit** of named header values of every instance of a
-subject, a session, a scan or one instance. Corrections are made with `nopacs correction` or
+subject, a session, a scan or one instance; a **move** of a session under
+another subject, or of every session of a subject (a merge). Corrections are made with `nopacs correction` or
 `CorrectionService`; the rules are in the contract's comments on
 [`correction.proto`](../../api/proto/nopacs/v1/correction.proto) and in
 [correct](../../internal/correct/doc.go).
@@ -18,7 +19,7 @@ audit entry and its record on the storage keep it.
 
 | What | Role on the tenant |
 |---|---|
-| delete, relabel, replace, edit, undo, purge, allow | admin (never a masked key for an edit) |
+| delete, relabel, replace, edit, move, merge, undo, purge, allow | admin (never a masked key for an edit, a move or a merge) |
 | list and show corrections | operator |
 
 ## The states of a correction
@@ -27,8 +28,8 @@ audit entry and its record on the storage keep it.
 stateDiagram-v2
     [*] --> prepared: recorded, nothing visible yet
     prepared --> committed: one transaction makes it visible to every read
-    prepared --> abandoned: a step failed, or a relabel was stopped
-    committed --> undone: a delete or an edit undone in its grace period
+    prepared --> abandoned: a step failed, or a relabel or a move was stopped
+    committed --> undone: a delete, an edit or a move undone in its grace period
     committed --> purging: the grace period ended, or an admin purged it
     purging --> purged: every object of every storage handled and recorded
 ```
@@ -338,6 +339,69 @@ identifier typed by a person into an attribute the profile keeps (a series
 description, a comment) is not a value the file held, so in a de-identified
 archive nothing tells it from any other text, and it is archived. Type no
 identifier into an edit; the reason and the audit entry say who made it.
+
+## Move a session; merge two subjects
+
+```
+nopacs correction move lab1 sub-3f9a/ses-81c2 --to sub-77c0 --reason "study filed under the wrong patient" --preview
+nopacs correction merge lab1 sub-3f9a --into sub-77c0 --reason "one patient under two ids"
+```
+
+A study filed under the wrong patient is moved, with its scans, under another
+subject the tenant holds; a patient archived under two subjects is merged, every
+session moving and the emptied subject hidden. Both are one correction, of kind
+`move`, built as a relabel is: every object is copied to its key under the other
+subject, read back and compared by SHA-256, on each primary and each replica in
+step; the whole move switches at once, with a `catalog_changed` event and a
+`session_moved` (or `subject_merged`) event; the old objects stay, unserved,
+until the purge after the grace period. A lookup by the old labels answers
+`RELABELED` and the labels the data has now, as after a relabel. A merged
+subject's label is held for arrivals until the merge ends.
+
+`correction undo` takes a committed move back until its purge: each session is
+filed under its subject again (a merged subject made again), the catalog names
+the old manifests and keys, and the copies under the other subject are removed
+from every copy. The undo is refused while a hold covers what moved, and once
+anything changed in it since the move (an instance or a scan arrived, an edit or
+another correction touched it): the old tree would not be what the catalog
+names. A move still copying is stopped with `correction undo`, as a relabel is.
+
+The preview (`--preview`, or `validate_only`) lists the sessions that move, the
+counts, the storages, the holds and the session labels that refuse it, and a
+token that holds an hour, and only while what moves (the catalog's rows and
+each scan's manifest) and the destination are unchanged. Refused: a session
+label the other subject already holds, compared case folded (relabel one
+first); a hold on either subject; a correction on either not ended; a reception
+of what moves in progress; a subject's last session (that is a merge); and a
+masked key, its preview too: where archived data is filed is a person's choice.
+
+The identity in the moved files (Patient ID and Issuer of Patient ID) is not
+changed by a move. With `--rewrite-identity`, once the move is published, each
+moved session is edited (a correction of kind `edit` of its own, made in the
+name of the key that asked for the move, and recorded with the move so a
+restart still makes it): every instance is given the other subject's archived
+Patient ID, and its Issuer of Patient ID, or none when the other subject's files
+hold none. These values are read from the other subject's own archived files,
+their de-identified form, so the profile's judgment of a person's edit (never
+put back what de-identification takes out) does not refuse them; each new
+revision is still de-identified in memory and held if the profile or the check
+after would hold it. The rewrite is decided for each moved session from the
+identity its files hold now, so a restart part way edits only the sessions left.
+It stays owed, and is tried again at each pass of the server's corrections (and
+at a start), while a storage or the database does not answer or a hold covers
+the destination or a session; it is made once the hold is released. An edit the
+profile or its check after refuses for good (or whose character set would not be
+kept), or a destination whose files hold no Patient ID, ends the rewrite: the
+move stands, and `nopacs correction show` and the API's correction answer it
+with `Identity rewrite: refused` and the reason (a fixed phrase, never a value).
+An edit changes at most 2000 instances: for a larger session the rewrite is
+refused, and shown with that reason. Once the edit is made the move can no longer be undone,
+even after the edit's own undo: the way back is another move.
+
+The move changes which subject later files of the same study land under: a file
+of the moved study sent again still carries the old patient's identity, which
+names the old subject, and is quarantined as a label conflict (two subjects for
+one study) rather than archived beside the moved session.
 
 ## While the catalog is rebuilt
 

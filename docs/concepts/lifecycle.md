@@ -28,7 +28,7 @@ many files are received, archived and quarantined.
 | **Publication** | Which revision of an instance is the current one, with its length, transfer syntax and SHA-256, and the manifest that commits it | Built: one transaction makes a change visible; a replace publishes a new revision |
 | **Preservation** | How many copies there are, when each was last checked, and whether an object is online, damaged or missing | Partly built: the server's scrub re-reads every stored object against its checksum and marks a damaged instance so a read fails as data loss, never returning wrong bytes. Replicas with their backfill, repair, recall from an archive tier and a verification sample for tools outside the server are built ([replicas](../operate/replicas.md)). |
 | **Distribution** | Which revision a send delivered and what the peer answered | Built: send jobs say, for each instance, sent, sent with a warning or refused, and why ([sending](../use/sending.md)) |
-| **Disposition** | Whether it is active, hidden, awaiting purge or removed, and why | Partly built: delete, relabel and replace, with a grace period and a record ([correcting](../use/correcting.md)). Holds and retention rules are built ([retention rules and holds](../use/retention.md)). |
+| **Disposition** | Whether it is active, hidden, awaiting purge or removed, and why | Partly built: delete, relabel, replace, edit and move (a session to another subject, or a merge), with a grace period and a record ([correcting](../use/correcting.md)). Holds and retention rules are built ([retention rules and holds](../use/retention.md)). |
 
 ## What a person can rely on
 

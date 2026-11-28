@@ -174,11 +174,25 @@ func (p CorrectionPrepare) Validate() error {
 		if err := validateEdits(p.Edits); err != nil {
 			return err
 		}
+	case record.KindMove:
+		// ToLabel is the subject it goes under.
+		if err := ValidateMove(p.Target, p.ToLabel); err != nil {
+			return err
+		}
+		if p.Quarantine != "" || p.RestoreLine != nil || !p.NewSHA256.IsZero() {
+			return invalid("a move names no quarantined file or new bytes")
+		}
+		if p.Confirm == "" || len(p.Confirm) > MaxConfirmLength {
+			return invalid("a move carries the confirm token of its preview")
+		}
 	default:
-		return invalid("a correction is a delete, a relabel, a replace or an edit")
+		return invalid("a correction is a delete, a relabel, a replace, an edit or a move")
 	}
 	if p.Kind != record.KindEdit && len(p.Edits) > 0 {
 		return invalid("only an edit names edited instances")
+	}
+	if p.Kind != record.KindMove && p.RewriteIdentity {
+		return invalid("only a move rewrites the identity of what it moves")
 	}
 	if b := p.Batch; b != nil {
 		if p.Kind != record.KindDelete || p.Retention != nil || p.OverrideRetention || p.Target.Instance != "" {
@@ -348,7 +362,7 @@ func ValidateCorrectionFilter(f CorrectionFilter) error {
 	}
 	for _, k := range f.Kinds {
 		if !knownKind(k) {
-			return invalid("a correction's kind is delete, relabel, replace or edit")
+			return invalid("a correction's kind is delete, relabel, replace, edit or move")
 		}
 	}
 	for _, s := range f.States {
@@ -362,7 +376,7 @@ func ValidateCorrectionFilter(f CorrectionFilter) error {
 // knownKind reports whether k is one of the kinds of correction.
 func knownKind(k record.Kind) bool {
 	switch k {
-	case record.KindDelete, record.KindRelabel, record.KindReplace, record.KindEdit:
+	case record.KindDelete, record.KindRelabel, record.KindReplace, record.KindEdit, record.KindMove:
 		return true
 	}
 	return false
@@ -474,7 +488,8 @@ type CatalogChanged struct {
 	SessionLabel string `json:"session_label"`
 	// ScanLabel is the scan's label, empty for a whole session.
 	ScanLabel string `json:"scan_label"`
-	// ToLabel is a relabel's new label.
+	// ToLabel is a relabel's new label, or the subject a move files its
+	// sessions under.
 	ToLabel string `json:"to_label"`
 	// Instances counts the instances the change covers.
 	Instances int64 `json:"instances"`
@@ -493,7 +508,7 @@ func (p *CatalogChanged) validate() error {
 		return err
 	}
 	if !knownKind(p.Kind) {
-		return invalid("a correction's kind is delete, relabel, replace or edit")
+		return invalid("a correction's kind is delete, relabel, replace, edit or move")
 	}
 	if !p.State.Valid() {
 		return invalid("a correction's state is one of the six")

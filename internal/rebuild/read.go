@@ -79,8 +79,10 @@ func relabeled(p label.Path, level, to string) label.Path {
 // undone or abandoned; one still prepared is taken as committed, since no
 // row says otherwise and a delete is fail-closed. A relabel hides the tree
 // that is not the archive's: the old labels once it was published, the new
-// ones before (its copy may be partial). A replace hides nothing: the
-// manifest names the revision it read back before naming it.
+// ones before (its copy may be partial). A move hides as a relabel does,
+// its new tree being the old one under the destination subject; undone, it
+// hides that new tree too. A replace hides nothing: the manifest names the
+// revision it read back before naming it.
 //
 // With no Config.Decide the record alone is read, and its state decides: the
 // fail-closed side, a delete the record names applied whatever a row might
@@ -114,6 +116,18 @@ func (h *hides) add(c record.Correction) {
 			p := pathOf(s)
 			if !c.State.Published() {
 				p = relabeled(p, c.Relabel.Level, c.Relabel.To)
+			}
+			h.scans[hideKey(p, s.SeriesUID)] = true
+		}
+	case record.KindMove:
+		// As a relabel: the old tree once it was published, the tree under
+		// the destination before (its copy may be partial) and once it was
+		// undone (its copies not yet swept). A merge's subject is left with
+		// no scan, so no row of it is made.
+		for _, s := range c.Scans {
+			p := pathOf(s)
+			if !c.State.Published() {
+				p = tenant.MovedPath(p, c.Move.To)
 			}
 			h.scans[hideKey(p, s.SeriesUID)] = true
 		}

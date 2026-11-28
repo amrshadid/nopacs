@@ -330,7 +330,7 @@ func (e *Engine) abandon(ctx context.Context, c tenant.Correction, why string, c
 	ctx, cancel := detached(ctx)
 	defer cancel()
 	cur, err := e.cfg.Store.Correction(ctx, c.ID)
-	if err == nil && cur.Kind == record.KindRelabel && cur.State == record.StateAbandoned && !cur.Swept {
+	if err == nil && cur.Kind.CopiesObjects() && cur.State == record.StateAbandoned && !cur.Swept {
 		if err := e.sweep(ctx, cur); err != nil {
 			e.cfg.Log.Error("a stopped relabel's copies could not be removed; they are removed at the next start", "correction", c.ID,
 				"error", fault.Message(err))
@@ -349,7 +349,7 @@ func (e *Engine) abandon(ctx context.Context, c tenant.Correction, why string, c
 	if err != nil {
 		return cur, cause
 	}
-	if a.Kind == record.KindRelabel {
+	if a.Kind.CopiesObjects() {
 		if err := e.cfg.Store.MarkSwept(ctx, a.ID); err != nil {
 			return a, cause
 		}
@@ -358,7 +358,8 @@ func (e *Engine) abandon(ctx context.Context, c tenant.Correction, why string, c
 	return a, cause
 }
 
-// sweep removes an abandoned relabel's copies and records them swept.
+// sweep removes the copies of an abandoned relabel or move, or of an undone
+// move, and records them swept.
 func (e *Engine) sweep(ctx context.Context, c tenant.Correction) error {
 	if err := e.removeCopies(ctx, c); err != nil {
 		return err
@@ -372,7 +373,7 @@ func (e *Engine) sweep(ctx context.Context, c tenant.Correction) error {
 // its records.
 func (e *Engine) undoWrites(ctx context.Context, c tenant.Correction) error {
 	switch c.Kind {
-	case record.KindRelabel:
+	case record.KindRelabel, record.KindMove:
 		return e.removeCopies(ctx, c)
 	case record.KindReplace:
 		return e.rollbackReplace(ctx, c)
@@ -383,8 +384,9 @@ func (e *Engine) undoWrites(ctx context.Context, c tenant.Correction) error {
 }
 
 // Undo undoes a committed delete in its grace period (its rows shown
-// again, its records rewritten undone), or stops a prepared relabel (its
-// copies removed, abandoned).
+// again, its records rewritten undone), or a committed move (its sessions
+// filed back, its copies under the destination removed), or stops a
+// prepared relabel or move (its copies removed, abandoned).
 func (e *Engine) Undo(ctx context.Context, id, reason string, audit master.AuditEntry, guard tenant.Guard) (tenant.Correction, error) {
 	// An edit's undo writes its scans' manifests and metadata before the
 	// store publishes it (UndoEdit).
@@ -398,11 +400,15 @@ func (e *Engine) Undo(ctx context.Context, id, reason string, audit master.Audit
 	if err := e.reached(c, "undone"); err != nil {
 		return c, err
 	}
-	// A relabel whose copy runs here sees the stop before its next write
-	// and removes its copies itself, after its last write; one whose copy
-	// does not run here has them removed now.
-	if c.Kind == record.KindRelabel && c.State == record.StateAbandoned && !c.Swept && !e.isCopying(c.ID) {
+	// A relabel or move whose copy runs here sees the stop before its next
+	// write and removes its copies itself, after its last write; one whose
+	// copy does not run here has them removed now, as an undone move's are.
+	stopped := c.Kind.CopiesObjects() && c.State == record.StateAbandoned && !e.isCopying(c.ID)
+	if (stopped || c.Kind == record.KindMove && c.State == record.StateUndone) && !c.Swept {
 		if err := e.sweep(ctx, c); err != nil {
+			return c, err
+		}
+		if c, err = e.cfg.Store.Correction(ctx, c.ID); err != nil {
 			return c, err
 		}
 	}

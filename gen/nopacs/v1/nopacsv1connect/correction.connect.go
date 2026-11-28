@@ -41,6 +41,10 @@ const (
 	CorrectionServiceReplaceProcedure = "/nopacs.v1.CorrectionService/Replace"
 	// CorrectionServiceEditProcedure is the procedure name of the CorrectionService's Edit RPC.
 	CorrectionServiceEditProcedure = "/nopacs.v1.CorrectionService/Edit"
+	// CorrectionServiceMoveProcedure is the procedure name of the CorrectionService's Move RPC.
+	CorrectionServiceMoveProcedure = "/nopacs.v1.CorrectionService/Move"
+	// CorrectionServiceMergeProcedure is the procedure name of the CorrectionService's Merge RPC.
+	CorrectionServiceMergeProcedure = "/nopacs.v1.CorrectionService/Merge"
 	// CorrectionServiceListCorrectionsProcedure is the procedure name of the CorrectionService's
 	// ListCorrections RPC.
 	CorrectionServiceListCorrectionsProcedure = "/nopacs.v1.CorrectionService/ListCorrections"
@@ -110,6 +114,22 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_nopacs_v1_correction_proto.Services().ByName("CorrectionService").Methods().ByName("Edit"),
 			Procedure:        CorrectionServiceEditProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	correctionServiceMoveSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_correction_proto.Services().ByName("CorrectionService").Methods().ByName("Move"),
+			Procedure:        CorrectionServiceMoveProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	correctionServiceMergeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_correction_proto.Services().ByName("CorrectionService").Methods().ByName("Merge"),
+			Procedure:        CorrectionServiceMergeProcedure,
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
@@ -366,6 +386,68 @@ type CorrectionServiceClient interface {
 	// database or a storage does not answer before anything is written; the
 	// server judges no edits; the tenant is not ready).
 	Edit(context.Context, *v1.EditRequest) (*v1.EditResponse, error)
+	// Move files a session, with its scans, under another subject the tenant
+	// holds: the study filed under the wrong patient. With validate_only it
+	// answers the preview (what moves, the storages and replicas it reaches,
+	// the holds and the session labels that refuse it) and the token to
+	// confirm it; with that token it records the move and answers it
+	// prepared, then copies every object to its key under the destination
+	// in the background, each read back and compared by SHA-256, and
+	// publishes it at once (CORRECTION_STATE_COMMITTED, with
+	// EVENT_TYPE_CATALOG_CHANGED and EVENT_TYPE_SESSION_MOVED). The old
+	// objects are kept until its purge after the grace period, and
+	// UndoCorrection files the session back until then. A lookup by the
+	// session's old labels answers not found with the reason RELABELED,
+	// naming the new ones. With rewrite_identity, once published, every moved
+	// instance is given the destination's archived Patient ID and Issuer of
+	// Patient ID by an edit of the session (CORRECTION_KIND_EDIT, its own
+	// correction), each new revision judged by the profile and its check
+	// after; an edit refused is abandoned with its reason and the move
+	// stands. A token used once answers the move it made.
+	//
+	// Role: admin on the tenant, never a masked key: where archived data is
+	// filed is a person's choice.
+	// Audit: one entry in the tenant's log, with the move's id as its object
+	// (none for validate_only), and the session's path of labels, the
+	// destination, validate_only, rewrite_identity and the reason in details.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant; a
+	// masked key), invalid (also a missing or too long reason; a label that
+	// does not pass the label rule; a destination that is the session's own
+	// subject; a confirm token with validate_only, or none without it), not
+	// found (the tenant holds no such subject, session or destination; a
+	// tenant that does not exist, for a caller who may list every tenant),
+	// conflict (the destination holds a session of the same label, compared
+	// case folded: relabel one first), precondition (the confirm token is
+	// not this server's preview of the same move, what it moves changed
+	// since, or it is more than an hour old; the session is its subject's
+	// last, which is a merge; a hold covers the session or the destination,
+	// with the reason HELD; a correction on either is prepared or not yet
+	// purged; a reception of the session is in progress; a rebuild of the
+	// tenant is running; the tenant is moved or fenced, with the reason
+	// TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database or
+	// a storage does not answer before anything is written; the server runs
+	// no corrections; the tenant is not ready).
+	Move(context.Context, *v1.MoveRequest) (*v1.MoveResponse, error)
+	// Merge merges a whole subject into another the tenant holds: every
+	// session moves as Move moves one, in one correction published at once
+	// (with EVENT_TYPE_SUBJECT_MERGED), and the emptied subject is hidden;
+	// its label is held for arrivals until the merge ends, and a lookup by
+	// it answers not found with the reason RELABELED, naming the
+	// destination. UndoCorrection makes the subject again with every
+	// session until the purge. validate_only, the token and rewrite_identity
+	// are Move's.
+	//
+	// Role: admin on the tenant, never a masked key: where archived data is
+	// filed is a person's choice.
+	// Audit: one entry in the tenant's log, as Move's, with the subject's
+	// label and the destination in details.
+	// Errors: those of Move, but for a session: invalid (also a destination
+	// that is the subject itself), conflict (the destination holds a session
+	// of the label of one of the subject's), precondition (a hold covers the
+	// subject or the destination; a correction on either is prepared or not
+	// yet purged; a reception of the subject is in progress).
+	Merge(context.Context, *v1.MergeRequest) (*v1.MergeResponse, error)
 	// ListCorrections answers a tenant's corrections, newest first, filtered
 	// by kind and state.
 	//
@@ -399,7 +481,11 @@ type CorrectionServiceClient interface {
 	// were, its new revisions removed from every copy; while it is being
 	// undone it is never purged, and an undo that may no longer be published
 	// (a hold placed over it meanwhile) is taken back, the edit committed as
-	// it was, to be asked for again. A correction already
+	// it was, to be asked for again. A committed move or merge is undone
+	// before its purge too: its sessions filed back under their subject (a
+	// merged subject made again), the old manifests named again, its copies
+	// under the destination removed from every copy; a prepared one is
+	// stopped as a relabel is. A correction already
 	// undone, or a relabel already abandoned, is answered as it stands, so a
 	// repeated call changes nothing more.
 	//
@@ -411,9 +497,11 @@ type CorrectionServiceClient interface {
 	// (also a missing or too long reason), not found (the tenant has no
 	// correction with that id; a tenant that does not exist, for a caller
 	// who may list every tenant), precondition (the correction is neither a
-	// committed delete or edit nor a prepared relabel; an edit taken from its
-	// records by a restore, which keeps nothing to write back; a hold covers
-	// an edit's revisions; a rebuild of the tenant is running; the tenant is
+	// committed delete, edit or move nor a prepared relabel or move; an edit
+	// taken from its records by a restore, which keeps nothing to write back;
+	// a hold covers an edit's revisions or what a move moved; a later
+	// correction touched what a move moved, or data arrived in it, since its
+	// publish; a rebuild of the tenant is running; the tenant is
 	// moved or fenced), unavailable (the tenant's
 	// database or a storage holding its record does not answer, or the
 	// tenant is not ready).
@@ -706,6 +794,68 @@ type CorrectionServiceHandler interface {
 	// database or a storage does not answer before anything is written; the
 	// server judges no edits; the tenant is not ready).
 	Edit(context.Context, *v1.EditRequest) (*v1.EditResponse, error)
+	// Move files a session, with its scans, under another subject the tenant
+	// holds: the study filed under the wrong patient. With validate_only it
+	// answers the preview (what moves, the storages and replicas it reaches,
+	// the holds and the session labels that refuse it) and the token to
+	// confirm it; with that token it records the move and answers it
+	// prepared, then copies every object to its key under the destination
+	// in the background, each read back and compared by SHA-256, and
+	// publishes it at once (CORRECTION_STATE_COMMITTED, with
+	// EVENT_TYPE_CATALOG_CHANGED and EVENT_TYPE_SESSION_MOVED). The old
+	// objects are kept until its purge after the grace period, and
+	// UndoCorrection files the session back until then. A lookup by the
+	// session's old labels answers not found with the reason RELABELED,
+	// naming the new ones. With rewrite_identity, once published, every moved
+	// instance is given the destination's archived Patient ID and Issuer of
+	// Patient ID by an edit of the session (CORRECTION_KIND_EDIT, its own
+	// correction), each new revision judged by the profile and its check
+	// after; an edit refused is abandoned with its reason and the move
+	// stands. A token used once answers the move it made.
+	//
+	// Role: admin on the tenant, never a masked key: where archived data is
+	// filed is a person's choice.
+	// Audit: one entry in the tenant's log, with the move's id as its object
+	// (none for validate_only), and the session's path of labels, the
+	// destination, validate_only, rewrite_identity and the reason in details.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant; a
+	// masked key), invalid (also a missing or too long reason; a label that
+	// does not pass the label rule; a destination that is the session's own
+	// subject; a confirm token with validate_only, or none without it), not
+	// found (the tenant holds no such subject, session or destination; a
+	// tenant that does not exist, for a caller who may list every tenant),
+	// conflict (the destination holds a session of the same label, compared
+	// case folded: relabel one first), precondition (the confirm token is
+	// not this server's preview of the same move, what it moves changed
+	// since, or it is more than an hour old; the session is its subject's
+	// last, which is a merge; a hold covers the session or the destination,
+	// with the reason HELD; a correction on either is prepared or not yet
+	// purged; a reception of the session is in progress; a rebuild of the
+	// tenant is running; the tenant is moved or fenced, with the reason
+	// TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database or
+	// a storage does not answer before anything is written; the server runs
+	// no corrections; the tenant is not ready).
+	Move(context.Context, *v1.MoveRequest) (*v1.MoveResponse, error)
+	// Merge merges a whole subject into another the tenant holds: every
+	// session moves as Move moves one, in one correction published at once
+	// (with EVENT_TYPE_SUBJECT_MERGED), and the emptied subject is hidden;
+	// its label is held for arrivals until the merge ends, and a lookup by
+	// it answers not found with the reason RELABELED, naming the
+	// destination. UndoCorrection makes the subject again with every
+	// session until the purge. validate_only, the token and rewrite_identity
+	// are Move's.
+	//
+	// Role: admin on the tenant, never a masked key: where archived data is
+	// filed is a person's choice.
+	// Audit: one entry in the tenant's log, as Move's, with the subject's
+	// label and the destination in details.
+	// Errors: those of Move, but for a session: invalid (also a destination
+	// that is the subject itself), conflict (the destination holds a session
+	// of the label of one of the subject's), precondition (a hold covers the
+	// subject or the destination; a correction on either is prepared or not
+	// yet purged; a reception of the subject is in progress).
+	Merge(context.Context, *v1.MergeRequest) (*v1.MergeResponse, error)
 	// ListCorrections answers a tenant's corrections, newest first, filtered
 	// by kind and state.
 	//
@@ -739,7 +889,11 @@ type CorrectionServiceHandler interface {
 	// were, its new revisions removed from every copy; while it is being
 	// undone it is never purged, and an undo that may no longer be published
 	// (a hold placed over it meanwhile) is taken back, the edit committed as
-	// it was, to be asked for again. A correction already
+	// it was, to be asked for again. A committed move or merge is undone
+	// before its purge too: its sessions filed back under their subject (a
+	// merged subject made again), the old manifests named again, its copies
+	// under the destination removed from every copy; a prepared one is
+	// stopped as a relabel is. A correction already
 	// undone, or a relabel already abandoned, is answered as it stands, so a
 	// repeated call changes nothing more.
 	//
@@ -751,9 +905,11 @@ type CorrectionServiceHandler interface {
 	// (also a missing or too long reason), not found (the tenant has no
 	// correction with that id; a tenant that does not exist, for a caller
 	// who may list every tenant), precondition (the correction is neither a
-	// committed delete or edit nor a prepared relabel; an edit taken from its
-	// records by a restore, which keeps nothing to write back; a hold covers
-	// an edit's revisions; a rebuild of the tenant is running; the tenant is
+	// committed delete, edit or move nor a prepared relabel or move; an edit
+	// taken from its records by a restore, which keeps nothing to write back;
+	// a hold covers an edit's revisions or what a move moved; a later
+	// correction touched what a move moved, or data arrived in it, since its
+	// publish; a rebuild of the tenant is running; the tenant is
 	// moved or fenced), unavailable (the tenant's
 	// database or a storage holding its record does not answer, or the
 	// tenant is not ready).
@@ -856,6 +1012,8 @@ func RegisterCorrectionServiceHandler(server *connect.Server, svc CorrectionServ
 		connect.Method{Spec: correctionServiceRelabelSpec(), Handler: adapter.relabel},
 		connect.Method{Spec: correctionServiceReplaceSpec(), Handler: adapter.replace},
 		connect.Method{Spec: correctionServiceEditSpec(), Handler: adapter.edit},
+		connect.Method{Spec: correctionServiceMoveSpec(), Handler: adapter.move},
+		connect.Method{Spec: correctionServiceMergeSpec(), Handler: adapter.merge},
 		connect.Method{Spec: correctionServiceListCorrectionsSpec(), Handler: adapter.listCorrections},
 		connect.Method{Spec: correctionServiceGetCorrectionSpec(), Handler: adapter.getCorrection},
 		connect.Method{Spec: correctionServiceUndoCorrectionSpec(), Handler: adapter.undoCorrection},
@@ -891,6 +1049,14 @@ func (UnimplementedCorrectionServiceHandler) Replace(context.Context, *v1.Replac
 
 func (UnimplementedCorrectionServiceHandler) Edit(context.Context, *v1.EditRequest) (*v1.EditResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.CorrectionService.Edit is not implemented")
+}
+
+func (UnimplementedCorrectionServiceHandler) Move(context.Context, *v1.MoveRequest) (*v1.MoveResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.CorrectionService.Move is not implemented")
+}
+
+func (UnimplementedCorrectionServiceHandler) Merge(context.Context, *v1.MergeRequest) (*v1.MergeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.CorrectionService.Merge is not implemented")
 }
 
 func (UnimplementedCorrectionServiceHandler) ListCorrections(context.Context, *v1.ListCorrectionsRequest) (*v1.ListCorrectionsResponse, error) {
@@ -968,6 +1134,22 @@ func (c *correctionServiceClient) Replace(ctx context.Context, req *v1.ReplaceRe
 func (c *correctionServiceClient) Edit(ctx context.Context, req *v1.EditRequest) (*v1.EditResponse, error) {
 	var res v1.EditResponse
 	if err := c.client.CallUnary(ctx, correctionServiceEditSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *correctionServiceClient) Move(ctx context.Context, req *v1.MoveRequest) (*v1.MoveResponse, error) {
+	var res v1.MoveResponse
+	if err := c.client.CallUnary(ctx, correctionServiceMoveSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *correctionServiceClient) Merge(ctx context.Context, req *v1.MergeRequest) (*v1.MergeResponse, error) {
+	var res v1.MergeResponse
+	if err := c.client.CallUnary(ctx, correctionServiceMergeSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -1097,6 +1279,30 @@ func (h correctionServiceHandler) edit(ctx context.Context, _ connect.Spec, stre
 		return err
 	}
 	res, err := h.svc.Edit(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h correctionServiceHandler) move(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MoveRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Move(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h correctionServiceHandler) merge(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MergeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Merge(ctx, &req)
 	if err != nil {
 		return err
 	}

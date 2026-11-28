@@ -428,8 +428,8 @@ func (es *Engines) loop() {
 }
 
 // pass goes once over every tenant ready now: Recover, until it has once
-// taken up everything; after it, what a request left prepared; then the
-// purges due.
+// taken up everything; after it, what a request left prepared and the
+// identity rewrites still owed (RewriteOwed); then the purges due.
 func (es *Engines) pass() {
 	names, err := es.cfg.Tenants.Names(es.ctx)
 	if err != nil {
@@ -474,6 +474,10 @@ func (es *Engines) passOne(name string, r *engineRun) {
 		}
 	} else {
 		es.abandonLeft(name, r)
+		if err := r.engine.RewriteOwed(es.ctx); err != nil && es.ctx.Err() == nil {
+			es.cfg.Log.Warn("corrections: a move's identity rewrite is still owed; the pass tries again", "tenant", name,
+				"error", fault.Message(err))
+		}
 	}
 	if es.cfg.HoldsAdopted != nil {
 		if err := es.cfg.HoldsAdopted(es.ctx, name, r.store); err != nil {

@@ -55,6 +55,8 @@ class EventType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     EVENT_TYPE_QUARANTINE_AGING: _ClassVar[EventType]
     EVENT_TYPE_SENDER_ALLOW_IDENTIFIED: _ClassVar[EventType]
     EVENT_TYPE_QUOTA: _ClassVar[EventType]
+    EVENT_TYPE_SESSION_MOVED: _ClassVar[EventType]
+    EVENT_TYPE_SUBJECT_MERGED: _ClassVar[EventType]
 
 class AssociationFailure(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -101,6 +103,8 @@ EVENT_TYPE_RETENTION_CLOCK: EventType
 EVENT_TYPE_QUARANTINE_AGING: EventType
 EVENT_TYPE_SENDER_ALLOW_IDENTIFIED: EventType
 EVENT_TYPE_QUOTA: EventType
+EVENT_TYPE_SESSION_MOVED: EventType
+EVENT_TYPE_SUBJECT_MERGED: EventType
 ASSOCIATION_FAILURE_UNSPECIFIED: AssociationFailure
 ASSOCIATION_FAILURE_CALLER_NOT_ALLOWED: AssociationFailure
 ASSOCIATION_FAILURE_CALLED_AE_TITLE_NOT_RECOGNIZED: AssociationFailure
@@ -637,6 +641,42 @@ class SenderAllowIdentifiedChanged(_message.Message):
     allow_identified: bool
     def __init__(self, sender: _Optional[str] = ..., allow_identified: _Optional[bool] = ...) -> None: ...
 
+class SessionMoved(_message.Message):
+    __slots__ = ("correction", "state", "from_subject_label", "to_subject_label", "session_label", "scans", "instances")
+    CORRECTION_FIELD_NUMBER: _ClassVar[int]
+    STATE_FIELD_NUMBER: _ClassVar[int]
+    FROM_SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    TO_SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    SESSION_LABEL_FIELD_NUMBER: _ClassVar[int]
+    SCANS_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_FIELD_NUMBER: _ClassVar[int]
+    correction: str
+    state: _correction_pb2.CorrectionState
+    from_subject_label: str
+    to_subject_label: str
+    session_label: str
+    scans: int
+    instances: int
+    def __init__(self, correction: _Optional[str] = ..., state: _Optional[_Union[_correction_pb2.CorrectionState, str]] = ..., from_subject_label: _Optional[str] = ..., to_subject_label: _Optional[str] = ..., session_label: _Optional[str] = ..., scans: _Optional[int] = ..., instances: _Optional[int] = ...) -> None: ...
+
+class SubjectMerged(_message.Message):
+    __slots__ = ("correction", "state", "from_subject_label", "to_subject_label", "sessions", "scans", "instances")
+    CORRECTION_FIELD_NUMBER: _ClassVar[int]
+    STATE_FIELD_NUMBER: _ClassVar[int]
+    FROM_SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    TO_SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    SESSIONS_FIELD_NUMBER: _ClassVar[int]
+    SCANS_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_FIELD_NUMBER: _ClassVar[int]
+    correction: str
+    state: _correction_pb2.CorrectionState
+    from_subject_label: str
+    to_subject_label: str
+    sessions: int
+    scans: int
+    instances: int
+    def __init__(self, correction: _Optional[str] = ..., state: _Optional[_Union[_correction_pb2.CorrectionState, str]] = ..., from_subject_label: _Optional[str] = ..., to_subject_label: _Optional[str] = ..., sessions: _Optional[int] = ..., scans: _Optional[int] = ..., instances: _Optional[int] = ...) -> None: ...
+
 class QuotaChanged(_message.Message):
     __slots__ = ("state", "used_bytes", "used_instances", "bytes_bound", "instances_bound")
     STATE_FIELD_NUMBER: _ClassVar[int]
@@ -662,7 +702,7 @@ class CatalogRebuilt(_message.Message):
     def __init__(self, job: _Optional[str] = ..., instances: _Optional[int] = ..., new_history: _Optional[bool] = ...) -> None: ...
 
 class Event(_message.Message):
-    __slots__ = ("cursor", "time", "tenant", "type", "association_failed", "reception_step", "file_quarantined", "quarantine_decided", "receiver_health", "storage_space", "frames_added", "job_step", "job_progress", "sender_health", "scrub_finding", "catalog_changed", "catalog_rebuilt", "replica_behind", "storage_switched", "hold_changed", "retention_clock", "quarantine_aging", "sender_allow_identified", "quota")
+    __slots__ = ("cursor", "time", "tenant", "type", "association_failed", "reception_step", "file_quarantined", "quarantine_decided", "receiver_health", "storage_space", "frames_added", "job_step", "job_progress", "sender_health", "scrub_finding", "catalog_changed", "catalog_rebuilt", "replica_behind", "storage_switched", "hold_changed", "retention_clock", "quarantine_aging", "sender_allow_identified", "quota", "session_moved", "subject_merged")
     CURSOR_FIELD_NUMBER: _ClassVar[int]
     TIME_FIELD_NUMBER: _ClassVar[int]
     TENANT_FIELD_NUMBER: _ClassVar[int]
@@ -687,6 +727,8 @@ class Event(_message.Message):
     QUARANTINE_AGING_FIELD_NUMBER: _ClassVar[int]
     SENDER_ALLOW_IDENTIFIED_FIELD_NUMBER: _ClassVar[int]
     QUOTA_FIELD_NUMBER: _ClassVar[int]
+    SESSION_MOVED_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_MERGED_FIELD_NUMBER: _ClassVar[int]
     cursor: str
     time: _timestamp_pb2.Timestamp
     tenant: str
@@ -711,7 +753,9 @@ class Event(_message.Message):
     quarantine_aging: QuarantineAging
     sender_allow_identified: SenderAllowIdentifiedChanged
     quota: QuotaChanged
-    def __init__(self, cursor: _Optional[str] = ..., time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tenant: _Optional[str] = ..., type: _Optional[_Union[EventType, str]] = ..., association_failed: _Optional[_Union[AssociationFailed, _Mapping]] = ..., reception_step: _Optional[_Union[ReceptionStepReached, _Mapping]] = ..., file_quarantined: _Optional[_Union[FileQuarantined, _Mapping]] = ..., quarantine_decided: _Optional[_Union[QuarantineDecided, _Mapping]] = ..., receiver_health: _Optional[_Union[ReceiverHealthChanged, _Mapping]] = ..., storage_space: _Optional[_Union[StorageSpaceChanged, _Mapping]] = ..., frames_added: _Optional[_Union[FramesAdded, _Mapping]] = ..., job_step: _Optional[_Union[JobStepReached, _Mapping]] = ..., job_progress: _Optional[_Union[JobProgressed, _Mapping]] = ..., sender_health: _Optional[_Union[SenderHealthChanged, _Mapping]] = ..., scrub_finding: _Optional[_Union[ScrubFindingChanged, _Mapping]] = ..., catalog_changed: _Optional[_Union[CatalogChanged, _Mapping]] = ..., catalog_rebuilt: _Optional[_Union[CatalogRebuilt, _Mapping]] = ..., replica_behind: _Optional[_Union[ReplicaBehind, _Mapping]] = ..., storage_switched: _Optional[_Union[StorageSwitched, _Mapping]] = ..., hold_changed: _Optional[_Union[HoldChanged, _Mapping]] = ..., retention_clock: _Optional[_Union[RetentionClock, _Mapping]] = ..., quarantine_aging: _Optional[_Union[QuarantineAging, _Mapping]] = ..., sender_allow_identified: _Optional[_Union[SenderAllowIdentifiedChanged, _Mapping]] = ..., quota: _Optional[_Union[QuotaChanged, _Mapping]] = ...) -> None: ...
+    session_moved: SessionMoved
+    subject_merged: SubjectMerged
+    def __init__(self, cursor: _Optional[str] = ..., time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tenant: _Optional[str] = ..., type: _Optional[_Union[EventType, str]] = ..., association_failed: _Optional[_Union[AssociationFailed, _Mapping]] = ..., reception_step: _Optional[_Union[ReceptionStepReached, _Mapping]] = ..., file_quarantined: _Optional[_Union[FileQuarantined, _Mapping]] = ..., quarantine_decided: _Optional[_Union[QuarantineDecided, _Mapping]] = ..., receiver_health: _Optional[_Union[ReceiverHealthChanged, _Mapping]] = ..., storage_space: _Optional[_Union[StorageSpaceChanged, _Mapping]] = ..., frames_added: _Optional[_Union[FramesAdded, _Mapping]] = ..., job_step: _Optional[_Union[JobStepReached, _Mapping]] = ..., job_progress: _Optional[_Union[JobProgressed, _Mapping]] = ..., sender_health: _Optional[_Union[SenderHealthChanged, _Mapping]] = ..., scrub_finding: _Optional[_Union[ScrubFindingChanged, _Mapping]] = ..., catalog_changed: _Optional[_Union[CatalogChanged, _Mapping]] = ..., catalog_rebuilt: _Optional[_Union[CatalogRebuilt, _Mapping]] = ..., replica_behind: _Optional[_Union[ReplicaBehind, _Mapping]] = ..., storage_switched: _Optional[_Union[StorageSwitched, _Mapping]] = ..., hold_changed: _Optional[_Union[HoldChanged, _Mapping]] = ..., retention_clock: _Optional[_Union[RetentionClock, _Mapping]] = ..., quarantine_aging: _Optional[_Union[QuarantineAging, _Mapping]] = ..., sender_allow_identified: _Optional[_Union[SenderAllowIdentifiedChanged, _Mapping]] = ..., quota: _Optional[_Union[QuotaChanged, _Mapping]] = ..., session_moved: _Optional[_Union[SessionMoved, _Mapping]] = ..., subject_merged: _Optional[_Union[SubjectMerged, _Mapping]] = ...) -> None: ...
 
 class WatchKeepAlive(_message.Message):
     __slots__ = ("time", "cursor", "tenant_cursors", "unanswered_tenants", "full", "event_history", "tenant_event_histories")

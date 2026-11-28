@@ -27,6 +27,10 @@ func TestAlone(t *testing.T) {
 		{KindReplace, StatePrepared, StateAbandoned, false},
 		{KindReplace, StateCommitted, StateCommitted, true},
 		{KindReplace, StatePurging, StateCommitted, true},
+		{KindMove, StatePrepared, StateAbandoned, false},
+		{KindMove, StateCommitted, StateCommitted, true},
+		{KindMove, StateUndone, StateUndone, false},
+		{KindMove, StateAbandoned, StateAbandoned, false},
 	} {
 		got, unresolved := Correction{Kind: c.kind, State: c.state}.Alone()
 		if got != c.want || unresolved != c.unresolved {

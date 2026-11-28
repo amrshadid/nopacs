@@ -31,6 +31,10 @@ type EditRequest struct {
 	// Audit is the request's entry; Guard the check of who asks.
 	Audit master.AuditEntry
 	Guard tenant.Guard
+	// fromArchive says the values set were read from the tenant's own
+	// archived files (EditedFile.FromArchive): a move's identity rewrite
+	// sets it, never a person's request.
+	fromArchive bool
 }
 
 // reasonRefused is the state reason of an edit the check after refused.
@@ -111,7 +115,7 @@ func (e *Engine) Edit(ctx context.Context, r EditRequest) (tenant.Correction, er
 	if err := e.reached(c, "records"); err != nil {
 		return c, err
 	}
-	return e.writeEdit(ctx, c, targets, r.Changes)
+	return e.writeEdit(ctx, c, targets, r.Changes, r.fromArchive)
 }
 
 // writeEdit writes a prepared edit's new revisions and each scan's
@@ -119,7 +123,8 @@ func (e *Engine) Edit(ctx context.Context, r EditRequest) (tenant.Correction, er
 // gates are held from before the first write until the publish is
 // answered, as a replace holds its storage's, so a switch never leaves a
 // new revision on a place the catalog then names no longer.
-func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []tenant.EditTarget, changes []EditChange) (tenant.Correction, error) {
+func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []tenant.EditTarget, changes []EditChange,
+	fromArchive bool) (tenant.Correction, error) {
 	prepared := make(map[string]tenant.EditedInstance, len(c.Edits))
 	for _, in := range c.Edits {
 		prepared[in.UID] = in
@@ -156,7 +161,7 @@ func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []t
 			if !ok {
 				return abandon(reasonChanged, fault.New(fault.Internal, "an instance of the edit was not prepared"))
 			}
-			line, file, w, why, err := e.editOne(ctx, st, t, in, changes)
+			line, file, w, why, err := e.editOne(ctx, st, t, in, changes, fromArchive)
 			if err != nil {
 				return abandon(why, err)
 			}
@@ -188,8 +193,10 @@ func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []t
 
 // editOne makes, judges and puts one instance's new revision, and returns
 // its line of the scan's metadata, its manifest entry and what was written;
-// on failure, the state reason to abandon with.
-func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget, in tenant.EditedInstance, changes []EditChange) (sidecar.Instance, manifest.File, tenant.EditWritten, string, error) {
+// on failure, the state reason to abandon with. fromArchive is the
+// request's (EditedFile.FromArchive).
+func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget, in tenant.EditedInstance, changes []EditChange,
+	fromArchive bool) (sidecar.Instance, manifest.File, tenant.EditWritten, string, error) {
 	var none sidecar.Instance
 	old, err := readAll(ctx, st, t.Key, t.Size)
 	if err == nil && (int64(len(old)) != t.Size || tenant.SHA256(sha256.Sum256(old)) != t.SHA256) {
@@ -205,7 +212,8 @@ func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget
 	if err != nil {
 		return none, manifest.File{}, tenant.EditWritten{}, reasonUnreadable, err
 	}
-	if err := e.cfg.Judge.JudgeEdit(ctx, EditedFile{Target: t, File: nb, Set: setTags(changes), Removed: removedTags(changes)}); err != nil {
+	if err := e.cfg.Judge.JudgeEdit(ctx, EditedFile{Target: t, File: nb, Set: setTags(changes), Removed: removedTags(changes),
+		FromArchive: fromArchive}); err != nil {
 		return none, manifest.File{}, tenant.EditWritten{}, reasonRefused, err
 	}
 	sum := tenant.SHA256(sha256.Sum256(nb))

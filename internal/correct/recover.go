@@ -15,10 +15,10 @@ const pendingPage = 100
 // Recover takes up, at start, what a stop left of every correction: a
 // delete or a replace left prepared is abandoned (its request was never
 // answered, so it did not happen), what a replace wrote written back; a
-// relabel left prepared goes on with its copy and its publish; an
-// abandoned relabel whose copies were not swept (a stop between its
-// abandon and the sweep, or a copy that wrote after the stop's sweep) has
-// them removed; an edit's undo left part way is finished, and an undone
+// relabel or move left prepared goes on with its copy and its publish; an
+// abandoned relabel or move, or an undone move, whose copies were not swept
+// (a stop between its abandon or undo and the sweep, or a copy that wrote
+// after the stop's sweep) has them removed; an edit's undo left part way is finished, and an undone
 // edit's new revisions not yet removed are; a purge left purging goes on;
 // and records that lag their row are rewritten. It goes on past one correction's failure and answers
 // them all.
@@ -45,9 +45,16 @@ func (e *Engine) Recover(ctx context.Context) error {
 // recoverOne takes up one correction.
 func (e *Engine) recoverOne(ctx context.Context, c tenant.Correction) error {
 	switch {
-	case c.State == record.StatePrepared && c.Kind == record.KindRelabel:
-		_, err := e.ContinueRelabel(ctx, c.ID)
-		return err
+	case c.State == record.StatePrepared && c.Kind.CopiesObjects():
+		pc, err := e.ContinueRelabel(ctx, c.ID)
+		if err != nil || pc.State != record.StateCommitted || !pc.RewriteIdentity {
+			return err
+		}
+		// A move published now still owes the identity rewrite it asked for.
+		if _, err := e.RewriteIdentity(ctx, c.ID); err != nil && fault.KindOf(err) == fault.Unavailable {
+			return err
+		}
+		return nil
 	case c.State == record.StatePrepared:
 		if err := e.undoWrites(ctx, c); err != nil {
 			return err
@@ -60,7 +67,8 @@ func (e *Engine) recoverOne(ctx context.Context, c tenant.Correction) error {
 	case c.State == record.StatePurging:
 		_, err := e.purge(ctx, c)
 		return err
-	case c.Kind == record.KindRelabel && c.State == record.StateAbandoned && !c.Swept:
+	case c.Kind.CopiesObjects() && c.State == record.StateAbandoned && !c.Swept,
+		c.Kind == record.KindMove && c.State == record.StateUndone && !c.Swept:
 		if err := e.sweep(ctx, c); err != nil {
 			return err
 		}
@@ -77,6 +85,13 @@ func (e *Engine) recoverOne(ctx context.Context, c tenant.Correction) error {
 		return err
 	case c.Kind == record.KindEdit && c.State == record.StateUndone && !c.Swept:
 		if err := e.sweepEdit(ctx, c); err != nil {
+			return err
+		}
+	case c.Kind == record.KindMove && c.State == record.StateCommitted && c.RewriteIdentity:
+		// The identity rewrite a move published before the stop asked for:
+		// an edit it refuses is abandoned with its reason, which is not a
+		// failure of the start.
+		if _, err := e.RewriteIdentity(ctx, c.ID); err != nil && fault.KindOf(err) == fault.Unavailable {
 			return err
 		}
 	}

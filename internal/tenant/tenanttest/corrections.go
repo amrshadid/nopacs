@@ -44,6 +44,11 @@ func runCorrections(t *testing.T, open OpenEvents) {
 		{"DeleteHoldsItsLabels", testDeleteHoldsItsLabels},
 		{"ClockAndPurgeTargets", testClockAndPurgeTargets},
 		{"JobMeetsDeletes", testJobMeetsDeletes},
+		{"MoveSession", testMoveSession},
+		{"MergeSubjects", testMergeSubjects},
+		{"MergeUndo", testMergeUndo},
+		{"MoveRefusals", testMoveRefusals},
+		{"MoveOwedIdentity", testMoveOwedIdentity},
 		{"QuotaCounts", testQuotaCounts},
 	}
 	for _, tt := range tests {

@@ -22,10 +22,13 @@ package record
 //     committed and unresolved, its purge left to an admin;
 //   - a relabel or a replace prepared or abandoned is abandoned: no row is
 //     left to finish or undo its writes, and the archive is read as it was
-//     before it.
+//     before it;
+//   - a move published is committed and unresolved, as a relabel; one
+//     undone stays undone (its old tree is the archive again), one prepared
+//     or abandoned is abandoned.
 func (c Correction) Alone() (State, bool) {
 	switch {
-	case c.Kind == KindDelete && (c.State == StateAbandoned || c.State == StateUndone):
+	case (c.Kind == KindDelete || c.Kind == KindMove) && (c.State == StateAbandoned || c.State == StateUndone):
 		return c.State, false
 	case c.Kind == KindDelete, c.State.Published():
 		return StateCommitted, true

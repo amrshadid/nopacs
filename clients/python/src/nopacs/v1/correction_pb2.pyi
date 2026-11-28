@@ -18,6 +18,7 @@ class CorrectionKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     CORRECTION_KIND_RELABEL: _ClassVar[CorrectionKind]
     CORRECTION_KIND_REPLACE: _ClassVar[CorrectionKind]
     CORRECTION_KIND_EDIT: _ClassVar[CorrectionKind]
+    CORRECTION_KIND_MOVE: _ClassVar[CorrectionKind]
 
 class CorrectionOrigin(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -84,6 +85,7 @@ CORRECTION_KIND_DELETE: CorrectionKind
 CORRECTION_KIND_RELABEL: CorrectionKind
 CORRECTION_KIND_REPLACE: CorrectionKind
 CORRECTION_KIND_EDIT: CorrectionKind
+CORRECTION_KIND_MOVE: CorrectionKind
 CORRECTION_ORIGIN_UNSPECIFIED: CorrectionOrigin
 CORRECTION_ORIGIN_PERSON: CorrectionOrigin
 CORRECTION_ORIGIN_RETENTION: CorrectionOrigin
@@ -250,7 +252,7 @@ class DeletePreview(_message.Message):
     def __init__(self, counts: _Optional[_Union[CorrectionCounts, _Mapping]] = ..., storages: _Optional[_Iterable[str]] = ..., sent_to: _Optional[_Iterable[_Union[PeerCopy, _Mapping]]] = ..., jobs: _Optional[_Iterable[str]] = ..., jobs_not_listed: _Optional[int] = ..., confirm: _Optional[str] = ..., purge_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., storage_purges: _Optional[_Iterable[_Union[StoragePurge, _Mapping]]] = ..., holds: _Optional[_Iterable[str]] = ..., sessions_under_minimum: _Optional[int] = ..., keep_until: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., quarantined: _Optional[int] = ..., receptions: _Optional[int] = ..., held_after_purge: _Optional[_Iterable[str]] = ..., tenant_jobs: _Optional[int] = ...) -> None: ...
 
 class Correction(_message.Message):
-    __slots__ = ("id", "kind", "state", "target", "to_label", "quarantined_file", "reason", "created_by_key_id", "create_time", "purge_time", "end_time", "counts", "sent_to", "state_reason", "old_sha256", "new_sha256", "arrivals_allowed", "undo_reason", "old_revision", "new_revision", "commit_time", "dispositions", "unresolved", "origin", "retention_rule", "retention_due_time", "override_retention", "override_reason", "job", "copies_abandoned", "holds", "swept")
+    __slots__ = ("id", "kind", "state", "target", "to_label", "quarantined_file", "reason", "created_by_key_id", "create_time", "purge_time", "end_time", "counts", "sent_to", "state_reason", "old_sha256", "new_sha256", "arrivals_allowed", "undo_reason", "old_revision", "new_revision", "commit_time", "dispositions", "unresolved", "origin", "retention_rule", "retention_due_time", "override_retention", "override_reason", "job", "copies_abandoned", "holds", "swept", "identity_rewrite_refused")
     ID_FIELD_NUMBER: _ClassVar[int]
     KIND_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
@@ -283,6 +285,7 @@ class Correction(_message.Message):
     COPIES_ABANDONED_FIELD_NUMBER: _ClassVar[int]
     HOLDS_FIELD_NUMBER: _ClassVar[int]
     SWEPT_FIELD_NUMBER: _ClassVar[int]
+    IDENTITY_REWRITE_REFUSED_FIELD_NUMBER: _ClassVar[int]
     id: str
     kind: CorrectionKind
     state: CorrectionState
@@ -315,7 +318,8 @@ class Correction(_message.Message):
     copies_abandoned: _containers.RepeatedScalarFieldContainer[str]
     holds: _containers.RepeatedCompositeFieldContainer[HeldValue]
     swept: bool
-    def __init__(self, id: _Optional[str] = ..., kind: _Optional[_Union[CorrectionKind, str]] = ..., state: _Optional[_Union[CorrectionState, str]] = ..., target: _Optional[_Union[CorrectionTarget, _Mapping]] = ..., to_label: _Optional[str] = ..., quarantined_file: _Optional[str] = ..., reason: _Optional[str] = ..., created_by_key_id: _Optional[str] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., purge_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., end_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., counts: _Optional[_Union[CorrectionCounts, _Mapping]] = ..., sent_to: _Optional[_Iterable[_Union[PeerCopy, _Mapping]]] = ..., state_reason: _Optional[str] = ..., old_sha256: _Optional[str] = ..., new_sha256: _Optional[str] = ..., arrivals_allowed: _Optional[bool] = ..., undo_reason: _Optional[str] = ..., old_revision: _Optional[int] = ..., new_revision: _Optional[int] = ..., commit_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., dispositions: _Optional[_Iterable[_Union[StorageDisposition, _Mapping]]] = ..., unresolved: _Optional[bool] = ..., origin: _Optional[_Union[CorrectionOrigin, str]] = ..., retention_rule: _Optional[str] = ..., retention_due_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., override_retention: _Optional[bool] = ..., override_reason: _Optional[str] = ..., job: _Optional[str] = ..., copies_abandoned: _Optional[_Iterable[str]] = ..., holds: _Optional[_Iterable[_Union[HeldValue, _Mapping]]] = ..., swept: _Optional[bool] = ...) -> None: ...
+    identity_rewrite_refused: str
+    def __init__(self, id: _Optional[str] = ..., kind: _Optional[_Union[CorrectionKind, str]] = ..., state: _Optional[_Union[CorrectionState, str]] = ..., target: _Optional[_Union[CorrectionTarget, _Mapping]] = ..., to_label: _Optional[str] = ..., quarantined_file: _Optional[str] = ..., reason: _Optional[str] = ..., created_by_key_id: _Optional[str] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., purge_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., end_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., counts: _Optional[_Union[CorrectionCounts, _Mapping]] = ..., sent_to: _Optional[_Iterable[_Union[PeerCopy, _Mapping]]] = ..., state_reason: _Optional[str] = ..., old_sha256: _Optional[str] = ..., new_sha256: _Optional[str] = ..., arrivals_allowed: _Optional[bool] = ..., undo_reason: _Optional[str] = ..., old_revision: _Optional[int] = ..., new_revision: _Optional[int] = ..., commit_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., dispositions: _Optional[_Iterable[_Union[StorageDisposition, _Mapping]]] = ..., unresolved: _Optional[bool] = ..., origin: _Optional[_Union[CorrectionOrigin, str]] = ..., retention_rule: _Optional[str] = ..., retention_due_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., override_retention: _Optional[bool] = ..., override_reason: _Optional[str] = ..., job: _Optional[str] = ..., copies_abandoned: _Optional[_Iterable[str]] = ..., holds: _Optional[_Iterable[_Union[HeldValue, _Mapping]]] = ..., swept: _Optional[bool] = ..., identity_rewrite_refused: _Optional[str] = ...) -> None: ...
 
 class DeleteRequest(_message.Message):
     __slots__ = ("tenant", "target", "reason", "validate_only", "confirm", "override_retention", "override_reason")
@@ -550,6 +554,80 @@ class EditResponse(_message.Message):
     preview: EditPreview
     correction: Correction
     def __init__(self, preview: _Optional[_Union[EditPreview, _Mapping]] = ..., correction: _Optional[_Union[Correction, _Mapping]] = ...) -> None: ...
+
+class MoveRequest(_message.Message):
+    __slots__ = ("tenant", "subject_label", "session_label", "to_subject_label", "reason", "validate_only", "confirm", "rewrite_identity")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    SESSION_LABEL_FIELD_NUMBER: _ClassVar[int]
+    TO_SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
+    CONFIRM_FIELD_NUMBER: _ClassVar[int]
+    REWRITE_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    subject_label: str
+    session_label: str
+    to_subject_label: str
+    reason: str
+    validate_only: bool
+    confirm: str
+    rewrite_identity: bool
+    def __init__(self, tenant: _Optional[str] = ..., subject_label: _Optional[str] = ..., session_label: _Optional[str] = ..., to_subject_label: _Optional[str] = ..., reason: _Optional[str] = ..., validate_only: _Optional[bool] = ..., confirm: _Optional[str] = ..., rewrite_identity: _Optional[bool] = ...) -> None: ...
+
+class MergeRequest(_message.Message):
+    __slots__ = ("tenant", "subject_label", "into_subject_label", "reason", "validate_only", "confirm", "rewrite_identity")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    INTO_SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
+    CONFIRM_FIELD_NUMBER: _ClassVar[int]
+    REWRITE_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    subject_label: str
+    into_subject_label: str
+    reason: str
+    validate_only: bool
+    confirm: str
+    rewrite_identity: bool
+    def __init__(self, tenant: _Optional[str] = ..., subject_label: _Optional[str] = ..., into_subject_label: _Optional[str] = ..., reason: _Optional[str] = ..., validate_only: _Optional[bool] = ..., confirm: _Optional[str] = ..., rewrite_identity: _Optional[bool] = ...) -> None: ...
+
+class MovePreview(_message.Message):
+    __slots__ = ("counts", "sessions", "storages", "holds", "clashes", "issue_time", "purge_time", "confirm")
+    COUNTS_FIELD_NUMBER: _ClassVar[int]
+    SESSIONS_FIELD_NUMBER: _ClassVar[int]
+    STORAGES_FIELD_NUMBER: _ClassVar[int]
+    HOLDS_FIELD_NUMBER: _ClassVar[int]
+    CLASHES_FIELD_NUMBER: _ClassVar[int]
+    ISSUE_TIME_FIELD_NUMBER: _ClassVar[int]
+    PURGE_TIME_FIELD_NUMBER: _ClassVar[int]
+    CONFIRM_FIELD_NUMBER: _ClassVar[int]
+    counts: CorrectionCounts
+    sessions: _containers.RepeatedScalarFieldContainer[str]
+    storages: _containers.RepeatedScalarFieldContainer[str]
+    holds: _containers.RepeatedScalarFieldContainer[str]
+    clashes: _containers.RepeatedScalarFieldContainer[str]
+    issue_time: _timestamp_pb2.Timestamp
+    purge_time: _timestamp_pb2.Timestamp
+    confirm: str
+    def __init__(self, counts: _Optional[_Union[CorrectionCounts, _Mapping]] = ..., sessions: _Optional[_Iterable[str]] = ..., storages: _Optional[_Iterable[str]] = ..., holds: _Optional[_Iterable[str]] = ..., clashes: _Optional[_Iterable[str]] = ..., issue_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., purge_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirm: _Optional[str] = ...) -> None: ...
+
+class MoveResponse(_message.Message):
+    __slots__ = ("preview", "correction")
+    PREVIEW_FIELD_NUMBER: _ClassVar[int]
+    CORRECTION_FIELD_NUMBER: _ClassVar[int]
+    preview: MovePreview
+    correction: Correction
+    def __init__(self, preview: _Optional[_Union[MovePreview, _Mapping]] = ..., correction: _Optional[_Union[Correction, _Mapping]] = ...) -> None: ...
+
+class MergeResponse(_message.Message):
+    __slots__ = ("preview", "correction")
+    PREVIEW_FIELD_NUMBER: _ClassVar[int]
+    CORRECTION_FIELD_NUMBER: _ClassVar[int]
+    preview: MovePreview
+    correction: Correction
+    def __init__(self, preview: _Optional[_Union[MovePreview, _Mapping]] = ..., correction: _Optional[_Union[Correction, _Mapping]] = ...) -> None: ...
 
 class ListCorrectionsRequest(_message.Message):
     __slots__ = ("tenant", "kinds", "states", "page_size", "page_token", "origins")

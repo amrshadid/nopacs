@@ -293,6 +293,16 @@ class CorrectionServiceStub:
                 request_serializer=nopacs_dot_v1_dot_correction__pb2.EditRequest.SerializeToString,
                 response_deserializer=nopacs_dot_v1_dot_correction__pb2.EditResponse.FromString,
                 _registered_method=True)
+        self.Move = channel.unary_unary(
+                '/nopacs.v1.CorrectionService/Move',
+                request_serializer=nopacs_dot_v1_dot_correction__pb2.MoveRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_correction__pb2.MoveResponse.FromString,
+                _registered_method=True)
+        self.Merge = channel.unary_unary(
+                '/nopacs.v1.CorrectionService/Merge',
+                request_serializer=nopacs_dot_v1_dot_correction__pb2.MergeRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_correction__pb2.MergeResponse.FromString,
+                _registered_method=True)
         self.ListCorrections = channel.unary_unary(
                 '/nopacs.v1.CorrectionService/ListCorrections',
                 request_serializer=nopacs_dot_v1_dot_correction__pb2.ListCorrectionsRequest.SerializeToString,
@@ -785,6 +795,78 @@ class CorrectionServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Move(self, request, context):
+        """Move files a session, with its scans, under another subject the tenant
+        holds: the study filed under the wrong patient. With validate_only it
+        answers the preview (what moves, the storages and replicas it reaches,
+        the holds and the session labels that refuse it) and the token to
+        confirm it; with that token it records the move and answers it
+        prepared, then copies every object to its key under the destination
+        in the background, each read back and compared by SHA-256, and
+        publishes it at once (CORRECTION_STATE_COMMITTED, with
+        EVENT_TYPE_CATALOG_CHANGED and EVENT_TYPE_SESSION_MOVED). The old
+        objects are kept until its purge after the grace period, and
+        UndoCorrection files the session back until then. A lookup by the
+        session's old labels answers not found with the reason RELABELED,
+        naming the new ones. With rewrite_identity, once published, every moved
+        instance is given the destination's archived Patient ID and Issuer of
+        Patient ID by an edit of the session (CORRECTION_KIND_EDIT, its own
+        correction), each new revision judged by the profile and its check
+        after; an edit refused is abandoned with its reason and the move
+        stands. A token used once answers the move it made.
+
+        Role: admin on the tenant, never a masked key: where archived data is
+        filed is a person's choice.
+        Audit: one entry in the tenant's log, with the move's id as its object
+        (none for validate_only), and the session's path of labels, the
+        destination, validate_only, rewrite_identity and the reason in details.
+        Errors: unauthenticated, permission denied (no grant; also a tenant
+        that does not exist, for a caller who may not list every tenant; a
+        masked key), invalid (also a missing or too long reason; a label that
+        does not pass the label rule; a destination that is the session's own
+        subject; a confirm token with validate_only, or none without it), not
+        found (the tenant holds no such subject, session or destination; a
+        tenant that does not exist, for a caller who may list every tenant),
+        conflict (the destination holds a session of the same label, compared
+        case folded: relabel one first), precondition (the confirm token is
+        not this server's preview of the same move, what it moves changed
+        since, or it is more than an hour old; the session is its subject's
+        last, which is a merge; a hold covers the session or the destination,
+        with the reason HELD; a correction on either is prepared or not yet
+        purged; a reception of the session is in progress; a rebuild of the
+        tenant is running; the tenant is moved or fenced, with the reason
+        TENANT_MOVED or TENANT_FENCED), unavailable (the tenant's database or
+        a storage does not answer before anything is written; the server runs
+        no corrections; the tenant is not ready).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Merge(self, request, context):
+        """Merge merges a whole subject into another the tenant holds: every
+        session moves as Move moves one, in one correction published at once
+        (with EVENT_TYPE_SUBJECT_MERGED), and the emptied subject is hidden;
+        its label is held for arrivals until the merge ends, and a lookup by
+        it answers not found with the reason RELABELED, naming the
+        destination. UndoCorrection makes the subject again with every
+        session until the purge. validate_only, the token and rewrite_identity
+        are Move's.
+
+        Role: admin on the tenant, never a masked key: where archived data is
+        filed is a person's choice.
+        Audit: one entry in the tenant's log, as Move's, with the subject's
+        label and the destination in details.
+        Errors: those of Move, but for a session: invalid (also a destination
+        that is the subject itself), conflict (the destination holds a session
+        of the label of one of the subject's), precondition (a hold covers the
+        subject or the destination; a correction on either is prepared or not
+        yet purged; a reception of the subject is in progress).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ListCorrections(self, request, context):
         """ListCorrections answers a tenant's corrections, newest first, filtered
         by kind and state.
@@ -829,7 +911,11 @@ class CorrectionServiceServicer:
         were, its new revisions removed from every copy; while it is being
         undone it is never purged, and an undo that may no longer be published
         (a hold placed over it meanwhile) is taken back, the edit committed as
-        it was, to be asked for again. A correction already
+        it was, to be asked for again. A committed move or merge is undone
+        before its purge too: its sessions filed back under their subject (a
+        merged subject made again), the old manifests named again, its copies
+        under the destination removed from every copy; a prepared one is
+        stopped as a relabel is. A correction already
         undone, or a relabel already abandoned, is answered as it stands, so a
         repeated call changes nothing more.
 
@@ -841,9 +927,11 @@ class CorrectionServiceServicer:
         (also a missing or too long reason), not found (the tenant has no
         correction with that id; a tenant that does not exist, for a caller
         who may list every tenant), precondition (the correction is neither a
-        committed delete or edit nor a prepared relabel; an edit taken from its
-        records by a restore, which keeps nothing to write back; a hold covers
-        an edit's revisions; a rebuild of the tenant is running; the tenant is
+        committed delete, edit or move nor a prepared relabel or move; an edit
+        taken from its records by a restore, which keeps nothing to write back;
+        a hold covers an edit's revisions or what a move moved; a later
+        correction touched what a move moved, or data arrived in it, since its
+        publish; a rebuild of the tenant is running; the tenant is
         moved or fenced), unavailable (the tenant's
         database or a storage holding its record does not answer, or the
         tenant is not ready).
@@ -989,6 +1077,16 @@ def add_CorrectionServiceServicer_to_server(servicer, server):
                     servicer.Edit,
                     request_deserializer=nopacs_dot_v1_dot_correction__pb2.EditRequest.FromString,
                     response_serializer=nopacs_dot_v1_dot_correction__pb2.EditResponse.SerializeToString,
+            ),
+            'Move': grpc.unary_unary_rpc_method_handler(
+                    servicer.Move,
+                    request_deserializer=nopacs_dot_v1_dot_correction__pb2.MoveRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_correction__pb2.MoveResponse.SerializeToString,
+            ),
+            'Merge': grpc.unary_unary_rpc_method_handler(
+                    servicer.Merge,
+                    request_deserializer=nopacs_dot_v1_dot_correction__pb2.MergeRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_correction__pb2.MergeResponse.SerializeToString,
             ),
             'ListCorrections': grpc.unary_unary_rpc_method_handler(
                     servicer.ListCorrections,
@@ -1417,6 +1515,60 @@ class CorrectionService:
             '/nopacs.v1.CorrectionService/Edit',
             nopacs_dot_v1_dot_correction__pb2.EditRequest.SerializeToString,
             nopacs_dot_v1_dot_correction__pb2.EditResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Move(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.CorrectionService/Move',
+            nopacs_dot_v1_dot_correction__pb2.MoveRequest.SerializeToString,
+            nopacs_dot_v1_dot_correction__pb2.MoveResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Merge(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.CorrectionService/Merge',
+            nopacs_dot_v1_dot_correction__pb2.MergeRequest.SerializeToString,
+            nopacs_dot_v1_dot_correction__pb2.MergeResponse.FromString,
             options,
             channel_credentials,
             insecure,

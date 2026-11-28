@@ -215,8 +215,8 @@ func existingCorrection(ctx context.Context, tx SendingTx, p tenant.CorrectionPr
 	var id string
 	var err error
 	switch p.Kind {
-	case corr.KindDelete, corr.KindEdit:
-		// A token is of one kind's preview: one of the other kind never
+	case corr.KindDelete, corr.KindEdit, corr.KindMove:
+		// A token is of one kind's preview: one of another kind never
 		// answers this request.
 		_, err = tx.QueryRow(ctx, `SELECT id FROM corrections WHERE confirm_token = ? AND kind = ?`, []any{p.Confirm, string(p.Kind)}, &id)
 	case corr.KindReplace:
@@ -289,6 +289,8 @@ func (k Sending) PrepareCorrection(ctx context.Context, p tenant.CorrectionPrepa
 			err = k.prepareRelabel(ctx, tx, p)
 		case corr.KindEdit:
 			err = k.prepareEdit(ctx, tx, p)
+		case corr.KindMove:
+			err = k.prepareMove(ctx, tx, p)
 		default:
 			err = k.prepareReplace(ctx, tx, &p)
 		}
@@ -367,13 +369,13 @@ func (k Sending) insertCorrection(ctx context.Context, tx SendingTx, p tenant.Co
 	return nil
 }
 
-// superseded counts the objects a relabel, replace or edit keeps until its
-// purge: a relabel's whole old tree (each instance and each scan's two
-// files), a replace's old revision, an edit's old revision of each of its
-// instances.
+// superseded counts the objects a relabel, move, replace or edit keeps
+// until its purge: a relabel's or a move's whole old tree (each instance
+// and each scan's two files), a replace's old revision, an edit's old
+// revision of each of its instances.
 func superseded(kind corr.Kind, r targetRows, c tenant.CorrectionCounts) int64 {
 	switch kind {
-	case corr.KindRelabel:
+	case corr.KindRelabel, corr.KindMove:
 		return c.Instances + 2*int64(len(r.scans))
 	case corr.KindReplace:
 		return 1

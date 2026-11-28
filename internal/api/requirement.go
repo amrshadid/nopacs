@@ -628,6 +628,15 @@ var rules = map[string]rule{
 	nopacsv1connect.CorrectionServiceRelabelProcedure: byMessage(func(r *v1.RelabelRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: relabelDetails(r)}
 	}),
+	// A move or a merge chooses which subject archived data is filed under,
+	// which a masked key may not (access.Requirement.ChoosesDestination);
+	// its preview is the same request, so it is refused the preview too.
+	nopacsv1connect.CorrectionServiceMoveProcedure: byMessage(func(r *v1.MoveRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{Details: moveDetails(r)}
+	}),
+	nopacsv1connect.CorrectionServiceMergeProcedure: byMessage(func(r *v1.MergeRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).ChoosesDestination(), access.Request{Details: mergeDetails(r)}
+	}),
 	nopacsv1connect.CorrectionServiceReplaceProcedure: byMessage(func(r *v1.ReplaceRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Details: map[string]string{detailQuarantined: jobObject(r.GetQuarantinedFile())}}
 	}),

@@ -47,7 +47,7 @@ func (e *Engine) abandonLeft(ctx context.Context) (int, error) {
 		}
 		for _, c := range page {
 			after = c.ID
-			if c.State != record.StatePrepared || c.Kind == record.KindRelabel {
+			if c.State != record.StatePrepared || c.Kind.CopiesObjects() {
 				continue
 			}
 			if err := e.undoWrites(ctx, c); err != nil {
@@ -102,7 +102,7 @@ func (e *Engine) settleForRebuild(ctx context.Context) error {
 		}
 	}
 	if err := e.eachPending(ctx, func(c tenant.Correction) error {
-		if c.State == record.StatePrepared && c.Kind != record.KindRelabel {
+		if c.State == record.StatePrepared && !c.Kind.CopiesObjects() {
 			if err := e.undoWrites(ctx, c); err != nil {
 				return err
 			}
@@ -125,7 +125,7 @@ func (e *Engine) settleForRebuild(ctx context.Context) error {
 	}
 	var left int
 	if err := e.eachPending(ctx, func(c tenant.Correction) error {
-		if c.State == record.StatePrepared && c.Kind != record.KindRelabel {
+		if c.State == record.StatePrepared && !c.Kind.CopiesObjects() {
 			left++
 		}
 		return nil

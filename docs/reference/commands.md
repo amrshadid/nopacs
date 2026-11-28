@@ -325,6 +325,32 @@ Usage: `nopacs correction list <tenant> [--kind KIND] [--state STATE] [flags]`
 | `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
 | `--state` | string |  | only the corrections in this state |
 
+#### `nopacs correction merge`
+
+Merge a subject into another
+
+Usage: `nopacs correction merge <tenant> <subject> --into <subject> --reason TEXT [--preview] [--rewrite-identity] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--into` | string |  | the label of the subject it merges into (required) |
+| `--preview` | bool |  | show what the merge would do, and change nothing |
+| `--reason` | string |  | why, in your own words, kept with the correction (required) |
+| `--rewrite-identity` | bool |  | give the moved instances the other subject's archived Patient ID and issuer |
+
+#### `nopacs correction move`
+
+File a session under another subject
+
+Usage: `nopacs correction move <tenant> <subject>/<session> --to <subject> --reason TEXT [--preview] [--rewrite-identity] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--preview` | bool |  | show what the move would do, and change nothing |
+| `--reason` | string |  | why, in your own words, kept with the correction (required) |
+| `--rewrite-identity` | bool |  | give the moved instances the other subject's archived Patient ID and issuer |
+| `--to` | string |  | the label of the subject the session goes under (required) |
+
 #### `nopacs correction purge`
 
 Purge a correction's hidden or superseded bytes now, before its grace period ends

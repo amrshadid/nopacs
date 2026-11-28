@@ -660,6 +660,14 @@ enum EventType {
   // What the tenant holds against its storage quota passed quota.warn or
   // reached a bound, or fell back.
   EVENT_TYPE_QUOTA = 20;
+
+  // A session was filed under another subject (CorrectionService.Move),
+  // or the move was undone.
+  EVENT_TYPE_SESSION_MOVED = 21;
+
+  // A subject was merged into another (CorrectionService.Merge), or the
+  // merge was undone.
+  EVENT_TYPE_SUBJECT_MERGED = 22;
 }
 
 // AssociationFailure is why a DIMSE receiver turned a caller away. Each
@@ -1149,6 +1157,60 @@ message SenderAllowIdentifiedChanged {
   bool allow_identified = 2;
 }
 
+// SessionMoved is a session filed under another subject, or that move
+// undone, written in the transaction of the change. It names labels and
+// counts only.
+message SessionMoved {
+  // The move's id (CorrectionService).
+  string correction = 1;
+
+  // CORRECTION_STATE_COMMITTED for the move published,
+  // CORRECTION_STATE_UNDONE for it undone.
+  CorrectionState state = 2;
+
+  // The subject the session was under.
+  string from_subject_label = 3;
+
+  // The subject it went under.
+  string to_subject_label = 4;
+
+  // The session's label, the same under both subjects.
+  string session_label = 5;
+
+  // The scans that moved.
+  int64 scans = 6;
+
+  // The instances that moved.
+  int64 instances = 7;
+}
+
+// SubjectMerged is a subject merged into another, or that merge undone,
+// written in the transaction of the change. It names labels and counts
+// only.
+message SubjectMerged {
+  // The merge's id (CorrectionService).
+  string correction = 1;
+
+  // CORRECTION_STATE_COMMITTED for the merge published,
+  // CORRECTION_STATE_UNDONE for it undone.
+  CorrectionState state = 2;
+
+  // The subject merged.
+  string from_subject_label = 3;
+
+  // The subject it merged into.
+  string to_subject_label = 4;
+
+  // The sessions that moved.
+  int64 sessions = 5;
+
+  // The scans that moved.
+  int64 scans = 6;
+
+  // The instances that moved.
+  int64 instances = 7;
+}
+
 // QuotaChanged is what a tenant holds against its storage quota moving to
 // another state (TenantQuota): passing quota.warn, reaching a bound, or
 // falling back under either. One event for each change of state, never
@@ -1266,6 +1328,12 @@ message Event {
 
     // What the tenant holds against its storage quota changed state.
     QuotaChanged quota = 24;
+
+    // A session was filed under another subject, or the move undone.
+    SessionMoved session_moved = 25;
+
+    // A subject was merged into another, or the merge undone.
+    SubjectMerged subject_merged = 26;
   }
 }
 

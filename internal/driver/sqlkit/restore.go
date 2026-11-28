@@ -421,6 +421,9 @@ func (k Sending) insertAdopted(ctx context.Context, tx SendingTx, rec corr.Corre
 	case corr.KindRelabel:
 		level = rec.Relabel.Level
 		to = rec.Relabel.To
+	case corr.KindMove:
+		level = rec.Move.Level
+		to = rec.Move.To
 	case corr.KindReplace:
 		level = corr.LevelInstance
 		instance = rec.Replace.SOPInstanceUID
@@ -473,9 +476,17 @@ func (k Sending) insertAdopted(ctx context.Context, tx SendingTx, rec corr.Corre
 	if err != nil {
 		return err
 	}
-	if rec.Kind == corr.KindRelabel {
+	switch {
+	case rec.Kind == corr.KindRelabel:
 		_, err = tx.Exec(ctx, `INSERT INTO relabels (correction_id, level, old_subject, old_session, old_scan, new_label)
 			VALUES (?, ?, ?, ?, ?, ?)`, rec.ID, level, subject, session, scan, to)
+	case rec.Kind == corr.KindMove && level == corr.LevelSession:
+		// The pointer as the move's prepare writes it (prepareMove).
+		_, err = tx.Exec(ctx, `INSERT INTO relabels (correction_id, level, old_subject, old_session, old_scan, new_label, new_subject)
+			VALUES (?, ?, ?, ?, '', ?, ?)`, rec.ID, level, subject, session, session, to)
+	case rec.Kind == corr.KindMove:
+		_, err = tx.Exec(ctx, `INSERT INTO relabels (correction_id, level, old_subject, old_session, old_scan, new_label, new_subject)
+			VALUES (?, ?, ?, '', '', ?, '')`, rec.ID, level, subject, to)
 	}
 	return err
 }
@@ -494,6 +505,9 @@ func (k Sending) adoptScans(ctx context.Context, tx SendingTx, rec corr.Correcti
 			default:
 				np.Scan = rec.Relabel.To
 			}
+		}
+		if rec.Kind == corr.KindMove {
+			np.Subject = rec.Move.To
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO correction_scans (correction_id, series_uid, study_uid, storage, subject_label,
 			session_label, scan_label, new_subject, new_session, new_scan, instances, bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)

@@ -391,6 +391,8 @@ func recordOf(c tenant.Correction, scans []tenant.CorrectionScan, storage string
 		from := map[string]string{record.LevelSubject: c.Target.Subject, record.LevelSession: c.Target.Session,
 			record.LevelScan: c.Target.Scan}[c.Level]
 		r.Relabel = &record.Relabel{Level: c.Level, From: from, To: c.ToLabel}
+	case record.KindMove:
+		r.Move = &record.Move{Level: c.Level, From: c.Target.Subject, To: c.ToLabel}
 	case record.KindReplace:
 		r.Replace = &record.Replacement{SOPInstanceUID: c.Target.Instance, OldRevision: c.OldRevision, NewRevision: c.NewRevision,
 			OldSHA256: hex.EncodeToString(c.OldSHA256[:]), NewSHA256: hex.EncodeToString(c.NewSHA256[:])}

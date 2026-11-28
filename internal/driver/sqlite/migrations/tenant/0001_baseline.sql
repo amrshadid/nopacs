@@ -1328,7 +1328,7 @@ CREATE TABLE rebuild_differences (
 -- delete's publish ended can still land: the purge removes nothing before it.
 CREATE TABLE corrections (
     id                 TEXT    NOT NULL PRIMARY KEY CHECK (length(id) = 26),
-    kind               TEXT    NOT NULL CHECK (kind IN ('delete', 'relabel', 'replace', 'edit')),
+    kind               TEXT    NOT NULL CHECK (kind IN ('delete', 'relabel', 'replace', 'edit', 'move')),
     level              TEXT    NOT NULL CHECK (level IN ('subject', 'session', 'scan', 'instance')),
     state              TEXT    NOT NULL CHECK (state IN ('prepared', 'committed', 'purging', 'purged', 'undone', 'abandoned')),
     records_state      TEXT    NOT NULL,
@@ -1372,6 +1372,10 @@ CREATE TABLE corrections (
     override_retention INTEGER NOT NULL DEFAULT 0 CHECK (override_retention IN (0, 1)),
     override_reason    TEXT    NOT NULL DEFAULT '',
     copies_in_flight_until INTEGER,
+    -- A move's identity rewrite asked and not yet made.
+    rewrite_identity   INTEGER NOT NULL DEFAULT 0 CHECK (rewrite_identity IN (0, 1)),
+    -- Why a move's identity rewrite was refused for good ('' for none): a fixed phrase, never a value.
+    identity_refused   TEXT    NOT NULL DEFAULT '',
     CHECK ((origin = 'retention') = (retention_rule <> '')),
     CHECK ((retention_rule = '') = (retention_due IS NULL)),
     CHECK ((override_retention = 1) = (override_reason <> '')),
@@ -1597,7 +1601,10 @@ CREATE TABLE relabels (
     old_subject   TEXT NOT NULL,
     old_session   TEXT NOT NULL,
     old_scan      TEXT NOT NULL,
-    new_label     TEXT NOT NULL
+    new_label     TEXT NOT NULL,
+    -- A move's row: a session's move names the subject it went under (new_subject),
+    -- its new_label the session's own; a merge is a subject's row.
+    new_subject   TEXT NOT NULL DEFAULT ''
 ) STRICT, WITHOUT ROWID;
 
 -- A lookup by labels that finds nothing asks which relabel gave them up

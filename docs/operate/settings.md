@@ -189,7 +189,7 @@ most once a second) plus the files taken since, one tenant's files decided one a
 the other, so two files at the edge never both see the same room. A file that cannot
 be checked, because the bounds or the count cannot be read, is refused the same way.
 A file can briefly count twice just after its batch is written, once in the database
-and once among the files taken since, which can only refuse early. A relabel's
+and once among the files taken since, which can only refuse early. Relabel and move
 copies count only from their publish, not while they are being made. At the
 bound a new file is refused as a temporary failure: a C-STORE is answered `A700`
 (out of resources), a STOW-RS request whose parts are all refused for it is

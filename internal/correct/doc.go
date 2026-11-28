@@ -60,4 +60,14 @@
 // it ends, every key it removed is checked absent on every copy attached
 // then, and one found again is removed. A replica detached with abandon_purges
 // is no longer reached.
+//
+// A move (move.go) files a session under another subject, or merges a
+// subject into another, through the relabel's copy: its scans' new paths
+// are their old ones under the destination's label (ContinueRelabel copies
+// and publishes both). It carries a preview's token, as a delete does, and
+// is undone after its publish until its purge: the catalog names the old
+// tree again and the copies are swept. Its identity rewrite, when asked, is
+// an edit of each moved session made once it is published
+// (RewriteIdentity), its values read from the destination's own archived
+// files.
 package correct

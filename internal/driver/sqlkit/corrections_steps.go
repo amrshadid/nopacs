@@ -138,6 +138,15 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 			err = k.publishReplace(ctx, tx, *c, cc)
 		case corr.KindEdit:
 			err = k.publishEdit(ctx, tx, *c, cc)
+		case corr.KindMove:
+			// A hold placed while it copied refuses it, as at its prepare.
+			var holds []string
+			if holds, err = moveHolds(ctx, tx, c.Target, c.ToLabel); err == nil && len(holds) > 0 {
+				err = moveHeld(holds[0])
+			}
+			if err == nil {
+				err = k.publishMove(ctx, tx, *c, cc.Manifests, cc.Snapshots)
+			}
 		}
 		if err != nil {
 			return err
@@ -178,7 +187,17 @@ func (k Sending) CommitCorrection(ctx context.Context, cc tenant.CorrectionCommi
 		if err := k.setState(ctx, tx, c, corr.StateCommitted, cc.Now, ""); err != nil {
 			return err
 		}
-		return changedEvent(ctx, tx, *c, cc.Now)
+		if err := changedEvent(ctx, tx, *c, cc.Now); err != nil {
+			return err
+		}
+		if c.Kind != corr.KindMove {
+			return nil
+		}
+		e, err := tenant.MoveEvent(*c, cc.Now)
+		if err != nil {
+			return err
+		}
+		return tx.WriteEvents(ctx, e)
 	})
 }
 
@@ -503,9 +522,13 @@ func (k Sending) UndoCorrection(ctx context.Context, id, reason string, now time
 	}
 	return k.step(ctx, id, "the correction cannot be undone", func(tx SendingTx, c *tenant.Correction) error {
 		switch {
-		case c.State == corr.StateUndone || (c.Kind == corr.KindRelabel && c.State == corr.StateAbandoned):
-		case c.Kind == corr.KindRelabel && c.State == corr.StatePrepared:
+		case c.State == corr.StateUndone || (c.Kind.CopiesObjects() && c.State == corr.StateAbandoned):
+		case c.Kind.CopiesObjects() && c.State == corr.StatePrepared:
 			if err := k.abandonIn(ctx, tx, c, tenant.StateReasonStopped, now); err != nil {
+				return err
+			}
+		case c.Kind == corr.KindMove && c.State == corr.StateCommitted:
+			if err := k.undoMoveIn(ctx, tx, c, reason, now); err != nil {
 				return err
 			}
 		case c.Kind == corr.KindDelete && c.State == corr.StateCommitted:
@@ -516,7 +539,7 @@ func (k Sending) UndoCorrection(ctx context.Context, id, reason string, now time
 				return err
 			}
 		default:
-			return tenant.Precondition("the correction is neither a committed delete nor a prepared relabel")
+			return tenant.Precondition("the correction is neither a committed delete or move nor a prepared relabel or move")
 		}
 		return tx.Audited(ctx, audit, guard)
 	})
@@ -683,7 +706,7 @@ func (k Sending) RecordCopied(ctx context.Context, id string, copied int64) erro
 		return fault.New(fault.Invalid, "a count of objects copied is not negative")
 	}
 	err := k.stepRow(ctx, id, "the relabel's progress cannot be recorded", func(tx SendingTx, c *tenant.Correction) error {
-		if c.Kind != corr.KindRelabel || c.State != corr.StatePrepared {
+		if !c.Kind.CopiesObjects() || c.State != corr.StatePrepared {
 			return nil
 		}
 		_, err := tx.Exec(ctx, `UPDATE corrections SET objects_copied = ? WHERE id = ?`, copied, id)

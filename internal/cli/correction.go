@@ -43,10 +43,11 @@ purge, and a file that matches it later is quarantined, not archived, until
 "correction allow" lets that value arrive again.
 
 Every command takes the tenant first. Deleting, relabeling, replacing, editing,
-undoing, purging and allowing need the admin role on the tenant; listing and
+moving, merging, undoing, purging and allowing need the admin role on the tenant; listing and
 showing need operator. Each reason is 1 to 1024 bytes, in your own words, never
 a value read from a file.`,
-		a.newCorrectionDelete(), a.newCorrectionDeleteBatch(), a.newCorrectionBatchTargets(), a.newCorrectionRelabel(), a.newCorrectionReplace(), a.newCorrectionEdit(), a.newCorrectionList(),
+		a.newCorrectionDelete(), a.newCorrectionDeleteBatch(), a.newCorrectionBatchTargets(), a.newCorrectionRelabel(), a.newCorrectionReplace(), a.newCorrectionEdit(), a.newCorrectionMove(),
+		a.newCorrectionMerge(), a.newCorrectionList(),
 		a.newCorrectionShow(), a.newCorrectionUndo(), a.newCorrectionPurge(), a.newCorrectionAllow())
 }
 
@@ -109,6 +110,9 @@ func (a *app) correctionDetails(c *v1.Correction) []output.Pair {
 		{Label: "Committed", Value: a.whenOr(c.GetCommitTime(), "-")},
 		{Label: "Purge after", Value: a.whenOr(c.GetPurgeTime(), "-")},
 		{Label: "Ended", Value: a.whenOr(c.GetEndTime(), "-")},
+	}
+	if c.GetIdentityRewriteRefused() != "" {
+		pairs = append(pairs, output.Pair{Label: "Identity rewrite", Value: "refused: " + output.Clean(c.GetIdentityRewriteRefused())})
 	}
 	if c.GetStateReason() != "" {
 		pairs = append(pairs, output.Pair{Label: "Why", Value: output.Clean(c.GetStateReason())})

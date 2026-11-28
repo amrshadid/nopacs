@@ -66,9 +66,9 @@ func (e *Engine) Relabel(ctx context.Context, r RelabelRequest) (tenant.Correcti
 	return c, e.reached(c, "records")
 }
 
-// ContinueRelabel copies every object of a prepared relabel to its key
-// under the new labels (each read back and compared), writes the new
-// manifests and metadata, and publishes it. Run again after a stop it
+// ContinueRelabel copies every object of a prepared relabel, or move, to
+// its key under the new labels (each read back and compared), writes the
+// new manifests and metadata, and publishes it. Run again after a stop it
 // copies again from the start; each object goes to the same key. An object
 // that cannot be read whole, or a target that changed meanwhile, abandons
 // the relabel and removes its copies. A relabel an admin stopped while it
@@ -77,7 +77,7 @@ func (e *Engine) Relabel(ctx context.Context, r RelabelRequest) (tenant.Correcti
 func (e *Engine) ContinueRelabel(ctx context.Context, id string) (tenant.Correction, error) {
 	defer e.startCopy(id)()
 	c, err := e.cfg.Store.Correction(ctx, id)
-	if err != nil || c.Kind != record.KindRelabel || c.State != record.StatePrepared {
+	if err != nil || !c.Kind.CopiesObjects() || c.State != record.StatePrepared {
 		return c, err
 	}
 	if err := e.fence(ctx); err != nil {

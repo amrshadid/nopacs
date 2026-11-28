@@ -165,9 +165,10 @@ type Corrections interface {
 	// or not of that scan is a precondition failure.
 	KeepRolledBack(ctx context.Context, id, series string, manifest, metadata SHA256) error
 	// UndoCorrection undoes a committed delete, showing its rows again as
-	// they were, with the reason given and an EventCatalogChanged, or
-	// abandons a prepared relabel. A row of the catalog that has taken one
-	// of the delete's labels since is a precondition failure.
+	// they were, with the reason given and an EventCatalogChanged, or a
+	// committed move (Moves), or abandons a prepared relabel or move. A row
+	// of the catalog that has taken one of the delete's labels since is a
+	// precondition failure.
 	UndoCorrection(ctx context.Context, id, reason string, now time.Time, audit master.AuditEntry, guard Guard) (Correction, error)
 	// StartPurge moves a committed correction to purging. With audit nil it
 	// is the server's, and only a correction whose PurgeAfter has come and
@@ -316,6 +317,7 @@ type Corrections interface {
 	// ResolveInstances answers each pair, in the order given.
 	ResolveInstances(ctx context.Context, refs []InstanceRef) ([]ResolvedInstance, error)
 	RelabelPointers
+	Moves
 }
 
 // The bounds of corrections.
@@ -486,7 +488,8 @@ type CorrectionPrepare struct {
 	// Target is what it acts on: for a relabel a subject, session or scan;
 	// for a replace, filled by the store from the quarantined file.
 	Target CorrectionTarget
-	// ToLabel is a relabel's new label.
+	// ToLabel is a relabel's new label, or the label of the subject a move
+	// files its sessions under (Moves).
 	ToLabel string
 	// Quarantine is a replace's quarantined file; NewSHA256 and NewSize the
 	// bytes it puts (after de-identification); RestoreLine the instance's
@@ -518,6 +521,10 @@ type CorrectionPrepare struct {
 	// when the edit read it (EditPrepared); the store refuses the edit when
 	// any differs now. Confirm is then the edit preview's token.
 	Edits []EditPrepared
+	// RewriteIdentity says a move asks that its instances be given the
+	// destination's archived subject identity once it is published
+	// (Correction.RewriteIdentity). A move's only.
+	RewriteIdentity bool
 	// Now is when.
 	Now time.Time
 }
@@ -657,7 +664,8 @@ type Correction struct {
 	Level string
 	// Target is what it acts on, by the labels it had.
 	Target CorrectionTarget
-	// ToLabel is a relabel's new label; Quarantine a replace's file.
+	// ToLabel is a relabel's new label, or the subject a move files its
+	// sessions under; Quarantine a replace's file.
 	ToLabel, Quarantine string
 	// Reason, KeyID and Origin say who asked and why.
 	Reason, KeyID, Origin string
@@ -710,6 +718,14 @@ type Correction struct {
 	// Edits are an edit's instances, read with one correction (Correction),
 	// not with a list.
 	Edits []EditedInstance
+	// RewriteIdentity says a move's identity rewrite was asked and is not
+	// yet made (Moves.IdentityRewritten): a start makes it for a move
+	// published before the stop.
+	RewriteIdentity bool
+	// IdentityRefused is, once a move's identity rewrite was refused for
+	// good (Moves.IdentityRefused), one of the fixed phrases that says why;
+	// empty otherwise.
+	IdentityRefused string
 }
 
 // HasEnded reports whether the correction reached an end.

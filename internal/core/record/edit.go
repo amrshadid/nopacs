@@ -11,7 +11,7 @@ import (
 // edit's among them, so not always the next), with its old checksum and,
 // once it is published, its new one.
 func (c Correction) validEdits() error {
-	if c.Relabel != nil || c.Replace != nil || len(c.Instances) > 0 {
+	if c.Relabel != nil || c.Replace != nil || c.Move != nil || len(c.Instances) > 0 {
 		return bad("an edit has its edits and nothing of a relabel, a replace or a delete")
 	}
 	switch c.Level {

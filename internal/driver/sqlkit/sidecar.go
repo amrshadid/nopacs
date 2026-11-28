@@ -40,11 +40,11 @@ const purgeRewritesSQL = `SELECT 1 FROM corrections AS c JOIN correction_scans A
 // edit being undone, that touches the scan of a series: a replace and an
 // edit write the scan's metadata file again and release the scan's lock
 // before their publish keeps that file's digest (an edit's undo before the
-// undo's publish), and a relabel copies the file to its new keys before
-// its publish keeps the copy's. A file another writer puts between the two
+// undo's publish), and a relabel or a move copies the file to its new keys
+// before its publish keeps the copy's. A file another writer puts between the two
 // would be named by a digest of another file once the publish commits.
 const preparedRewritesSQL = `SELECT 1 FROM corrections AS c JOIN correction_scans AS cs ON cs.correction_id = c.id
-	AND cs.series_uid = ? WHERE (c.state = 'prepared' AND c.kind IN ('replace', 'relabel', 'edit')
+	AND cs.series_uid = ? WHERE (c.state = 'prepared' AND c.kind IN ('replace', 'relabel', 'move', 'edit')
 	OR c.state = 'committed' AND c.kind = 'edit' AND c.state_reason = '` + tenant.StateReasonUndoing + `') LIMIT 1`
 
 // SetSidecarInTx keeps, in the caller's transaction, sidecar as the digest

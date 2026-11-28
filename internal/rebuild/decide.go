@@ -26,8 +26,9 @@ import (
 //     adopts it by (record.Correction.Alone): a delete committed, purging,
 //     purged or still prepared hides what it names (the last the
 //     fail-closed side, counted unresolved), one abandoned or undone shows
-//     it; a relabel published hides its old tree, one prepared or
-//     abandoned its new tree; a replace hides nothing.
+//     it; a relabel or a move published hides its old tree, one prepared
+//     or abandoned (or a move undone) its new tree; a replace hides
+//     nothing.
 //
 // A row that cannot be read is an error: the unit's attempt fails rather
 // than apply a record the database may contradict.

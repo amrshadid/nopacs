@@ -366,8 +366,8 @@ func (c coverage) add(to, from label.Path) {
 
 // coverageOf reads what the corrections not yet purged leave on the
 // storage: by the database's rows, a published delete's scans and a
-// relabel's old and new trees; by the records with no row that verify, the
-// same. A correction's scans are those of catalog, the storage whose scans
+// relabel's or a move's old and new trees; by the records with no row that
+// verify, the same. A correction's scans are those of catalog, the storage whose scans
 // the catalog holds for this one (its primary, for a replica, which holds
 // the same keys). It returns how many records have no row, and how many of
 // those do not verify.
@@ -389,7 +389,7 @@ func (u *unitRun) coverageOf(store Storage, storage, catalog string) (coverage, 
 				continue
 			}
 			cov.add(s.Path, s.Path)
-			if c.Kind == record.KindRelabel && s.NewPath != (label.Path{}) {
+			if c.Kind.CopiesObjects() && s.NewPath != (label.Path{}) {
 				cov.add(s.NewPath, s.NewPath)
 				cov.add(s.NewPath, s.Path)
 			}
@@ -416,6 +416,11 @@ func (u *unitRun) coverageOf(store Storage, storage, catalog string) (coverage, 
 					cov.add(to, to)
 					cov.add(to, p)
 				}
+			}
+			if r.Move != nil {
+				to := tenant.MovedPath(p, r.Move.To)
+				cov.add(to, to)
+				cov.add(to, p)
 			}
 		}
 	}

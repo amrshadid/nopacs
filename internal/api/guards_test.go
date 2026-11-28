@@ -255,6 +255,13 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 			return call(c.corrections.Edit, &v1.EditRequest{Tenant: name, Target: &v1.CorrectionTarget{SubjectLabel: "S1"},
 				Changes: []*v1.EditChange{{Attribute: "SeriesDescription", Value: "x"}}, Reason: "x", ValidateOnly: true})
 		},
+		"Move": func(c clients) outcome {
+			return call(c.corrections.Move, &v1.MoveRequest{Tenant: name, SubjectLabel: "S1", SessionLabel: "E1", ToSubjectLabel: "S2", Reason: "x",
+				ValidateOnly: true})
+		},
+		"Merge": func(c clients) outcome {
+			return call(c.corrections.Merge, &v1.MergeRequest{Tenant: name, SubjectLabel: "S1", IntoSubjectLabel: "S2", Reason: "x", ValidateOnly: true})
+		},
 		"ListCorrections": func(c clients) outcome {
 			return call(c.corrections.ListCorrections, &v1.ListCorrectionsRequest{Tenant: name})
 		},

@@ -91,14 +91,14 @@ func (s State) Published() bool {
 }
 
 // CanFollow reports whether a correction of that kind may go from state s to
-// next: the forward moves only, and undone only for a delete or an edit,
-// whose superseded revisions are kept until its purge.
+// next: the forward moves only, and undone only for a delete, an edit or a
+// move, whose superseded revisions or old tree are kept until its purge.
 func (s State) CanFollow(next State, kind Kind) bool {
 	switch s {
 	case StatePrepared:
 		return next == StateCommitted || next == StateAbandoned
 	case StateCommitted:
-		return next == StatePurging || (next == StateUndone && (kind == KindDelete || kind == KindEdit))
+		return next == StatePurging || (next == StateUndone && (kind == KindDelete || kind == KindEdit || kind == KindMove))
 	case StatePurging:
 		return next == StatePurged
 	}
@@ -216,8 +216,9 @@ type Correction struct {
 	// Kind says what the correction does.
 	Kind Kind `json:"kind"`
 	// Level is what a delete removes, or what an edit names: LevelSubject,
-	// LevelSession, LevelScan or LevelInstance. Empty for a relabel, whose
-	// level is its Relabel's, and for a replace, which is of one instance.
+	// LevelSession, LevelScan or LevelInstance. Empty for a relabel or a
+	// move, whose level is its Relabel's or Move's, and for a replace, which
+	// is of one instance.
 	Level string `json:"level,omitempty"`
 	// State says how far it got.
 	State State `json:"state"`
@@ -240,6 +241,8 @@ type Correction struct {
 	Relabel *Relabel `json:"relabel,omitempty"`
 	// Replace is set for a replace.
 	Replace *Replacement `json:"replace,omitempty"`
+	// Move is set for a move.
+	Move *Move `json:"move,omitempty"`
 	// Edits are, for an edit, the instances of the record's scans it gives a
 	// new revision, in byte order of SOP Instance UID.
 	Edits []Replacement `json:"edits,omitempty"`
@@ -297,15 +300,15 @@ func (c Correction) Validate() error {
 		return bad("id: %v", err)
 	}
 	switch c.Kind {
-	case KindDelete, KindRelabel, KindReplace, KindEdit:
+	case KindDelete, KindRelabel, KindReplace, KindEdit, KindMove:
 	default:
-		return bad("kind is delete, relabel, replace or edit")
+		return bad("kind is delete, relabel, replace, edit or move")
 	}
 	if !c.State.Valid() {
 		return bad("state is not one of the six")
 	}
-	if c.State == StateUndone && c.Kind != KindDelete && c.Kind != KindEdit {
-		return bad("only a delete or an edit is undone")
+	if c.State == StateUndone && c.Kind != KindDelete && c.Kind != KindEdit && c.Kind != KindMove {
+		return bad("only a delete, an edit or a move is undone")
 	}
 	if !lowerHex64(c.ReasonSHA256) {
 		return bad("reason_sha256 is 64 lowercase hex digits")
@@ -409,8 +412,8 @@ func (s Scan) labelAt(level string) string {
 func (c Correction) validTarget() error {
 	switch c.Kind {
 	case KindDelete:
-		if c.Relabel != nil || c.Replace != nil || len(c.Edits) > 0 {
-			return bad("a delete has no relabel, replace or edits")
+		if c.Relabel != nil || c.Replace != nil || c.Move != nil || len(c.Edits) > 0 {
+			return bad("a delete has no relabel, replace, move or edits")
 		}
 		switch c.Level {
 		case LevelSubject, LevelSession, LevelScan, LevelInstance:
@@ -439,7 +442,7 @@ func (c Correction) validTarget() error {
 		}
 	case KindRelabel:
 		r := c.Relabel
-		if r == nil || c.Replace != nil || len(c.Edits) > 0 || len(c.Instances) > 0 || c.Level != "" {
+		if r == nil || c.Replace != nil || c.Move != nil || len(c.Edits) > 0 || len(c.Instances) > 0 || c.Level != "" {
 			return bad("a relabel has its relabel and nothing of a replace, an edit or a delete")
 		}
 		if r.Level != LevelSubject && r.Level != LevelSession && r.Level != LevelScan {
@@ -456,7 +459,7 @@ func (c Correction) validTarget() error {
 		}
 	case KindReplace:
 		r := c.Replace
-		if r == nil || c.Relabel != nil || len(c.Edits) > 0 || len(c.Instances) > 0 || len(c.Scans) != 1 || c.Level != "" ||
+		if r == nil || c.Relabel != nil || c.Move != nil || len(c.Edits) > 0 || len(c.Instances) > 0 || len(c.Scans) != 1 || c.Level != "" ||
 			r.SeriesUID != "" {
 			return bad("a replace has its replace, one scan, and nothing else")
 		}
@@ -477,6 +480,8 @@ func (c Correction) validTarget() error {
 		}
 	case KindEdit:
 		return c.validEdits()
+	case KindMove:
+		return c.validMove()
 	}
 	return nil
 }

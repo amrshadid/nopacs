@@ -39,7 +39,7 @@ const correctionColumns = `id, kind, level, state, records_state, origin, subjec
 // a row is written with them (correctionColumns, which a restore writes
 // too), then those a later change gave a default.
 const correctionSelect = correctionColumns + `, swept, retention_rule, retention_due, override_retention, override_reason,
-	copies_in_flight_until`
+	copies_in_flight_until, rewrite_identity, identity_refused`
 
 // scanCorrection reads one row of correctionSelect.
 func scanCorrection(row Row) (tenant.Correction, error) {
@@ -52,7 +52,8 @@ func scanCorrection(row Row) (tenant.Correction, error) {
 		&c.StateReason, &c.OldRevision, &c.NewRevision, &oldSum, &newSum, &received, &c.NewSize, &c.InstanceKey,
 		&c.InstanceSize, &c.RestoreLine, &c.ArrivalsAllowed, &c.UndoReason, &c.Unresolved, &c.Counts.Subjects,
 		&c.Counts.Sessions, &c.Counts.Scans, &c.Counts.Instances, &c.Counts.Bytes, &c.Counts.ObjectsCopied,
-		&c.Counts.ObjectsSuperseded, &c.Swept, &c.RetentionRule, &due, &c.OverrideRetention, &c.OverrideReason, &inFlight)
+		&c.Counts.ObjectsSuperseded, &c.Swept, &c.RetentionRule, &due, &c.OverrideRetention, &c.OverrideReason, &inFlight,
+		&c.RewriteIdentity, &c.IdentityRefused)
 	c.Kind, c.State, c.RecordsState = corr.Kind(kind), corr.State(state), corr.State(records)
 	c.Created, c.CommitTime, c.PurgeAfter, c.Ended, c.RetentionDue = created.T, committed.T, purgeAfter.T, ended.T, due.T
 	c.CopiesInFlightUntil = inFlight.T
@@ -318,8 +319,9 @@ func (k Sending) PendingCorrections(ctx context.Context, after string, limit int
 	}
 	return k.readCorrections(ctx, `SELECT `+correctionSelect+` FROM corrections WHERE id > ?
 		AND (state IN ('prepared', 'committed', 'purging') OR records_state <> state
-			OR (kind = 'relabel' AND state = 'abandoned' AND swept = ?) OR (kind = 'edit' AND state = 'undone' AND swept = ?))
-		ORDER BY id LIMIT ?`, after, k.D.Bool(false), k.D.Bool(false), limit)
+			OR (kind = 'relabel' AND state = 'abandoned' AND swept = ?) OR (kind = 'edit' AND state = 'undone' AND swept = ?)
+			OR (kind = 'move' AND state IN ('abandoned', 'undone') AND swept = ?))
+		ORDER BY id LIMIT ?`, after, k.D.Bool(false), k.D.Bool(false), k.D.Bool(false), limit)
 }
 
 // DueCorrections implements tenant.Corrections.
@@ -394,24 +396,43 @@ func overlaps(a, b label.Path) bool {
 // undone edit whose new revisions are not yet removed from every copy
 // (swept) has not ended either: its sweep still removes objects under the
 // scans' labels. (A SQLite integer and a Postgres boolean both read as a
-// truth value under NOT.)
+// truth value under NOT.) A relabel or a move whose copies are not yet
+// swept does not hold its new labels: its sweep leaves the copies of any
+// scan another correction holds the new path of (SweepableScans).
 func checkOverlap(ctx context.Context, tx SendingTx, path label.Path, except string) error {
+	return overlapIn(ctx, tx, path, except, false)
+}
+
+// checkEditOverlap is checkOverlap for an edit, which alone may overlap a
+// committed move: the identity a move rewrites is written by an edit of
+// what it moved, made once it is published (its new revisions under the
+// destination, never in the move's old tree), and the move's undo is
+// refused while any later correction of its scans stands.
+func checkEditOverlap(ctx context.Context, tx SendingTx, path label.Path, except string) error {
+	return overlapIn(ctx, tx, path, except, true)
+}
+
+// overlapIn is checkOverlap, leaving out committed moves when movesAllowed.
+func overlapIn(ctx context.Context, tx SendingTx, path label.Path, except string, movesAllowed bool) error {
 	busy := false
 	folded := label.Fold(path.Subject)
-	err := tx.Query(ctx, `SELECT cs.subject_label, cs.session_label, cs.scan_label, cs.new_subject, cs.new_session, cs.new_scan
+	q := `SELECT cs.subject_label, cs.session_label, cs.scan_label, cs.new_subject, cs.new_session, cs.new_scan
 		FROM correction_scans AS cs JOIN corrections AS c ON c.id = cs.correction_id
 		WHERE (c.state IN ('prepared', 'committed', 'purging') OR c.kind = 'edit' AND c.state = 'undone' AND NOT c.swept) AND c.id <> ?
-		AND (lower(cs.subject_label) = ? OR lower(cs.new_subject) = ?)`,
-		[]any{except, folded, folded}, func(r Row) error {
-			var old, nw label.Path
-			if err := r.Scan(&old.Subject, &old.Session, &old.Scan, &nw.Subject, &nw.Session, &nw.Scan); err != nil {
-				return err
-			}
-			if overlaps(path, old) || overlaps(path, nw) {
-				busy = true
-			}
-			return nil
-		})
+		AND (lower(cs.subject_label) = ? OR lower(cs.new_subject) = ?)`
+	if movesAllowed {
+		q += ` AND NOT (c.kind = 'move' AND c.state = 'committed')`
+	}
+	err := tx.Query(ctx, q, []any{except, folded, folded}, func(r Row) error {
+		var old, nw label.Path
+		if err := r.Scan(&old.Subject, &old.Session, &old.Scan, &nw.Subject, &nw.Session, &nw.Scan); err != nil {
+			return err
+		}
+		if overlaps(path, old) || overlaps(path, nw) {
+			busy = true
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}

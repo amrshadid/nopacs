@@ -77,14 +77,15 @@ func editTargetsIn(ctx context.Context, tx SendingTx, t tenant.CorrectionTarget,
 }
 
 // prepareEdit records an edit: its target held by no hold and no other
-// correction, no reception of it open, and every instance of it the one the
-// edit read (its revision and checksum), none left out.
+// correction but a committed move (checkEditOverlap), no reception of it
+// open, and every instance of it the one the edit read (its revision and
+// checksum), none left out.
 func (k Sending) prepareEdit(ctx context.Context, tx SendingTx, p tenant.CorrectionPrepare) error {
 	issued, ok := tenant.ConfirmIssued(p.Confirm)
 	if !ok || p.Now.Sub(issued) > tenant.MaxConfirmAge || issued.After(p.Now.Add(time.Minute)) {
 		return tenant.Precondition("the confirm token is not one of an edit's preview made within the hour")
 	}
-	if err := checkOverlap(ctx, tx, p.Target.Path(), p.ID); err != nil {
+	if err := checkEditOverlap(ctx, tx, p.Target.Path(), p.ID); err != nil {
 		return err
 	}
 	holds, err := activeHolds(ctx, tx)

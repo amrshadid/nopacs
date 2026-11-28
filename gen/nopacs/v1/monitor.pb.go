@@ -154,6 +154,12 @@ const (
 	// What the tenant holds against its storage quota passed quota.warn or
 	// reached a bound, or fell back.
 	EventType_EVENT_TYPE_QUOTA EventType = 20
+	// A session was filed under another subject (CorrectionService.Move),
+	// or the move was undone.
+	EventType_EVENT_TYPE_SESSION_MOVED EventType = 21
+	// A subject was merged into another (CorrectionService.Merge), or the
+	// merge was undone.
+	EventType_EVENT_TYPE_SUBJECT_MERGED EventType = 22
 )
 
 // Enum value maps for EventType.
@@ -180,6 +186,8 @@ var (
 		18: "EVENT_TYPE_QUARANTINE_AGING",
 		19: "EVENT_TYPE_SENDER_ALLOW_IDENTIFIED",
 		20: "EVENT_TYPE_QUOTA",
+		21: "EVENT_TYPE_SESSION_MOVED",
+		22: "EVENT_TYPE_SUBJECT_MERGED",
 	}
 	EventType_value = map[string]int32{
 		"EVENT_TYPE_UNSPECIFIED":             0,
@@ -203,6 +211,8 @@ var (
 		"EVENT_TYPE_QUARANTINE_AGING":        18,
 		"EVENT_TYPE_SENDER_ALLOW_IDENTIFIED": 19,
 		"EVENT_TYPE_QUOTA":                   20,
+		"EVENT_TYPE_SESSION_MOVED":           21,
+		"EVENT_TYPE_SUBJECT_MERGED":          22,
 	}
 )
 
@@ -3520,6 +3530,212 @@ func (x *SenderAllowIdentifiedChanged) GetAllowIdentified() bool {
 	return false
 }
 
+// SessionMoved is a session filed under another subject, or that move
+// undone, written in the transaction of the change. It names labels and
+// counts only.
+type SessionMoved struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The move's id (CorrectionService).
+	Correction string `protobuf:"bytes,1,opt,name=correction,proto3" json:"correction,omitempty"`
+	// CORRECTION_STATE_COMMITTED for the move published,
+	// CORRECTION_STATE_UNDONE for it undone.
+	State CorrectionState `protobuf:"varint,2,opt,name=state,proto3,enum=nopacs.v1.CorrectionState" json:"state,omitempty"`
+	// The subject the session was under.
+	FromSubjectLabel string `protobuf:"bytes,3,opt,name=from_subject_label,json=fromSubjectLabel,proto3" json:"from_subject_label,omitempty"`
+	// The subject it went under.
+	ToSubjectLabel string `protobuf:"bytes,4,opt,name=to_subject_label,json=toSubjectLabel,proto3" json:"to_subject_label,omitempty"`
+	// The session's label, the same under both subjects.
+	SessionLabel string `protobuf:"bytes,5,opt,name=session_label,json=sessionLabel,proto3" json:"session_label,omitempty"`
+	// The scans that moved.
+	Scans int64 `protobuf:"varint,6,opt,name=scans,proto3" json:"scans,omitempty"`
+	// The instances that moved.
+	Instances     int64 `protobuf:"varint,7,opt,name=instances,proto3" json:"instances,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SessionMoved) Reset() {
+	*x = SessionMoved{}
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionMoved) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionMoved) ProtoMessage() {}
+
+func (x *SessionMoved) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionMoved.ProtoReflect.Descriptor instead.
+func (*SessionMoved) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *SessionMoved) GetCorrection() string {
+	if x != nil {
+		return x.Correction
+	}
+	return ""
+}
+
+func (x *SessionMoved) GetState() CorrectionState {
+	if x != nil {
+		return x.State
+	}
+	return CorrectionState_CORRECTION_STATE_UNSPECIFIED
+}
+
+func (x *SessionMoved) GetFromSubjectLabel() string {
+	if x != nil {
+		return x.FromSubjectLabel
+	}
+	return ""
+}
+
+func (x *SessionMoved) GetToSubjectLabel() string {
+	if x != nil {
+		return x.ToSubjectLabel
+	}
+	return ""
+}
+
+func (x *SessionMoved) GetSessionLabel() string {
+	if x != nil {
+		return x.SessionLabel
+	}
+	return ""
+}
+
+func (x *SessionMoved) GetScans() int64 {
+	if x != nil {
+		return x.Scans
+	}
+	return 0
+}
+
+func (x *SessionMoved) GetInstances() int64 {
+	if x != nil {
+		return x.Instances
+	}
+	return 0
+}
+
+// SubjectMerged is a subject merged into another, or that merge undone,
+// written in the transaction of the change. It names labels and counts
+// only.
+type SubjectMerged struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The merge's id (CorrectionService).
+	Correction string `protobuf:"bytes,1,opt,name=correction,proto3" json:"correction,omitempty"`
+	// CORRECTION_STATE_COMMITTED for the merge published,
+	// CORRECTION_STATE_UNDONE for it undone.
+	State CorrectionState `protobuf:"varint,2,opt,name=state,proto3,enum=nopacs.v1.CorrectionState" json:"state,omitempty"`
+	// The subject merged.
+	FromSubjectLabel string `protobuf:"bytes,3,opt,name=from_subject_label,json=fromSubjectLabel,proto3" json:"from_subject_label,omitempty"`
+	// The subject it merged into.
+	ToSubjectLabel string `protobuf:"bytes,4,opt,name=to_subject_label,json=toSubjectLabel,proto3" json:"to_subject_label,omitempty"`
+	// The sessions that moved.
+	Sessions int64 `protobuf:"varint,5,opt,name=sessions,proto3" json:"sessions,omitempty"`
+	// The scans that moved.
+	Scans int64 `protobuf:"varint,6,opt,name=scans,proto3" json:"scans,omitempty"`
+	// The instances that moved.
+	Instances     int64 `protobuf:"varint,7,opt,name=instances,proto3" json:"instances,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubjectMerged) Reset() {
+	*x = SubjectMerged{}
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubjectMerged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubjectMerged) ProtoMessage() {}
+
+func (x *SubjectMerged) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubjectMerged.ProtoReflect.Descriptor instead.
+func (*SubjectMerged) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *SubjectMerged) GetCorrection() string {
+	if x != nil {
+		return x.Correction
+	}
+	return ""
+}
+
+func (x *SubjectMerged) GetState() CorrectionState {
+	if x != nil {
+		return x.State
+	}
+	return CorrectionState_CORRECTION_STATE_UNSPECIFIED
+}
+
+func (x *SubjectMerged) GetFromSubjectLabel() string {
+	if x != nil {
+		return x.FromSubjectLabel
+	}
+	return ""
+}
+
+func (x *SubjectMerged) GetToSubjectLabel() string {
+	if x != nil {
+		return x.ToSubjectLabel
+	}
+	return ""
+}
+
+func (x *SubjectMerged) GetSessions() int64 {
+	if x != nil {
+		return x.Sessions
+	}
+	return 0
+}
+
+func (x *SubjectMerged) GetScans() int64 {
+	if x != nil {
+		return x.Scans
+	}
+	return 0
+}
+
+func (x *SubjectMerged) GetInstances() int64 {
+	if x != nil {
+		return x.Instances
+	}
+	return 0
+}
+
 // QuotaChanged is what a tenant holds against its storage quota moving to
 // another state (TenantQuota): passing quota.warn, reaching a bound, or
 // falling back under either. One event for each change of state, never
@@ -3543,7 +3759,7 @@ type QuotaChanged struct {
 
 func (x *QuotaChanged) Reset() {
 	*x = QuotaChanged{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3555,7 +3771,7 @@ func (x *QuotaChanged) String() string {
 func (*QuotaChanged) ProtoMessage() {}
 
 func (x *QuotaChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[33]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3568,7 +3784,7 @@ func (x *QuotaChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuotaChanged.ProtoReflect.Descriptor instead.
 func (*QuotaChanged) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{33}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *QuotaChanged) GetState() QuotaState {
@@ -3626,7 +3842,7 @@ type CatalogRebuilt struct {
 
 func (x *CatalogRebuilt) Reset() {
 	*x = CatalogRebuilt{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3638,7 +3854,7 @@ func (x *CatalogRebuilt) String() string {
 func (*CatalogRebuilt) ProtoMessage() {}
 
 func (x *CatalogRebuilt) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[34]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3651,7 +3867,7 @@ func (x *CatalogRebuilt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogRebuilt.ProtoReflect.Descriptor instead.
 func (*CatalogRebuilt) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{34}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *CatalogRebuilt) GetJob() string {
@@ -3713,6 +3929,8 @@ type Event struct {
 	//	*Event_QuarantineAging
 	//	*Event_SenderAllowIdentified
 	//	*Event_Quota
+	//	*Event_SessionMoved
+	//	*Event_SubjectMerged
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3720,7 +3938,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3732,7 +3950,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[35]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3745,7 +3963,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{35}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *Event) GetCursor() string {
@@ -3963,6 +4181,24 @@ func (x *Event) GetQuota() *QuotaChanged {
 	return nil
 }
 
+func (x *Event) GetSessionMoved() *SessionMoved {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_SessionMoved); ok {
+			return x.SessionMoved
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetSubjectMerged() *SubjectMerged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_SubjectMerged); ok {
+			return x.SubjectMerged
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -4067,6 +4303,16 @@ type Event_Quota struct {
 	Quota *QuotaChanged `protobuf:"bytes,24,opt,name=quota,proto3,oneof"`
 }
 
+type Event_SessionMoved struct {
+	// A session was filed under another subject, or the move undone.
+	SessionMoved *SessionMoved `protobuf:"bytes,25,opt,name=session_moved,json=sessionMoved,proto3,oneof"`
+}
+
+type Event_SubjectMerged struct {
+	// A subject was merged into another, or the merge undone.
+	SubjectMerged *SubjectMerged `protobuf:"bytes,26,opt,name=subject_merged,json=subjectMerged,proto3,oneof"`
+}
+
 func (*Event_AssociationFailed) isEvent_Payload() {}
 
 func (*Event_ReceptionStep) isEvent_Payload() {}
@@ -4106,6 +4352,10 @@ func (*Event_QuarantineAging) isEvent_Payload() {}
 func (*Event_SenderAllowIdentified) isEvent_Payload() {}
 
 func (*Event_Quota) isEvent_Payload() {}
+
+func (*Event_SessionMoved) isEvent_Payload() {}
+
+func (*Event_SubjectMerged) isEvent_Payload() {}
 
 // WatchKeepAlive opens every stream, and is sent again when no event has
 // been sent for 15 seconds.
@@ -4155,7 +4405,7 @@ type WatchKeepAlive struct {
 
 func (x *WatchKeepAlive) Reset() {
 	*x = WatchKeepAlive{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4167,7 +4417,7 @@ func (x *WatchKeepAlive) String() string {
 func (*WatchKeepAlive) ProtoMessage() {}
 
 func (x *WatchKeepAlive) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[36]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4180,7 +4430,7 @@ func (x *WatchKeepAlive) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchKeepAlive.ProtoReflect.Descriptor instead.
 func (*WatchKeepAlive) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{36}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *WatchKeepAlive) GetTime() *timestamppb.Timestamp {
@@ -4265,7 +4515,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[37]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4277,7 +4527,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[37]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4290,7 +4540,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{37}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *WatchRequest) GetScope() *Scope {
@@ -4344,7 +4594,7 @@ type WatchResponse struct {
 
 func (x *WatchResponse) Reset() {
 	*x = WatchResponse{}
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[38]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4356,7 +4606,7 @@ func (x *WatchResponse) String() string {
 func (*WatchResponse) ProtoMessage() {}
 
 func (x *WatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_monitor_proto_msgTypes[38]
+	mi := &file_nopacs_v1_monitor_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4369,7 +4619,7 @@ func (x *WatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
 func (*WatchResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{38}
+	return file_nopacs_v1_monitor_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *WatchResponse) GetKind() isWatchResponse_Kind {
@@ -4696,7 +4946,27 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\trecovered\x18\x06 \x01(\bR\trecovered\"a\n" +
 	"\x1cSenderAllowIdentifiedChanged\x12\x16\n" +
 	"\x06sender\x18\x01 \x01(\tR\x06sender\x12)\n" +
-	"\x10allow_identified\x18\x02 \x01(\bR\x0fallowIdentified\"\xcb\x01\n" +
+	"\x10allow_identified\x18\x02 \x01(\bR\x0fallowIdentified\"\x91\x02\n" +
+	"\fSessionMoved\x12\x1e\n" +
+	"\n" +
+	"correction\x18\x01 \x01(\tR\n" +
+	"correction\x120\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x1a.nopacs.v1.CorrectionStateR\x05state\x12,\n" +
+	"\x12from_subject_label\x18\x03 \x01(\tR\x10fromSubjectLabel\x12(\n" +
+	"\x10to_subject_label\x18\x04 \x01(\tR\x0etoSubjectLabel\x12#\n" +
+	"\rsession_label\x18\x05 \x01(\tR\fsessionLabel\x12\x14\n" +
+	"\x05scans\x18\x06 \x01(\x03R\x05scans\x12\x1c\n" +
+	"\tinstances\x18\a \x01(\x03R\tinstances\"\x89\x02\n" +
+	"\rSubjectMerged\x12\x1e\n" +
+	"\n" +
+	"correction\x18\x01 \x01(\tR\n" +
+	"correction\x120\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x1a.nopacs.v1.CorrectionStateR\x05state\x12,\n" +
+	"\x12from_subject_label\x18\x03 \x01(\tR\x10fromSubjectLabel\x12(\n" +
+	"\x10to_subject_label\x18\x04 \x01(\tR\x0etoSubjectLabel\x12\x1a\n" +
+	"\bsessions\x18\x05 \x01(\x03R\bsessions\x12\x14\n" +
+	"\x05scans\x18\x06 \x01(\x03R\x05scans\x12\x1c\n" +
+	"\tinstances\x18\a \x01(\x03R\tinstances\"\xcb\x01\n" +
 	"\fQuotaChanged\x12+\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x15.nopacs.v1.QuotaStateR\x05state\x12\x1d\n" +
 	"\n" +
@@ -4709,7 +4979,7 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x03job\x18\x01 \x01(\tR\x03job\x12\x1c\n" +
 	"\tinstances\x18\x02 \x01(\x03R\tinstances\x12\x1f\n" +
 	"\vnew_history\x18\x03 \x01(\bR\n" +
-	"newHistory\"\x9b\f\n" +
+	"newHistory\"\x9e\r\n" +
 	"\x05Event\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\tR\x06cursor\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x16\n" +
@@ -4735,7 +5005,9 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x0fretention_clock\x18\x15 \x01(\v2\x19.nopacs.v1.RetentionClockH\x00R\x0eretentionClock\x12G\n" +
 	"\x10quarantine_aging\x18\x16 \x01(\v2\x1a.nopacs.v1.QuarantineAgingH\x00R\x0fquarantineAging\x12a\n" +
 	"\x17sender_allow_identified\x18\x17 \x01(\v2'.nopacs.v1.SenderAllowIdentifiedChangedH\x00R\x15senderAllowIdentified\x12/\n" +
-	"\x05quota\x18\x18 \x01(\v2\x17.nopacs.v1.QuotaChangedH\x00R\x05quotaB\t\n" +
+	"\x05quota\x18\x18 \x01(\v2\x17.nopacs.v1.QuotaChangedH\x00R\x05quota\x12>\n" +
+	"\rsession_moved\x18\x19 \x01(\v2\x17.nopacs.v1.SessionMovedH\x00R\fsessionMoved\x12A\n" +
+	"\x0esubject_merged\x18\x1a \x01(\v2\x18.nopacs.v1.SubjectMergedH\x00R\rsubjectMergedB\t\n" +
 	"\apayload\"\x8b\x04\n" +
 	"\x0eWatchKeepAlive\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x16\n" +
@@ -4771,7 +5043,7 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x16STORAGE_VERSIONING_OFF\x10\x02\x12\x1e\n" +
 	"\x1aSTORAGE_VERSIONING_ENABLED\x10\x03\x12 \n" +
 	"\x1cSTORAGE_VERSIONING_SUSPENDED\x10\x04\x12\x1e\n" +
-	"\x1aSTORAGE_VERSIONING_UNKNOWN\x10\x05*\x96\x05\n" +
+	"\x1aSTORAGE_VERSIONING_UNKNOWN\x10\x05*\xd3\x05\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dEVENT_TYPE_ASSOCIATION_FAILED\x10\x01\x12\x1d\n" +
@@ -4794,7 +5066,9 @@ const file_nopacs_v1_monitor_proto_rawDesc = "" +
 	"\x1aEVENT_TYPE_RETENTION_CLOCK\x10\x11\x12\x1f\n" +
 	"\x1bEVENT_TYPE_QUARANTINE_AGING\x10\x12\x12&\n" +
 	"\"EVENT_TYPE_SENDER_ALLOW_IDENTIFIED\x10\x13\x12\x14\n" +
-	"\x10EVENT_TYPE_QUOTA\x10\x14*\xba\x03\n" +
+	"\x10EVENT_TYPE_QUOTA\x10\x14\x12\x1c\n" +
+	"\x18EVENT_TYPE_SESSION_MOVED\x10\x15\x12\x1d\n" +
+	"\x19EVENT_TYPE_SUBJECT_MERGED\x10\x16*\xba\x03\n" +
 	"\x12AssociationFailure\x12#\n" +
 	"\x1fASSOCIATION_FAILURE_UNSPECIFIED\x10\x00\x12*\n" +
 	"&ASSOCIATION_FAILURE_CALLER_NOT_ALLOWED\x10\x01\x126\n" +
@@ -4829,7 +5103,7 @@ func file_nopacs_v1_monitor_proto_rawDescGZIP() []byte {
 }
 
 var file_nopacs_v1_monitor_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_nopacs_v1_monitor_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_nopacs_v1_monitor_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_nopacs_v1_monitor_proto_goTypes = []any{
 	(StorageVersioning)(0),               // 0: nopacs.v1.StorageVersioning
 	(EventType)(0),                       // 1: nopacs.v1.EventType
@@ -4868,147 +5142,153 @@ var file_nopacs_v1_monitor_proto_goTypes = []any{
 	(*RetentionClock)(nil),               // 34: nopacs.v1.RetentionClock
 	(*QuarantineAging)(nil),              // 35: nopacs.v1.QuarantineAging
 	(*SenderAllowIdentifiedChanged)(nil), // 36: nopacs.v1.SenderAllowIdentifiedChanged
-	(*QuotaChanged)(nil),                 // 37: nopacs.v1.QuotaChanged
-	(*CatalogRebuilt)(nil),               // 38: nopacs.v1.CatalogRebuilt
-	(*Event)(nil),                        // 39: nopacs.v1.Event
-	(*WatchKeepAlive)(nil),               // 40: nopacs.v1.WatchKeepAlive
-	(*WatchRequest)(nil),                 // 41: nopacs.v1.WatchRequest
-	(*WatchResponse)(nil),                // 42: nopacs.v1.WatchResponse
-	nil,                                  // 43: nopacs.v1.WatchKeepAlive.TenantCursorsEntry
-	nil,                                  // 44: nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
-	nil,                                  // 45: nopacs.v1.WatchRequest.TenantCursorsEntry
-	(ReceptionStep)(0),                   // 46: nopacs.v1.ReceptionStep
-	(JobState)(0),                        // 47: nopacs.v1.JobState
-	(*SenderHealth)(nil),                 // 48: nopacs.v1.SenderHealth
-	(StorageTier)(0),                     // 49: nopacs.v1.StorageTier
-	(*timestamppb.Timestamp)(nil),        // 50: google.protobuf.Timestamp
-	(EncryptionAtRest)(0),                // 51: nopacs.v1.EncryptionAtRest
-	(*durationpb.Duration)(nil),          // 52: google.protobuf.Duration
-	(*ReceiverHealth)(nil),               // 53: nopacs.v1.ReceiverHealth
-	(TenantState)(0),                     // 54: nopacs.v1.TenantState
-	(*AuditSealStatus)(nil),              // 55: nopacs.v1.AuditSealStatus
-	(*ReplicaStatus)(nil),                // 56: nopacs.v1.ReplicaStatus
-	(*RetentionStatus)(nil),              // 57: nopacs.v1.RetentionStatus
-	(*TenantQuota)(nil),                  // 58: nopacs.v1.TenantQuota
-	(ScrubFindingKind)(0),                // 59: nopacs.v1.ScrubFindingKind
-	(*Scope)(nil),                        // 60: nopacs.v1.Scope
-	(*Key)(nil),                          // 61: nopacs.v1.Key
-	(*Caller)(nil),                       // 62: nopacs.v1.Caller
-	(*ReceptionCounts)(nil),              // 63: nopacs.v1.ReceptionCounts
-	(QuarantineReason)(0),                // 64: nopacs.v1.QuarantineReason
-	(QuarantineState)(0),                 // 65: nopacs.v1.QuarantineState
-	(ReleaseMode)(0),                     // 66: nopacs.v1.ReleaseMode
-	(*JobCounts)(nil),                    // 67: nopacs.v1.JobCounts
-	(CorrectionKind)(0),                  // 68: nopacs.v1.CorrectionKind
-	(CorrectionState)(0),                 // 69: nopacs.v1.CorrectionState
-	(CorrectionOrigin)(0),                // 70: nopacs.v1.CorrectionOrigin
-	(HoldState)(0),                       // 71: nopacs.v1.HoldState
-	(QuotaState)(0),                      // 72: nopacs.v1.QuotaState
+	(*SessionMoved)(nil),                 // 37: nopacs.v1.SessionMoved
+	(*SubjectMerged)(nil),                // 38: nopacs.v1.SubjectMerged
+	(*QuotaChanged)(nil),                 // 39: nopacs.v1.QuotaChanged
+	(*CatalogRebuilt)(nil),               // 40: nopacs.v1.CatalogRebuilt
+	(*Event)(nil),                        // 41: nopacs.v1.Event
+	(*WatchKeepAlive)(nil),               // 42: nopacs.v1.WatchKeepAlive
+	(*WatchRequest)(nil),                 // 43: nopacs.v1.WatchRequest
+	(*WatchResponse)(nil),                // 44: nopacs.v1.WatchResponse
+	nil,                                  // 45: nopacs.v1.WatchKeepAlive.TenantCursorsEntry
+	nil,                                  // 46: nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
+	nil,                                  // 47: nopacs.v1.WatchRequest.TenantCursorsEntry
+	(ReceptionStep)(0),                   // 48: nopacs.v1.ReceptionStep
+	(JobState)(0),                        // 49: nopacs.v1.JobState
+	(*SenderHealth)(nil),                 // 50: nopacs.v1.SenderHealth
+	(StorageTier)(0),                     // 51: nopacs.v1.StorageTier
+	(*timestamppb.Timestamp)(nil),        // 52: google.protobuf.Timestamp
+	(EncryptionAtRest)(0),                // 53: nopacs.v1.EncryptionAtRest
+	(*durationpb.Duration)(nil),          // 54: google.protobuf.Duration
+	(*ReceiverHealth)(nil),               // 55: nopacs.v1.ReceiverHealth
+	(TenantState)(0),                     // 56: nopacs.v1.TenantState
+	(*AuditSealStatus)(nil),              // 57: nopacs.v1.AuditSealStatus
+	(*ReplicaStatus)(nil),                // 58: nopacs.v1.ReplicaStatus
+	(*RetentionStatus)(nil),              // 59: nopacs.v1.RetentionStatus
+	(*TenantQuota)(nil),                  // 60: nopacs.v1.TenantQuota
+	(ScrubFindingKind)(0),                // 61: nopacs.v1.ScrubFindingKind
+	(*Scope)(nil),                        // 62: nopacs.v1.Scope
+	(*Key)(nil),                          // 63: nopacs.v1.Key
+	(*Caller)(nil),                       // 64: nopacs.v1.Caller
+	(*ReceptionCounts)(nil),              // 65: nopacs.v1.ReceptionCounts
+	(QuarantineReason)(0),                // 66: nopacs.v1.QuarantineReason
+	(QuarantineState)(0),                 // 67: nopacs.v1.QuarantineState
+	(ReleaseMode)(0),                     // 68: nopacs.v1.ReleaseMode
+	(*JobCounts)(nil),                    // 69: nopacs.v1.JobCounts
+	(CorrectionKind)(0),                  // 70: nopacs.v1.CorrectionKind
+	(CorrectionState)(0),                 // 71: nopacs.v1.CorrectionState
+	(CorrectionOrigin)(0),                // 72: nopacs.v1.CorrectionOrigin
+	(HoldState)(0),                       // 73: nopacs.v1.HoldState
+	(QuotaState)(0),                      // 74: nopacs.v1.QuotaState
 }
 var file_nopacs_v1_monitor_proto_depIdxs = []int32{
-	46, // 0: nopacs.v1.ReceptionStepCount.step:type_name -> nopacs.v1.ReceptionStep
-	4,  // 1: nopacs.v1.TenantCounts.receptions_in_progress:type_name -> nopacs.v1.ReceptionStepCount
-	6,  // 2: nopacs.v1.TenantCounts.jobs_in_progress:type_name -> nopacs.v1.JobStateCount
-	47, // 3: nopacs.v1.JobStateCount.state:type_name -> nopacs.v1.JobState
-	48, // 4: nopacs.v1.SenderStatus.health:type_name -> nopacs.v1.SenderHealth
-	0,  // 5: nopacs.v1.StorageStatus.versioning:type_name -> nopacs.v1.StorageVersioning
-	49, // 6: nopacs.v1.StorageStatus.tier:type_name -> nopacs.v1.StorageTier
-	50, // 7: nopacs.v1.StorageStatus.last_switch_time:type_name -> google.protobuf.Timestamp
-	51, // 8: nopacs.v1.StorageStatus.encryption_at_rest:type_name -> nopacs.v1.EncryptionAtRest
-	10, // 9: nopacs.v1.StorageStatus.coverage:type_name -> nopacs.v1.ScrubCoverage
-	52, // 10: nopacs.v1.ScrubCoverage.oldest_unverified:type_name -> google.protobuf.Duration
-	53, // 11: nopacs.v1.ReceiverStatus.health:type_name -> nopacs.v1.ReceiverHealth
-	54, // 12: nopacs.v1.TenantStatus.database_state:type_name -> nopacs.v1.TenantState
-	50, // 13: nopacs.v1.TenantStatus.database_state_time:type_name -> google.protobuf.Timestamp
-	5,  // 14: nopacs.v1.TenantStatus.counts:type_name -> nopacs.v1.TenantCounts
-	8,  // 15: nopacs.v1.TenantStatus.throughput:type_name -> nopacs.v1.Throughput
-	9,  // 16: nopacs.v1.TenantStatus.storages:type_name -> nopacs.v1.StorageStatus
-	12, // 17: nopacs.v1.TenantStatus.receivers:type_name -> nopacs.v1.ReceiverStatus
-	7,  // 18: nopacs.v1.TenantStatus.senders:type_name -> nopacs.v1.SenderStatus
-	15, // 19: nopacs.v1.TenantStatus.last_scrub:type_name -> nopacs.v1.ScrubSummary
-	16, // 20: nopacs.v1.TenantStatus.open_findings:type_name -> nopacs.v1.ScrubFindingCount
-	55, // 21: nopacs.v1.TenantStatus.audit_seal:type_name -> nopacs.v1.AuditSealStatus
-	56, // 22: nopacs.v1.TenantStatus.replicas:type_name -> nopacs.v1.ReplicaStatus
-	11, // 23: nopacs.v1.TenantStatus.recalls:type_name -> nopacs.v1.RecallCounts
-	57, // 24: nopacs.v1.TenantStatus.retention:type_name -> nopacs.v1.RetentionStatus
-	14, // 25: nopacs.v1.TenantStatus.quarantine:type_name -> nopacs.v1.QuarantineWarnings
-	58, // 26: nopacs.v1.TenantStatus.quota:type_name -> nopacs.v1.TenantQuota
-	52, // 27: nopacs.v1.QuarantineWarnings.oldest_age:type_name -> google.protobuf.Duration
-	47, // 28: nopacs.v1.ScrubSummary.state:type_name -> nopacs.v1.JobState
-	50, // 29: nopacs.v1.ScrubSummary.start_time:type_name -> google.protobuf.Timestamp
-	50, // 30: nopacs.v1.ScrubSummary.end_time:type_name -> google.protobuf.Timestamp
-	16, // 31: nopacs.v1.ScrubSummary.findings:type_name -> nopacs.v1.ScrubFindingCount
-	59, // 32: nopacs.v1.ScrubFindingCount.kind:type_name -> nopacs.v1.ScrubFindingKind
-	60, // 33: nopacs.v1.GetStatusRequest.scope:type_name -> nopacs.v1.Scope
-	13, // 34: nopacs.v1.GetStatusResponse.tenants:type_name -> nopacs.v1.TenantStatus
-	50, // 35: nopacs.v1.GetStatusResponse.time:type_name -> google.protobuf.Timestamp
-	61, // 36: nopacs.v1.GetStatusResponse.expiring_keys:type_name -> nopacs.v1.Key
-	55, // 37: nopacs.v1.GetStatusResponse.installation_audit_seal:type_name -> nopacs.v1.AuditSealStatus
-	62, // 38: nopacs.v1.AssociationFailed.caller:type_name -> nopacs.v1.Caller
-	2,  // 39: nopacs.v1.AssociationFailed.failure:type_name -> nopacs.v1.AssociationFailure
-	46, // 40: nopacs.v1.ReceptionStepReached.step:type_name -> nopacs.v1.ReceptionStep
-	46, // 41: nopacs.v1.ReceptionStepReached.previous_step:type_name -> nopacs.v1.ReceptionStep
-	63, // 42: nopacs.v1.ReceptionStepReached.counts:type_name -> nopacs.v1.ReceptionCounts
-	64, // 43: nopacs.v1.FileQuarantined.reason:type_name -> nopacs.v1.QuarantineReason
-	65, // 44: nopacs.v1.QuarantineDecided.state:type_name -> nopacs.v1.QuarantineState
-	66, // 45: nopacs.v1.QuarantineDecided.release_mode:type_name -> nopacs.v1.ReleaseMode
-	53, // 46: nopacs.v1.ReceiverHealthChanged.health:type_name -> nopacs.v1.ReceiverHealth
-	3,  // 47: nopacs.v1.StorageSpaceChanged.state:type_name -> nopacs.v1.StorageSpaceState
-	47, // 48: nopacs.v1.JobStepReached.state:type_name -> nopacs.v1.JobState
-	47, // 49: nopacs.v1.JobStepReached.previous_state:type_name -> nopacs.v1.JobState
-	67, // 50: nopacs.v1.JobStepReached.counts:type_name -> nopacs.v1.JobCounts
-	67, // 51: nopacs.v1.JobProgressed.counts:type_name -> nopacs.v1.JobCounts
-	48, // 52: nopacs.v1.SenderHealthChanged.health:type_name -> nopacs.v1.SenderHealth
-	59, // 53: nopacs.v1.ScrubFindingChanged.kind:type_name -> nopacs.v1.ScrubFindingKind
-	68, // 54: nopacs.v1.CatalogChanged.kind:type_name -> nopacs.v1.CorrectionKind
-	69, // 55: nopacs.v1.CatalogChanged.state:type_name -> nopacs.v1.CorrectionState
-	70, // 56: nopacs.v1.CatalogChanged.origin:type_name -> nopacs.v1.CorrectionOrigin
-	52, // 57: nopacs.v1.ReplicaBehind.lag:type_name -> google.protobuf.Duration
-	52, // 58: nopacs.v1.StorageSwitched.pause:type_name -> google.protobuf.Duration
-	71, // 59: nopacs.v1.HoldChanged.state:type_name -> nopacs.v1.HoldState
-	52, // 60: nopacs.v1.RetentionClock.clock_step:type_name -> google.protobuf.Duration
-	50, // 61: nopacs.v1.RetentionClock.last_pass_time:type_name -> google.protobuf.Timestamp
-	52, // 62: nopacs.v1.QuarantineAging.oldest_age:type_name -> google.protobuf.Duration
-	72, // 63: nopacs.v1.QuotaChanged.state:type_name -> nopacs.v1.QuotaState
-	50, // 64: nopacs.v1.Event.time:type_name -> google.protobuf.Timestamp
-	1,  // 65: nopacs.v1.Event.type:type_name -> nopacs.v1.EventType
-	19, // 66: nopacs.v1.Event.association_failed:type_name -> nopacs.v1.AssociationFailed
-	20, // 67: nopacs.v1.Event.reception_step:type_name -> nopacs.v1.ReceptionStepReached
-	21, // 68: nopacs.v1.Event.file_quarantined:type_name -> nopacs.v1.FileQuarantined
-	22, // 69: nopacs.v1.Event.quarantine_decided:type_name -> nopacs.v1.QuarantineDecided
-	23, // 70: nopacs.v1.Event.receiver_health:type_name -> nopacs.v1.ReceiverHealthChanged
-	24, // 71: nopacs.v1.Event.storage_space:type_name -> nopacs.v1.StorageSpaceChanged
-	25, // 72: nopacs.v1.Event.frames_added:type_name -> nopacs.v1.FramesAdded
-	26, // 73: nopacs.v1.Event.job_step:type_name -> nopacs.v1.JobStepReached
-	27, // 74: nopacs.v1.Event.job_progress:type_name -> nopacs.v1.JobProgressed
-	28, // 75: nopacs.v1.Event.sender_health:type_name -> nopacs.v1.SenderHealthChanged
-	29, // 76: nopacs.v1.Event.scrub_finding:type_name -> nopacs.v1.ScrubFindingChanged
-	30, // 77: nopacs.v1.Event.catalog_changed:type_name -> nopacs.v1.CatalogChanged
-	38, // 78: nopacs.v1.Event.catalog_rebuilt:type_name -> nopacs.v1.CatalogRebuilt
-	31, // 79: nopacs.v1.Event.replica_behind:type_name -> nopacs.v1.ReplicaBehind
-	32, // 80: nopacs.v1.Event.storage_switched:type_name -> nopacs.v1.StorageSwitched
-	33, // 81: nopacs.v1.Event.hold_changed:type_name -> nopacs.v1.HoldChanged
-	34, // 82: nopacs.v1.Event.retention_clock:type_name -> nopacs.v1.RetentionClock
-	35, // 83: nopacs.v1.Event.quarantine_aging:type_name -> nopacs.v1.QuarantineAging
-	36, // 84: nopacs.v1.Event.sender_allow_identified:type_name -> nopacs.v1.SenderAllowIdentifiedChanged
-	37, // 85: nopacs.v1.Event.quota:type_name -> nopacs.v1.QuotaChanged
-	50, // 86: nopacs.v1.WatchKeepAlive.time:type_name -> google.protobuf.Timestamp
-	43, // 87: nopacs.v1.WatchKeepAlive.tenant_cursors:type_name -> nopacs.v1.WatchKeepAlive.TenantCursorsEntry
-	44, // 88: nopacs.v1.WatchKeepAlive.tenant_event_histories:type_name -> nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
-	60, // 89: nopacs.v1.WatchRequest.scope:type_name -> nopacs.v1.Scope
-	1,  // 90: nopacs.v1.WatchRequest.types:type_name -> nopacs.v1.EventType
-	45, // 91: nopacs.v1.WatchRequest.tenant_cursors:type_name -> nopacs.v1.WatchRequest.TenantCursorsEntry
-	39, // 92: nopacs.v1.WatchResponse.event:type_name -> nopacs.v1.Event
-	40, // 93: nopacs.v1.WatchResponse.keep_alive:type_name -> nopacs.v1.WatchKeepAlive
-	17, // 94: nopacs.v1.MonitorService.GetStatus:input_type -> nopacs.v1.GetStatusRequest
-	41, // 95: nopacs.v1.MonitorService.Watch:input_type -> nopacs.v1.WatchRequest
-	18, // 96: nopacs.v1.MonitorService.GetStatus:output_type -> nopacs.v1.GetStatusResponse
-	42, // 97: nopacs.v1.MonitorService.Watch:output_type -> nopacs.v1.WatchResponse
-	96, // [96:98] is the sub-list for method output_type
-	94, // [94:96] is the sub-list for method input_type
-	94, // [94:94] is the sub-list for extension type_name
-	94, // [94:94] is the sub-list for extension extendee
-	0,  // [0:94] is the sub-list for field type_name
+	48,  // 0: nopacs.v1.ReceptionStepCount.step:type_name -> nopacs.v1.ReceptionStep
+	4,   // 1: nopacs.v1.TenantCounts.receptions_in_progress:type_name -> nopacs.v1.ReceptionStepCount
+	6,   // 2: nopacs.v1.TenantCounts.jobs_in_progress:type_name -> nopacs.v1.JobStateCount
+	49,  // 3: nopacs.v1.JobStateCount.state:type_name -> nopacs.v1.JobState
+	50,  // 4: nopacs.v1.SenderStatus.health:type_name -> nopacs.v1.SenderHealth
+	0,   // 5: nopacs.v1.StorageStatus.versioning:type_name -> nopacs.v1.StorageVersioning
+	51,  // 6: nopacs.v1.StorageStatus.tier:type_name -> nopacs.v1.StorageTier
+	52,  // 7: nopacs.v1.StorageStatus.last_switch_time:type_name -> google.protobuf.Timestamp
+	53,  // 8: nopacs.v1.StorageStatus.encryption_at_rest:type_name -> nopacs.v1.EncryptionAtRest
+	10,  // 9: nopacs.v1.StorageStatus.coverage:type_name -> nopacs.v1.ScrubCoverage
+	54,  // 10: nopacs.v1.ScrubCoverage.oldest_unverified:type_name -> google.protobuf.Duration
+	55,  // 11: nopacs.v1.ReceiverStatus.health:type_name -> nopacs.v1.ReceiverHealth
+	56,  // 12: nopacs.v1.TenantStatus.database_state:type_name -> nopacs.v1.TenantState
+	52,  // 13: nopacs.v1.TenantStatus.database_state_time:type_name -> google.protobuf.Timestamp
+	5,   // 14: nopacs.v1.TenantStatus.counts:type_name -> nopacs.v1.TenantCounts
+	8,   // 15: nopacs.v1.TenantStatus.throughput:type_name -> nopacs.v1.Throughput
+	9,   // 16: nopacs.v1.TenantStatus.storages:type_name -> nopacs.v1.StorageStatus
+	12,  // 17: nopacs.v1.TenantStatus.receivers:type_name -> nopacs.v1.ReceiverStatus
+	7,   // 18: nopacs.v1.TenantStatus.senders:type_name -> nopacs.v1.SenderStatus
+	15,  // 19: nopacs.v1.TenantStatus.last_scrub:type_name -> nopacs.v1.ScrubSummary
+	16,  // 20: nopacs.v1.TenantStatus.open_findings:type_name -> nopacs.v1.ScrubFindingCount
+	57,  // 21: nopacs.v1.TenantStatus.audit_seal:type_name -> nopacs.v1.AuditSealStatus
+	58,  // 22: nopacs.v1.TenantStatus.replicas:type_name -> nopacs.v1.ReplicaStatus
+	11,  // 23: nopacs.v1.TenantStatus.recalls:type_name -> nopacs.v1.RecallCounts
+	59,  // 24: nopacs.v1.TenantStatus.retention:type_name -> nopacs.v1.RetentionStatus
+	14,  // 25: nopacs.v1.TenantStatus.quarantine:type_name -> nopacs.v1.QuarantineWarnings
+	60,  // 26: nopacs.v1.TenantStatus.quota:type_name -> nopacs.v1.TenantQuota
+	54,  // 27: nopacs.v1.QuarantineWarnings.oldest_age:type_name -> google.protobuf.Duration
+	49,  // 28: nopacs.v1.ScrubSummary.state:type_name -> nopacs.v1.JobState
+	52,  // 29: nopacs.v1.ScrubSummary.start_time:type_name -> google.protobuf.Timestamp
+	52,  // 30: nopacs.v1.ScrubSummary.end_time:type_name -> google.protobuf.Timestamp
+	16,  // 31: nopacs.v1.ScrubSummary.findings:type_name -> nopacs.v1.ScrubFindingCount
+	61,  // 32: nopacs.v1.ScrubFindingCount.kind:type_name -> nopacs.v1.ScrubFindingKind
+	62,  // 33: nopacs.v1.GetStatusRequest.scope:type_name -> nopacs.v1.Scope
+	13,  // 34: nopacs.v1.GetStatusResponse.tenants:type_name -> nopacs.v1.TenantStatus
+	52,  // 35: nopacs.v1.GetStatusResponse.time:type_name -> google.protobuf.Timestamp
+	63,  // 36: nopacs.v1.GetStatusResponse.expiring_keys:type_name -> nopacs.v1.Key
+	57,  // 37: nopacs.v1.GetStatusResponse.installation_audit_seal:type_name -> nopacs.v1.AuditSealStatus
+	64,  // 38: nopacs.v1.AssociationFailed.caller:type_name -> nopacs.v1.Caller
+	2,   // 39: nopacs.v1.AssociationFailed.failure:type_name -> nopacs.v1.AssociationFailure
+	48,  // 40: nopacs.v1.ReceptionStepReached.step:type_name -> nopacs.v1.ReceptionStep
+	48,  // 41: nopacs.v1.ReceptionStepReached.previous_step:type_name -> nopacs.v1.ReceptionStep
+	65,  // 42: nopacs.v1.ReceptionStepReached.counts:type_name -> nopacs.v1.ReceptionCounts
+	66,  // 43: nopacs.v1.FileQuarantined.reason:type_name -> nopacs.v1.QuarantineReason
+	67,  // 44: nopacs.v1.QuarantineDecided.state:type_name -> nopacs.v1.QuarantineState
+	68,  // 45: nopacs.v1.QuarantineDecided.release_mode:type_name -> nopacs.v1.ReleaseMode
+	55,  // 46: nopacs.v1.ReceiverHealthChanged.health:type_name -> nopacs.v1.ReceiverHealth
+	3,   // 47: nopacs.v1.StorageSpaceChanged.state:type_name -> nopacs.v1.StorageSpaceState
+	49,  // 48: nopacs.v1.JobStepReached.state:type_name -> nopacs.v1.JobState
+	49,  // 49: nopacs.v1.JobStepReached.previous_state:type_name -> nopacs.v1.JobState
+	69,  // 50: nopacs.v1.JobStepReached.counts:type_name -> nopacs.v1.JobCounts
+	69,  // 51: nopacs.v1.JobProgressed.counts:type_name -> nopacs.v1.JobCounts
+	50,  // 52: nopacs.v1.SenderHealthChanged.health:type_name -> nopacs.v1.SenderHealth
+	61,  // 53: nopacs.v1.ScrubFindingChanged.kind:type_name -> nopacs.v1.ScrubFindingKind
+	70,  // 54: nopacs.v1.CatalogChanged.kind:type_name -> nopacs.v1.CorrectionKind
+	71,  // 55: nopacs.v1.CatalogChanged.state:type_name -> nopacs.v1.CorrectionState
+	72,  // 56: nopacs.v1.CatalogChanged.origin:type_name -> nopacs.v1.CorrectionOrigin
+	54,  // 57: nopacs.v1.ReplicaBehind.lag:type_name -> google.protobuf.Duration
+	54,  // 58: nopacs.v1.StorageSwitched.pause:type_name -> google.protobuf.Duration
+	73,  // 59: nopacs.v1.HoldChanged.state:type_name -> nopacs.v1.HoldState
+	54,  // 60: nopacs.v1.RetentionClock.clock_step:type_name -> google.protobuf.Duration
+	52,  // 61: nopacs.v1.RetentionClock.last_pass_time:type_name -> google.protobuf.Timestamp
+	54,  // 62: nopacs.v1.QuarantineAging.oldest_age:type_name -> google.protobuf.Duration
+	71,  // 63: nopacs.v1.SessionMoved.state:type_name -> nopacs.v1.CorrectionState
+	71,  // 64: nopacs.v1.SubjectMerged.state:type_name -> nopacs.v1.CorrectionState
+	74,  // 65: nopacs.v1.QuotaChanged.state:type_name -> nopacs.v1.QuotaState
+	52,  // 66: nopacs.v1.Event.time:type_name -> google.protobuf.Timestamp
+	1,   // 67: nopacs.v1.Event.type:type_name -> nopacs.v1.EventType
+	19,  // 68: nopacs.v1.Event.association_failed:type_name -> nopacs.v1.AssociationFailed
+	20,  // 69: nopacs.v1.Event.reception_step:type_name -> nopacs.v1.ReceptionStepReached
+	21,  // 70: nopacs.v1.Event.file_quarantined:type_name -> nopacs.v1.FileQuarantined
+	22,  // 71: nopacs.v1.Event.quarantine_decided:type_name -> nopacs.v1.QuarantineDecided
+	23,  // 72: nopacs.v1.Event.receiver_health:type_name -> nopacs.v1.ReceiverHealthChanged
+	24,  // 73: nopacs.v1.Event.storage_space:type_name -> nopacs.v1.StorageSpaceChanged
+	25,  // 74: nopacs.v1.Event.frames_added:type_name -> nopacs.v1.FramesAdded
+	26,  // 75: nopacs.v1.Event.job_step:type_name -> nopacs.v1.JobStepReached
+	27,  // 76: nopacs.v1.Event.job_progress:type_name -> nopacs.v1.JobProgressed
+	28,  // 77: nopacs.v1.Event.sender_health:type_name -> nopacs.v1.SenderHealthChanged
+	29,  // 78: nopacs.v1.Event.scrub_finding:type_name -> nopacs.v1.ScrubFindingChanged
+	30,  // 79: nopacs.v1.Event.catalog_changed:type_name -> nopacs.v1.CatalogChanged
+	40,  // 80: nopacs.v1.Event.catalog_rebuilt:type_name -> nopacs.v1.CatalogRebuilt
+	31,  // 81: nopacs.v1.Event.replica_behind:type_name -> nopacs.v1.ReplicaBehind
+	32,  // 82: nopacs.v1.Event.storage_switched:type_name -> nopacs.v1.StorageSwitched
+	33,  // 83: nopacs.v1.Event.hold_changed:type_name -> nopacs.v1.HoldChanged
+	34,  // 84: nopacs.v1.Event.retention_clock:type_name -> nopacs.v1.RetentionClock
+	35,  // 85: nopacs.v1.Event.quarantine_aging:type_name -> nopacs.v1.QuarantineAging
+	36,  // 86: nopacs.v1.Event.sender_allow_identified:type_name -> nopacs.v1.SenderAllowIdentifiedChanged
+	39,  // 87: nopacs.v1.Event.quota:type_name -> nopacs.v1.QuotaChanged
+	37,  // 88: nopacs.v1.Event.session_moved:type_name -> nopacs.v1.SessionMoved
+	38,  // 89: nopacs.v1.Event.subject_merged:type_name -> nopacs.v1.SubjectMerged
+	52,  // 90: nopacs.v1.WatchKeepAlive.time:type_name -> google.protobuf.Timestamp
+	45,  // 91: nopacs.v1.WatchKeepAlive.tenant_cursors:type_name -> nopacs.v1.WatchKeepAlive.TenantCursorsEntry
+	46,  // 92: nopacs.v1.WatchKeepAlive.tenant_event_histories:type_name -> nopacs.v1.WatchKeepAlive.TenantEventHistoriesEntry
+	62,  // 93: nopacs.v1.WatchRequest.scope:type_name -> nopacs.v1.Scope
+	1,   // 94: nopacs.v1.WatchRequest.types:type_name -> nopacs.v1.EventType
+	47,  // 95: nopacs.v1.WatchRequest.tenant_cursors:type_name -> nopacs.v1.WatchRequest.TenantCursorsEntry
+	41,  // 96: nopacs.v1.WatchResponse.event:type_name -> nopacs.v1.Event
+	42,  // 97: nopacs.v1.WatchResponse.keep_alive:type_name -> nopacs.v1.WatchKeepAlive
+	17,  // 98: nopacs.v1.MonitorService.GetStatus:input_type -> nopacs.v1.GetStatusRequest
+	43,  // 99: nopacs.v1.MonitorService.Watch:input_type -> nopacs.v1.WatchRequest
+	18,  // 100: nopacs.v1.MonitorService.GetStatus:output_type -> nopacs.v1.GetStatusResponse
+	44,  // 101: nopacs.v1.MonitorService.Watch:output_type -> nopacs.v1.WatchResponse
+	100, // [100:102] is the sub-list for method output_type
+	98,  // [98:100] is the sub-list for method input_type
+	98,  // [98:98] is the sub-list for extension type_name
+	98,  // [98:98] is the sub-list for extension extendee
+	0,   // [0:98] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_monitor_proto_init() }
@@ -5030,7 +5310,7 @@ func file_nopacs_v1_monitor_proto_init() {
 	file_nopacs_v1_tenant_proto_init()
 	file_nopacs_v1_monitor_proto_msgTypes[5].OneofWrappers = []any{}
 	file_nopacs_v1_monitor_proto_msgTypes[20].OneofWrappers = []any{}
-	file_nopacs_v1_monitor_proto_msgTypes[35].OneofWrappers = []any{
+	file_nopacs_v1_monitor_proto_msgTypes[37].OneofWrappers = []any{
 		(*Event_AssociationFailed)(nil),
 		(*Event_ReceptionStep)(nil),
 		(*Event_FileQuarantined)(nil),
@@ -5051,8 +5331,10 @@ func file_nopacs_v1_monitor_proto_init() {
 		(*Event_QuarantineAging)(nil),
 		(*Event_SenderAllowIdentified)(nil),
 		(*Event_Quota)(nil),
+		(*Event_SessionMoved)(nil),
+		(*Event_SubjectMerged)(nil),
 	}
-	file_nopacs_v1_monitor_proto_msgTypes[38].OneofWrappers = []any{
+	file_nopacs_v1_monitor_proto_msgTypes[40].OneofWrappers = []any{
 		(*WatchResponse_Event)(nil),
 		(*WatchResponse_KeepAlive)(nil),
 	}
@@ -5062,7 +5344,7 @@ func file_nopacs_v1_monitor_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_monitor_proto_rawDesc), len(file_nopacs_v1_monitor_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   42,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

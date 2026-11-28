@@ -29,3 +29,5 @@ not know and takes its cursor, so a type added in a later version breaks no clie
 | `QUARANTINE_AGING` | 18 | What the tenant holds in quarantine passed quarantine.warn-age or quarantine.warn-bytes, or is no longer past one of them. |
 | `SENDER_ALLOW_IDENTIFIED` | 19 | A sender's allow_identified was set or cleared (SenderService), or a sender was added with it set. |
 | `QUOTA` | 20 | What the tenant holds against its storage quota passed quota.warn or reached a bound, or fell back. |
+| `SESSION_MOVED` | 21 | A session was filed under another subject (CorrectionService.Move), or the move was undone. |
+| `SUBJECT_MERGED` | 22 | A subject was merged into another (CorrectionService.Merge), or the merge was undone. |

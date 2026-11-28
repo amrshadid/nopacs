@@ -347,6 +347,8 @@ func Contract() Table {
 		nopacsv1connect.CorrectionServiceRelabelProcedure:           onTenant(func() *nopacsv1.RelabelRequest { return &nopacsv1.RelabelRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceReplaceProcedure:           onTenant(func() *nopacsv1.ReplaceRequest { return &nopacsv1.ReplaceRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceEditProcedure:              onTenant(func() *nopacsv1.EditRequest { return &nopacsv1.EditRequest{} }, master.RoleAdmin),
+		nopacsv1connect.CorrectionServiceMoveProcedure:              onTenant(func() *nopacsv1.MoveRequest { return &nopacsv1.MoveRequest{} }, master.RoleAdmin),
+		nopacsv1connect.CorrectionServiceMergeProcedure:             onTenant(func() *nopacsv1.MergeRequest { return &nopacsv1.MergeRequest{} }, master.RoleAdmin),
 		nopacsv1connect.CorrectionServiceListCorrectionsProcedure:   onTenant(func() *nopacsv1.ListCorrectionsRequest { return &nopacsv1.ListCorrectionsRequest{} }, master.RoleOperator),
 		nopacsv1connect.CorrectionServiceGetCorrectionProcedure:     onTenant(func() *nopacsv1.GetCorrectionRequest { return &nopacsv1.GetCorrectionRequest{} }, master.RoleOperator),
 		nopacsv1connect.CorrectionServiceUndoCorrectionProcedure:    onTenant(func() *nopacsv1.UndoCorrectionRequest { return &nopacsv1.UndoCorrectionRequest{} }, master.RoleAdmin),

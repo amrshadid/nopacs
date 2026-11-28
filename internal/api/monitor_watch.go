@@ -340,6 +340,12 @@ func eventMessage(name string, e tenant.Event) *v1.Event {
 	case *tenant.SenderAllowIdentifiedChanged:
 		m.Payload = &v1.Event_SenderAllowIdentified{SenderAllowIdentified: &v1.SenderAllowIdentifiedChanged{
 			Sender: p.Sender, AllowIdentified: p.AllowIdentified}}
+	case *tenant.SessionMoved:
+		m.Payload = &v1.Event_SessionMoved{SessionMoved: &v1.SessionMoved{Correction: p.Correction, State: correctionStates[p.State],
+			FromSubjectLabel: p.FromSubject, ToSubjectLabel: p.ToSubject, SessionLabel: p.SessionLabel, Scans: p.Scans, Instances: p.Instances}}
+	case *tenant.SubjectMerged:
+		m.Payload = &v1.Event_SubjectMerged{SubjectMerged: &v1.SubjectMerged{Correction: p.Correction, State: correctionStates[p.State],
+			FromSubjectLabel: p.FromSubject, ToSubjectLabel: p.ToSubject, Sessions: p.Sessions, Scans: p.Scans, Instances: p.Instances}}
 	case *tenant.QuotaChanged:
 		m.Payload = &v1.Event_Quota{Quota: &v1.QuotaChanged{State: quotaStateMessage(p.State), UsedBytes: p.UsedBytes,
 			UsedInstances: p.UsedInstances, BytesBound: p.BytesBound, InstancesBound: p.InstancesBound}}

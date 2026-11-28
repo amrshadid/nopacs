@@ -30,6 +30,13 @@ type EditedFile struct {
 	File []byte
 	// Set are the tags the edit gives a value; Removed those it removes.
 	Set, Removed []uint32
+	// FromArchive says every value of Set was read from the tenant's own
+	// archived files (a move's identity rewrite gives the moved files the
+	// destination's): their archived form, which the profile made, so a
+	// profile that would change them again does not refuse the file. The
+	// file is still held, and refused, as the profile and the check after
+	// would hold it.
+	FromArchive bool
 }
 
 // ProfileJudge judges an edited file by the tenant's effective profile, as
@@ -37,7 +44,8 @@ type EditedFile struct {
 // (receive.TryFile): the file de-identified in memory and the check after
 // run over what that writes. A file it would hold is refused, and so is
 // one where the profile would change, remove or replace an attribute the
-// edit sets: the edit would put back a value de-identification takes out.
+// edit sets: the edit would put back a value de-identification takes out
+// (but for values read from the archive, EditedFile.FromArchive).
 // An instance whose effective profile is none (archived as received, by a
 // receiver without one) is not judged.
 type ProfileJudge struct {
@@ -106,7 +114,10 @@ func (j ProfileJudge) JudgeEdit(ctx context.Context, f EditedFile) error {
 			continue
 		}
 		path := strings.ToUpper(e.Path)
-		if s, ok := set[path]; ok {
+		// A value read from the archive is the profile's own output: the
+		// profile changes it again (the floor never keeps a Patient ID), and
+		// that is no value put back.
+		if s, ok := set[path]; ok && !f.FromArchive {
 			return fault.New(fault.Precondition, "the tenant's profile "+ref.String()+" takes "+tagText(s)+" out ("+e.Action+
 				"): an edit does not put back what de-identification takes out")
 		}
