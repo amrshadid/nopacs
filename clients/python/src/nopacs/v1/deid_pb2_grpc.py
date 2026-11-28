@@ -41,8 +41,11 @@ class DeidServiceStub:
     pseudonym, so it is for an admin alone, one value at a time, at a
     bounded rate, and every call is in the audit log, without the value: its
     entry is written before the answer is sent, and a call whose entry
-    cannot be written is refused. No method of this service is served over
-    HTTP GET, so a value never travels in a URL.
+    cannot be written is refused. No method of this service that takes a
+    value is served over HTTP GET, so a value never travels in a URL.
+
+    The service also holds the tenant's coverage report, the elements of
+    archived files that no rule of a profile named, which holds no value.
 
     A value given to this service is the caller's own data: each is marked
     debug_redact, and no log line, audit entry, event or error carries one.
@@ -72,6 +75,31 @@ class DeidServiceStub:
                 request_serializer=nopacs_dot_v1_dot_deid__pb2.ListLookupTablesRequest.SerializeToString,
                 response_deserializer=nopacs_dot_v1_dot_deid__pb2.ListLookupTablesResponse.FromString,
                 _registered_method=True)
+        self.GetCoverage = channel.unary_unary(
+                '/nopacs.v1.DeidService/GetCoverage',
+                request_serializer=nopacs_dot_v1_dot_deid__pb2.GetCoverageRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_deid__pb2.GetCoverageResponse.FromString,
+                _registered_method=True)
+        self.RefreshCoverage = channel.unary_unary(
+                '/nopacs.v1.DeidService/RefreshCoverage',
+                request_serializer=nopacs_dot_v1_dot_deid__pb2.RefreshCoverageRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_deid__pb2.RefreshCoverageResponse.FromString,
+                _registered_method=True)
+        self.AddPixelTemplates = channel.unary_unary(
+                '/nopacs.v1.DeidService/AddPixelTemplates',
+                request_serializer=nopacs_dot_v1_dot_deid__pb2.AddPixelTemplatesRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_deid__pb2.AddPixelTemplatesResponse.FromString,
+                _registered_method=True)
+        self.RemovePixelTemplate = channel.unary_unary(
+                '/nopacs.v1.DeidService/RemovePixelTemplate',
+                request_serializer=nopacs_dot_v1_dot_deid__pb2.RemovePixelTemplateRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_deid__pb2.RemovePixelTemplateResponse.FromString,
+                _registered_method=True)
+        self.ListPixelTemplates = channel.unary_unary(
+                '/nopacs.v1.DeidService/ListPixelTemplates',
+                request_serializer=nopacs_dot_v1_dot_deid__pb2.ListPixelTemplatesRequest.SerializeToString,
+                response_deserializer=nopacs_dot_v1_dot_deid__pb2.ListPixelTemplatesResponse.FromString,
+                _registered_method=True)
 
 
 class DeidServiceServicer:
@@ -90,8 +118,11 @@ class DeidServiceServicer:
     pseudonym, so it is for an admin alone, one value at a time, at a
     bounded rate, and every call is in the audit log, without the value: its
     entry is written before the answer is sent, and a call whose entry
-    cannot be written is refused. No method of this service is served over
-    HTTP GET, so a value never travels in a URL.
+    cannot be written is refused. No method of this service that takes a
+    value is served over HTTP GET, so a value never travels in a URL.
+
+    The service also holds the tenant's coverage report, the elements of
+    archived files that no rule of a profile named, which holds no value.
 
     A value given to this service is the caller's own data: each is marked
     debug_redact, and no log line, audit entry, event or error carries one.
@@ -230,6 +261,148 @@ class DeidServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetCoverage(self, request, context):
+        """GetCoverage answers the tenant's coverage report: every public element
+        and every private element (by its private creator and its element
+        within the creator's block) that files archived by a receiver that
+        de-identifies held, as received, and that no rule of the profile named,
+        so the profile's default decided it (a private element removed, any
+        other as the profile's unnamed says). For each, its VR as the file gave
+        it, how many instances held it and how many times in all. It is what a
+        profile never decided, the private elements a vendor writes among them,
+        and a person reads it to name the ones that matter.
+
+        The report holds no value of any file, and nothing a value could be
+        read from but a private creator, which is a vendor's name written in
+        the file. A creator that is not printable ASCII of at most 64 bytes, or
+        that holds a value the profile removed from the file or a term of its
+        text lists, is never given: its elements are counted under
+        creator_withheld. For that reason a masked key may read the report.
+
+        It is made by RefreshCoverage, from what each instance's metadata line
+        records; the answer is the report of the latest job that ended, with
+        when it ended and what it read, and the job that is making the next one
+        when there is one. An instance archived before the line recorded this,
+        or as received, is counted in the report's instances but not in
+        instances_recorded, and contributes no element. Elements are in order
+        of tag, then creator, then VR.
+
+        Role: operator on the tenant.
+        Audit: one entry in the tenant's log.
+        Errors: unauthenticated, permission denied (no grant; also a tenant
+        that does not exist, for a caller who may not list every tenant),
+        invalid (a page_size that is negative or past 1000, a page_token that
+        is not one of this call), not found (a tenant that does not exist, for
+        a caller who may list every tenant), unavailable (the tenant's database
+        does not answer, or the tenant is not ready).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RefreshCoverage(self, request, context):
+        """RefreshCoverage makes the job (kind deid_coverage) that builds the
+        coverage report again: it reads each scan's metadata file once, line by
+        line within the reader's bounds, and counts the elements each line
+        records as unnamed, then replaces the stored report when it ends. It
+        writes the tenant's database only; it reads storages, never writes one,
+        and never reads an instance's file. A scan whose metadata cannot be
+        read is counted skipped, and the job ends partial. A restart goes on
+        after the last page of scans written, so no scan is counted twice.
+        One runs at a time for a tenant, and none while a rebuild runs. As for
+        every job, the operator role is enough.
+
+        Role: operator on the tenant.
+        Audit: one entry in the tenant's log, with the job's id as its object.
+        Errors: unauthenticated, permission denied (no grant; also a tenant
+        that does not exist, for a caller who may not list every tenant), not
+        found (a tenant that does not exist, for a caller who may list every
+        tenant), precondition (a coverage job not ended; a rebuild running),
+        unavailable (the tenant's database does not answer, or the tenant is
+        not ready).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AddPixelTemplates(self, request, context):
+        """AddPixelTemplates stores pixel templates in the tenant: for a device
+        (manufacturer and model, compared with case folded) and an image size
+        (rows and columns, exactly) and, optionally, a SOP class, the rectangles
+        of the image that burned-in text is drawn in. A pixel rule of a profile
+        whose action is redact_by_template fills the rectangles of the template
+        that fits the file's header as received, and holds an image at risk of
+        burned-in text that no template fits (deid_failed, cause
+        "no_pixel_template"). The table is empty until an admin fills it: the
+        server ships none, since which rectangles hold text is for the site to
+        know of its own devices.
+
+        All or nothing: every template is stored in one transaction, or none.
+        Refused, storing nothing: a template whose manufacturer or model is
+        empty after its padding, is longer than 256 bytes or not UTF-8 without
+        control characters; rows or columns not 1 to 65535; a SOP class that is
+        not a UID; no rectangle or more than 64; a rectangle with a negative
+        position, a side not 1 to 65535, or reaching past the image's size,
+        measured from the edge it names; two templates of one device, size and
+        SOP class in the request, or one the tenant already holds (precondition:
+        remove it first), each named by its position from 1. A tenant holds at
+        most 10000 templates, and a request carries 1 to 1000.
+
+        A masked key (Key.masked) is refused, whatever its role: a template is
+        part of what removes identity from images, and is changed only by a
+        person who may see them.
+
+        Role: admin on the tenant.
+        Audit: one entry in the tenant's log, with the number of templates in
+        its details, written with the templates; an entry of a request refused
+        after its tenant was found is written before the answer.
+        Errors: unauthenticated, permission denied (no grant, a masked key; also
+        a tenant that does not exist, for a caller who may not list every
+        tenant), invalid, not found (a tenant that does not exist, for a caller
+        who may list every tenant), precondition (a template held already; the
+        bound of 10000 passed), unavailable (the tenant's database does not
+        answer, the tenant is not ready, or the audit entry cannot be written).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemovePixelTemplate(self, request, context):
+        """RemovePixelTemplate removes the template of one device, size and SOP
+        class. Images that matched it are held (cause "no_pixel_template") when
+        they are at risk of burned-in text, from the next file on.
+
+        A masked key is refused, as for AddPixelTemplates.
+
+        Role: admin on the tenant.
+        Audit: one entry in the tenant's log, with the template's key as its
+        object.
+        Errors: unauthenticated, permission denied (no grant, a masked key),
+        invalid (a key that names no template: no manufacturer or model, rows or
+        columns not 1 to 65535, a SOP class that is not a UID), not found (the
+        tenant has no such template; also a tenant that does not exist, for a
+        caller who may list every tenant), unavailable.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListPixelTemplates(self, request, context):
+        """ListPixelTemplates answers a page of the tenant's pixel templates, in
+        order of manufacturer, model, rows, columns and SOP class, each as it was
+        written.
+
+        Role: operator on the tenant.
+        Audit: one entry in the tenant's log.
+        Errors: unauthenticated, permission denied (no grant; also a tenant
+        that does not exist, for a caller who may not list every tenant),
+        invalid, not found (a tenant that does not exist, for a caller who may
+        list every tenant), unavailable.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DeidServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -247,6 +420,31 @@ def add_DeidServiceServicer_to_server(servicer, server):
                     servicer.ListLookupTables,
                     request_deserializer=nopacs_dot_v1_dot_deid__pb2.ListLookupTablesRequest.FromString,
                     response_serializer=nopacs_dot_v1_dot_deid__pb2.ListLookupTablesResponse.SerializeToString,
+            ),
+            'GetCoverage': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCoverage,
+                    request_deserializer=nopacs_dot_v1_dot_deid__pb2.GetCoverageRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_deid__pb2.GetCoverageResponse.SerializeToString,
+            ),
+            'RefreshCoverage': grpc.unary_unary_rpc_method_handler(
+                    servicer.RefreshCoverage,
+                    request_deserializer=nopacs_dot_v1_dot_deid__pb2.RefreshCoverageRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_deid__pb2.RefreshCoverageResponse.SerializeToString,
+            ),
+            'AddPixelTemplates': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddPixelTemplates,
+                    request_deserializer=nopacs_dot_v1_dot_deid__pb2.AddPixelTemplatesRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_deid__pb2.AddPixelTemplatesResponse.SerializeToString,
+            ),
+            'RemovePixelTemplate': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemovePixelTemplate,
+                    request_deserializer=nopacs_dot_v1_dot_deid__pb2.RemovePixelTemplateRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_deid__pb2.RemovePixelTemplateResponse.SerializeToString,
+            ),
+            'ListPixelTemplates': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListPixelTemplates,
+                    request_deserializer=nopacs_dot_v1_dot_deid__pb2.ListPixelTemplatesRequest.FromString,
+                    response_serializer=nopacs_dot_v1_dot_deid__pb2.ListPixelTemplatesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -272,8 +470,11 @@ class DeidService:
     pseudonym, so it is for an admin alone, one value at a time, at a
     bounded rate, and every call is in the audit log, without the value: its
     entry is written before the answer is sent, and a call whose entry
-    cannot be written is refused. No method of this service is served over
-    HTTP GET, so a value never travels in a URL.
+    cannot be written is refused. No method of this service that takes a
+    value is served over HTTP GET, so a value never travels in a URL.
+
+    The service also holds the tenant's coverage report, the elements of
+    archived files that no rule of a profile named, which holds no value.
 
     A value given to this service is the caller's own data: each is marked
     debug_redact, and no log line, audit entry, event or error carries one.
@@ -353,6 +554,141 @@ class DeidService:
             '/nopacs.v1.DeidService/ListLookupTables',
             nopacs_dot_v1_dot_deid__pb2.ListLookupTablesRequest.SerializeToString,
             nopacs_dot_v1_dot_deid__pb2.ListLookupTablesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCoverage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.DeidService/GetCoverage',
+            nopacs_dot_v1_dot_deid__pb2.GetCoverageRequest.SerializeToString,
+            nopacs_dot_v1_dot_deid__pb2.GetCoverageResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RefreshCoverage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.DeidService/RefreshCoverage',
+            nopacs_dot_v1_dot_deid__pb2.RefreshCoverageRequest.SerializeToString,
+            nopacs_dot_v1_dot_deid__pb2.RefreshCoverageResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AddPixelTemplates(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.DeidService/AddPixelTemplates',
+            nopacs_dot_v1_dot_deid__pb2.AddPixelTemplatesRequest.SerializeToString,
+            nopacs_dot_v1_dot_deid__pb2.AddPixelTemplatesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemovePixelTemplate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.DeidService/RemovePixelTemplate',
+            nopacs_dot_v1_dot_deid__pb2.RemovePixelTemplateRequest.SerializeToString,
+            nopacs_dot_v1_dot_deid__pb2.RemovePixelTemplateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListPixelTemplates(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/nopacs.v1.DeidService/ListPixelTemplates',
+            nopacs_dot_v1_dot_deid__pb2.ListPixelTemplatesRequest.SerializeToString,
+            nopacs_dot_v1_dot_deid__pb2.ListPixelTemplatesResponse.FromString,
             options,
             channel_credentials,
             insecure,

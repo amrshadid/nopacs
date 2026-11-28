@@ -47,7 +47,7 @@ const maxSumText = 64 + 3
 // maxLine is the longest line the reader takes: the longest data set, the
 // longest frame table with a checksum for each of its frames (a frame has
 // at least one range), and the fixed fields around them.
-const maxLine = MaxDataset + MaxFrameRanges*(maxRangeText+maxSumText) + 4096 + layout.MaxKeyLength + 2*uid.MaxLength
+const maxLine = MaxDataset + MaxFrameRanges*(maxRangeText+maxSumText) + 4096 + layout.MaxKeyLength + 2*uid.MaxLength + MaxUnnamed*maxUnnamedText
 
 const (
 	headerV1 = `{"version":1,"instances":[` + "\n"
@@ -170,6 +170,12 @@ type Instance struct {
 	// text, which names the version whatever database holds it. Version 3
 	// only, and only with Profile; empty when the writer did not know it.
 	ProfileSHA256 string `json:"profile_sha256,omitempty"`
+	// BaseProfile is the tenant's base profile version, "name@version", the
+	// profile above was stacked over when the instance was de-identified; left
+	// out when the tenant had none. Version 3 only, and only with Profile. The
+	// instance then counts as having full profile provenance: Profile names the
+	// version of the receiver or route, as before.
+	BaseProfile string `json:"base_profile,omitempty"`
 	// PixelRiskAccepted says the instance's image was at risk of burned-in
 	// text and a pixel rule of Profile accepted it as it is, as its catalog
 	// row records it, so a catalog made again from the metadata refuses to
@@ -195,6 +201,16 @@ type Instance struct {
 	// NopacsVersion is the version of the build that wrote the line; empty
 	// when unknown. Version 3 only.
 	NopacsVersion string `json:"nopacs_version,omitempty"`
+	// Unnamed lists the elements of the file as received that no rule of its
+	// profile named, with their VRs and counts and never a value (see
+	// UnnamedElement); empty but present for a de-identified file none were
+	// found in, and left out (nil) for one archived as received and in a line
+	// written before the field existed. Version 3 only.
+	Unnamed []UnnamedElement `json:"unnamed,omitzero"`
+	// UnnamedOver counts the occurrences of distinct elements past MaxUnnamed
+	// that Unnamed does not list; left out (0) when none. Version 3 only,
+	// and only with Unnamed.
+	UnnamedOver int `json:"unnamed_over,omitempty"`
 	// PixelData is where its pixel data is, nil when it has none or when the
 	// file's data set is deflated, where no offset in the file names it.
 	PixelData *PixelData `json:"pixel_data"`
@@ -346,16 +362,17 @@ func validProfile(s string) bool {
 
 // hasV3 reports whether the line holds a field only version 3 has.
 func (in Instance) hasV3() bool {
-	return in.Revision != 0 || in.ReceivedSHA256 != "" || in.ProfileSHA256 != "" || in.Reception != "" || !in.HeldAt.IsZero() ||
-		in.ReceivedForm != "" || in.ReceivedSyntax != "" || in.NopacsVersion != ""
+	return in.Revision != 0 || in.ReceivedSHA256 != "" || in.ProfileSHA256 != "" || in.BaseProfile != "" || in.Reception != "" || !in.HeldAt.IsZero() ||
+		in.ReceivedForm != "" || in.ReceivedSyntax != "" || in.NopacsVersion != "" || in.Unnamed != nil || in.UnnamedOver != 0
 }
 
 // withoutV3 returns the line without the fields only version 3 has, for a
 // sidecar of an older version, which has no place for them. The revision is
 // not touched: a line that holds one cannot be written to an older form.
 func (in Instance) withoutV3() Instance {
-	in.ReceivedSHA256, in.ProfileSHA256, in.Reception, in.HeldAt = "", "", "", time.Time{}
+	in.ReceivedSHA256, in.ProfileSHA256, in.BaseProfile, in.Reception, in.HeldAt = "", "", "", "", time.Time{}
 	in.ReceivedForm, in.ReceivedSyntax, in.NopacsVersion = "", "", ""
+	in.Unnamed, in.UnnamedOver = nil, 0
 	return in
 }
 
@@ -396,7 +413,13 @@ func checkV3(in Instance, version int) error {
 	if in.NopacsVersion != "" && !validVersionText(in.NopacsVersion) {
 		return fmt.Errorf("%w: nopacs_version", ErrFormat)
 	}
-	return nil
+	if in.BaseProfile != "" && (in.Profile == "" || !validProfile(in.BaseProfile)) {
+		return fmt.Errorf("%w: base_profile is name@version and goes with a profile", ErrFormat)
+	}
+	if in.Unnamed != nil && in.Profile == "" {
+		return fmt.Errorf("%w: unnamed goes with a profile", ErrFormat)
+	}
+	return checkUnnamed(in)
 }
 
 // check returns nil if in may be written to a sidecar of version, or read

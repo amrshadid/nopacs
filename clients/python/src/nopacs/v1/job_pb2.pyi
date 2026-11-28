@@ -26,6 +26,8 @@ class DeidJobMode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     DEID_JOB_MODE_UNSPECIFIED: _ClassVar[DeidJobMode]
     DEID_JOB_MODE_DRY_RUN: _ClassVar[DeidJobMode]
     DEID_JOB_MODE_CHECK: _ClassVar[DeidJobMode]
+    DEID_JOB_MODE_RERUN: _ClassVar[DeidJobMode]
+    DEID_JOB_MODE_RERUN_PREVIEW: _ClassVar[DeidJobMode]
 
 class RebuildJobMode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -100,6 +102,8 @@ JOB_STATE_CANCELED: JobState
 DEID_JOB_MODE_UNSPECIFIED: DeidJobMode
 DEID_JOB_MODE_DRY_RUN: DeidJobMode
 DEID_JOB_MODE_CHECK: DeidJobMode
+DEID_JOB_MODE_RERUN: DeidJobMode
+DEID_JOB_MODE_RERUN_PREVIEW: DeidJobMode
 REBUILD_JOB_MODE_UNSPECIFIED: RebuildJobMode
 REBUILD_JOB_MODE_COMPARE: RebuildJobMode
 REBUILD_JOB_MODE_REPLACE: RebuildJobMode
@@ -194,20 +198,22 @@ class SendJob(_message.Message):
     def __init__(self, sender: _Optional[str] = ..., subject_label: _Optional[str] = ..., session_label: _Optional[str] = ..., scan_label: _Optional[str] = ..., reception: _Optional[str] = ..., receiver: _Optional[str] = ...) -> None: ...
 
 class DeidJob(_message.Message):
-    __slots__ = ("mode", "profile", "profile_version", "subject_label", "session_label", "scan_label")
+    __slots__ = ("mode", "profile", "profile_version", "subject_label", "session_label", "scan_label", "reason")
     MODE_FIELD_NUMBER: _ClassVar[int]
     PROFILE_FIELD_NUMBER: _ClassVar[int]
     PROFILE_VERSION_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_LABEL_FIELD_NUMBER: _ClassVar[int]
     SESSION_LABEL_FIELD_NUMBER: _ClassVar[int]
     SCAN_LABEL_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
     mode: DeidJobMode
     profile: str
     profile_version: int
     subject_label: str
     session_label: str
     scan_label: str
-    def __init__(self, mode: _Optional[_Union[DeidJobMode, str]] = ..., profile: _Optional[str] = ..., profile_version: _Optional[int] = ..., subject_label: _Optional[str] = ..., session_label: _Optional[str] = ..., scan_label: _Optional[str] = ...) -> None: ...
+    reason: str
+    def __init__(self, mode: _Optional[_Union[DeidJobMode, str]] = ..., profile: _Optional[str] = ..., profile_version: _Optional[int] = ..., subject_label: _Optional[str] = ..., session_label: _Optional[str] = ..., scan_label: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
 
 class ScrubJob(_message.Message):
     __slots__ = ("storage", "scheduled")
@@ -279,6 +285,16 @@ class SearchBackfillJob(_message.Message):
     fields: _containers.RepeatedScalarFieldContainer[str]
     scans_skipped: int
     def __init__(self, fields: _Optional[_Iterable[str]] = ..., scans_skipped: _Optional[int] = ...) -> None: ...
+
+class DeidCoverageJob(_message.Message):
+    __slots__ = ("scans_skipped", "instances_read", "instances_recorded")
+    SCANS_SKIPPED_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_READ_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_RECORDED_FIELD_NUMBER: _ClassVar[int]
+    scans_skipped: int
+    instances_read: int
+    instances_recorded: int
+    def __init__(self, scans_skipped: _Optional[int] = ..., instances_read: _Optional[int] = ..., instances_recorded: _Optional[int] = ...) -> None: ...
 
 class ImportJob(_message.Message):
     __slots__ = ("receiver", "path", "map_file", "counts", "map_csv", "map_key_columns", "map_value_column", "map_key_parts", "map_gives", "retention_start")
@@ -363,7 +379,7 @@ class JobTally(_message.Message):
     def __init__(self, key: _Optional[str] = ..., count: _Optional[int] = ...) -> None: ...
 
 class Job(_message.Message):
-    __slots__ = ("id", "send", "deid", "scrub", "rebuild", "import_job", "replicate", "repair", "dispose", "delete_batch", "search_backfill", "state", "counts", "reason", "created_by_key_id", "create_time", "start_time", "state_time", "end_time", "retry_of", "retry_job", "failures_not_listed", "tallies", "paused")
+    __slots__ = ("id", "send", "deid", "scrub", "rebuild", "import_job", "replicate", "repair", "dispose", "delete_batch", "search_backfill", "deid_coverage", "state", "counts", "reason", "created_by_key_id", "create_time", "start_time", "state_time", "end_time", "retry_of", "retry_job", "failures_not_listed", "tallies", "paused")
     ID_FIELD_NUMBER: _ClassVar[int]
     SEND_FIELD_NUMBER: _ClassVar[int]
     DEID_FIELD_NUMBER: _ClassVar[int]
@@ -375,6 +391,7 @@ class Job(_message.Message):
     DISPOSE_FIELD_NUMBER: _ClassVar[int]
     DELETE_BATCH_FIELD_NUMBER: _ClassVar[int]
     SEARCH_BACKFILL_FIELD_NUMBER: _ClassVar[int]
+    DEID_COVERAGE_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
     COUNTS_FIELD_NUMBER: _ClassVar[int]
     REASON_FIELD_NUMBER: _ClassVar[int]
@@ -399,6 +416,7 @@ class Job(_message.Message):
     dispose: DisposeJob
     delete_batch: DeleteBatchJob
     search_backfill: SearchBackfillJob
+    deid_coverage: DeidCoverageJob
     state: JobState
     counts: JobCounts
     reason: str
@@ -412,7 +430,7 @@ class Job(_message.Message):
     failures_not_listed: int
     tallies: _containers.RepeatedCompositeFieldContainer[JobTally]
     paused: bool
-    def __init__(self, id: _Optional[str] = ..., send: _Optional[_Union[SendJob, _Mapping]] = ..., deid: _Optional[_Union[DeidJob, _Mapping]] = ..., scrub: _Optional[_Union[ScrubJob, _Mapping]] = ..., rebuild: _Optional[_Union[RebuildJob, _Mapping]] = ..., import_job: _Optional[_Union[ImportJob, _Mapping]] = ..., replicate: _Optional[_Union[ReplicateJob, _Mapping]] = ..., repair: _Optional[_Union[RepairJob, _Mapping]] = ..., dispose: _Optional[_Union[DisposeJob, _Mapping]] = ..., delete_batch: _Optional[_Union[DeleteBatchJob, _Mapping]] = ..., search_backfill: _Optional[_Union[SearchBackfillJob, _Mapping]] = ..., state: _Optional[_Union[JobState, str]] = ..., counts: _Optional[_Union[JobCounts, _Mapping]] = ..., reason: _Optional[str] = ..., created_by_key_id: _Optional[str] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., start_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., end_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., retry_of: _Optional[str] = ..., retry_job: _Optional[str] = ..., failures_not_listed: _Optional[int] = ..., tallies: _Optional[_Iterable[_Union[JobTally, _Mapping]]] = ..., paused: _Optional[bool] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., send: _Optional[_Union[SendJob, _Mapping]] = ..., deid: _Optional[_Union[DeidJob, _Mapping]] = ..., scrub: _Optional[_Union[ScrubJob, _Mapping]] = ..., rebuild: _Optional[_Union[RebuildJob, _Mapping]] = ..., import_job: _Optional[_Union[ImportJob, _Mapping]] = ..., replicate: _Optional[_Union[ReplicateJob, _Mapping]] = ..., repair: _Optional[_Union[RepairJob, _Mapping]] = ..., dispose: _Optional[_Union[DisposeJob, _Mapping]] = ..., delete_batch: _Optional[_Union[DeleteBatchJob, _Mapping]] = ..., search_backfill: _Optional[_Union[SearchBackfillJob, _Mapping]] = ..., deid_coverage: _Optional[_Union[DeidCoverageJob, _Mapping]] = ..., state: _Optional[_Union[JobState, str]] = ..., counts: _Optional[_Union[JobCounts, _Mapping]] = ..., reason: _Optional[str] = ..., created_by_key_id: _Optional[str] = ..., create_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., start_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., end_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., retry_of: _Optional[str] = ..., retry_job: _Optional[str] = ..., failures_not_listed: _Optional[int] = ..., tallies: _Optional[_Iterable[_Union[JobTally, _Mapping]]] = ..., paused: _Optional[bool] = ...) -> None: ...
 
 class JobFailure(_message.Message):
     __slots__ = ("instance_id", "subject_label", "session_label", "scan_label", "code", "peer_status", "sop_class_uid", "transfer_syntax_uid", "detail", "time", "peer_status_http", "revision")

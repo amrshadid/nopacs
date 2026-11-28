@@ -905,6 +905,27 @@ enum DeidJobMode {
   // Verify each archived file against the profile version the catalog
   // records for it.
   DEID_JOB_MODE_CHECK = 2;
+
+  // Re-run a newer profile version over the archived files, which an older
+  // version de-identified: each file the newer version takes more from (an
+  // element it removes, empties, replaces by a constant, generalizes or
+  // cleans) becomes a new revision, as an edit does (superseded revision
+  // kept until the purge, undo before it, sidecar, checksum, records on
+  // every copy), after the check after has run over it; a file the check
+  // holds, one that would need the original (an element the newer version
+  // hashes, remaps or shifts that the older one left), and one the layer
+  // rule refuses (a version that lets through more than the older) are
+  // recorded as failures with a fixed detail and not written; a file the
+  // version changes nothing in is skipped. profile is required; the job
+  // needs the admin role, and is refused to a key that may see only
+  // de-identified values in their archived form.
+  DEID_JOB_MODE_RERUN = 3;
+
+  // Judge what DEID_JOB_MODE_RERUN would do, and write nothing: the
+  // tallies count the files that would change, by element and action
+  // ("rerun|element|<tag>|<action>"), those unchanged, and the holds. No
+  // value is in the answer.
+  DEID_JOB_MODE_RERUN_PREVIEW = 4;
 }
 
 // DeidJob is a job that judges archived instances against a
@@ -935,6 +956,12 @@ message DeidJob {
   // The label of the scan of the session whose instances it judges. Empty
   // for every scan of the session; needs session_label.
   string scan_label = 6;
+
+  // Why a profile is re-run over the archive (DEID_JOB_MODE_RERUN):
+  // required then, 1 to 1,000 characters; recorded with the request in the
+  // audit log. The new revisions the job writes say which job made them.
+  // Empty in every other mode.
+  string reason = 7;
 }
 
 // ScrubJob is a job that reads every stored object of the tenant, or of
@@ -1112,6 +1139,24 @@ message SearchBackfillJob {
 
   // The scans whose metadata could not be read.
   int64 scans_skipped = 2;
+}
+
+// DeidCoverageJob is a job that builds the tenant's coverage report
+// (DeidService.RefreshCoverage), reading each scan's metadata file. Its
+// counts are of scans: instances is the scans it covers, sent the scans
+// read, refused the scans whose metadata could not be read. It ends done
+// when every scan was read, partial when any could not be, and failed, with
+// its reason, when it could not go on; the report it built replaces the
+// one before when it ended done or partial.
+message DeidCoverageJob {
+  // The scans whose metadata could not be read.
+  int64 scans_skipped = 1;
+
+  // The instances' lines read so far.
+  int64 instances_read = 2;
+
+  // How many of those lines recorded their unnamed elements.
+  int64 instances_recorded = 3;
 }
 
 // ImportJob is a job that hands the files of a directory under an import
@@ -1436,6 +1481,10 @@ message Job {
     // The scans archived before a search attribute was added given its
     // value, read from each scan's metadata file.
     SearchBackfillJob search_backfill = 25;
+
+    // The tenant's coverage report built again from each scan's metadata
+    // file.
+    DeidCoverageJob deid_coverage = 26;
   }
 
   // Where it is.

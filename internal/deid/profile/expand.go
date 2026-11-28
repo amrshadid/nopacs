@@ -106,16 +106,24 @@ func Expand(doc *v1.ProfileDocument, cat *Catalog) (*v1.ExpandedProfile, Problem
 // meaning of every edition it has shipped, so a stored version never
 // changes what it does when the language grows.
 //
-// Edition 2 adds value patterns and redact, edition 3 text lists. A
+// Edition 2 adds value patterns and redact, edition 3 text lists, edition 4
+// the pixel action that fills by the tenant's template. A
 // profile is written as the oldest edition that has everything it uses,
 // its bases included, so the expanded text and checksum of one that uses
 // nothing newer are what they were before the newer edition existed, and
-// an older build still runs it.
-const LanguageEdition = 3
+// an older build still runs it (an older build refuses a version that uses
+// the template action, so the pixels of an at-risk image are never left
+// unfilled by a build that does not know it).
+const LanguageEdition = 4
 
 // editionOf returns the oldest language edition that has everything an
 // expanded profile uses.
 func editionOf(e *v1.ExpandedProfile) int32 {
+	for _, ep := range e.GetPixelRules() {
+		if usesTemplate(ep.GetRule()) {
+			return templateEdition
+		}
+	}
 	if len(e.GetTextLists()) > 0 {
 		return listEdition
 	}
@@ -129,6 +137,16 @@ func editionOf(e *v1.ExpandedProfile) int32 {
 		}
 	}
 	return ed
+}
+
+// templateEdition is the language edition that has the pixel action that
+// fills by the tenant's template.
+const templateEdition = 4
+
+// usesTemplate reports whether a pixel rule fills by the tenant's template.
+func usesTemplate(r *v1.PixelRule) bool {
+	_, ok := r.GetAction().(*v1.PixelRule_RedactByTemplate)
+	return ok
 }
 
 // MaxVersionBytes is the bound of a version's document and expanded form

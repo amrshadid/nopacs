@@ -431,6 +431,16 @@ Usage: `nopacs deid code <tenant> (--patient-id VALUE|- | --attribute NAME --val
 | `--patient-id` | string |  | the Patient ID (0010,0020) to find the codes of, or - to read it from the first line of standard input |
 | `--value` | string |  | the value, or - to read it from the first line of standard input |
 
+#### `nopacs deid coverage`
+
+List the elements archived files held that no rule of their profile named
+
+Usage: `nopacs deid coverage <tenant> [--refresh] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--refresh` | bool |  | build the report again first: make the job and wait for it to end |
+
 #### `nopacs deid dry-run`
 
 Run a profile version over archived instances and say what it would hold
@@ -441,6 +451,71 @@ Usage: `nopacs deid dry-run <tenant> (<profile>[@<version>] | --own) [<subject>[
 |---|---|---|---|
 | `--own` | bool |  | run each instance under the version its catalog row records |
 | `--wait` | bool |  | follow the job until it ends, as "job watch" does, with its exit codes |
+
+#### `nopacs deid rerun`
+
+Run a newer profile version over archived data, a new revision of each file it changes
+
+Usage: `nopacs deid rerun <tenant> [<subject>[/<session>[/<scan>]]] --profile <name>[@<version>] --reason TEXT [--preview] [--wait] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--preview` | bool |  | count what would change, by element and action, and write nothing |
+| `--profile` | string |  | the profile version to run, <name>[@<version>] |
+| `--reason` | string |  | why the profile is re-run; required unless --preview |
+| `--wait` | bool |  | follow the job until it ends, as "job watch" does, with its exit codes |
+
+#### `nopacs deid template`
+
+Keep the per-device pixel templates a profile's pixel rule fills by
+
+Usage: `nopacs deid template`
+
+##### `nopacs deid template add`
+
+Add one pixel template
+
+Usage: `nopacs deid template add <tenant> --manufacturer M --model M --rows N --columns N --rect x,y,w,h... [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--columns` | int32 |  | the image's Columns, matched exactly |
+| `--manufacturer` | string |  | the device's Manufacturer (0008,0070); case is ignored |
+| `--model` | string |  | the device's Manufacturer's Model Name (0008,1090); case is ignored |
+| `--rect` | stringArray |  | a rectangle to fill, x,y,width,height[,from-right][,from-bottom]; repeat for more |
+| `--rows` | int32 |  | the image's Rows, matched exactly |
+| `--sop-class` | string |  | the SOP Class UID the template is for; without it, any class |
+
+##### `nopacs deid template import`
+
+Import pixel templates from a JSON or CSV file
+
+Usage: `nopacs deid template import <tenant> FILE`
+
+##### `nopacs deid template list`
+
+List a tenant's pixel templates
+
+Usage: `nopacs deid template list <tenant> [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--all` | bool |  | fetch every item, page after page |
+| `--limit` | int | `100` | the most items to fetch; when more exist the command says so |
+
+##### `nopacs deid template remove`
+
+Remove one pixel template
+
+Usage: `nopacs deid template remove <tenant> --manufacturer M --model M --rows N --columns N [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--columns` | int32 |  | the template's columns |
+| `--manufacturer` | string |  | the template's manufacturer |
+| `--model` | string |  | the template's model |
+| `--rows` | int32 |  | the template's rows |
+| `--sop-class` | string |  | the template's SOP class; without it, the template for any class |
 
 ### `nopacs download`
 
@@ -827,11 +902,12 @@ Usage: `nopacs profile create <tenant> <name> (--document|--from) FILE|- [--note
 
 Say in plain words what a version or a document does, with its method record and its rules
 
-Usage: `nopacs profile describe <tenant> (<name>[@<version>] | --document FILE|-) [--no-rules] [flags]`
+Usage: `nopacs profile describe <tenant> (<name>[@<version>] | --document FILE|-) [--no-rules | --effective] [flags]`
 
 | Flag | Type | Default | What it does |
 |---|---|---|---|
 | `--document` | string |  | an unsaved document's file, or - to read it from standard input |
+| `--effective` | bool |  | describe a receiver's profile stacked over the tenant's base profile, with each element's winning layer |
 | `--no-rules` | bool |  | leave out the table of every rule |
 
 #### `nopacs profile diff`
@@ -1113,6 +1189,8 @@ Usage: `nopacs receiver set <tenant> <name> [flags of the fields to change] [fla
 | `--bind-address` | string |  | the address of the server to listen on, one of those the setting receiver.bind-addresses lists (default: the installation's default) |
 | `--default-naming` | bool |  | return to the default naming rule, which carries no value the sender gave |
 | `--enabled` | bool |  | whether the receiver accepts data; false, the default, keeps it stopped (--enabled=false stops one) |
+| `--force` | bool |  | point the receiver at a profile version that was not tried or whose trial held files; needs --force-reason |
+| `--force-reason` | string |  | why the change is forced; audited |
 | `--forward-to` | stringArray |  | the name of a sender of the tenant to send each reception to when it is archived; repeat for more senders, and --forward-to "" on set stops forwarding |
 | `--layout` | string |  | import: how a file's path is read for labels: plain (not read) or pattern (--pattern and --unit-depth) |
 | `--map-file` | string |  | import: the map file, a CSV under the root, by its path under the root (shown to operators only) |
@@ -1149,6 +1227,16 @@ Usage: `nopacs receiver set <tenant> <name> [flags of the fields to change] [fla
 Show one receiver with its health now
 
 Usage: `nopacs receiver show <tenant> <name>`
+
+#### `nopacs receiver try-profile`
+
+Try a profile version over what a receiver last received, before pointing it at the version
+
+Usage: `nopacs receiver try-profile <tenant> <receiver> --profile <name>[@<version>] [flags]`
+
+| Flag | Type | Default | What it does |
+|---|---|---|---|
+| `--profile` | string |  | the profile version to try, <name>[@<version>]; required |
 
 ### `nopacs reception`
 

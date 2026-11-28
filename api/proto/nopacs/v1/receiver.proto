@@ -241,6 +241,30 @@ service ReceiverService {
   rpc RemoveReceiver(RemoveReceiverRequest) returns (RemoveReceiverResponse) {
     option idempotency_level = IDEMPOTENT;
   }
+
+  // TryReceiverProfile tries a profile version over what a receiver last
+  // received (change control), before the receiver is pointed at it: the
+  // version is run, as a re-run's preview runs it, over the first archived
+  // file of each scan of the receiver's newest deid.change-trial-sessions
+  // sessions, which changes nothing. The answer counts the files the
+  // version would change, leave and hold, names each element it changes
+  // with its action and how many files, and why files would be held; it
+  // holds no value of any file. The result is recorded for the receiver and
+  // version, and SetReceiver then points the receiver at the version only
+  // when it was tried and held no file, or with force and a reason. A
+  // receiver that received nothing is tried over no file, and the trial
+  // says so.
+  //
+  // Role: admin on the tenant, never a masked key: what the archive's files say is a person's choice.
+  // Audit: one entry in the tenant's log, with the receiver's name as its
+  // object, and the version and the counts in details.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant that
+  // does not exist, for a caller who may not list every tenant; a masked
+  // key), invalid, not found (the tenant has no such receiver or profile
+  // version), precondition (the receiver's newest sessions hold more scans
+  // than one trial reads), unavailable (the tenant's database does not
+  // answer, or the tenant is not ready).
+  rpc TryReceiverProfile(TryReceiverProfileRequest) returns (TryReceiverProfileResponse);
 }
 
 // Receiver is a way for data to arrive at a tenant, and how what arrives is
@@ -1191,6 +1215,20 @@ message SetReceiverRequest {
   // back loses no change another made meanwhile. Absent changes whatever is
   // stored.
   google.protobuf.Timestamp expected_update_time = 4;
+
+  // Point the receiver at a profile version that was not tried over its last
+  // receptions (TryReceiverProfile), whose trial read no file, or whose trial
+  // found files it would hold. A receiver that archives as received is gated
+  // the same when it is given a profile. Without it such a change is refused as a precondition failure.
+  // Needs force_reason, which is audited. Only a change of the receiver's
+  // profile reads it. A change of the tenant's base profile
+  // (deid.base-profile) is not gated by trials: it applies to every receiver,
+  // and is checked for strictness and audited.
+  bool force = 5;
+
+  // Why the change is forced: 1 to 1,000 characters, required with force,
+  // and empty without it. Recorded in the audit entry.
+  string force_reason = 6;
 }
 
 // SetReceiverResponse is the receiver as changed.
@@ -1218,3 +1256,82 @@ message RemoveReceiverResponse {
 // receiver takes files only from the server's own jobs, never from a network
 // caller, and has no port, address or keys.
 message JobReceiver {}
+
+// TryReceiverProfileRequest names the receiver and the profile version to try.
+message TryReceiverProfileRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The receiver's name. Required.
+  string receiver = 2;
+
+  // The profile whose version is tried. Required.
+  string profile = 3;
+
+  // The version of profile: 0 for its latest, which the trial fixes and
+  // answers.
+  int32 profile_version = 4;
+}
+
+// TryReceiverProfileResponse is what the trial found.
+message TryReceiverProfileResponse {
+  // The profile tried.
+  string profile = 1;
+
+  // The version of profile tried, as fixed.
+  int32 profile_version = 2;
+
+  // When the trial ran; the record SetReceiver reads is this one.
+  google.protobuf.Timestamp tried = 3;
+
+  // The sessions read: at most deid.change-trial-sessions.
+  int64 sessions = 4;
+
+  // The files read: the first of each scan of those sessions.
+  int64 files = 5;
+
+  // How many files the version would give a new revision.
+  int64 changed = 6;
+
+  // How many files the version would hold: its check after holds them, it
+  // needs the original value of an element it would hash, remap or shift, it
+  // loosens what made the file, or it has pixel rules.
+  int64 held = 7;
+
+  // How many files the version changes nothing in.
+  int64 unchanged = 8;
+
+  // How many files were not judged: archived as received, too large, or
+  // damaged.
+  int64 skipped = 9;
+
+  // The elements the version changes, most files first: never a value.
+  repeated ChangeElement elements = 10;
+
+  // Why files would be held, most files first.
+  repeated ChangeHold holds = 11;
+}
+
+// ChangeElement is an element a profile version changes in some of the files
+// tried.
+message ChangeElement {
+  // The element's tag as eight upper-case hexadecimal digits ("00180060").
+  string tag = 1;
+
+  // The version's action: remove, empty, replace, set, dummy,
+  // remove_unless_required, generalize, clean, redact or create.
+  string action = 2;
+
+  // In how many files it changes. An element the version leaves as it is
+  // is not listed.
+  int64 files = 3;
+}
+
+// ChangeHold is a reason a profile version would hold files.
+message ChangeHold {
+  // The quarantine reason and the cause, "reason/cause", fixed words.
+  string reason = 1;
+
+  // How many files.
+  int64 files = 2;
+}

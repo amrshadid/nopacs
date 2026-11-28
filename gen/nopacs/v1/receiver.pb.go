@@ -2372,8 +2372,20 @@ type SetReceiverRequest struct {
 	// back loses no change another made meanwhile. Absent changes whatever is
 	// stored.
 	ExpectedUpdateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expected_update_time,json=expectedUpdateTime,proto3" json:"expected_update_time,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Point the receiver at a profile version that was not tried over its last
+	// receptions (TryReceiverProfile), whose trial read no file, or whose trial
+	// found files it would hold. A receiver that archives as received is gated
+	// the same when it is given a profile. Without it such a change is refused as a precondition failure.
+	// Needs force_reason, which is audited. Only a change of the receiver's
+	// profile reads it. A change of the tenant's base profile
+	// (deid.base-profile) is not gated by trials: it applies to every receiver,
+	// and is checked for strictness and audited.
+	Force bool `protobuf:"varint,5,opt,name=force,proto3" json:"force,omitempty"`
+	// Why the change is forced: 1 to 1,000 characters, required with force,
+	// and empty without it. Recorded in the audit entry.
+	ForceReason   string `protobuf:"bytes,6,opt,name=force_reason,json=forceReason,proto3" json:"force_reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetReceiverRequest) Reset() {
@@ -2432,6 +2444,20 @@ func (x *SetReceiverRequest) GetExpectedUpdateTime() *timestamppb.Timestamp {
 		return x.ExpectedUpdateTime
 	}
 	return nil
+}
+
+func (x *SetReceiverRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *SetReceiverRequest) GetForceReason() string {
+	if x != nil {
+		return x.ForceReason
+	}
+	return ""
 }
 
 // SetReceiverResponse is the receiver as changed.
@@ -2620,6 +2646,341 @@ func (*JobReceiver) Descriptor() ([]byte, []int) {
 	return file_nopacs_v1_receiver_proto_rawDescGZIP(), []int{25}
 }
 
+// TryReceiverProfileRequest names the receiver and the profile version to try.
+type TryReceiverProfileRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tenant, by name. Required.
+	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// The receiver's name. Required.
+	Receiver string `protobuf:"bytes,2,opt,name=receiver,proto3" json:"receiver,omitempty"`
+	// The profile whose version is tried. Required.
+	Profile string `protobuf:"bytes,3,opt,name=profile,proto3" json:"profile,omitempty"`
+	// The version of profile: 0 for its latest, which the trial fixes and
+	// answers.
+	ProfileVersion int32 `protobuf:"varint,4,opt,name=profile_version,json=profileVersion,proto3" json:"profile_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *TryReceiverProfileRequest) Reset() {
+	*x = TryReceiverProfileRequest{}
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TryReceiverProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TryReceiverProfileRequest) ProtoMessage() {}
+
+func (x *TryReceiverProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TryReceiverProfileRequest.ProtoReflect.Descriptor instead.
+func (*TryReceiverProfileRequest) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_receiver_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *TryReceiverProfileRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+func (x *TryReceiverProfileRequest) GetReceiver() string {
+	if x != nil {
+		return x.Receiver
+	}
+	return ""
+}
+
+func (x *TryReceiverProfileRequest) GetProfile() string {
+	if x != nil {
+		return x.Profile
+	}
+	return ""
+}
+
+func (x *TryReceiverProfileRequest) GetProfileVersion() int32 {
+	if x != nil {
+		return x.ProfileVersion
+	}
+	return 0
+}
+
+// TryReceiverProfileResponse is what the trial found.
+type TryReceiverProfileResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The profile tried.
+	Profile string `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
+	// The version of profile tried, as fixed.
+	ProfileVersion int32 `protobuf:"varint,2,opt,name=profile_version,json=profileVersion,proto3" json:"profile_version,omitempty"`
+	// When the trial ran; the record SetReceiver reads is this one.
+	Tried *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=tried,proto3" json:"tried,omitempty"`
+	// The sessions read: at most deid.change-trial-sessions.
+	Sessions int64 `protobuf:"varint,4,opt,name=sessions,proto3" json:"sessions,omitempty"`
+	// The files read: the first of each scan of those sessions.
+	Files int64 `protobuf:"varint,5,opt,name=files,proto3" json:"files,omitempty"`
+	// How many files the version would give a new revision.
+	Changed int64 `protobuf:"varint,6,opt,name=changed,proto3" json:"changed,omitempty"`
+	// How many files the version would hold: its check after holds them, it
+	// needs the original value of an element it would hash, remap or shift, it
+	// loosens what made the file, or it has pixel rules.
+	Held int64 `protobuf:"varint,7,opt,name=held,proto3" json:"held,omitempty"`
+	// How many files the version changes nothing in.
+	Unchanged int64 `protobuf:"varint,8,opt,name=unchanged,proto3" json:"unchanged,omitempty"`
+	// How many files were not judged: archived as received, too large, or
+	// damaged.
+	Skipped int64 `protobuf:"varint,9,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	// The elements the version changes, most files first: never a value.
+	Elements []*ChangeElement `protobuf:"bytes,10,rep,name=elements,proto3" json:"elements,omitempty"`
+	// Why files would be held, most files first.
+	Holds         []*ChangeHold `protobuf:"bytes,11,rep,name=holds,proto3" json:"holds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TryReceiverProfileResponse) Reset() {
+	*x = TryReceiverProfileResponse{}
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TryReceiverProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TryReceiverProfileResponse) ProtoMessage() {}
+
+func (x *TryReceiverProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TryReceiverProfileResponse.ProtoReflect.Descriptor instead.
+func (*TryReceiverProfileResponse) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_receiver_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *TryReceiverProfileResponse) GetProfile() string {
+	if x != nil {
+		return x.Profile
+	}
+	return ""
+}
+
+func (x *TryReceiverProfileResponse) GetProfileVersion() int32 {
+	if x != nil {
+		return x.ProfileVersion
+	}
+	return 0
+}
+
+func (x *TryReceiverProfileResponse) GetTried() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Tried
+	}
+	return nil
+}
+
+func (x *TryReceiverProfileResponse) GetSessions() int64 {
+	if x != nil {
+		return x.Sessions
+	}
+	return 0
+}
+
+func (x *TryReceiverProfileResponse) GetFiles() int64 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *TryReceiverProfileResponse) GetChanged() int64 {
+	if x != nil {
+		return x.Changed
+	}
+	return 0
+}
+
+func (x *TryReceiverProfileResponse) GetHeld() int64 {
+	if x != nil {
+		return x.Held
+	}
+	return 0
+}
+
+func (x *TryReceiverProfileResponse) GetUnchanged() int64 {
+	if x != nil {
+		return x.Unchanged
+	}
+	return 0
+}
+
+func (x *TryReceiverProfileResponse) GetSkipped() int64 {
+	if x != nil {
+		return x.Skipped
+	}
+	return 0
+}
+
+func (x *TryReceiverProfileResponse) GetElements() []*ChangeElement {
+	if x != nil {
+		return x.Elements
+	}
+	return nil
+}
+
+func (x *TryReceiverProfileResponse) GetHolds() []*ChangeHold {
+	if x != nil {
+		return x.Holds
+	}
+	return nil
+}
+
+// ChangeElement is an element a profile version changes in some of the files
+// tried.
+type ChangeElement struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The element's tag as eight upper-case hexadecimal digits ("00180060").
+	Tag string `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	// The version's action: remove, empty, replace, set, dummy,
+	// remove_unless_required, generalize, clean, redact or create.
+	Action string `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
+	// In how many files it changes. An element the version leaves as it is
+	// is not listed.
+	Files         int64 `protobuf:"varint,3,opt,name=files,proto3" json:"files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeElement) Reset() {
+	*x = ChangeElement{}
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeElement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeElement) ProtoMessage() {}
+
+func (x *ChangeElement) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeElement.ProtoReflect.Descriptor instead.
+func (*ChangeElement) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_receiver_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ChangeElement) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *ChangeElement) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *ChangeElement) GetFiles() int64 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+// ChangeHold is a reason a profile version would hold files.
+type ChangeHold struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The quarantine reason and the cause, "reason/cause", fixed words.
+	Reason string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	// How many files.
+	Files         int64 `protobuf:"varint,2,opt,name=files,proto3" json:"files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeHold) Reset() {
+	*x = ChangeHold{}
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeHold) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeHold) ProtoMessage() {}
+
+func (x *ChangeHold) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_receiver_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeHold.ProtoReflect.Descriptor instead.
+func (*ChangeHold) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_receiver_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ChangeHold) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *ChangeHold) GetFiles() int64 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
 var File_nopacs_v1_receiver_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_receiver_proto_rawDesc = "" +
@@ -2741,13 +3102,15 @@ const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"r\n" +
 	"\x15ListReceiversResponse\x121\n" +
 	"\treceivers\x18\x01 \x03(\v2\x13.nopacs.v1.ReceiverR\treceivers\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe8\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa1\x02\n" +
 	"\x12SetReceiverRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12/\n" +
 	"\breceiver\x18\x02 \x01(\v2\x13.nopacs.v1.ReceiverR\breceiver\x12;\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\x12L\n" +
-	"\x14expected_update_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x12expectedUpdateTime\"F\n" +
+	"\x14expected_update_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x12expectedUpdateTime\x12\x14\n" +
+	"\x05force\x18\x05 \x01(\bR\x05force\x12!\n" +
+	"\fforce_reason\x18\x06 \x01(\tR\vforceReason\"F\n" +
 	"\x13SetReceiverResponse\x12/\n" +
 	"\breceiver\x18\x01 \x01(\v2\x13.nopacs.v1.ReceiverR\breceiver\"C\n" +
 	"\x15RemoveReceiverRequest\x12\x16\n" +
@@ -2755,7 +3118,33 @@ const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"I\n" +
 	"\x16RemoveReceiverResponse\x12/\n" +
 	"\breceiver\x18\x01 \x01(\v2\x13.nopacs.v1.ReceiverR\breceiver\"\r\n" +
-	"\vJobReceiver*g\n" +
+	"\vJobReceiver\"\x92\x01\n" +
+	"\x19TryReceiverProfileRequest\x12\x16\n" +
+	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1a\n" +
+	"\breceiver\x18\x02 \x01(\tR\breceiver\x12\x18\n" +
+	"\aprofile\x18\x03 \x01(\tR\aprofile\x12'\n" +
+	"\x0fprofile_version\x18\x04 \x01(\x05R\x0eprofileVersion\"\x8c\x03\n" +
+	"\x1aTryReceiverProfileResponse\x12\x18\n" +
+	"\aprofile\x18\x01 \x01(\tR\aprofile\x12'\n" +
+	"\x0fprofile_version\x18\x02 \x01(\x05R\x0eprofileVersion\x120\n" +
+	"\x05tried\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05tried\x12\x1a\n" +
+	"\bsessions\x18\x04 \x01(\x03R\bsessions\x12\x14\n" +
+	"\x05files\x18\x05 \x01(\x03R\x05files\x12\x18\n" +
+	"\achanged\x18\x06 \x01(\x03R\achanged\x12\x12\n" +
+	"\x04held\x18\a \x01(\x03R\x04held\x12\x1c\n" +
+	"\tunchanged\x18\b \x01(\x03R\tunchanged\x12\x18\n" +
+	"\askipped\x18\t \x01(\x03R\askipped\x124\n" +
+	"\belements\x18\n" +
+	" \x03(\v2\x18.nopacs.v1.ChangeElementR\belements\x12+\n" +
+	"\x05holds\x18\v \x03(\v2\x15.nopacs.v1.ChangeHoldR\x05holds\"O\n" +
+	"\rChangeElement\x12\x10\n" +
+	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x16\n" +
+	"\x06action\x18\x02 \x01(\tR\x06action\x12\x14\n" +
+	"\x05files\x18\x03 \x01(\x03R\x05files\":\n" +
+	"\n" +
+	"ChangeHold\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x14\n" +
+	"\x05files\x18\x02 \x01(\x03R\x05files*g\n" +
 	"\fImportLayout\x12\x1d\n" +
 	"\x19IMPORT_LAYOUT_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13IMPORT_LAYOUT_PLAIN\x10\x01\x12\x19\n" +
@@ -2778,13 +3167,14 @@ const file_nopacs_v1_receiver_proto_rawDesc = "" +
 	"\x1dRECEIVER_DOWN_REASON_STOPPING\x10\b\x12\x1e\n" +
 	"\x1aRECEIVER_DOWN_REASON_OTHER\x10\t\x12'\n" +
 	"#RECEIVER_DOWN_REASON_INCOMING_LIMIT\x10\n" +
-	"2\xba\x03\n" +
+	"2\x9d\x04\n" +
 	"\x0fReceiverService\x12L\n" +
 	"\vAddReceiver\x12\x1d.nopacs.v1.AddReceiverRequest\x1a\x1e.nopacs.v1.AddReceiverResponse\x12Q\n" +
 	"\vGetReceiver\x12\x1d.nopacs.v1.GetReceiverRequest\x1a\x1e.nopacs.v1.GetReceiverResponse\"\x03\x90\x02\x01\x12W\n" +
 	"\rListReceivers\x12\x1f.nopacs.v1.ListReceiversRequest\x1a .nopacs.v1.ListReceiversResponse\"\x03\x90\x02\x01\x12Q\n" +
 	"\vSetReceiver\x12\x1d.nopacs.v1.SetReceiverRequest\x1a\x1e.nopacs.v1.SetReceiverResponse\"\x03\x90\x02\x02\x12Z\n" +
-	"\x0eRemoveReceiver\x12 .nopacs.v1.RemoveReceiverRequest\x1a!.nopacs.v1.RemoveReceiverResponse\"\x03\x90\x02\x02B\x97\x01\n" +
+	"\x0eRemoveReceiver\x12 .nopacs.v1.RemoveReceiverRequest\x1a!.nopacs.v1.RemoveReceiverResponse\"\x03\x90\x02\x02\x12a\n" +
+	"\x12TryReceiverProfile\x12$.nopacs.v1.TryReceiverProfileRequest\x1a%.nopacs.v1.TryReceiverProfileResponseB\x97\x01\n" +
 	"\rcom.nopacs.v1B\rReceiverProtoP\x01Z2github.com/amrshadid/nopacs/gen/nopacs/v1;nopacsv1\xa2\x02\x03NXX\xaa\x02\tNopacs.V1\xca\x02\tNopacs\\V1\xe2\x02\x15Nopacs\\V1\\GPBMetadata\xea\x02\n" +
 	"Nopacs::V1b\x06proto3"
 
@@ -2801,41 +3191,45 @@ func file_nopacs_v1_receiver_proto_rawDescGZIP() []byte {
 }
 
 var file_nopacs_v1_receiver_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_nopacs_v1_receiver_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_nopacs_v1_receiver_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_nopacs_v1_receiver_proto_goTypes = []any{
-	(ImportLayout)(0),              // 0: nopacs.v1.ImportLayout
-	(ReceiverState)(0),             // 1: nopacs.v1.ReceiverState
-	(ReceiverDownReason)(0),        // 2: nopacs.v1.ReceiverDownReason
-	(*Receiver)(nil),               // 3: nopacs.v1.Receiver
-	(*ReceiverRouting)(nil),        // 4: nopacs.v1.ReceiverRouting
-	(*Route)(nil),                  // 5: nopacs.v1.Route
-	(*RouteForwardTo)(nil),         // 6: nopacs.v1.RouteForwardTo
-	(*AsReceived)(nil),             // 7: nopacs.v1.AsReceived
-	(*ProfileVersionRef)(nil),      // 8: nopacs.v1.ProfileVersionRef
-	(*DimseReceiver)(nil),          // 9: nopacs.v1.DimseReceiver
-	(*StowReceiver)(nil),           // 10: nopacs.v1.StowReceiver
-	(*ImportReceiver)(nil),         // 11: nopacs.v1.ImportReceiver
-	(*AllowedCallers)(nil),         // 12: nopacs.v1.AllowedCallers
-	(*CallerRule)(nil),             // 13: nopacs.v1.CallerRule
-	(*ReceiverTls)(nil),            // 14: nopacs.v1.ReceiverTls
-	(*NamingRule)(nil),             // 15: nopacs.v1.NamingRule
-	(*NamingPattern)(nil),          // 16: nopacs.v1.NamingPattern
-	(*ReceiverHealth)(nil),         // 17: nopacs.v1.ReceiverHealth
-	(*AddReceiverRequest)(nil),     // 18: nopacs.v1.AddReceiverRequest
-	(*AddReceiverResponse)(nil),    // 19: nopacs.v1.AddReceiverResponse
-	(*GetReceiverRequest)(nil),     // 20: nopacs.v1.GetReceiverRequest
-	(*GetReceiverResponse)(nil),    // 21: nopacs.v1.GetReceiverResponse
-	(*ListReceiversRequest)(nil),   // 22: nopacs.v1.ListReceiversRequest
-	(*ListReceiversResponse)(nil),  // 23: nopacs.v1.ListReceiversResponse
-	(*SetReceiverRequest)(nil),     // 24: nopacs.v1.SetReceiverRequest
-	(*SetReceiverResponse)(nil),    // 25: nopacs.v1.SetReceiverResponse
-	(*RemoveReceiverRequest)(nil),  // 26: nopacs.v1.RemoveReceiverRequest
-	(*RemoveReceiverResponse)(nil), // 27: nopacs.v1.RemoveReceiverResponse
-	(*JobReceiver)(nil),            // 28: nopacs.v1.JobReceiver
-	(*durationpb.Duration)(nil),    // 29: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),  // 30: google.protobuf.Timestamp
-	(*ProfileCondition)(nil),       // 31: nopacs.v1.ProfileCondition
-	(*fieldmaskpb.FieldMask)(nil),  // 32: google.protobuf.FieldMask
+	(ImportLayout)(0),                  // 0: nopacs.v1.ImportLayout
+	(ReceiverState)(0),                 // 1: nopacs.v1.ReceiverState
+	(ReceiverDownReason)(0),            // 2: nopacs.v1.ReceiverDownReason
+	(*Receiver)(nil),                   // 3: nopacs.v1.Receiver
+	(*ReceiverRouting)(nil),            // 4: nopacs.v1.ReceiverRouting
+	(*Route)(nil),                      // 5: nopacs.v1.Route
+	(*RouteForwardTo)(nil),             // 6: nopacs.v1.RouteForwardTo
+	(*AsReceived)(nil),                 // 7: nopacs.v1.AsReceived
+	(*ProfileVersionRef)(nil),          // 8: nopacs.v1.ProfileVersionRef
+	(*DimseReceiver)(nil),              // 9: nopacs.v1.DimseReceiver
+	(*StowReceiver)(nil),               // 10: nopacs.v1.StowReceiver
+	(*ImportReceiver)(nil),             // 11: nopacs.v1.ImportReceiver
+	(*AllowedCallers)(nil),             // 12: nopacs.v1.AllowedCallers
+	(*CallerRule)(nil),                 // 13: nopacs.v1.CallerRule
+	(*ReceiverTls)(nil),                // 14: nopacs.v1.ReceiverTls
+	(*NamingRule)(nil),                 // 15: nopacs.v1.NamingRule
+	(*NamingPattern)(nil),              // 16: nopacs.v1.NamingPattern
+	(*ReceiverHealth)(nil),             // 17: nopacs.v1.ReceiverHealth
+	(*AddReceiverRequest)(nil),         // 18: nopacs.v1.AddReceiverRequest
+	(*AddReceiverResponse)(nil),        // 19: nopacs.v1.AddReceiverResponse
+	(*GetReceiverRequest)(nil),         // 20: nopacs.v1.GetReceiverRequest
+	(*GetReceiverResponse)(nil),        // 21: nopacs.v1.GetReceiverResponse
+	(*ListReceiversRequest)(nil),       // 22: nopacs.v1.ListReceiversRequest
+	(*ListReceiversResponse)(nil),      // 23: nopacs.v1.ListReceiversResponse
+	(*SetReceiverRequest)(nil),         // 24: nopacs.v1.SetReceiverRequest
+	(*SetReceiverResponse)(nil),        // 25: nopacs.v1.SetReceiverResponse
+	(*RemoveReceiverRequest)(nil),      // 26: nopacs.v1.RemoveReceiverRequest
+	(*RemoveReceiverResponse)(nil),     // 27: nopacs.v1.RemoveReceiverResponse
+	(*JobReceiver)(nil),                // 28: nopacs.v1.JobReceiver
+	(*TryReceiverProfileRequest)(nil),  // 29: nopacs.v1.TryReceiverProfileRequest
+	(*TryReceiverProfileResponse)(nil), // 30: nopacs.v1.TryReceiverProfileResponse
+	(*ChangeElement)(nil),              // 31: nopacs.v1.ChangeElement
+	(*ChangeHold)(nil),                 // 32: nopacs.v1.ChangeHold
+	(*durationpb.Duration)(nil),        // 33: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),      // 34: google.protobuf.Timestamp
+	(*ProfileCondition)(nil),           // 35: nopacs.v1.ProfileCondition
+	(*fieldmaskpb.FieldMask)(nil),      // 36: google.protobuf.FieldMask
 }
 var file_nopacs_v1_receiver_proto_depIdxs = []int32{
 	9,  // 0: nopacs.v1.Receiver.dimse:type_name -> nopacs.v1.DimseReceiver
@@ -2843,16 +3237,16 @@ var file_nopacs_v1_receiver_proto_depIdxs = []int32{
 	11, // 2: nopacs.v1.Receiver.importer:type_name -> nopacs.v1.ImportReceiver
 	28, // 3: nopacs.v1.Receiver.job:type_name -> nopacs.v1.JobReceiver
 	15, // 4: nopacs.v1.Receiver.naming:type_name -> nopacs.v1.NamingRule
-	29, // 5: nopacs.v1.Receiver.quiet_period:type_name -> google.protobuf.Duration
-	29, // 6: nopacs.v1.Receiver.max_open_time:type_name -> google.protobuf.Duration
+	33, // 5: nopacs.v1.Receiver.quiet_period:type_name -> google.protobuf.Duration
+	33, // 6: nopacs.v1.Receiver.max_open_time:type_name -> google.protobuf.Duration
 	17, // 7: nopacs.v1.Receiver.health:type_name -> nopacs.v1.ReceiverHealth
-	30, // 8: nopacs.v1.Receiver.create_time:type_name -> google.protobuf.Timestamp
-	30, // 9: nopacs.v1.Receiver.update_time:type_name -> google.protobuf.Timestamp
+	34, // 8: nopacs.v1.Receiver.create_time:type_name -> google.protobuf.Timestamp
+	34, // 9: nopacs.v1.Receiver.update_time:type_name -> google.protobuf.Timestamp
 	7,  // 10: nopacs.v1.Receiver.as_received:type_name -> nopacs.v1.AsReceived
 	8,  // 11: nopacs.v1.Receiver.profile:type_name -> nopacs.v1.ProfileVersionRef
 	4,  // 12: nopacs.v1.Receiver.routing:type_name -> nopacs.v1.ReceiverRouting
 	5,  // 13: nopacs.v1.ReceiverRouting.routes:type_name -> nopacs.v1.Route
-	31, // 14: nopacs.v1.Route.conditions:type_name -> nopacs.v1.ProfileCondition
+	35, // 14: nopacs.v1.Route.conditions:type_name -> nopacs.v1.ProfileCondition
 	8,  // 15: nopacs.v1.Route.profile:type_name -> nopacs.v1.ProfileVersionRef
 	6,  // 16: nopacs.v1.Route.forward_to:type_name -> nopacs.v1.RouteForwardTo
 	12, // 17: nopacs.v1.DimseReceiver.allowed_callers:type_name -> nopacs.v1.AllowedCallers
@@ -2862,31 +3256,36 @@ var file_nopacs_v1_receiver_proto_depIdxs = []int32{
 	16, // 21: nopacs.v1.NamingRule.pattern:type_name -> nopacs.v1.NamingPattern
 	1,  // 22: nopacs.v1.ReceiverHealth.state:type_name -> nopacs.v1.ReceiverState
 	2,  // 23: nopacs.v1.ReceiverHealth.down_reason:type_name -> nopacs.v1.ReceiverDownReason
-	30, // 24: nopacs.v1.ReceiverHealth.since:type_name -> google.protobuf.Timestamp
+	34, // 24: nopacs.v1.ReceiverHealth.since:type_name -> google.protobuf.Timestamp
 	3,  // 25: nopacs.v1.AddReceiverRequest.receiver:type_name -> nopacs.v1.Receiver
 	3,  // 26: nopacs.v1.AddReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
 	3,  // 27: nopacs.v1.GetReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
 	3,  // 28: nopacs.v1.ListReceiversResponse.receivers:type_name -> nopacs.v1.Receiver
 	3,  // 29: nopacs.v1.SetReceiverRequest.receiver:type_name -> nopacs.v1.Receiver
-	32, // 30: nopacs.v1.SetReceiverRequest.update_mask:type_name -> google.protobuf.FieldMask
-	30, // 31: nopacs.v1.SetReceiverRequest.expected_update_time:type_name -> google.protobuf.Timestamp
+	36, // 30: nopacs.v1.SetReceiverRequest.update_mask:type_name -> google.protobuf.FieldMask
+	34, // 31: nopacs.v1.SetReceiverRequest.expected_update_time:type_name -> google.protobuf.Timestamp
 	3,  // 32: nopacs.v1.SetReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
 	3,  // 33: nopacs.v1.RemoveReceiverResponse.receiver:type_name -> nopacs.v1.Receiver
-	18, // 34: nopacs.v1.ReceiverService.AddReceiver:input_type -> nopacs.v1.AddReceiverRequest
-	20, // 35: nopacs.v1.ReceiverService.GetReceiver:input_type -> nopacs.v1.GetReceiverRequest
-	22, // 36: nopacs.v1.ReceiverService.ListReceivers:input_type -> nopacs.v1.ListReceiversRequest
-	24, // 37: nopacs.v1.ReceiverService.SetReceiver:input_type -> nopacs.v1.SetReceiverRequest
-	26, // 38: nopacs.v1.ReceiverService.RemoveReceiver:input_type -> nopacs.v1.RemoveReceiverRequest
-	19, // 39: nopacs.v1.ReceiverService.AddReceiver:output_type -> nopacs.v1.AddReceiverResponse
-	21, // 40: nopacs.v1.ReceiverService.GetReceiver:output_type -> nopacs.v1.GetReceiverResponse
-	23, // 41: nopacs.v1.ReceiverService.ListReceivers:output_type -> nopacs.v1.ListReceiversResponse
-	25, // 42: nopacs.v1.ReceiverService.SetReceiver:output_type -> nopacs.v1.SetReceiverResponse
-	27, // 43: nopacs.v1.ReceiverService.RemoveReceiver:output_type -> nopacs.v1.RemoveReceiverResponse
-	39, // [39:44] is the sub-list for method output_type
-	34, // [34:39] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	34, // 34: nopacs.v1.TryReceiverProfileResponse.tried:type_name -> google.protobuf.Timestamp
+	31, // 35: nopacs.v1.TryReceiverProfileResponse.elements:type_name -> nopacs.v1.ChangeElement
+	32, // 36: nopacs.v1.TryReceiverProfileResponse.holds:type_name -> nopacs.v1.ChangeHold
+	18, // 37: nopacs.v1.ReceiverService.AddReceiver:input_type -> nopacs.v1.AddReceiverRequest
+	20, // 38: nopacs.v1.ReceiverService.GetReceiver:input_type -> nopacs.v1.GetReceiverRequest
+	22, // 39: nopacs.v1.ReceiverService.ListReceivers:input_type -> nopacs.v1.ListReceiversRequest
+	24, // 40: nopacs.v1.ReceiverService.SetReceiver:input_type -> nopacs.v1.SetReceiverRequest
+	26, // 41: nopacs.v1.ReceiverService.RemoveReceiver:input_type -> nopacs.v1.RemoveReceiverRequest
+	29, // 42: nopacs.v1.ReceiverService.TryReceiverProfile:input_type -> nopacs.v1.TryReceiverProfileRequest
+	19, // 43: nopacs.v1.ReceiverService.AddReceiver:output_type -> nopacs.v1.AddReceiverResponse
+	21, // 44: nopacs.v1.ReceiverService.GetReceiver:output_type -> nopacs.v1.GetReceiverResponse
+	23, // 45: nopacs.v1.ReceiverService.ListReceivers:output_type -> nopacs.v1.ListReceiversResponse
+	25, // 46: nopacs.v1.ReceiverService.SetReceiver:output_type -> nopacs.v1.SetReceiverResponse
+	27, // 47: nopacs.v1.ReceiverService.RemoveReceiver:output_type -> nopacs.v1.RemoveReceiverResponse
+	30, // 48: nopacs.v1.ReceiverService.TryReceiverProfile:output_type -> nopacs.v1.TryReceiverProfileResponse
+	43, // [43:49] is the sub-list for method output_type
+	37, // [37:43] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_receiver_proto_init() }
@@ -2913,7 +3312,7 @@ func file_nopacs_v1_receiver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_receiver_proto_rawDesc), len(file_nopacs_v1_receiver_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   26,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

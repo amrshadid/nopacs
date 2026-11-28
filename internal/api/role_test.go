@@ -141,6 +141,7 @@ var rolePhrases = map[string]roleShape{
 	"operator on the tenant.": tenantOperator,
 	"admin on the tenant.":    tenantAdmin,
 	"admin on the tenant, never a masked key: a person decides how much of the archive goes at once.":                                                                                   tenantAdmin,
+	"admin on the tenant, never a masked key: what the archive's files say is a person's choice.":                                                                                       tenantAdmin,
 	"admin on the tenant, never a masked key: where archived data is filed is a person's choice.":                                                                                       tenantAdmin,
 	"admin on the tenant, and writer on the target tenant, never a masked key: where archived data goes is a person's choice.":                                                          tenantAdmin,
 	"reader on the tenant; operator on the tenant to filter by Study Instance UID, since looking a study up by an identifier the caller already holds is a search for a person's data.": tenantReaderOrOperator,
@@ -181,6 +182,8 @@ var originalsWhen = map[string][]string{
 	nopacsv1connect.ReceptionServiceListReceptionsProcedure:        {"study_instance_uid"},
 	nopacsv1connect.DeidServiceCodeProcedure:                       nil,
 	nopacsv1connect.DeidServiceImportLookupCodesProcedure:          nil,
+	nopacsv1connect.DeidServiceAddPixelTemplatesProcedure:          nil,
+	nopacsv1connect.DeidServiceRemovePixelTemplateProcedure:        nil,
 	nopacsv1connect.JobServiceListImportFilesProcedure:             nil,
 	nopacsv1connect.JobServiceListImportUnitsProcedure:             nil,
 	nopacsv1connect.BackupServiceCreateBackupProcedure:             nil,
@@ -262,7 +265,8 @@ func choosesDestination(proc string, req proto.Message) bool {
 // caller chooses into archived files, which a masked key is refused
 // (access.Requirement.WritesValues). A method not here never does.
 var writesValues = map[string]bool{
-	nopacsv1connect.CorrectionServiceEditProcedure: true,
+	nopacsv1connect.CorrectionServiceEditProcedure:             true,
+	nopacsv1connect.ReceiverServiceTryReceiverProfileProcedure: true,
 }
 
 // deletesInBulk names the methods whose every request deletes many targets

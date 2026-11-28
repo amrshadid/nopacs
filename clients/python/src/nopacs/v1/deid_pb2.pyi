@@ -1,3 +1,8 @@
+import datetime
+
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from nopacs.v1 import job_pb2 as _job_pb2
+from nopacs.v1 import profile_pb2 as _profile_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -5,6 +10,148 @@ from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class PixelTemplate(_message.Message):
+    __slots__ = ("manufacturer", "model", "rows", "columns", "sop_class", "rectangles")
+    MANUFACTURER_FIELD_NUMBER: _ClassVar[int]
+    MODEL_FIELD_NUMBER: _ClassVar[int]
+    ROWS_FIELD_NUMBER: _ClassVar[int]
+    COLUMNS_FIELD_NUMBER: _ClassVar[int]
+    SOP_CLASS_FIELD_NUMBER: _ClassVar[int]
+    RECTANGLES_FIELD_NUMBER: _ClassVar[int]
+    manufacturer: str
+    model: str
+    rows: int
+    columns: int
+    sop_class: str
+    rectangles: _containers.RepeatedCompositeFieldContainer[_profile_pb2.PixelRectangle]
+    def __init__(self, manufacturer: _Optional[str] = ..., model: _Optional[str] = ..., rows: _Optional[int] = ..., columns: _Optional[int] = ..., sop_class: _Optional[str] = ..., rectangles: _Optional[_Iterable[_Union[_profile_pb2.PixelRectangle, _Mapping]]] = ...) -> None: ...
+
+class AddPixelTemplatesRequest(_message.Message):
+    __slots__ = ("tenant", "templates")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    TEMPLATES_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    templates: _containers.RepeatedCompositeFieldContainer[PixelTemplate]
+    def __init__(self, tenant: _Optional[str] = ..., templates: _Optional[_Iterable[_Union[PixelTemplate, _Mapping]]] = ...) -> None: ...
+
+class AddPixelTemplatesResponse(_message.Message):
+    __slots__ = ("added",)
+    ADDED_FIELD_NUMBER: _ClassVar[int]
+    added: int
+    def __init__(self, added: _Optional[int] = ...) -> None: ...
+
+class RemovePixelTemplateRequest(_message.Message):
+    __slots__ = ("tenant", "manufacturer", "model", "rows", "columns", "sop_class")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    MANUFACTURER_FIELD_NUMBER: _ClassVar[int]
+    MODEL_FIELD_NUMBER: _ClassVar[int]
+    ROWS_FIELD_NUMBER: _ClassVar[int]
+    COLUMNS_FIELD_NUMBER: _ClassVar[int]
+    SOP_CLASS_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    manufacturer: str
+    model: str
+    rows: int
+    columns: int
+    sop_class: str
+    def __init__(self, tenant: _Optional[str] = ..., manufacturer: _Optional[str] = ..., model: _Optional[str] = ..., rows: _Optional[int] = ..., columns: _Optional[int] = ..., sop_class: _Optional[str] = ...) -> None: ...
+
+class RemovePixelTemplateResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListPixelTemplatesRequest(_message.Message):
+    __slots__ = ("tenant", "page_size", "page_token")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    page_size: int
+    page_token: str
+    def __init__(self, tenant: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+
+class ListPixelTemplatesResponse(_message.Message):
+    __slots__ = ("templates", "next_page_token")
+    TEMPLATES_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    templates: _containers.RepeatedCompositeFieldContainer[PixelTemplate]
+    next_page_token: str
+    def __init__(self, templates: _Optional[_Iterable[_Union[PixelTemplate, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
+
+class GetCoverageRequest(_message.Message):
+    __slots__ = ("tenant", "page_size", "page_token")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    page_size: int
+    page_token: str
+    def __init__(self, tenant: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+
+class GetCoverageResponse(_message.Message):
+    __slots__ = ("report", "refreshing", "elements", "next_page_token")
+    REPORT_FIELD_NUMBER: _ClassVar[int]
+    REFRESHING_FIELD_NUMBER: _ClassVar[int]
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    report: CoverageReport
+    refreshing: _job_pb2.Job
+    elements: _containers.RepeatedCompositeFieldContainer[CoverageElement]
+    next_page_token: str
+    def __init__(self, report: _Optional[_Union[CoverageReport, _Mapping]] = ..., refreshing: _Optional[_Union[_job_pb2.Job, _Mapping]] = ..., elements: _Optional[_Iterable[_Union[CoverageElement, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
+
+class CoverageReport(_message.Message):
+    __slots__ = ("job_id", "end_time", "scans_read", "scans_skipped", "instances", "instances_recorded", "instances_capped", "elements_not_listed", "distinct_elements")
+    JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    END_TIME_FIELD_NUMBER: _ClassVar[int]
+    SCANS_READ_FIELD_NUMBER: _ClassVar[int]
+    SCANS_SKIPPED_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_RECORDED_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_CAPPED_FIELD_NUMBER: _ClassVar[int]
+    ELEMENTS_NOT_LISTED_FIELD_NUMBER: _ClassVar[int]
+    DISTINCT_ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    job_id: str
+    end_time: _timestamp_pb2.Timestamp
+    scans_read: int
+    scans_skipped: int
+    instances: int
+    instances_recorded: int
+    instances_capped: int
+    elements_not_listed: int
+    distinct_elements: int
+    def __init__(self, job_id: _Optional[str] = ..., end_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., scans_read: _Optional[int] = ..., scans_skipped: _Optional[int] = ..., instances: _Optional[int] = ..., instances_recorded: _Optional[int] = ..., instances_capped: _Optional[int] = ..., elements_not_listed: _Optional[int] = ..., distinct_elements: _Optional[int] = ...) -> None: ...
+
+class CoverageElement(_message.Message):
+    __slots__ = ("tag", "private", "private_creator", "creator_withheld", "vr", "instances", "occurrences")
+    TAG_FIELD_NUMBER: _ClassVar[int]
+    PRIVATE_FIELD_NUMBER: _ClassVar[int]
+    PRIVATE_CREATOR_FIELD_NUMBER: _ClassVar[int]
+    CREATOR_WITHHELD_FIELD_NUMBER: _ClassVar[int]
+    VR_FIELD_NUMBER: _ClassVar[int]
+    INSTANCES_FIELD_NUMBER: _ClassVar[int]
+    OCCURRENCES_FIELD_NUMBER: _ClassVar[int]
+    tag: str
+    private: bool
+    private_creator: str
+    creator_withheld: bool
+    vr: str
+    instances: int
+    occurrences: int
+    def __init__(self, tag: _Optional[str] = ..., private: _Optional[bool] = ..., private_creator: _Optional[str] = ..., creator_withheld: _Optional[bool] = ..., vr: _Optional[str] = ..., instances: _Optional[int] = ..., occurrences: _Optional[int] = ...) -> None: ...
+
+class RefreshCoverageRequest(_message.Message):
+    __slots__ = ("tenant",)
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    def __init__(self, tenant: _Optional[str] = ...) -> None: ...
+
+class RefreshCoverageResponse(_message.Message):
+    __slots__ = ("job",)
+    JOB_FIELD_NUMBER: _ClassVar[int]
+    job: _job_pb2.Job
+    def __init__(self, job: _Optional[_Union[_job_pb2.Job, _Mapping]] = ...) -> None: ...
 
 class CodeRequest(_message.Message):
     __slots__ = ("tenant", "attribute", "value", "issuer", "namespace")

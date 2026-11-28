@@ -522,6 +522,12 @@ func (k Sending) RetryJob(ctx context.Context, id, newID string, now time.Time, 
 		if first.job.Kind == tenant.JobDeleteBatch {
 			return tenant.Precondition("a batch delete job is not retried; a new preview and batch delete what is still to delete")
 		}
+		if first.job.Kind == tenant.JobDeidCoverage {
+			return tenant.Precondition("a coverage job is not retried; a new refresh reads every scan again")
+		}
+		if first.job.Kind == tenant.JobDispose {
+			return tenant.Precondition("a dispose job is not retried; a new preview and Dispose list the sessions that are still due")
+		}
 		has := true
 		if first.job.Kind == tenant.JobSend {
 			if has, err = k.lockSender(ctx, tx, first.job.Sender); err != nil {

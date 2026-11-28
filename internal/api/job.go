@@ -83,6 +83,13 @@ func (v *jobViews) message(ctx context.Context, j tenant.Job) *v1.Job {
 		}
 		return m
 	}
+	if j.Kind == tenant.JobDeidCoverage {
+		m := jobMessage(j, "")
+		if cj, err := v.p.DeidCoverageJob(ctx, j.ID); err == nil {
+			m.Kind = &v1.Job_DeidCoverage{DeidCoverage: &v1.DeidCoverageJob{ScansSkipped: cj.Skipped, InstancesRead: cj.Instances, InstancesRecorded: cj.Recorded}}
+		}
+		return m
+	}
 	if j.Kind == tenant.JobReplicate {
 		return jobMessage(j, replicaHeld(ctx, v.p, j))
 	}

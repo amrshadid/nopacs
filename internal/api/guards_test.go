@@ -119,6 +119,9 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		"RemoveReceiver": func(c clients) outcome {
 			return call(c.receivers.RemoveReceiver, &v1.RemoveReceiverRequest{Tenant: name, Name: "scanner1"})
 		},
+		"TryReceiverProfile": func(c clients) outcome {
+			return call(c.receivers.TryReceiverProfile, &v1.TryReceiverProfileRequest{Tenant: name, Receiver: "scanner1", Profile: "research", ProfileVersion: 1})
+		},
 		"ListReceptions": func(c clients) outcome {
 			return call(c.receptions.ListReceptions, &v1.ListReceptionsRequest{Tenant: name})
 		},
@@ -244,6 +247,21 @@ func tenantMethods(name string) map[string]func(clients) outcome {
 		},
 		"BackfillAttribute": func(c clients) outcome {
 			return call(c.search.BackfillAttribute, &v1.BackfillAttributeRequest{Tenant: name, Attribute: "Modality"})
+		},
+		"AddPixelTemplates": func(c clients) outcome {
+			return call(c.deid.AddPixelTemplates, &v1.AddPixelTemplatesRequest{Tenant: name, Templates: []*v1.PixelTemplate{validTemplate("Guard Co", "G1", 32, 32)}})
+		},
+		"RemovePixelTemplate": func(c clients) outcome {
+			return call(c.deid.RemovePixelTemplate, &v1.RemovePixelTemplateRequest{Tenant: name, Manufacturer: "Guard Co", Model: "G1", Rows: 32, Columns: 32})
+		},
+		"ListPixelTemplates": func(c clients) outcome {
+			return call(c.deid.ListPixelTemplates, &v1.ListPixelTemplatesRequest{Tenant: name})
+		},
+		"GetCoverage": func(c clients) outcome {
+			return call(c.deid.GetCoverage, &v1.GetCoverageRequest{Tenant: name})
+		},
+		"RefreshCoverage": func(c clients) outcome {
+			return call(c.deid.RefreshCoverage, &v1.RefreshCoverageRequest{Tenant: name})
 		},
 		"Delete": func(c clients) outcome {
 			return call(c.corrections.Delete, &v1.DeleteRequest{Tenant: name, Target: &v1.CorrectionTarget{SubjectLabel: "S1"}, Reason: "x", ValidateOnly: true})

@@ -48,11 +48,19 @@ type written struct {
 	// profile made; false, the file as received.
 	made    bool
 	profile tenant.ProfileRef
+	// base is the tenant's base profile the file was de-identified over, zero
+	// when it had none (profile.Reception).
+	base tenant.ProfileRef
 	// pixelRiskAccepted says the image was at risk of burned-in text and a
 	// pixel rule of profile accepted it as it is; the catalog and the
 	// metadata record it so no sender sends it unless marked
 	// (tenant.SendRefusal).
 	pixelRiskAccepted bool
+	// unnamed and unnamedOver are what the profile's run recorded of the
+	// elements no rule named (sidecar.Instance.Unnamed): non-nil, possibly
+	// empty, for a file profile de-identified; nil for one archived as it is.
+	unnamed     []sidecar.UnnamedElement
+	unnamedOver int
 }
 
 // archiveScan archives the files of one series into its scan. A file is

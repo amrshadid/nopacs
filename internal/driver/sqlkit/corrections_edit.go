@@ -2,6 +2,9 @@ package sqlkit
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/amrshadid/nopacs/internal/core/label"
@@ -332,6 +335,9 @@ func (k Sending) publishEdit(ctx context.Context, tx SendingTx, c tenant.Correct
 		if err := k.setInstanceBytes(ctx, tx, row, row.Storage, key, w.SHA256, w.Size); err != nil {
 			return err
 		}
+		if err := setProfileOfLine(ctx, tx, row.scanID, row.UID, w.Line); err != nil {
+			return err
+		}
 		var line any
 		if len(w.Line) > 0 {
 			line = w.Line
@@ -352,6 +358,31 @@ func (k Sending) publishEdit(ctx context.Context, tx SendingTx, c tenant.Correct
 		}
 	}
 	return k.afterEditRows(ctx, tx, c, rows, cc.Manifests)
+}
+
+// setProfileOfLine points an instance's row at the profile version its line
+// of the scan's metadata names ("name@version"), when the tenant has it: a
+// profile re-run's new revision is made by a newer version than the one
+// the row records, and an undo gives the older one back from the line it
+// kept. A line that names none (an instance archived as received), or one
+// the tenant does not hold, changes nothing.
+func setProfileOfLine(ctx context.Context, tx SendingTx, scanID int64, uid string, line []byte) error {
+	var in struct {
+		Profile string `json:"profile"`
+	}
+	if len(line) == 0 || json.Unmarshal(line, &in) != nil {
+		return nil
+	}
+	at := strings.LastIndexByte(in.Profile, '@')
+	version, err := strconv.Atoi(in.Profile[at+1:])
+	if at <= 0 || err != nil {
+		return nil
+	}
+	name := in.Profile[:at]
+	_, err = tx.Exec(ctx, `UPDATE instances SET profile_version_id = (SELECT id FROM profile_versions WHERE name = ? AND version = ?)
+		WHERE scan_id = ? AND sop_instance_uid = ? AND EXISTS (SELECT 1 FROM profile_versions WHERE name = ? AND version = ?)`,
+		name, version, scanID, uid, name, version)
+	return err
 }
 
 // setEditValues gives a scan the catalog values an edit names.

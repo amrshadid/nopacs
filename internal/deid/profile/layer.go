@@ -176,7 +176,21 @@ func (e *Effective) Add(layer Layer) (*Effective, Problems) {
 	for i := range layer.Expanded.GetPixelRules() {
 		at{c: chk, pixelRule: i + 1}.add(CodeLayerPixelRule, "%s has pixel rules; the last pixel rule matching an image decides it, so a layer's would replace what the layers below fill: pixel rules belong to the first layer", name)
 	}
+	// A rule of the layer that a later rule of the same selector with no
+	// condition replaces decides nothing in the layer (the later of two rules
+	// of one selector wins, and one with no condition always holds), so only
+	// the later is judged: a layer that takes a base's weaker action for an
+	// element and then states a stricter one is as strict as the second says.
+	replacedBy := make(map[string]int, len(upper.rules))
 	for i, ur := range upper.rules {
+		if len(ur.norm.GetWhen()) == 0 {
+			replacedBy[selectorOnly(ur.norm)] = i
+		}
+	}
+	for i, ur := range upper.rules {
+		if j, ok := replacedBy[selectorOnly(ur.norm)]; ok && j > i {
+			continue
+		}
 		e.judge(at{c: chk, rule: i + 1, name: ur.norm.GetName(), field: "action"}, name, ur, lower)
 	}
 	if len(chk.list) > 0 {
@@ -187,6 +201,14 @@ func (e *Effective) Add(layer Layer) (*Effective, Problems) {
 		c, _ := proto.Clone(er).(*v1.ExpandedRule)
 		merged.Rules = append(merged.Rules, c)
 	}
+	// The layers are kept apart, so the profile decides each element by each
+	// layer alone and the strictest decision wins, never a more specific
+	// selector of one layer over a stricter rule of another (Program.Decide).
+	if len(merged.Layers) == 0 {
+		merged.Layers = []*v1.ExpandedLayer{{Rules: int32(len(e.expanded.GetRules())), PixelRules: int32(len(e.expanded.GetPixelRules())), //nolint:gosec // G115: bounded by MaxExpandedRules.
+			Unnamed: e.expanded.GetUnnamed()}}
+	}
+	merged.Layers = append(merged.Layers, &v1.ExpandedLayer{Rules: int32(len(layer.Expanded.GetRules())), Unnamed: layer.Expanded.GetUnnamed()}) //nolint:gosec // G115: bounded by MaxExpandedRules.
 	if layer.Expanded.GetUnnamed() == v1.UnnamedElements_UNNAMED_ELEMENTS_REMOVE {
 		merged.Unnamed = v1.UnnamedElements_UNNAMED_ELEMENTS_REMOVE
 	}

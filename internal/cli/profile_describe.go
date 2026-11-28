@@ -150,9 +150,9 @@ func protoJSON(m proto.Message, field string) (json.RawMessage, error) {
 // newProfileDescribe builds "profile describe".
 func (a *app) newProfileDescribe() *cobra.Command {
 	var document string
-	var noRules bool
+	var noRules, effective bool
 	cmd := &cobra.Command{
-		Use:   "describe <tenant> (<name>[@<version>] | --document FILE|-) [--no-rules]",
+		Use:   "describe <tenant> (<name>[@<version>] | --document FILE|-) [--no-rules | --effective]",
 		Short: "Say in plain words what a version or a document does, with its method record and its rules",
 		Long: `Say what a version (or an unsaved document) does, in plain words and in the
 terms a DICOM Conformance Statement needs (PS3.15 E.3.5, E.3.6, E.3.10):
@@ -177,12 +177,23 @@ Then every rule it runs, in order: the rules of its bases as they were copied
 in, then its own, each with its origin, selector, action and reason (not with
 --no-rules). The rule that decides an element is the most specific selector's,
 and between equally specific ones the later; "profile explain" shows the
-decision for each element of a file. With --json, all of it as one document.`,
+decision for each element of a file. With --json, all of it as one document.
+
+With --effective, a receiver's name takes the place of a version: the profile
+the receiver de-identifies with, stacked over the tenant's base profile (the
+setting deid.base-profile), each selector listed once with the strictest
+action and the layer it came from: "receiver" for what the receiver's profile
+names (it may only tighten the base), "tenant" for what only the base names.
+It reads profiles, never a file.`,
 		Example: `  nopacs profile describe lab1 research@2
+  nopacs profile describe --effective lab1 scanner1
   nopacs profile describe lab1 research@2 --no-rules
   nopacs profile describe lab1 --document research.json --json`,
 		Args: rangeArgs(1, 2),
 		RunE: a.run(func(ctx context.Context, cmd *cobra.Command, args []string) error {
+			if effective {
+				return a.describeEffective(ctx, cmd, args, document)
+			}
 			var expanded *v1.ExpandedProfile
 			var warnings []*v1.ProfileProblem
 			var tp *v1.TrialProfile
@@ -276,6 +287,7 @@ decision for each element of a file. With --json, all of it as one document.`,
 	}
 	cmd.Flags().StringVar(&document, documentFlag, "", "an unsaved document's file, or - to read it from standard input")
 	cmd.Flags().BoolVar(&noRules, "no-rules", false, "leave out the table of every rule")
+	cmd.Flags().BoolVar(&effective, "effective", false, "describe a receiver's profile stacked over the tenant's base profile, with each element's winning layer")
 	return cmd
 }
 

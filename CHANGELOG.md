@@ -153,6 +153,37 @@ scan, keeps it whole, and serves it through an API with keys.
 - Each file's de-identification record lists the public tags and (private
   creator, element) no rule named, with VR and count, no values; a creator
   holding a removed value or a list term is withheld.
+- A tenant may set a base profile (`deid.base-profile`). Every reception runs
+  the receiver's profile stacked over it: an element both layers decide gets
+  the stricter action, the base's pixel rules decide an image first, and the
+  check after holds what either layer removes. Every receiver, archive-rule
+  and destination profile must be at least as strict as the base, checked
+  wherever a profile is pointed at, and a looser one is refused with the
+  loosening listed; `nopacs profile describe --effective` shows each element's
+  deciding layer. De-identification jobs judge by the same stack.
+- `nopacs deid coverage` lists the standard and private elements archived
+  files held that no rule named, with VR and counts and never a value (a
+  private creator that held a removed value or a list term is withheld), from
+  a job that reads each scan's metadata once and resumes after a restart.
+- Profile re-run over the archive (`nopacs deid rerun`): a newer profile
+  version runs over data already archived de-identified, and each file it
+  takes more from becomes a new revision (the superseded one kept until the
+  purge, undone before it, the check after first); a preview counts what would
+  change by element and action, and a looser version, a version that does not
+  stack over the base, a file that would need the original, and a held file
+  are refused with a fixed reason.
+- Change control: `nopacs receiver try-profile` tries a version over a
+  receiver's newest `deid.change-trial-sessions` sessions. Giving a receiver
+  another profile version, its first one, or an archive rule's version needs
+  that version tried over files with none held, or `--force` with a reason,
+  which is audited.
+- Per-device pixel templates: a tenant keeps, for a device (manufacturer and
+  model, case ignored) and an image size (rows and columns, exactly), and
+  optionally a SOP class, the rectangles of burned-in text; a pixel rule
+  `redact_by_template` fills them, and an image at risk of burned-in text that
+  no template fits is held (`no_pixel_template`), never archived unfilled.
+  Loaded by an admin with `nopacs deid template add|import|list|remove` (JSON
+  or CSV); none is shipped.
 
 #### Reading and sending
 

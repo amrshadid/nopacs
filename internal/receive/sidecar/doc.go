@@ -95,12 +95,19 @@
 // differs from "sha256", which is the file as archived: a de-identified
 // instance's, the catalog's keyed one), "profile_sha256" (the checksum of the
 // profile version's expanded text, which names the version in whatever
-// database holds it), "reception" and "held_at" (always there: the
+// database holds it), "base_profile" (the tenant's base profile version, "name@version",
+// the profile was stacked over, only when the tenant had one), "reception" and "held_at" (always there: the
 // reception that confirmed the revision, and when the instance was first
 // held, which a later revision keeps), "received_form" ("dimse"
 // for a data set NoPACs wrapped in its own Part 10 header, "part10" for a file
-// taken as sent), "received_syntax" (the Transfer Syntax UID it arrived in)
-// and "nopacs_version" (the build that wrote the line). A sidecar of
+// taken as sent), "received_syntax" (the Transfer Syntax UID it arrived in),
+// "nopacs_version" (the build that wrote the line), "unnamed" (for an
+// instance a profile de-identified, the elements of the file as received that
+// no rule of the profile named, each as ["gggg00ee","VR",count] with a
+// private creator after them when it is given, or "" and true when it is
+// withheld, never a value; the list is there, possibly empty, whenever the
+// line was written by a build that records it) and "unnamed_over" (how many
+// occurrences of elements past the 1024 distinct ones listed). A sidecar of
 // version 1 or 2 has none of these and none is accepted in it, so a line has
 // one meaning in each version.
 //

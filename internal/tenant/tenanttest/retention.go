@@ -46,6 +46,7 @@ func runRetention(t *testing.T, open OpenEvents) {
 		{"DisposalEnds", testDisposalEnds},
 		{"DisposalAfterRelabel", testDisposalAfterRelabel},
 		{"DisposalStopsWhenEnded", testDisposalStopsWhenEnded},
+		{"DisposalNotRetried", testDisposalNotRetried},
 		{"BatchPreview", testBatchPreview},
 		{"BatchQueue", testBatchQueue},
 		{"BatchDeletes", testBatchDeletes},

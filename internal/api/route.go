@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
@@ -56,6 +57,13 @@ func (s routeService) CreateRuleSet(ctx context.Context, req *v1.CreateRuleSetRe
 		if err := c.checkRuleSetProfiles(ctx, p, rcv, rs); err != nil {
 			return nil, c.layerFail(d, st, facts, err)
 		}
+		forced, err := c.checkRuleSetChangeControl(ctx, p, rcv, rs, true, req.GetForce(), req.GetForceReason())
+		if err != nil {
+			return nil, c.failWith(d, st, facts, err)
+		}
+		maps.Copy(facts.Details, forced.Details)
+	} else if _, err := c.checkRuleSetChangeControl(ctx, p, tenant.Receiver{}, tenant.RuleSet{}, false, req.GetForce(), req.GetForceReason()); err != nil {
+		return nil, c.failIn(d, st, err)
 	}
 	out, err := p.CreateRuleSet(ctx, rs, req.GetActivate(), c.now(), changeEntry(d, facts), c.adminGuard(d))
 	if err != nil {
@@ -173,6 +181,7 @@ func (s routeService) ActivateRuleSet(ctx context.Context, req *v1.ActivateRuleS
 	}
 	c.places.Lock()
 	defer c.places.Unlock()
+	var forced access.Facts
 	if req.GetVersion() != 0 {
 		rcv, err := lookupReceiver(ctx, p, req.GetReceiver())
 		if err != nil {
@@ -185,8 +194,14 @@ func (s routeService) ActivateRuleSet(ctx context.Context, req *v1.ActivateRuleS
 		if err := c.checkRuleSetProfiles(ctx, p, rcv, rs); err != nil {
 			return nil, c.layerFail(d, st, access.Facts{}, err)
 		}
+		forced, err = c.checkRuleSetChangeControl(ctx, p, rcv, rs, true, req.GetForce(), req.GetForceReason())
+		if err != nil {
+			return nil, c.failIn(d, st, err)
+		}
+	} else if _, err := c.checkRuleSetChangeControl(ctx, p, tenant.Receiver{}, tenant.RuleSet{}, false, req.GetForce(), req.GetForceReason()); err != nil {
+		return nil, c.failIn(d, st, err)
 	}
-	out, err := p.ActivateRuleSet(ctx, req.GetReceiver(), req.GetVersion(), c.now(), changeEntry(d, access.Facts{}), c.adminGuard(d))
+	out, err := p.ActivateRuleSet(ctx, req.GetReceiver(), req.GetVersion(), c.now(), changeEntry(d, forced), c.adminGuard(d))
 	if err != nil {
 		return nil, c.failIn(d, st, err)
 	}

@@ -97,7 +97,7 @@ func (s receiverService) AddReceiver(ctx context.Context, req *v1.AddReceiverReq
 		return nil, c.failIn(d, st, err)
 	}
 	if err := c.checkDeidentification(ctx, p, st, in); err != nil {
-		return nil, c.failIn(d, st, err)
+		return nil, c.layerFail(d, st, access.Facts{}, err)
 	}
 	out, err := p.AddReceiver(ctx, in, c.now(), changeEntry(d, access.Facts{Details: receiverDetails(in, true)}), c.adminGuard(d))
 	if err != nil {
@@ -253,7 +253,7 @@ func (s receiverService) SetReceiver(ctx context.Context, req *v1.SetReceiverReq
 	// off.
 	if slices.Contains(fields, tenant.FieldDeidentification) || (result.Deidentifies() && slices.Contains(fields, tenant.FieldNaming)) {
 		if err := c.checkDeidentification(ctx, p, st, result); err != nil {
-			return nil, c.failIn(d, st, err)
+			return nil, c.layerFail(d, st, access.Facts{}, err)
 		}
 	}
 	// A new profile is a new layer under the rule set the receiver runs, whose
@@ -271,7 +271,11 @@ func (s receiverService) SetReceiver(ctx context.Context, req *v1.SetReceiverReq
 			}
 		}
 	}
-	out, err := p.SetReceiver(ctx, change, fields, c.now(), changeEntry(d, access.Facts{}), c.adminGuard(d))
+	facts, err := c.checkChangeControl(ctx, p, stored, result, slices.Contains(fields, tenant.FieldDeidentification), req)
+	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
+	out, err := p.SetReceiver(ctx, change, fields, c.now(), changeEntry(d, facts), c.adminGuard(d))
 	if err != nil {
 		return nil, c.failIn(d, st, fieldOf("receiver", err))
 	}

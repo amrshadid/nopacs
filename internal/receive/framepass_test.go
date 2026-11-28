@@ -203,5 +203,6 @@ func TestStartGivesOldSidecarsTheirTables(t *testing.T) {
 func withoutV3(in sidecar.Instance) sidecar.Instance {
 	in.Reception, in.HeldAt, in.ReceivedSHA256, in.ProfileSHA256 = "", time.Time{}, "", ""
 	in.ReceivedForm, in.ReceivedSyntax, in.NopacsVersion = "", "", ""
+	in.Unnamed, in.UnnamedOver = nil, 0
 	return in
 }

@@ -219,6 +219,20 @@ func (s settingsService) SetSetting(ctx context.Context, req *v1.SetSettingReque
 	if err := c.checkReadBounds(ctx, name, value); err != nil {
 		return nil, c.failWith(d, st, facts, err)
 	}
+	if name == settings.DeidBaseProfile {
+		// A base is checked against every profile the tenant's receivers and
+		// their rule sets run, under the lock a change of a receiver takes,
+		// so none is added or changed between the check and the change.
+		c.places.Lock()
+		defer c.places.Unlock()
+		p, err := c.pipeline(st)
+		if err == nil {
+			err = c.checkBaseSetting(ctx, p, value)
+		}
+		if err != nil {
+			return nil, c.layerFail(d, st, facts, err)
+		}
+	}
 	if placeSettings[name] {
 		c.places.Lock()
 		defer c.places.Unlock()
@@ -285,6 +299,9 @@ func (c *core) settingToChange(d access.Decision, scope access.Scope, prefix, na
 	}
 	if quotaSettings[name] && d.Masked() {
 		return settings.Definition{}, fault.New(fault.Denied, messageQuotaMasked)
+	}
+	if name == settings.DeidBaseProfile && d.Masked() {
+		return settings.Definition{}, fault.New(fault.Denied, messageBaseMasked)
 	}
 	return def, nil
 }

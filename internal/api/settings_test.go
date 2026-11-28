@@ -259,7 +259,7 @@ func testListSettings(t *testing.T) {
 			check: func(t *testing.T, o outcome) {
 				want := "access.allowed-networks=@/BUILT_IN,access.block-time=15m@/BUILT_IN,access.denied-networks=@/BUILT_IN,access.failure-limit=10@/BUILT_IN," +
 					"access.failure-window=1m@/BUILT_IN,access.forwarded-header=x-forwarded-for@/BUILT_IN,access.tenant-networks=@/BUILT_IN,access.trusted-proxies=@/BUILT_IN," +
-					"api.cors-origins=@/BUILT_IN,audit.retention=0@/BUILT_IN,audit.seal-interval=10m@/BUILT_IN,backup.max-duration=6h@/BUILT_IN,correction.batch-max=10000@/BUILT_IN,deid.list-cache-bytes=256MiB@/BUILT_IN,deid.memory=2GiB@/BUILT_IN,deid.pixel-limit=1GiB@/BUILT_IN,delete.grace=7d@/BUILT_IN,events.retention=90d@/BUILT_IN," +
+					"api.cors-origins=@/BUILT_IN,audit.retention=0@/BUILT_IN,audit.seal-interval=10m@/BUILT_IN,backup.max-duration=6h@/BUILT_IN,correction.batch-max=10000@/BUILT_IN,deid.base-profile=@/BUILT_IN,deid.change-trial-sessions=20@/BUILT_IN,deid.list-cache-bytes=256MiB@/BUILT_IN,deid.memory=2GiB@/BUILT_IN,deid.pixel-limit=1GiB@/BUILT_IN,delete.grace=7d@/BUILT_IN,events.retention=90d@/BUILT_IN," +
 					"import.allowed-roots=@/BUILT_IN,import.max-dir-entries=200000@/BUILT_IN,import.max-units=4@/BUILT_IN,import.roots=@/BUILT_IN,import.server-max-units=8@/BUILT_IN," +
 					"incoming.limit=0@/BUILT_IN,job.failures-kept=10000@/BUILT_IN,key.default-lifetime=90d@/BUILT_IN," +
 					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN,quarantine.warn-age=30d@/BUILT_IN,quarantine.warn-bytes=0@/BUILT_IN," +
@@ -278,16 +278,16 @@ func testListSettings(t *testing.T) {
 		{name: "installation, a page of 15", as: f.instReader, call: list(installation(), 15, ""),
 			check: func(t *testing.T, o outcome) {
 				token = o.res.(*v1.ListSettingsResponse).GetNextPageToken()
-				if got := names(o); !strings.HasPrefix(got, "access.allowed-networks=") || !strings.HasSuffix(got, "deid.memory=2GiB@/BUILT_IN") || token == "" {
+				if got := names(o); !strings.HasPrefix(got, "access.allowed-networks=") || !strings.HasSuffix(got, "deid.change-trial-sessions=20@/BUILT_IN") || token == "" {
 					t.Errorf("got %q, token %q", got, token)
 				}
 			}},
 		{name: "installation, the next page", as: f.instReader, call: func(c clients) outcome { return list(installation(), 15, token)(c) },
 			check: func(t *testing.T, o outcome) {
-				if got, next := names(o), o.res.(*v1.ListSettingsResponse).GetNextPageToken(); got != "deid.pixel-limit=1GiB@/BUILT_IN,delete.grace=7d@/BUILT_IN,events.retention=90d@/BUILT_IN,import.allowed-roots=@/BUILT_IN,import.max-dir-entries=200000@/BUILT_IN,import.max-units=4@/BUILT_IN,"+
+				if got, next := names(o), o.res.(*v1.ListSettingsResponse).GetNextPageToken(); got != "deid.list-cache-bytes=256MiB@/BUILT_IN,deid.memory=2GiB@/BUILT_IN,deid.pixel-limit=1GiB@/BUILT_IN,delete.grace=7d@/BUILT_IN,events.retention=90d@/BUILT_IN,import.allowed-roots=@/BUILT_IN,import.max-dir-entries=200000@/BUILT_IN,import.max-units=4@/BUILT_IN,"+
 					"import.roots=@/BUILT_IN,import.server-max-units=8@/BUILT_IN,incoming.limit=0@/BUILT_IN,"+
 					"job.failures-kept=10000@/BUILT_IN,key.default-lifetime=90d@/BUILT_IN,"+
-					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN,quarantine.warn-age=30d@/BUILT_IN,quarantine.warn-bytes=0@/BUILT_IN" || next == "" {
+					"key.expiry-warning=7d@/BUILT_IN,key.max-lifetime=3650d@/BUILT_IN" || next == "" {
 					t.Errorf("got %q, token %q", got, next)
 				}
 			}},

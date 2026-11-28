@@ -333,6 +333,11 @@ var rules = map[string]rule{
 	nopacsv1connect.ReceiverServiceSetReceiverProcedure: byMessage(func(r *v1.SetReceiverRequest) (access.Requirement, access.Request) {
 		return receiverChangeNeed(r.GetTenant(), r.GetReceiver(), r.GetUpdateMask().GetPaths()), access.Request{Object: r.GetReceiver().GetName(), Details: maskDetails(r.GetUpdateMask().GetPaths())}
 	}),
+	// TryReceiverProfile reads archived files and records a trial that gates
+	// a change of the receiver's profile: admin, never a masked key.
+	nopacsv1connect.ReceiverServiceTryReceiverProfileProcedure: byMessage(func(r *v1.TryReceiverProfileRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).WritesValues(), access.Request{Object: r.GetReceiver()}
+	}),
 	nopacsv1connect.ReceiverServiceRemoveReceiverProcedure: byMessage(func(r *v1.RemoveReceiverRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleAdmin), access.Request{Object: r.GetName()}
 	}),
@@ -511,6 +516,12 @@ var rules = map[string]rule{
 		if r.GetSend() != nil {
 			need = need.ChoosesDestination()
 		}
+		// A profile re-run rewrites what the archive's files say, by a rule
+		// a person chose, in bulk: admin on the tenant, never a masked key
+		// (its preview counts what the files hold, so the same).
+		if m := r.GetDeid().GetMode(); m == v1.DeidJobMode_DEID_JOB_MODE_RERUN || m == v1.DeidJobMode_DEID_JOB_MODE_RERUN_PREVIEW {
+			need = onTenantNamed(r.GetTenant(), master.RoleAdmin).WritesValues()
+		}
 		return need, access.Request{Details: createJobDetails(r)}
 	}),
 	nopacsv1connect.JobServiceGetJobProcedure: byMessage(func(r *v1.GetJobRequest) (access.Requirement, access.Request) {
@@ -613,7 +624,31 @@ var rules = map[string]rule{
 	nopacsv1connect.DeidServiceListLookupTablesProcedure: byMessage(func(r *v1.ListLookupTablesRequest) (access.Requirement, access.Request) {
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
 	}),
+	// Pixel templates decide which parts of an image are filled, so only an
+	// admin changes them and a masked key never does; the list holds a
+	// device's name and rectangles, never a value of a file.
+	nopacsv1connect.DeidServiceAddPixelTemplatesProcedure: byMessage(func(r *v1.AddPixelTemplatesRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).AnswersOriginals(), access.Request{}
+	}),
+	nopacsv1connect.DeidServiceRemovePixelTemplateProcedure: byMessage(func(r *v1.RemovePixelTemplateRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleAdmin).AnswersOriginals(), access.Request{Object: templateObject(r)}
+	}),
+	nopacsv1connect.DeidServiceListPixelTemplatesProcedure: byMessage(func(r *v1.ListPixelTemplatesRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
+	}),
+	// The coverage report holds no value of any file (a private creator is
+	// given only where it is a vendor's name), so a masked key may read it;
+	// the job that builds it writes the tenant's database only.
+	nopacsv1connect.DeidServiceGetCoverageProcedure: byMessage(func(r *v1.GetCoverageRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
+	}),
+	nopacsv1connect.DeidServiceRefreshCoverageProcedure: byMessage(func(r *v1.RefreshCoverageRequest) (access.Requirement, access.Request) {
+		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{}
+	}),
 	nopacsv1connect.ProfileServiceDescribeProfileProcedure: byMessage(func(r *v1.DescribeProfileRequest) (access.Requirement, access.Request) {
+		if r.GetEffectiveReceiver() != "" {
+			return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: profileObject(r.GetEffectiveReceiver())}
+		}
 		return onTenantNamed(r.GetTenant(), master.RoleOperator), access.Request{Object: trialObject(r.GetProfile())}
 	}),
 

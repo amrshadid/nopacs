@@ -28,8 +28,20 @@ operator role on the tenant.
 
 "deid code" is the forward lookup: from a value a person has (a Patient ID) to
 the codes the archive gives it, such as the subject's label, for a withdrawal
-of consent. It needs the admin role.`,
-		a.newDeidCheck(), a.newDeidDryRun(), a.newDeidCode())
+of consent. It needs the admin role.
+
+"deid rerun" runs a newer profile version over data already archived, a new
+revision of each file it changes, or counts what would change with --preview;
+it needs the admin role.
+
+"deid coverage" lists the elements archived files held that no rule of their
+profile named, with counts and never a value, from a report a job builds out of
+each scan's metadata. It needs the operator role.
+
+"deid template" keeps the per-device pixel templates a profile's
+redact_by_template pixel rule fills by: add, import, list, remove. Changing
+them needs the admin role.`,
+		a.newDeidCheck(), a.newDeidDryRun(), a.newDeidCode(), a.newDeidCoverage(), a.newDeidRerun(), a.newDeidTemplate())
 }
 
 // parseTarget reads an optional target: none for the whole tenant, or a
@@ -179,6 +191,10 @@ func deidMode(m v1.DeidJobMode) string {
 		return "check"
 	case v1.DeidJobMode_DEID_JOB_MODE_DRY_RUN:
 		return "dry run"
+	case v1.DeidJobMode_DEID_JOB_MODE_RERUN:
+		return "rerun"
+	case v1.DeidJobMode_DEID_JOB_MODE_RERUN_PREVIEW:
+		return "rerun preview"
 	}
 	return "unknown"
 }
@@ -224,6 +240,9 @@ func jobKindText(j *v1.Job) (string, string) {
 	}
 	if sb := j.GetSearchBackfill(); sb != nil {
 		return "search backfill", strings.Join(sb.GetFields(), ", ")
+	}
+	if j.GetDeidCoverage() != nil {
+		return "deid coverage", "the whole tenant"
 	}
 	return j.GetSend().GetSender(), output.JobTarget(j.GetSend())
 }

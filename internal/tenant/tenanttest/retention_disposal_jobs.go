@@ -7,6 +7,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/core/record"
 	"github.com/amrshadid/nopacs/internal/fault"
+	"github.com/amrshadid/nopacs/internal/master"
 	"github.com/amrshadid/nopacs/internal/tenant"
 )
 
@@ -168,4 +169,53 @@ func testDisposalStopsWhenEnded(e *tenv) {
 	if _, err := prep(now.Add(7*time.Minute), open.ID); err != nil {
 		e.Fatalf("a delete for a dispose job not ended: %v", err)
 	}
+}
+
+// testDisposalNotRetried guards that a dispose job is never retried: a retry
+// would walk a listing the preview already settled and could delete sessions
+// the person did not confirm again. A queued job and one that was stopped
+// (ended failed) are both refused as a precondition that says a new preview
+// replaces it, and the refusal changes nothing: no job is made, the job and
+// its listing stay as they were.
+func testDisposalNotRetried(e *tenv) {
+	now := e.disposalSetup()
+	p, err := e.p.PreviewDisposal(e.ctx, "d", 5, now)
+	e.ok("PreviewDisposal", err)
+	j, _, _, err := e.queue(e.id("j"), p.Confirm, now.Add(time.Minute))
+	e.ok("QueueDispose", err)
+	refused := func(what string, at time.Time) {
+		e.Helper()
+		before, err := e.p.Job(e.ctx, j.ID)
+		e.ok("Job", err)
+		beforeDispose, err := e.p.DisposeJob(e.ctx, j.ID)
+		e.ok("DisposeJob", err)
+		_, _, err = e.p.RetryJob(e.ctx, j.ID, e.id("r"), at, e.audit(), nil)
+		e.wantKind(what, err, fault.Precondition)
+		if err == nil || !strings.Contains(err.Error(), "a dispose job is not retried") {
+			e.Fatalf("%s answers %v, want it to say a dispose job is not retried", what, err)
+		}
+		after, err := e.p.Job(e.ctx, j.ID)
+		e.ok("Job", err)
+		afterDispose, err := e.p.DisposeJob(e.ctx, j.ID)
+		e.ok("DisposeJob", err)
+		if after.State != before.State || after.RetryJob != "" || after.RetryOf != "" || !after.Ended.Equal(before.Ended) ||
+			len(afterDispose.Sessions) != len(beforeDispose.Sessions) {
+			e.Fatalf("%s changed the job: %+v then %+v", what, before, after)
+		}
+		all, _, err := e.p.ListJobs(e.ctx, tenant.JobFilter{}, master.Page{Limit: 100})
+		e.ok("ListJobs", err)
+		if len(all) != 1 {
+			e.Fatalf("%s left %d jobs, want the one", what, len(all))
+		}
+	}
+	refused("RetryJob of a queued dispose job", now.Add(2*time.Minute))
+	if _, err := e.p.StopDisposeJob(e.ctx, j.ID, "stopped for the test", now.Add(3*time.Minute)); err != nil {
+		e.Fatalf("StopDisposeJob: %v", err)
+	}
+	ended, err := e.p.Job(e.ctx, j.ID)
+	e.ok("Job", err)
+	if ended.State != tenant.JobFailed {
+		e.Fatalf("a stopped dispose job is %s, want failed", ended.State)
+	}
+	refused("RetryJob of a failed dispose job", now.Add(4*time.Minute))
 }

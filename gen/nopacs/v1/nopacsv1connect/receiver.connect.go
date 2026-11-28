@@ -42,6 +42,9 @@ const (
 	// ReceiverServiceRemoveReceiverProcedure is the procedure name of the ReceiverService's
 	// RemoveReceiver RPC.
 	ReceiverServiceRemoveReceiverProcedure = "/nopacs.v1.ReceiverService/RemoveReceiver"
+	// ReceiverServiceTryReceiverProfileProcedure is the procedure name of the ReceiverService's
+	// TryReceiverProfile RPC.
+	ReceiverServiceTryReceiverProfileProcedure = "/nopacs.v1.ReceiverService/TryReceiverProfile"
 )
 
 var (
@@ -82,6 +85,13 @@ var (
 			Schema:           v1.File_nopacs_v1_receiver_proto.Services().ByName("ReceiverService").Methods().ByName("RemoveReceiver"),
 			Procedure:        ReceiverServiceRemoveReceiverProcedure,
 			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	receiverServiceTryReceiverProfileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_nopacs_v1_receiver_proto.Services().ByName("ReceiverService").Methods().ByName("TryReceiverProfile"),
+			Procedure:  ReceiverServiceTryReceiverProfileProcedure,
 		}
 	})
 )
@@ -196,6 +206,29 @@ type ReceiverServiceClient interface {
 	// import receiver one of whose jobs is queued or running), unavailable (the
 	// tenant's database does not answer, or the tenant is not ready).
 	RemoveReceiver(context.Context, *v1.RemoveReceiverRequest) (*v1.RemoveReceiverResponse, error)
+	// TryReceiverProfile tries a profile version over what a receiver last
+	// received (change control), before the receiver is pointed at it: the
+	// version is run, as a re-run's preview runs it, over the first archived
+	// file of each scan of the receiver's newest deid.change-trial-sessions
+	// sessions, which changes nothing. The answer counts the files the
+	// version would change, leave and hold, names each element it changes
+	// with its action and how many files, and why files would be held; it
+	// holds no value of any file. The result is recorded for the receiver and
+	// version, and SetReceiver then points the receiver at the version only
+	// when it was tried and held no file, or with force and a reason. A
+	// receiver that received nothing is tried over no file, and the trial
+	// says so.
+	//
+	// Role: admin on the tenant, never a masked key: what the archive's files say is a person's choice.
+	// Audit: one entry in the tenant's log, with the receiver's name as its
+	// object, and the version and the counts in details.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant that
+	// does not exist, for a caller who may not list every tenant; a masked
+	// key), invalid, not found (the tenant has no such receiver or profile
+	// version), precondition (the receiver's newest sessions hold more scans
+	// than one trial reads), unavailable (the tenant's database does not
+	// answer, or the tenant is not ready).
+	TryReceiverProfile(context.Context, *v1.TryReceiverProfileRequest) (*v1.TryReceiverProfileResponse, error)
 }
 
 // NewReceiverServiceClient constructs a client for the nopacs.v1.ReceiverService service. Multiple
@@ -314,6 +347,29 @@ type ReceiverServiceHandler interface {
 	// import receiver one of whose jobs is queued or running), unavailable (the
 	// tenant's database does not answer, or the tenant is not ready).
 	RemoveReceiver(context.Context, *v1.RemoveReceiverRequest) (*v1.RemoveReceiverResponse, error)
+	// TryReceiverProfile tries a profile version over what a receiver last
+	// received (change control), before the receiver is pointed at it: the
+	// version is run, as a re-run's preview runs it, over the first archived
+	// file of each scan of the receiver's newest deid.change-trial-sessions
+	// sessions, which changes nothing. The answer counts the files the
+	// version would change, leave and hold, names each element it changes
+	// with its action and how many files, and why files would be held; it
+	// holds no value of any file. The result is recorded for the receiver and
+	// version, and SetReceiver then points the receiver at the version only
+	// when it was tried and held no file, or with force and a reason. A
+	// receiver that received nothing is tried over no file, and the trial
+	// says so.
+	//
+	// Role: admin on the tenant, never a masked key: what the archive's files say is a person's choice.
+	// Audit: one entry in the tenant's log, with the receiver's name as its
+	// object, and the version and the counts in details.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant that
+	// does not exist, for a caller who may not list every tenant; a masked
+	// key), invalid, not found (the tenant has no such receiver or profile
+	// version), precondition (the receiver's newest sessions hold more scans
+	// than one trial reads), unavailable (the tenant's database does not
+	// answer, or the tenant is not ready).
+	TryReceiverProfile(context.Context, *v1.TryReceiverProfileRequest) (*v1.TryReceiverProfileResponse, error)
 }
 
 // RegisterReceiverServiceHandler registers svc as the nopacs.v1.ReceiverService implementation on
@@ -326,6 +382,7 @@ func RegisterReceiverServiceHandler(server *connect.Server, svc ReceiverServiceH
 		connect.Method{Spec: receiverServiceListReceiversSpec(), Handler: adapter.listReceivers},
 		connect.Method{Spec: receiverServiceSetReceiverSpec(), Handler: adapter.setReceiver},
 		connect.Method{Spec: receiverServiceRemoveReceiverSpec(), Handler: adapter.removeReceiver},
+		connect.Method{Spec: receiverServiceTryReceiverProfileSpec(), Handler: adapter.tryReceiverProfile},
 	)
 }
 
@@ -350,6 +407,10 @@ func (UnimplementedReceiverServiceHandler) SetReceiver(context.Context, *v1.SetR
 
 func (UnimplementedReceiverServiceHandler) RemoveReceiver(context.Context, *v1.RemoveReceiverRequest) (*v1.RemoveReceiverResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.ReceiverService.RemoveReceiver is not implemented")
+}
+
+func (UnimplementedReceiverServiceHandler) TryReceiverProfile(context.Context, *v1.TryReceiverProfileRequest) (*v1.TryReceiverProfileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.ReceiverService.TryReceiverProfile is not implemented")
 }
 
 type receiverServiceClient struct {
@@ -391,6 +452,14 @@ func (c *receiverServiceClient) SetReceiver(ctx context.Context, req *v1.SetRece
 func (c *receiverServiceClient) RemoveReceiver(ctx context.Context, req *v1.RemoveReceiverRequest) (*v1.RemoveReceiverResponse, error) {
 	var res v1.RemoveReceiverResponse
 	if err := c.client.CallUnary(ctx, receiverServiceRemoveReceiverSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *receiverServiceClient) TryReceiverProfile(ctx context.Context, req *v1.TryReceiverProfileRequest) (*v1.TryReceiverProfileResponse, error) {
+	var res v1.TryReceiverProfileResponse
+	if err := c.client.CallUnary(ctx, receiverServiceTryReceiverProfileSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -452,6 +521,18 @@ func (h receiverServiceHandler) removeReceiver(ctx context.Context, _ connect.Sp
 		return err
 	}
 	res, err := h.svc.RemoveReceiver(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h receiverServiceHandler) tryReceiverProfile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TryReceiverProfileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TryReceiverProfile(ctx, &req)
 	if err != nil {
 		return err
 	}

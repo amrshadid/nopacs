@@ -30,7 +30,7 @@ are the installation's to allot (the settings receiver.ports and
 receiver.bind-addresses).
 Every command takes the tenant first. Adding, changing and removing need the
 admin role on the tenant; list and show need the reader role.`,
-		a.newReceiverAdd(), a.newReceiverList(), a.newReceiverShow(), a.newReceiverSet(), a.newReceiverRemove())
+		a.newReceiverAdd(), a.newReceiverList(), a.newReceiverShow(), a.newReceiverSet(), a.newReceiverTryProfile(), a.newReceiverRemove())
 }
 
 // newReceiverAdd builds "receiver add".
@@ -353,6 +353,8 @@ TLS files, its naming rule and limits, and whether it accepts data now.`,
 
 // newReceiverSet builds "receiver set".
 func (a *app) newReceiverSet() *cobra.Command {
+	var force bool
+	var forceReason string
 	var f receiverFlags
 	cmd := &cobra.Command{
 		Use:   "set <tenant> <name> [flags of the fields to change]",
@@ -371,12 +373,17 @@ closes it. The three naming templates are given together, and --default-naming
 returns to the default rule. --forward-to replaces the list of senders each
 reception is sent to when it is archived, and --forward-to "" stops forwarding.
 --profile NAME@VERSION or --as-received changes what the receiver does to what
-arrives from then on; nothing already archived changes.
+arrives from then on; nothing already archived changes. Changing from one
+profile version to another needs the new version tried first over the
+receiver's last receptions ("receiver try-profile") with no file it would hold;
+--force with --force-reason TEXT points the receiver at a version that was not
+tried or whose trial held files, and the reason is audited.
 --enabled=false stops a receiver without removing it. An import receiver's
 --root, --layout, --pattern, --unit-depth, --map-file and --map-* flags each
 change that field alone, and are refused while one of its jobs is queued or
 running.`,
-		Example: `  nopacs receiver set lab1 scanner1 --quiet-period 5m
+		Example: `  nopacs receiver set lab1 scanner1 --profile research@5 --force --force-reason "the site's new rule, tried on another receiver"
+  nopacs receiver set lab1 scanner1 --quiet-period 5m
   nopacs receiver set lab1 scanner1 --allow-aet PRISMA1 --allow-aet SKYRA2
   nopacs receiver set lab1 scanner1 --enabled=false
   nopacs receiver set lab1 scanner1 --forward-to pacs --forward-to archive2
@@ -398,7 +405,8 @@ running.`,
 			}
 			defer closeClient()
 			res, err := call(ctx, c, cmd, func(ctx context.Context) (*v1.SetReceiverResponse, error) {
-				return c.Receivers.SetReceiver(ctx, &v1.SetReceiverRequest{Tenant: args[0], Receiver: r, UpdateMask: &fieldmaskpb.FieldMask{Paths: paths}})
+				return c.Receivers.SetReceiver(ctx, &v1.SetReceiverRequest{Tenant: args[0], Receiver: r, UpdateMask: &fieldmaskpb.FieldMask{Paths: paths},
+					Force: force, ForceReason: forceReason})
 			})
 			if err != nil {
 				return err
@@ -407,6 +415,8 @@ running.`,
 		}),
 	}
 	f.add(cmd, true)
+	cmd.Flags().BoolVar(&force, "force", false, "point the receiver at a profile version that was not tried or whose trial held files; needs --force-reason")
+	cmd.Flags().StringVar(&forceReason, "force-reason", "", "why the change is forced; audited")
 	return cmd
 }
 

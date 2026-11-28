@@ -30,6 +30,7 @@ func runRebuilding(t *testing.T, open OpenEvents, scratch Scratch) {
 		{"RebuildCompareEqual", testRebuildCompareEqual},
 		{"RebuildCompareDiffers", testRebuildCompareDiffers},
 		{"RebuildActivates", testRebuildActivates},
+		{"RebuildKeepsAETitles", testRebuildKeepsAETitles},
 		{"RebuildResumes", testRebuildResumes},
 		{"RebuildScanRefusals", testRebuildScanRefusals},
 		{"RebuildJobRefusals", testRebuildJobRefusals},

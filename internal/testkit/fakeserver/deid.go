@@ -20,6 +20,11 @@ type deid struct {
 	codes   []*v1.CodeRequest
 	imports []*v1.ImportLookupCodesRequest
 	tables  map[string]map[string]string
+	// coverage is each tenant's coverage report (deid_coverage.go).
+	coverage map[string]*coverage
+	// templates are the pixel templates by key, addTemplates the requests that added them.
+	templates    map[string]*v1.PixelTemplate
+	addTemplates []*v1.AddPixelTemplatesRequest
 }
 
 // deidHandler is the fake's DeidService.

@@ -380,3 +380,12 @@ func (s *Server) FailWithDetailOnly(procedure string, kind fault.Kind, message, 
 	}
 	s.fail[procedure] = plain
 }
+
+// FailWithoutDetails makes a procedure answer a bare error: a code and a
+// message and no google.rpc details, as a proxy or an older server answers, so a
+// client that reads details is shown to cope with their absence.
+func (s *Server) FailWithoutDetails(procedure string, code connect.Code, message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fail[procedure] = connect.NewError(code, message)
+}

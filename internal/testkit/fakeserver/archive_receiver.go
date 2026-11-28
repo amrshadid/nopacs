@@ -235,3 +235,9 @@ func (s *Server) forwardable(tenant string, senders []string) error {
 	}
 	return nil
 }
+
+// TryReceiverProfile is not served by the fake server: it keeps no files to
+// try a version over.
+func (receiverHandler) TryReceiverProfile(context.Context, *v1.TryReceiverProfileRequest) (*v1.TryReceiverProfileResponse, error) {
+	return nil, errNotServed
+}

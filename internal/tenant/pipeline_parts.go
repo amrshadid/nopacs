@@ -378,6 +378,7 @@ type PipelineParts interface {
 	Disposal
 	DeleteBatches
 	SearchBackfills
+	DeidCoverages
 	Transfers
 	TransferTargets
 }

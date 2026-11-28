@@ -76,6 +76,9 @@ func (a *app) jobDetails(j *v1.Job) []output.Pair {
 	if sb := j.GetSearchBackfill(); sb != nil {
 		pairs = append(pairs, searchBackfillDetails(sb)...)
 	}
+	if dc := j.GetDeidCoverage(); dc != nil {
+		pairs = append(pairs, deidCoverageDetails(dc)...)
+	}
 	pairs = append(pairs, output.ReplicationJobPairs(j)...)
 	sentLabel, refusedLabel := countLabels(j)
 	if j.GetReason() != "" {

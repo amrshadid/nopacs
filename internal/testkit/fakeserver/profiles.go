@@ -328,6 +328,9 @@ func (h profileHandler) DescribeProfile(_ context.Context, req *v1.DescribeProfi
 		return nil, err
 	}
 	s.prof.ensure()
+	if req.GetEffectiveReceiver() != "" {
+		return s.effectiveOf(req.GetTenant(), req.GetEffectiveReceiver())
+	}
 	out := &v1.DescribeProfileResponse{}
 	var e *v1.ExpandedProfile
 	method := ""

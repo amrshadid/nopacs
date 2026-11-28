@@ -224,7 +224,7 @@ func APIServices(d Deps) (Built, error) {
 	}
 	sending.Store(senders)
 	// The deid jobs, which read archived bytes under the same count.
-	deids, err := newDeidJobs(d, reg, feeds.Wake, reads, readCounts, deidMemory)
+	deids, err := newDeidJobs(d, reg, feeds.Wake, reads, readCounts, deidMemory, work.deidRevisions)
 	if err != nil {
 		_ = feeds.Close()
 		closeRegistry(reg)

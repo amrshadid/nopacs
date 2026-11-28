@@ -27,6 +27,7 @@ var settingForms = map[string]string{
 	"audit.seal-interval":            "A period. How often the server seals every audit log, and once more when it stops.",
 	"backup.max-duration":            "A period. The longest a backup over the API may run, read when it starts; past it the backup stops, without its summary. Meanwhile it holds a read transaction open, no audit log is sealed and no export runs.",
 	"correction.batch-max":           "A whole number. The most subjects, sessions or scans one batch delete names (`nopacs correction delete-batch`).",
+	"deid.change-trial-sessions":     "A whole number from 1 to 200. How many of a receiver's newest sessions a profile version is tried over (`nopacs receiver try-profile`) before the receiver is pointed at it; the trial reads the first file of each of their scans.",
 	"deid.list-cache-bytes":          "A size. The most bytes the compiled text lists of stored profile versions are kept in, their automata included; the least recently used are dropped past it and built again when next needed.",
 	"deid.memory":                    "A size. The most bytes the server's de-identification work holds in memory at once, across every tenant; work that does not fit waits for room.",
 	"deid.pixel-limit":               "A size. The most bytes of a decoded image that de-identification works on; a larger image is quarantined with its bytes kept.",
@@ -67,6 +68,7 @@ var settingForms = map[string]string{
 	"search.facet-rows":              "A whole number of rows. The most rows a search counts to answer how many match, or reads to give a facet: a count of a search that matches more answers \"at least\" this many, and a facet of one is refused. Narrow the search, or raise the bound at the cost of a slower count and facet.",
 	"sender.allow-plain-http":        "`true` or `false`. Whether a STOW-RS sender's URL may be plain http.",
 	"sender.destinations":            "One line per destination: a host name, an address or a range, then optionally `ports=...` and the flags `private-address` and `link-local`. Empty: no sender can be added. The long form is on the settings page.",
+	"deid.base-profile":              "Empty for none, or a profile version of the tenant as `name@version`, such as `research@2`. The tenant's base: the profile of every receiver that de-identifies, of every archive rule and of every destination of a rule set must be at least as strict as it (a rule that keeps what the base removes is refused with the loosening listed), and a reception runs the receiver's profile stacked over it. Refused to a masked key. `nopacs profile describe --effective` shows each element's winning layer.",
 	"sender.max-associations":        "A whole number. The most associations (STOW-RS requests) all senders of all tenants hold open at once.",
 	"sender.tenant-max-associations": "A whole number. The most associations one tenant's senders hold open at once.",
 	"storage.directory-roots":        "One `name=path` per line. The roots directory storages may lie under. Empty: no directory storage.",
@@ -88,6 +90,7 @@ var settingBounds = map[string][4]string{
 	"audit.seal-interval":            {"59s", "1m", "1d", "25h"},
 	"backup.max-duration":            {"59s", "1m", "7d", "8d"},
 	"correction.batch-max":           {"0", "1", "10000", "10001"},
+	"deid.change-trial-sessions":     {"0", "1", "200", "201"},
 	"deid.list-cache-bytes":          {"63MiB", "64MiB", "16GiB", "17GiB"},
 	"deid.memory":                    {"255MiB", "256MiB", "64GiB", "65GiB"},
 	"deid.pixel-limit":               {"1023KiB", "1MiB", "64GiB", "65GiB"},
@@ -137,6 +140,9 @@ func scopeOf(d settings.Definition) string {
 
 // whoOf says who may set a setting.
 func whoOf(d settings.Definition) string {
+	if d.TenantOnly && !d.TenantSetByInstallation {
+		return "the tenant's admin"
+	}
 	if d.TenantOverride && !d.TenantSetByInstallation {
 		return "admin on the installation; the tenant's admin for the tenant's value"
 	}

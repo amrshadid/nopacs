@@ -264,6 +264,9 @@ func TestStartRewritesVersion2FromTheCatalog(t *testing.T) {
 				for i, in := range lines {
 					want := wantLines[path.Scan][i]
 					want.ReceivedForm, want.NopacsVersion = "", ""
+					// A version 2 sidecar never recorded the elements no rule named,
+					// and the catalog the rewrite reads holds none.
+					want.Unnamed, want.UnnamedOver = nil, 0
 					if opts.deid != nil {
 						want.ReceivedSyntax = ""
 					}

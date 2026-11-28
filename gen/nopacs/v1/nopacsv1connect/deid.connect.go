@@ -35,6 +35,20 @@ const (
 	// DeidServiceListLookupTablesProcedure is the procedure name of the DeidService's ListLookupTables
 	// RPC.
 	DeidServiceListLookupTablesProcedure = "/nopacs.v1.DeidService/ListLookupTables"
+	// DeidServiceGetCoverageProcedure is the procedure name of the DeidService's GetCoverage RPC.
+	DeidServiceGetCoverageProcedure = "/nopacs.v1.DeidService/GetCoverage"
+	// DeidServiceRefreshCoverageProcedure is the procedure name of the DeidService's RefreshCoverage
+	// RPC.
+	DeidServiceRefreshCoverageProcedure = "/nopacs.v1.DeidService/RefreshCoverage"
+	// DeidServiceAddPixelTemplatesProcedure is the procedure name of the DeidService's
+	// AddPixelTemplates RPC.
+	DeidServiceAddPixelTemplatesProcedure = "/nopacs.v1.DeidService/AddPixelTemplates"
+	// DeidServiceRemovePixelTemplateProcedure is the procedure name of the DeidService's
+	// RemovePixelTemplate RPC.
+	DeidServiceRemovePixelTemplateProcedure = "/nopacs.v1.DeidService/RemovePixelTemplate"
+	// DeidServiceListPixelTemplatesProcedure is the procedure name of the DeidService's
+	// ListPixelTemplates RPC.
+	DeidServiceListPixelTemplatesProcedure = "/nopacs.v1.DeidService/ListPixelTemplates"
 )
 
 var (
@@ -58,6 +72,45 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_nopacs_v1_deid_proto.Services().ByName("DeidService").Methods().ByName("ListLookupTables"),
 			Procedure:        DeidServiceListLookupTablesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	deidServiceGetCoverageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_deid_proto.Services().ByName("DeidService").Methods().ByName("GetCoverage"),
+			Procedure:        DeidServiceGetCoverageProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	deidServiceRefreshCoverageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_nopacs_v1_deid_proto.Services().ByName("DeidService").Methods().ByName("RefreshCoverage"),
+			Procedure:  DeidServiceRefreshCoverageProcedure,
+		}
+	})
+	deidServiceAddPixelTemplatesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_deid_proto.Services().ByName("DeidService").Methods().ByName("AddPixelTemplates"),
+			Procedure:        DeidServiceAddPixelTemplatesProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	deidServiceRemovePixelTemplateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_deid_proto.Services().ByName("DeidService").Methods().ByName("RemovePixelTemplate"),
+			Procedure:        DeidServiceRemovePixelTemplateProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	deidServiceListPixelTemplatesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_nopacs_v1_deid_proto.Services().ByName("DeidService").Methods().ByName("ListPixelTemplates"),
+			Procedure:        DeidServiceListPixelTemplatesProcedure,
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
@@ -180,6 +233,123 @@ type DeidServiceClient interface {
 	// list every tenant), unavailable (the tenant's database does not
 	// answer, or the tenant is not ready).
 	ListLookupTables(context.Context, *v1.ListLookupTablesRequest) (*v1.ListLookupTablesResponse, error)
+	// GetCoverage answers the tenant's coverage report: every public element
+	// and every private element (by its private creator and its element
+	// within the creator's block) that files archived by a receiver that
+	// de-identifies held, as received, and that no rule of the profile named,
+	// so the profile's default decided it (a private element removed, any
+	// other as the profile's unnamed says). For each, its VR as the file gave
+	// it, how many instances held it and how many times in all. It is what a
+	// profile never decided, the private elements a vendor writes among them,
+	// and a person reads it to name the ones that matter.
+	//
+	// The report holds no value of any file, and nothing a value could be
+	// read from but a private creator, which is a vendor's name written in
+	// the file. A creator that is not printable ASCII of at most 64 bytes, or
+	// that holds a value the profile removed from the file or a term of its
+	// text lists, is never given: its elements are counted under
+	// creator_withheld. For that reason a masked key may read the report.
+	//
+	// It is made by RefreshCoverage, from what each instance's metadata line
+	// records; the answer is the report of the latest job that ended, with
+	// when it ended and what it read, and the job that is making the next one
+	// when there is one. An instance archived before the line recorded this,
+	// or as received, is counted in the report's instances but not in
+	// instances_recorded, and contributes no element. Elements are in order
+	// of tag, then creator, then VR.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant),
+	// invalid (a page_size that is negative or past 1000, a page_token that
+	// is not one of this call), not found (a tenant that does not exist, for
+	// a caller who may list every tenant), unavailable (the tenant's database
+	// does not answer, or the tenant is not ready).
+	GetCoverage(context.Context, *v1.GetCoverageRequest) (*v1.GetCoverageResponse, error)
+	// RefreshCoverage makes the job (kind deid_coverage) that builds the
+	// coverage report again: it reads each scan's metadata file once, line by
+	// line within the reader's bounds, and counts the elements each line
+	// records as unnamed, then replaces the stored report when it ends. It
+	// writes the tenant's database only; it reads storages, never writes one,
+	// and never reads an instance's file. A scan whose metadata cannot be
+	// read is counted skipped, and the job ends partial. A restart goes on
+	// after the last page of scans written, so no scan is counted twice.
+	// One runs at a time for a tenant, and none while a rebuild runs. As for
+	// every job, the operator role is enough.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log, with the job's id as its object.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant), not
+	// found (a tenant that does not exist, for a caller who may list every
+	// tenant), precondition (a coverage job not ended; a rebuild running),
+	// unavailable (the tenant's database does not answer, or the tenant is
+	// not ready).
+	RefreshCoverage(context.Context, *v1.RefreshCoverageRequest) (*v1.RefreshCoverageResponse, error)
+	// AddPixelTemplates stores pixel templates in the tenant: for a device
+	// (manufacturer and model, compared with case folded) and an image size
+	// (rows and columns, exactly) and, optionally, a SOP class, the rectangles
+	// of the image that burned-in text is drawn in. A pixel rule of a profile
+	// whose action is redact_by_template fills the rectangles of the template
+	// that fits the file's header as received, and holds an image at risk of
+	// burned-in text that no template fits (deid_failed, cause
+	// "no_pixel_template"). The table is empty until an admin fills it: the
+	// server ships none, since which rectangles hold text is for the site to
+	// know of its own devices.
+	//
+	// All or nothing: every template is stored in one transaction, or none.
+	// Refused, storing nothing: a template whose manufacturer or model is
+	// empty after its padding, is longer than 256 bytes or not UTF-8 without
+	// control characters; rows or columns not 1 to 65535; a SOP class that is
+	// not a UID; no rectangle or more than 64; a rectangle with a negative
+	// position, a side not 1 to 65535, or reaching past the image's size,
+	// measured from the edge it names; two templates of one device, size and
+	// SOP class in the request, or one the tenant already holds (precondition:
+	// remove it first), each named by its position from 1. A tenant holds at
+	// most 10000 templates, and a request carries 1 to 1000.
+	//
+	// A masked key (Key.masked) is refused, whatever its role: a template is
+	// part of what removes identity from images, and is changed only by a
+	// person who may see them.
+	//
+	// Role: admin on the tenant.
+	// Audit: one entry in the tenant's log, with the number of templates in
+	// its details, written with the templates; an entry of a request refused
+	// after its tenant was found is written before the answer.
+	// Errors: unauthenticated, permission denied (no grant, a masked key; also
+	// a tenant that does not exist, for a caller who may not list every
+	// tenant), invalid, not found (a tenant that does not exist, for a caller
+	// who may list every tenant), precondition (a template held already; the
+	// bound of 10000 passed), unavailable (the tenant's database does not
+	// answer, the tenant is not ready, or the audit entry cannot be written).
+	AddPixelTemplates(context.Context, *v1.AddPixelTemplatesRequest) (*v1.AddPixelTemplatesResponse, error)
+	// RemovePixelTemplate removes the template of one device, size and SOP
+	// class. Images that matched it are held (cause "no_pixel_template") when
+	// they are at risk of burned-in text, from the next file on.
+	//
+	// A masked key is refused, as for AddPixelTemplates.
+	//
+	// Role: admin on the tenant.
+	// Audit: one entry in the tenant's log, with the template's key as its
+	// object.
+	// Errors: unauthenticated, permission denied (no grant, a masked key),
+	// invalid (a key that names no template: no manufacturer or model, rows or
+	// columns not 1 to 65535, a SOP class that is not a UID), not found (the
+	// tenant has no such template; also a tenant that does not exist, for a
+	// caller who may list every tenant), unavailable.
+	RemovePixelTemplate(context.Context, *v1.RemovePixelTemplateRequest) (*v1.RemovePixelTemplateResponse, error)
+	// ListPixelTemplates answers a page of the tenant's pixel templates, in
+	// order of manufacturer, model, rows, columns and SOP class, each as it was
+	// written.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant),
+	// invalid, not found (a tenant that does not exist, for a caller who may
+	// list every tenant), unavailable.
+	ListPixelTemplates(context.Context, *v1.ListPixelTemplatesRequest) (*v1.ListPixelTemplatesResponse, error)
 }
 
 // NewDeidServiceClient constructs a client for the nopacs.v1.DeidService service. Multiple service
@@ -305,6 +475,123 @@ type DeidServiceHandler interface {
 	// list every tenant), unavailable (the tenant's database does not
 	// answer, or the tenant is not ready).
 	ListLookupTables(context.Context, *v1.ListLookupTablesRequest) (*v1.ListLookupTablesResponse, error)
+	// GetCoverage answers the tenant's coverage report: every public element
+	// and every private element (by its private creator and its element
+	// within the creator's block) that files archived by a receiver that
+	// de-identifies held, as received, and that no rule of the profile named,
+	// so the profile's default decided it (a private element removed, any
+	// other as the profile's unnamed says). For each, its VR as the file gave
+	// it, how many instances held it and how many times in all. It is what a
+	// profile never decided, the private elements a vendor writes among them,
+	// and a person reads it to name the ones that matter.
+	//
+	// The report holds no value of any file, and nothing a value could be
+	// read from but a private creator, which is a vendor's name written in
+	// the file. A creator that is not printable ASCII of at most 64 bytes, or
+	// that holds a value the profile removed from the file or a term of its
+	// text lists, is never given: its elements are counted under
+	// creator_withheld. For that reason a masked key may read the report.
+	//
+	// It is made by RefreshCoverage, from what each instance's metadata line
+	// records; the answer is the report of the latest job that ended, with
+	// when it ended and what it read, and the job that is making the next one
+	// when there is one. An instance archived before the line recorded this,
+	// or as received, is counted in the report's instances but not in
+	// instances_recorded, and contributes no element. Elements are in order
+	// of tag, then creator, then VR.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant),
+	// invalid (a page_size that is negative or past 1000, a page_token that
+	// is not one of this call), not found (a tenant that does not exist, for
+	// a caller who may list every tenant), unavailable (the tenant's database
+	// does not answer, or the tenant is not ready).
+	GetCoverage(context.Context, *v1.GetCoverageRequest) (*v1.GetCoverageResponse, error)
+	// RefreshCoverage makes the job (kind deid_coverage) that builds the
+	// coverage report again: it reads each scan's metadata file once, line by
+	// line within the reader's bounds, and counts the elements each line
+	// records as unnamed, then replaces the stored report when it ends. It
+	// writes the tenant's database only; it reads storages, never writes one,
+	// and never reads an instance's file. A scan whose metadata cannot be
+	// read is counted skipped, and the job ends partial. A restart goes on
+	// after the last page of scans written, so no scan is counted twice.
+	// One runs at a time for a tenant, and none while a rebuild runs. As for
+	// every job, the operator role is enough.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log, with the job's id as its object.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant), not
+	// found (a tenant that does not exist, for a caller who may list every
+	// tenant), precondition (a coverage job not ended; a rebuild running),
+	// unavailable (the tenant's database does not answer, or the tenant is
+	// not ready).
+	RefreshCoverage(context.Context, *v1.RefreshCoverageRequest) (*v1.RefreshCoverageResponse, error)
+	// AddPixelTemplates stores pixel templates in the tenant: for a device
+	// (manufacturer and model, compared with case folded) and an image size
+	// (rows and columns, exactly) and, optionally, a SOP class, the rectangles
+	// of the image that burned-in text is drawn in. A pixel rule of a profile
+	// whose action is redact_by_template fills the rectangles of the template
+	// that fits the file's header as received, and holds an image at risk of
+	// burned-in text that no template fits (deid_failed, cause
+	// "no_pixel_template"). The table is empty until an admin fills it: the
+	// server ships none, since which rectangles hold text is for the site to
+	// know of its own devices.
+	//
+	// All or nothing: every template is stored in one transaction, or none.
+	// Refused, storing nothing: a template whose manufacturer or model is
+	// empty after its padding, is longer than 256 bytes or not UTF-8 without
+	// control characters; rows or columns not 1 to 65535; a SOP class that is
+	// not a UID; no rectangle or more than 64; a rectangle with a negative
+	// position, a side not 1 to 65535, or reaching past the image's size,
+	// measured from the edge it names; two templates of one device, size and
+	// SOP class in the request, or one the tenant already holds (precondition:
+	// remove it first), each named by its position from 1. A tenant holds at
+	// most 10000 templates, and a request carries 1 to 1000.
+	//
+	// A masked key (Key.masked) is refused, whatever its role: a template is
+	// part of what removes identity from images, and is changed only by a
+	// person who may see them.
+	//
+	// Role: admin on the tenant.
+	// Audit: one entry in the tenant's log, with the number of templates in
+	// its details, written with the templates; an entry of a request refused
+	// after its tenant was found is written before the answer.
+	// Errors: unauthenticated, permission denied (no grant, a masked key; also
+	// a tenant that does not exist, for a caller who may not list every
+	// tenant), invalid, not found (a tenant that does not exist, for a caller
+	// who may list every tenant), precondition (a template held already; the
+	// bound of 10000 passed), unavailable (the tenant's database does not
+	// answer, the tenant is not ready, or the audit entry cannot be written).
+	AddPixelTemplates(context.Context, *v1.AddPixelTemplatesRequest) (*v1.AddPixelTemplatesResponse, error)
+	// RemovePixelTemplate removes the template of one device, size and SOP
+	// class. Images that matched it are held (cause "no_pixel_template") when
+	// they are at risk of burned-in text, from the next file on.
+	//
+	// A masked key is refused, as for AddPixelTemplates.
+	//
+	// Role: admin on the tenant.
+	// Audit: one entry in the tenant's log, with the template's key as its
+	// object.
+	// Errors: unauthenticated, permission denied (no grant, a masked key),
+	// invalid (a key that names no template: no manufacturer or model, rows or
+	// columns not 1 to 65535, a SOP class that is not a UID), not found (the
+	// tenant has no such template; also a tenant that does not exist, for a
+	// caller who may list every tenant), unavailable.
+	RemovePixelTemplate(context.Context, *v1.RemovePixelTemplateRequest) (*v1.RemovePixelTemplateResponse, error)
+	// ListPixelTemplates answers a page of the tenant's pixel templates, in
+	// order of manufacturer, model, rows, columns and SOP class, each as it was
+	// written.
+	//
+	// Role: operator on the tenant.
+	// Audit: one entry in the tenant's log.
+	// Errors: unauthenticated, permission denied (no grant; also a tenant
+	// that does not exist, for a caller who may not list every tenant),
+	// invalid, not found (a tenant that does not exist, for a caller who may
+	// list every tenant), unavailable.
+	ListPixelTemplates(context.Context, *v1.ListPixelTemplatesRequest) (*v1.ListPixelTemplatesResponse, error)
 }
 
 // RegisterDeidServiceHandler registers svc as the nopacs.v1.DeidService implementation on server.
@@ -314,6 +601,11 @@ func RegisterDeidServiceHandler(server *connect.Server, svc DeidServiceHandler) 
 		connect.Method{Spec: deidServiceCodeSpec(), Handler: adapter.code},
 		connect.Method{Spec: deidServiceImportLookupCodesSpec(), Handler: adapter.importLookupCodes},
 		connect.Method{Spec: deidServiceListLookupTablesSpec(), Handler: adapter.listLookupTables},
+		connect.Method{Spec: deidServiceGetCoverageSpec(), Handler: adapter.getCoverage},
+		connect.Method{Spec: deidServiceRefreshCoverageSpec(), Handler: adapter.refreshCoverage},
+		connect.Method{Spec: deidServiceAddPixelTemplatesSpec(), Handler: adapter.addPixelTemplates},
+		connect.Method{Spec: deidServiceRemovePixelTemplateSpec(), Handler: adapter.removePixelTemplate},
+		connect.Method{Spec: deidServiceListPixelTemplatesSpec(), Handler: adapter.listPixelTemplates},
 	)
 }
 
@@ -330,6 +622,26 @@ func (UnimplementedDeidServiceHandler) ImportLookupCodes(context.Context, *v1.Im
 
 func (UnimplementedDeidServiceHandler) ListLookupTables(context.Context, *v1.ListLookupTablesRequest) (*v1.ListLookupTablesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.DeidService.ListLookupTables is not implemented")
+}
+
+func (UnimplementedDeidServiceHandler) GetCoverage(context.Context, *v1.GetCoverageRequest) (*v1.GetCoverageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.DeidService.GetCoverage is not implemented")
+}
+
+func (UnimplementedDeidServiceHandler) RefreshCoverage(context.Context, *v1.RefreshCoverageRequest) (*v1.RefreshCoverageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.DeidService.RefreshCoverage is not implemented")
+}
+
+func (UnimplementedDeidServiceHandler) AddPixelTemplates(context.Context, *v1.AddPixelTemplatesRequest) (*v1.AddPixelTemplatesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.DeidService.AddPixelTemplates is not implemented")
+}
+
+func (UnimplementedDeidServiceHandler) RemovePixelTemplate(context.Context, *v1.RemovePixelTemplateRequest) (*v1.RemovePixelTemplateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.DeidService.RemovePixelTemplate is not implemented")
+}
+
+func (UnimplementedDeidServiceHandler) ListPixelTemplates(context.Context, *v1.ListPixelTemplatesRequest) (*v1.ListPixelTemplatesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "nopacs.v1.DeidService.ListPixelTemplates is not implemented")
 }
 
 type deidServiceClient struct {
@@ -355,6 +667,46 @@ func (c *deidServiceClient) ImportLookupCodes(ctx context.Context, req *v1.Impor
 func (c *deidServiceClient) ListLookupTables(ctx context.Context, req *v1.ListLookupTablesRequest) (*v1.ListLookupTablesResponse, error) {
 	var res v1.ListLookupTablesResponse
 	if err := c.client.CallUnary(ctx, deidServiceListLookupTablesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *deidServiceClient) GetCoverage(ctx context.Context, req *v1.GetCoverageRequest) (*v1.GetCoverageResponse, error) {
+	var res v1.GetCoverageResponse
+	if err := c.client.CallUnary(ctx, deidServiceGetCoverageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *deidServiceClient) RefreshCoverage(ctx context.Context, req *v1.RefreshCoverageRequest) (*v1.RefreshCoverageResponse, error) {
+	var res v1.RefreshCoverageResponse
+	if err := c.client.CallUnary(ctx, deidServiceRefreshCoverageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *deidServiceClient) AddPixelTemplates(ctx context.Context, req *v1.AddPixelTemplatesRequest) (*v1.AddPixelTemplatesResponse, error) {
+	var res v1.AddPixelTemplatesResponse
+	if err := c.client.CallUnary(ctx, deidServiceAddPixelTemplatesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *deidServiceClient) RemovePixelTemplate(ctx context.Context, req *v1.RemovePixelTemplateRequest) (*v1.RemovePixelTemplateResponse, error) {
+	var res v1.RemovePixelTemplateResponse
+	if err := c.client.CallUnary(ctx, deidServiceRemovePixelTemplateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *deidServiceClient) ListPixelTemplates(ctx context.Context, req *v1.ListPixelTemplatesRequest) (*v1.ListPixelTemplatesResponse, error) {
+	var res v1.ListPixelTemplatesResponse
+	if err := c.client.CallUnary(ctx, deidServiceListPixelTemplatesSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -392,6 +744,66 @@ func (h deidServiceHandler) listLookupTables(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.ListLookupTables(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h deidServiceHandler) getCoverage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCoverageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCoverage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h deidServiceHandler) refreshCoverage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RefreshCoverageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RefreshCoverage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h deidServiceHandler) addPixelTemplates(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AddPixelTemplatesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AddPixelTemplates(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h deidServiceHandler) removePixelTemplate(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RemovePixelTemplateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RemovePixelTemplate(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h deidServiceHandler) listPixelTemplates(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPixelTemplatesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPixelTemplates(ctx, &req)
 	if err != nil {
 		return err
 	}

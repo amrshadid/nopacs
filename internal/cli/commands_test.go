@@ -416,6 +416,8 @@ func TestSettingCommands(t *testing.T) {
 			"audit.seal-interval             10m              built-in default\n"+
 			"backup.max-duration             6h               built-in default\n"+
 			"correction.batch-max            10000            built-in default\n"+
+			"deid.base-profile                                built-in default\n"+
+			"deid.change-trial-sessions      20               built-in default\n"+
 			"deid.list-cache-bytes           256MiB           built-in default\n"+
 			"deid.memory                     2GiB             built-in default\n"+
 			"deid.pixel-limit                1GiB             built-in default\n"+
@@ -474,7 +476,7 @@ func TestSettingCommands(t *testing.T) {
 		t.Errorf("get --json: %v", doc)
 	}
 	document(t, r.run("setting", "set", "key.default-lifetime", "30d", "--json"))
-	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 60 {
+	if ss := document(t, r.run("setting", "list", "--json"))["settings"].([]any); len(ss) != 62 {
 		t.Errorf("list --json: %v", ss)
 	}
 	document(t, r.run("setting", "unset", "test.retention", "--tenant", "lab1", "--json"))

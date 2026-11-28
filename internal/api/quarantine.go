@@ -297,6 +297,11 @@ func (s quarantineService) ReleaseQuarantinedFile(ctx context.Context, req *v1.R
 		if err := c.checkProfileVersion(ctx, p, "profile", profile); err != nil {
 			return nil, c.failIn(d, st, err)
 		}
+		// A released file is de-identified as a receiver's would be, so the
+		// version is a layer over the tenant's base too.
+		if err := c.checkReceiverBase(ctx, p, "profile", profile); err != nil {
+			return nil, c.layerFail(d, st, access.Facts{}, err)
+		}
 	}
 	// Read first for the receiver the release runs through when the request
 	// names none, which the entry records.

@@ -19,10 +19,21 @@ const (
 	// DeidCheck verifies each archived file against the profile version
 	// the catalog records for it.
 	DeidCheck DeidMode = "check"
+	// DeidRerun runs a newer profile version over each archived file and
+	// gives each file it changes a new revision (a profile re-run).
+	DeidRerun DeidMode = "rerun"
+	// DeidRerunPreview judges what DeidRerun would do, as it would, and
+	// writes nothing.
+	DeidRerunPreview DeidMode = "rerun_preview"
 )
 
 // Valid reports whether m is one of the modes.
-func (m DeidMode) Valid() bool { return m == DeidDryRun || m == DeidCheck }
+func (m DeidMode) Valid() bool {
+	return m == DeidDryRun || m == DeidCheck || m == DeidRerun || m == DeidRerunPreview
+}
+
+// Rerun reports whether m is a profile re-run or its preview.
+func (m DeidMode) Rerun() bool { return m == DeidRerun || m == DeidRerunPreview }
 
 // DeidWorkKind is the kind of every unit of work of the tenant's deid
 // jobs: one kind, since a deid job waits for no sender, so the server's
@@ -54,7 +65,10 @@ func validateDeidJob(sender string, mode DeidMode, p ProfileRef) error {
 		return invalid("a deid job names no sender")
 	}
 	if !mode.Valid() {
-		return invalid("a deid job's mode is dry_run or check")
+		return invalid("a deid job's mode is dry_run, check, rerun or rerun_preview")
+	}
+	if mode.Rerun() && p.IsZero() {
+		return invalid("a profile re-run names the profile version it runs")
 	}
 	if p.IsZero() {
 		return nil

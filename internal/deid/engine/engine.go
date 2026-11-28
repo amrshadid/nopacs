@@ -126,6 +126,10 @@ type Options struct {
 	// Lookups reaches the lookup tables; nil when the profile has no
 	// lookup action, and Apply fails for one that does.
 	Lookups Lookups
+	// PixelTemplates reaches the tenant's pixel templates; nil when the
+	// tenant has none to give, so a rule that fills by template holds every
+	// image at risk of burned-in text.
+	PixelTemplates PixelTemplates
 	// Types gives attributes' Types in their IODs, for the action that
 	// removes an element unless its IOD requires it; nil for the DICOM
 	// library's IOD tables (IODTypes).
@@ -154,6 +158,8 @@ type Engine struct {
 	lookups Lookups
 	types   Types
 	method  string
+	// templates are the tenant's pixel templates; nil for none.
+	templates PixelTemplates
 	// codes are the PS3.16 CID 7050 codes of the Annex E bases the
 	// profile is built on, recorded in every file (planMethod).
 	codes []anonymize.MethodCode
@@ -265,7 +271,9 @@ func newEngine(dec Decider, keys Keys, opts Options) (*Engine, error) {
 		keys:    Keys{UID: clone(keys.UID), Date: clone(keys.Date), Hash: clone(keys.Hash)},
 		lookups: opts.Lookups,
 		types:   opts.Types,
-		method:  opts.Method,
+
+		templates: opts.PixelTemplates,
+		method:    opts.Method,
 	}
 	if en.types == nil {
 		en.types = defaultTypes

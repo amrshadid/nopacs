@@ -16,6 +16,8 @@ import (
 	"github.com/amrshadid/go-dicom/filewriter"
 	"github.com/amrshadid/go-dicom/tag"
 
+	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
+	"github.com/amrshadid/nopacs/internal/core/settings"
 	"github.com/amrshadid/nopacs/internal/deid/check"
 	"github.com/amrshadid/nopacs/internal/deid/engine"
 	"github.com/amrshadid/nopacs/internal/deid/profile"
@@ -59,7 +61,7 @@ var errNoCheck = fault.New(fault.Internal, "the reception pipeline is given no c
 type deid struct {
 	mu      sync.Mutex
 	keys    *engine.Keys
-	engines map[tenant.ProfileRef]*engine.Engine
+	engines map[engineKey]*engine.Engine
 	// sums are the checksums of the expanded texts of the versions in
 	// engines, which name each version whatever database holds it.
 	sums map[tenant.ProfileRef]string
@@ -95,9 +97,10 @@ var errProfileUnusable = errors.New("the profile version cannot run in this buil
 // engineFor returns the engine of a profile version, compiled once. A
 // version the build cannot run is errProfileUnusable; a database that
 // cannot be read is its own error.
-func (p *Pipeline) engineFor(ctx context.Context, ref tenant.ProfileRef) (*engine.Engine, error) {
+func (p *Pipeline) engineFor(ctx context.Context, ref, base tenant.ProfileRef) (*engine.Engine, error) {
+	key := engineKey{ref, base}
 	p.deid.mu.Lock()
-	en := p.deid.engines[ref]
+	en := p.deid.engines[key]
 	p.deid.mu.Unlock()
 	if en != nil {
 		return en, nil
@@ -124,15 +127,21 @@ func (p *Pipeline) engineFor(ctx context.Context, ref tenant.ProfileRef) (*engin
 	if err != nil {
 		return nil, errProfileUnusable
 	}
-	en, err = engine.New(version.Expanded(), keys, engine.Options{Lookups: lookups{store: store, now: p.now}, Method: ref.String()})
+	expanded := version.Expanded()
+	if !base.IsZero() {
+		if expanded, err = p.stackedOver(ctx, store, base, ref, expanded); err != nil {
+			return nil, err
+		}
+	}
+	en, err = engine.New(expanded, keys, engine.Options{Lookups: lookups{store: store, now: p.now}, PixelTemplates: templatesFor(p.store), Method: ref.String()})
 	if err != nil {
 		return nil, errProfileUnusable
 	}
 	p.deid.mu.Lock()
 	if p.deid.engines == nil {
-		p.deid.engines = map[tenant.ProfileRef]*engine.Engine{}
+		p.deid.engines = map[engineKey]*engine.Engine{}
 	}
-	p.deid.engines[ref] = en
+	p.deid.engines[key] = en
 	if p.deid.sums == nil {
 		p.deid.sums = map[tenant.ProfileRef]string{}
 	}
@@ -298,4 +307,72 @@ func (s *bufferedSeeker) Seek(offset int64, whence int) (int64, error) {
 		return 0, err
 	}
 	return s.w.Seek(offset, whence)
+}
+
+// engineKey names an engine by the profile version a file is de-identified
+// with and the tenant's base profile it is stacked over, zero for none, so a
+// changed base is a new engine and the old one is never run again.
+type engineKey struct{ ref, base tenant.ProfileRef }
+
+// stackedOver is StackedProfile for an engine: a base that cannot be
+// stacked is errProfileUnusable, so the file is held.
+func (p *Pipeline) stackedOver(ctx context.Context, store tenant.Deidentification, base, ref tenant.ProfileRef, expanded *v1.ExpandedProfile) (*v1.ExpandedProfile, error) {
+	out, usable, err := StackedProfile(ctx, store, base, ref, expanded)
+	if err != nil {
+		return nil, err
+	}
+	if !usable {
+		return nil, errProfileUnusable
+	}
+	return out, nil
+}
+
+// StackedProfile returns the profile a receiver runs when the tenant has the
+// base given: ref's expanded profile stacked over it (profile.Reception). It
+// is the one stack a reception, a trial and a job over the archive all use,
+// so each judges a file by what a reception does. usable is false for a base
+// the tenant does not have, or that this build cannot load, or that ref would
+// loosen: no file may be archived, or judged good, by less than the base.
+func StackedProfile(ctx context.Context, store tenant.Deidentification, base, ref tenant.ProfileRef, expanded *v1.ExpandedProfile) (out *v1.ExpandedProfile, usable bool, err error) {
+	bv, err := store.ProfileVersion(ctx, base.Name, base.Version)
+	if fault.KindOf(err) == fault.NotFound {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	loaded, err := profile.Load(bv.Name, bv.Version, bv.Source, bv.Expanded, bv.Checksum)
+	if err != nil {
+		return nil, false, nil
+	}
+	stacked, problems := profile.Reception(base.String(), loaded.Expanded(), ref.String(), expanded)
+	if len(problems) > 0 {
+		return nil, false, nil
+	}
+	return stacked, true, nil
+}
+
+// baseProfile returns the tenant's base profile for the next file: BaseOf of
+// the pipeline's store, read for each file so a base set is taken at once.
+func (p *Pipeline) baseProfile(ctx context.Context) (tenant.ProfileRef, error) {
+	return BaseOf(ctx, p.store)
+}
+
+// BaseOf returns the tenant's base profile (deid.base-profile), zero when it
+// has none.
+func BaseOf(ctx context.Context, s interface {
+	Setting(ctx context.Context, name string) (string, error)
+}) (tenant.ProfileRef, error) {
+	v, err := s.Setting(ctx, settings.DeidBaseProfile)
+	if fault.KindOf(err) == fault.NotFound {
+		return tenant.ProfileRef{}, nil
+	}
+	if err != nil {
+		return tenant.ProfileRef{}, err
+	}
+	name, version, perr := settings.ParseBaseProfile(v)
+	if perr != nil {
+		return tenant.ProfileRef{}, fault.New(fault.Internal, "the tenant's base profile does not follow its rule")
+	}
+	return tenant.ProfileRef{Name: name, Version: version}, nil
 }

@@ -153,8 +153,11 @@ const (
 	// wholly outside the image), "pixel_text_unsearched" (its compressed
 	// pixel data has segments that are not searched, such as JPEG 2000's,
 	// and the profile holds such images), "detect_implausible" (the
-	// detector found regions covering more of the picture than text does)
-	// or "subject_mismatch" (the subject label the receiver's naming rule
+	// detector found regions covering more of the picture than text does),
+	// "no_pixel_template" (a pixel rule fills by the tenant's template for
+	// the device and size, the image's pixels may carry burned-in text and the
+	// tenant has no template that fits; a release once one is added fills
+	// it) or "subject_mismatch" (the subject label the receiver's naming rule
 	// makes from the file itself is not the subject its session is filed
 	// under, nor one a committed relabel moved to it: one file of a study
 	// carries an Issuer of Patient ID another lacks, or another Patient ID,

@@ -95,16 +95,20 @@ class ForwardRule(_message.Message):
     def __init__(self, name: _Optional[str] = ..., when: _Optional[str] = ..., series: _Optional[str] = ..., senders: _Optional[_Iterable[str]] = ..., destination_profile: _Optional[_Union[_receiver_pb2.ProfileVersionRef, _Mapping]] = ...) -> None: ...
 
 class CreateRuleSetRequest(_message.Message):
-    __slots__ = ("tenant", "receiver", "rule_set", "activate")
+    __slots__ = ("tenant", "receiver", "rule_set", "activate", "force", "force_reason")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     RECEIVER_FIELD_NUMBER: _ClassVar[int]
     RULE_SET_FIELD_NUMBER: _ClassVar[int]
     ACTIVATE_FIELD_NUMBER: _ClassVar[int]
+    FORCE_FIELD_NUMBER: _ClassVar[int]
+    FORCE_REASON_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     receiver: str
     rule_set: RuleSet
     activate: bool
-    def __init__(self, tenant: _Optional[str] = ..., receiver: _Optional[str] = ..., rule_set: _Optional[_Union[RuleSet, _Mapping]] = ..., activate: _Optional[bool] = ...) -> None: ...
+    force: bool
+    force_reason: str
+    def __init__(self, tenant: _Optional[str] = ..., receiver: _Optional[str] = ..., rule_set: _Optional[_Union[RuleSet, _Mapping]] = ..., activate: _Optional[bool] = ..., force: _Optional[bool] = ..., force_reason: _Optional[str] = ...) -> None: ...
 
 class CreateRuleSetResponse(_message.Message):
     __slots__ = ("rule_set",)
@@ -149,14 +153,18 @@ class ListRuleSetsResponse(_message.Message):
     def __init__(self, rule_sets: _Optional[_Iterable[_Union[RuleSet, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
 class ActivateRuleSetRequest(_message.Message):
-    __slots__ = ("tenant", "receiver", "version")
+    __slots__ = ("tenant", "receiver", "version", "force", "force_reason")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     RECEIVER_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
+    FORCE_FIELD_NUMBER: _ClassVar[int]
+    FORCE_REASON_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     receiver: str
     version: int
-    def __init__(self, tenant: _Optional[str] = ..., receiver: _Optional[str] = ..., version: _Optional[int] = ...) -> None: ...
+    force: bool
+    force_reason: str
+    def __init__(self, tenant: _Optional[str] = ..., receiver: _Optional[str] = ..., version: _Optional[int] = ..., force: _Optional[bool] = ..., force_reason: _Optional[str] = ...) -> None: ...
 
 class ActivateRuleSetResponse(_message.Message):
     __slots__ = ("rule_set",)

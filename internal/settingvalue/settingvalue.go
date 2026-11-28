@@ -346,6 +346,14 @@ func (t Tenant) DeleteGrace(ctx context.Context) (time.Duration, error) {
 	return typed(settings.DeleteGrace, v, err, settings.ParseDeleteGrace)
 }
 
+// ChangeTrialSessions returns deid.change-trial-sessions as it applies on
+// the tenant: how many of a receiver's newest sessions a new profile
+// version is tried over before the receiver is pointed at it.
+func (t Tenant) ChangeTrialSessions(ctx context.Context) (int, error) {
+	v, err := t.r.Tenant(ctx, t.st, settings.DeidChangeTrialSessions)
+	return typed(settings.DeidChangeTrialSessions, v, err, settings.ParseChangeTrialSessions)
+}
+
 // FailuresKept returns job.failures-kept as it applies on the tenant: how
 // many failures a job lists.
 func (t Tenant) FailuresKept(ctx context.Context) (int, error) {

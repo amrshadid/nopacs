@@ -186,6 +186,9 @@ func (k Sending) undoEditRow(ctx context.Context, tx SendingTx, id string, row e
 	if err := k.setInstanceBytes(ctx, tx, row, row.Storage, raw, row.OldSHA256, row.OldSize); err != nil {
 		return err
 	}
+	if err := setProfileOfLine(ctx, tx, row.scanID, row.UID, row.RestoreLine); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM instance_revisions WHERE sop_instance_uid = ? AND revision = ? AND correction_id = ?`, row.UID,
 		row.OldRevision, id); err != nil {
 		return err

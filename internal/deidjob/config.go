@@ -128,6 +128,11 @@ type Config struct {
 	// (receive.TrialOptions.Memory). Nil bounds a unit by MaxFileBytes and
 	// MaxUnits alone.
 	Memory check.Memory
+	// Revisions returns what publishes the new revisions of a profile
+	// re-run on the tenant named name, whose database is st, and the call
+	// that gives it back. Nil serves no re-run (its units wait); a preview
+	// never calls it.
+	Revisions func(ctx context.Context, name string, st tenant.Store) (Reviser, func(), error)
 	// Wake is called with a tenant's name after a write that may have
 	// written events of it; nil does nothing.
 	Wake func(tenantName string)

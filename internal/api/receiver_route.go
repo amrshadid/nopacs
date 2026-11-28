@@ -125,7 +125,13 @@ func (c *core) checkRuleSetProfiles(ctx context.Context, p tenant.Pipeline, rcv 
 			}
 		}
 	}
-	return nil
+	// Each archive rule's and each destination's profile is also a layer over
+	// the tenant's base, whatever the receiver does.
+	base, err := c.tenantBase(ctx, p)
+	if err != nil {
+		return err
+	}
+	return checkRuleSetBase(base, rcv, rs, load)
 }
 
 // layerRefusal is a destination profile that loosens a layer below it: the

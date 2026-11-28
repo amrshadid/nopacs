@@ -204,6 +204,8 @@ func (r *run) planRule(w *PixelWork, rule *v1.PixelRule, img Image, infoErr erro
 			w.Regions = append(w.Regions, reg)
 		}
 		return nil
+	case *v1.PixelRule_RedactByTemplate:
+		return r.redactByTemplate(w, img, infoErr, name)
 	case *v1.PixelRule_Detect:
 		w.Action = pixelDetect
 		if infoErr != nil {

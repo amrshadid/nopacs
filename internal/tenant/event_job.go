@@ -155,7 +155,7 @@ func JobProgressEvent(j Job, at time.Time) (EventRecord, error) {
 // alone cannot tell, since the contract's events carry no kind.
 func eventSender(j Job) error {
 	noSender := j.Kind == JobDeid || j.Kind == JobImport || j.Kind == JobScrub || j.Kind == JobRebuild || j.Kind == JobReplicate ||
-		j.Kind == JobRepair || j.Kind == JobDispose || j.Kind == JobDeleteBatch || j.Kind == JobTransfer || j.Kind == JobSearchBackfill
+		j.Kind == JobRepair || j.Kind == JobDispose || j.Kind == JobDeleteBatch || j.Kind == JobTransfer || j.Kind == JobSearchBackfill || j.Kind == JobDeidCoverage
 	switch {
 	case noSender && j.Sender != "":
 		return invalid("only a send job's event names a sender")

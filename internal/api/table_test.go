@@ -77,6 +77,7 @@ var methodTests = map[string]func(t *testing.T){
 	nopacsv1connect.ReceiverServiceListReceiversProcedure:            testListReceivers,
 	nopacsv1connect.ReceiverServiceSetReceiverProcedure:              testSetReceiver,
 	nopacsv1connect.ReceiverServiceRemoveReceiverProcedure:           testRemoveReceiver,
+	nopacsv1connect.ReceiverServiceTryReceiverProfileProcedure:       testTryReceiverProfile,
 	nopacsv1connect.ReceptionServiceListReceptionsProcedure:          testListReceptions,
 	nopacsv1connect.ReceptionServiceGetReceptionProcedure:            testGetReception,
 	nopacsv1connect.ReceptionServiceRetryReceptionProcedure:          testRetryReception,
@@ -128,6 +129,11 @@ var methodTests = map[string]func(t *testing.T){
 	nopacsv1connect.DeidServiceCodeProcedure:                         testCode,
 	nopacsv1connect.DeidServiceImportLookupCodesProcedure:            testImportLookupCodes,
 	nopacsv1connect.DeidServiceListLookupTablesProcedure:             testListLookupTables,
+	nopacsv1connect.DeidServiceAddPixelTemplatesProcedure:            testAddPixelTemplates,
+	nopacsv1connect.DeidServiceRemovePixelTemplateProcedure:          testRemovePixelTemplate,
+	nopacsv1connect.DeidServiceListPixelTemplatesProcedure:           testListPixelTemplates,
+	nopacsv1connect.DeidServiceGetCoverageProcedure:                  testGetCoverage,
+	nopacsv1connect.DeidServiceRefreshCoverageProcedure:              testRefreshCoverage,
 	nopacsv1connect.AuditSealServiceVerifyAuditProcedure:             testVerifyAudit,
 	nopacsv1connect.AuditSealServiceListAuditCheckpointsProcedure:    testListAuditCheckpoints,
 	nopacsv1connect.AuditSealServiceExportAuditProcedure:             testExportAudit,
@@ -216,8 +222,8 @@ func contractMethods() map[string]protoreflect.MethodDescriptor {
 // here names a method the contract does not have.
 func TestEveryMethod(t *testing.T) {
 	methods := contractMethods()
-	if len(methods) != 134 {
-		t.Errorf("the contract has %d methods; this test was written for 134, so look at what changed", len(methods))
+	if len(methods) != 140 {
+		t.Errorf("the contract has %d methods; this test was written for 140, so look at what changed", len(methods))
 	}
 	var table api.Methods
 	for proc, md := range methods {

@@ -138,6 +138,12 @@ func TestMaskedKeyIsRefusedOriginals(t *testing.T) {
 		{"an import of lookup codes", f.lab1Admin, maskedAdmin, func(c clients) outcome {
 			return call(c.deid.ImportLookupCodes, &v1.ImportLookupCodesRequest{Tenant: "lab1", Table: "sites", Entries: []*v1.LookupEntry{{Value: "12345", Code: "S1"}}})
 		}},
+		{"an add of pixel templates", f.lab1Admin, maskedAdmin, func(c clients) outcome {
+			return call(c.deid.AddPixelTemplates, &v1.AddPixelTemplatesRequest{Tenant: "lab1", Templates: []*v1.PixelTemplate{validTemplate("Mask Co", "Q1", 64, 64)}})
+		}},
+		{"a removal of a pixel template", f.lab1Admin, maskedAdmin, func(c clients) outcome {
+			return call(c.deid.RemovePixelTemplate, &v1.RemovePixelTemplateRequest{Tenant: "lab1", Manufacturer: "Mask Co", Model: "Q1", Rows: 64, Columns: 64})
+		}},
 		{"a routing explanation's values", f.lab1Operator, maskedAdmin, func(c clients) outcome {
 			return call(c.routes.ExplainRoute, &v1.ExplainRouteRequest{Tenant: "lab1", Receiver: "scanner1", ShowValues: true,
 				Source: &v1.ExplainRouteRequest_File{File: ct}})

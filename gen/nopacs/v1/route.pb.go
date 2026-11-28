@@ -512,7 +512,16 @@ type CreateRuleSetRequest struct {
 	// The rules. Required.
 	RuleSet *RuleSet `protobuf:"bytes,3,opt,name=rule_set,json=ruleSet,proto3" json:"rule_set,omitempty"`
 	// Point the receiver at the new version in the same transaction.
-	Activate      bool `protobuf:"varint,4,opt,name=activate,proto3" json:"activate,omitempty"`
+	Activate bool `protobuf:"varint,4,opt,name=activate,proto3" json:"activate,omitempty"`
+	// Make the change although an archive rule names a profile version that
+	// was not tried over the receiver's last receptions
+	// (ReceiverService.TryReceiverProfile), or whose trial read no file or
+	// found files it would hold. Needs force_reason, which is audited. Read
+	// only when the rule set is activated.
+	Force bool `protobuf:"varint,5,opt,name=force,proto3" json:"force,omitempty"`
+	// Why the change is forced: 1 to 1,000 characters, required with force and
+	// empty without it.
+	ForceReason   string `protobuf:"bytes,6,opt,name=force_reason,json=forceReason,proto3" json:"force_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -573,6 +582,20 @@ func (x *CreateRuleSetRequest) GetActivate() bool {
 		return x.Activate
 	}
 	return false
+}
+
+func (x *CreateRuleSetRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *CreateRuleSetRequest) GetForceReason() string {
+	if x != nil {
+		return x.ForceReason
+	}
+	return ""
 }
 
 // CreateRuleSetResponse is the version stored.
@@ -870,7 +893,16 @@ type ActivateRuleSetRequest struct {
 	// The receiver, by name. Required.
 	Receiver string `protobuf:"bytes,2,opt,name=receiver,proto3" json:"receiver,omitempty"`
 	// The version; 0 to run none.
-	Version       int32 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	Version int32 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	// Make the change although an archive rule names a profile version that
+	// was not tried over the receiver's last receptions
+	// (ReceiverService.TryReceiverProfile), or whose trial read no file or
+	// found files it would hold. Needs force_reason, which is audited. Read
+	// only when the rule set is activated.
+	Force bool `protobuf:"varint,4,opt,name=force,proto3" json:"force,omitempty"`
+	// Why the change is forced: 1 to 1,000 characters, required with force and
+	// empty without it.
+	ForceReason   string `protobuf:"bytes,5,opt,name=force_reason,json=forceReason,proto3" json:"force_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -924,6 +956,20 @@ func (x *ActivateRuleSetRequest) GetVersion() int32 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *ActivateRuleSetRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *ActivateRuleSetRequest) GetForceReason() string {
+	if x != nil {
+		return x.ForceReason
+	}
+	return ""
 }
 
 // ActivateRuleSetResponse is the version the receiver runs after.
@@ -2075,12 +2121,14 @@ const file_nopacs_v1_route_proto_rawDesc = "" +
 	"\x04when\x18\x02 \x01(\tR\x04when\x12\x16\n" +
 	"\x06series\x18\x03 \x01(\tR\x06series\x12\x18\n" +
 	"\asenders\x18\x04 \x03(\tR\asenders\x12M\n" +
-	"\x13destination_profile\x18\x05 \x01(\v2\x1c.nopacs.v1.ProfileVersionRefR\x12destinationProfile\"\x95\x01\n" +
+	"\x13destination_profile\x18\x05 \x01(\v2\x1c.nopacs.v1.ProfileVersionRefR\x12destinationProfile\"\xce\x01\n" +
 	"\x14CreateRuleSetRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1a\n" +
 	"\breceiver\x18\x02 \x01(\tR\breceiver\x12-\n" +
 	"\brule_set\x18\x03 \x01(\v2\x12.nopacs.v1.RuleSetR\aruleSet\x12\x1a\n" +
-	"\bactivate\x18\x04 \x01(\bR\bactivate\"F\n" +
+	"\bactivate\x18\x04 \x01(\bR\bactivate\x12\x14\n" +
+	"\x05force\x18\x05 \x01(\bR\x05force\x12!\n" +
+	"\fforce_reason\x18\x06 \x01(\tR\vforceReason\"F\n" +
 	"\x15CreateRuleSetResponse\x12-\n" +
 	"\brule_set\x18\x01 \x01(\v2\x12.nopacs.v1.RuleSetR\aruleSet\"a\n" +
 	"\x11GetRuleSetRequest\x12\x16\n" +
@@ -2097,11 +2145,13 @@ const file_nopacs_v1_route_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\"o\n" +
 	"\x14ListRuleSetsResponse\x12/\n" +
 	"\trule_sets\x18\x01 \x03(\v2\x12.nopacs.v1.RuleSetR\bruleSets\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"f\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x9f\x01\n" +
 	"\x16ActivateRuleSetRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1a\n" +
 	"\breceiver\x18\x02 \x01(\tR\breceiver\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x05R\aversion\"H\n" +
+	"\aversion\x18\x03 \x01(\x05R\aversion\x12\x14\n" +
+	"\x05force\x18\x04 \x01(\bR\x05force\x12!\n" +
+	"\fforce_reason\x18\x05 \x01(\tR\vforceReason\"H\n" +
 	"\x17ActivateRuleSetResponse\x12-\n" +
 	"\brule_set\x18\x01 \x01(\v2\x12.nopacs.v1.RuleSetR\aruleSet\"\xae\x02\n" +
 	"\x13ExplainRouteRequest\x12\x16\n" +

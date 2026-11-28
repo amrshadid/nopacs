@@ -333,6 +333,17 @@ message CreateRuleSetRequest {
 
   // Point the receiver at the new version in the same transaction.
   bool activate = 4;
+
+  // Make the change although an archive rule names a profile version that
+  // was not tried over the receiver's last receptions
+  // (ReceiverService.TryReceiverProfile), or whose trial read no file or
+  // found files it would hold. Needs force_reason, which is audited. Read
+  // only when the rule set is activated.
+  bool force = 5;
+
+  // Why the change is forced: 1 to 1,000 characters, required with force and
+  // empty without it.
+  string force_reason = 6;
 }
 
 // CreateRuleSetResponse is the version stored.
@@ -396,6 +407,17 @@ message ActivateRuleSetRequest {
 
   // The version; 0 to run none.
   int32 version = 3;
+
+  // Make the change although an archive rule names a profile version that
+  // was not tried over the receiver's last receptions
+  // (ReceiverService.TryReceiverProfile), or whose trial read no file or
+  // found files it would hold. Needs force_reason, which is audited. Read
+  // only when the rule set is activated.
+  bool force = 4;
+
+  // Why the change is forced: 1 to 1,000 characters, required with force and
+  // empty without it.
+  string force_reason = 5;
 }
 
 // ActivateRuleSetResponse is the version the receiver runs after.

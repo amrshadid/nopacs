@@ -6,6 +6,7 @@ import (
 
 	"github.com/amrshadid/nopacs/internal/core/label"
 	"github.com/amrshadid/nopacs/internal/core/uid"
+	"github.com/amrshadid/nopacs/internal/deid/engine"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/receive/sidecar"
 	"github.com/amrshadid/nopacs/internal/tenant"
@@ -192,7 +193,24 @@ func (p *Pipeline) lineOf(m sidecarMeta, wr written) sidecar.Instance {
 	if !wr.profile.IsZero() {
 		in.Profile = wr.profile.String()
 		in.ProfileSHA256 = p.profileSum(wr.profile)
+		if !wr.base.IsZero() {
+			in.BaseProfile = wr.base.String()
+		}
 		in.PixelRiskAccepted = wr.pixelRiskAccepted
+		in.Unnamed, in.UnnamedOver = wr.unnamed, wr.unnamedOver
 	}
 	return in
+}
+
+// unnamedOf returns the elements no rule named that a de-identification
+// recorded, as a line lists them: never nil, so a line says it was recorded
+// even when none was found. A private creator the engine withheld stays
+// withheld, since the line outlives the run and a report is made from it
+// alone.
+func unnamedOf(rec *engine.Record) ([]sidecar.UnnamedElement, int) {
+	out := make([]sidecar.UnnamedElement, 0, len(rec.Unnamed))
+	for _, u := range rec.Unnamed {
+		out = append(out, sidecar.UnnamedElement{Tag: u.Tag, VR: u.VR, Count: u.Count, Creator: u.Creator, Withheld: u.CreatorUnreadable})
+	}
+	return out, rec.UnnamedOver
 }

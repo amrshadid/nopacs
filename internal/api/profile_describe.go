@@ -10,6 +10,7 @@ import (
 	"github.com/amrshadid/nopacs/internal/deid/profile"
 	"github.com/amrshadid/nopacs/internal/fault"
 	"github.com/amrshadid/nopacs/internal/master"
+	"github.com/amrshadid/nopacs/internal/tenant"
 	"github.com/amrshadid/nopacs/internal/trial"
 )
 
@@ -25,6 +26,9 @@ func (s profileService) DescribeProfile(ctx context.Context, req *v1.DescribePro
 	p, st, err := c.inProfiles(ctx, d, req.GetTenant(), nil)
 	if err != nil {
 		return nil, err
+	}
+	if req.GetEffectiveReceiver() != "" {
+		return s.describeEffective(ctx, d, st, req)
 	}
 	target, ps, err := resolveTrial(ctx, p, req.GetProfile())
 	if err != nil {
@@ -44,6 +48,58 @@ func (s profileService) DescribeProfile(ctx context.Context, req *v1.DescribePro
 		}
 	}
 	c.record(d, st, master.OutcomeDone, "", access.Facts{Object: target.object})
+	return out, nil
+}
+
+// describeEffective answers what decides each selector of a receiver's
+// effective profile, its profile stacked over the tenant's base, and the
+// layer each decision came from. A receiver that archives as received has no
+// profile to describe.
+func (s profileService) describeEffective(ctx context.Context, d access.Decision, st tenant.Store, req *v1.DescribeProfileRequest) (*v1.DescribeProfileResponse, error) {
+	c := s.c
+	p, err := c.pipeline(st)
+	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
+	if req.GetProfile() != nil {
+		return nil, c.failIn(d, st, invalid("profile", "is not given with effective_receiver: the receiver's profile is described"))
+	}
+	if err := itemName("effective_receiver", req.GetEffectiveReceiver()); err != nil {
+		return nil, c.failIn(d, st, err)
+	}
+	rcv, err := lookupReceiver(ctx, p, req.GetEffectiveReceiver())
+	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
+	if !rcv.Deidentifies() {
+		return nil, c.failIn(d, st, precondition("effective_receiver: the receiver archives what it receives as received; it has no profile"))
+	}
+	ver, err := loadedProfile(ctx, p, "effective_receiver", rcv.Profile)
+	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
+	base, err := c.tenantBase(ctx, p)
+	if err != nil {
+		return nil, c.failIn(d, st, err)
+	}
+	var eff *profile.Effective
+	var problems profile.Problems
+	if base == nil {
+		eff, problems = profile.Stack(layerOf(profile.LayerReceiver, rcv.Profile, ver))
+	} else {
+		eff, problems = base.stack(profile.LayerReceiver, rcv.Profile, ver)
+	}
+	if len(problems) > 0 {
+		// Checked when the receiver or the base was set, so only a change
+		// that slipped past both would be here.
+		return nil, problemsError(c.failIn(d, st, precondition("effective_receiver: the receiver's profile "+rcv.Profile.String()+
+			" does not stack over the tenant's base profile: "+problems[0].String()+problemsMore(len(problems)))), problems)
+	}
+	out := &v1.DescribeProfileResponse{Version: &v1.ProfileVersion{Name: rcv.Profile.Name, Version: rcv.Profile.Version}}
+	for _, r := range eff.Describe() {
+		out.Effective = append(out.Effective, effectiveElement(r))
+	}
+	c.record(d, st, master.OutcomeDone, "", access.Facts{Object: profileObject(req.GetEffectiveReceiver())})
 	return out, nil
 }
 

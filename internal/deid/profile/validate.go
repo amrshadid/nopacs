@@ -173,12 +173,13 @@ func checkPixelRule(a at, r *v1.PixelRule, names map[string]int) (pixelRule, boo
 	case *v1.PixelRule_Redact:
 		checkRectangles(a.in("redact"), k.Redact.GetRectangles(), r.GetRows(), r.GetColumns())
 	case *v1.PixelRule_Detect:
+	case *v1.PixelRule_RedactByTemplate:
 	case *v1.PixelRule_Accept:
 		if r.GetReason() == "" {
 			a.in("reason").add(CodeRequired, "accepting an image whose pixels may carry text needs a reason")
 		}
 	default:
-		a.add(CodeOneOf, "a pixel rule needs one action: redact, detect or accept")
+		a.add(CodeOneOf, "a pixel rule needs one action: redact, redact_by_template, detect or accept")
 	}
 	if len(a.c.list) != before {
 		return pixelRule{}, false

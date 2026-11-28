@@ -457,6 +457,8 @@ func testDispose(t *testing.T) {
 		{name: "the token again under another rule", as: c.lab1Admin,
 			call: func(cl clients) outcome { return disposeCall("trial8", "end of study", token, false, 0)(cl) },
 			code: connect.CodeFailedPrecondition, msg: "another rule"},
+		{name: "the retry of a dispose job", as: c.lab1Operator, call: func(cl clients) outcome { return retryJob(job)(cl) },
+			code: connect.CodeFailedPrecondition, msg: "a dispose job is not retried"},
 	})
 }
 

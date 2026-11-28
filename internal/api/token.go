@@ -15,6 +15,9 @@ const (
 	// tokenInstallationSettings is ListSettings on the installation, which
 	// pages the list of settings the server knows.
 	tokenInstallationSettings = "s1"
+	// tokenCoverage is GetCoverage, bound to the tenant and to the job that
+	// made the report it pages, so a token of an older report is refused.
+	tokenCoverage = "c1"
 )
 
 // afterToken returns the page token of a list this package pages itself that

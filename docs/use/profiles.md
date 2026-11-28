@@ -244,6 +244,49 @@ leaves them out); `--json` gives all of it. The classes are judged from each
 rule's selector and VRs, not from a file: an element's own decision is
 `profile explain`'s. Needs the operator role.
 
+### A tenant's base profile, and the effective profile of a receiver
+
+A tenant may name a base, a profile version every receiver's profile must be at
+least as strict as: `nopacs setting set deid.base-profile floor@1 --tenant lab1`
+(the tenant's admin; a masked key never sets it). The actions are ordered by
+strictness: keep, then hash, shift and generalize, then replace and dummy, then
+empty, then remove, then quarantine. A rule that lets through more of an element
+than the base decides for it is refused, with every such rule as a detail of the
+error (`loosens_lower_layer`; `incomparable_actions` when a rule and the base's
+have the same strictness and differ, such as a hash and a shift). It is judged
+where a profile is pointed at: when the base is set, against every receiver that
+de-identifies and every archive rule's and destination's profile of the rule set
+each runs; when a receiver is added or its profile changed; when a rule set
+that names profiles is created with activation or activated; and when a
+quarantined file is released through a named profile. A later rule of a profile
+for an element replaces its earlier one (an option after the basic profile), and
+only the one that decides is judged. Pixel rules are not judged as layers.
+An image is decided by the base's pixel rules when one matches it (the last that
+does), and by the receiver's own only when no pixel rule of the base matches, so
+a receiver's catch-all rule never replaces what the base does to an image.
+
+`nopacs profile describe --effective lab1 scanner1` prints the receiver's profile
+stacked over the base: one row for each selector with the action that decides
+it, the layer it came from (`receiver` for what the receiver's profile names,
+`tenant` for what only the base names) and that layer's profile version.
+
+An element both layers decide is decided by the stricter of the two decisions,
+each made as the layer would alone: a base's rule for one tag does not weaken a
+receiver's rule for a whole VR, and the other way round.
+
+The effective profile is what runs. A reception de-identifies a file by the
+receiver's profile (or the archive rule's) stacked over the base, read for each
+file, so an element the base decides and the receiver's profile does not name
+is decided by the base, and a base set or changed is taken by the next file
+received. A trial or an explanation as a named receiver runs the same stack.
+Each instance's metadata line records the base beside the profile
+(`base_profile`; the profile stays the receiver's, so the instance still has
+its profile provenance and may be sent). If a base can no longer be stacked
+(a profile of the receiver loosens it, or the base is gone) the file is held
+as `deid_failed`, cause `profile_unusable`, never archived with less. Files
+archived before a base was set are not changed by it. Use `deid coverage` below
+to see what no rule named.
+
 `nopacs profile try --local --document draft.json ./samples/` runs the same
 trial as `profile try` inside the command, with no server and no tenant: the
 engine and the check after run in the process, under keys made for the run and
@@ -390,3 +433,131 @@ lower of `deid.pixel-limit` and 256 MiB. The server works at most two units of d
 jobs at once, one per tenant, and their reads count in the same bound as the
 API's and the senders'. Both need the operator role.
 
+
+## See what no rule named: the coverage report
+
+```
+nopacs deid coverage lab1 --refresh
+nopacs deid coverage lab1 --json
+```
+
+A profile decides each element a rule names; every other element is decided by
+a default (a private element is removed, any other kept or removed as the
+profile's `unnamed` says). `deid coverage` lists those: every standard element
+and every private element, by its private creator and its element within the
+creator's block, that files archived by a receiver that de-identifies held as
+received and no rule named, with its VR as the file gave it, how many instances
+held it and how many times in all. It is where to look for a vendor's private
+elements. It holds no value of any file. A private creator is a vendor's name
+written in the file; one that is not printable ASCII of at most 64 bytes, or
+that holds a value the profile removed from the file or a term of its text
+lists, is shown as `(withheld)` and its elements are counted together. A key
+that is masked may read it. A name written as a private creator is
+withheld only when the part of the name that matches is at least three
+characters long, so a very short name used as a creator may be shown.
+
+The report is built by a job of the kind `deid_coverage`, made by `--refresh`
+(operator on the tenant), which reads each scan's metadata file once, line by
+line, and adds up what each line records of its unnamed elements, a page of
+scans at a time in the tenant's database: a restart goes on after the last
+page, and no scan is counted twice. It reads no instance's file and writes no
+storage. A scan whose metadata is missing or not in its form is counted skipped
+and the report is marked partial. A line records the elements only when it was
+written by a build that does, for a file a receiver de-identified; an instance
+archived as received, or before that, is counted as read but not as recorded.
+A line lists at most 1,024 distinct elements; the occurrences past it are
+counted, not listed. A report lists at most 100,000 distinct elements. Only the
+latest report is kept: a new job's end replaces it. Without `--refresh` the
+command shows the stored report and says when there is none.
+
+## Run a newer version over the archive
+
+A profile version that takes more from a file than the one that archived it
+(a newer, stricter version) can be run over data already archived, as a job of
+the kind `deid` in the mode `rerun`:
+
+```sh
+nopacs deid rerun lab1 sub-0017 --profile research@5 --reason "the site now removes KVP" --preview --wait
+nopacs deid rerun lab1 sub-0017 --profile research@5 --reason "the site now removes KVP" --wait
+```
+
+It needs the admin role on the tenant and is refused to a masked key. When the
+tenant has a base profile, a version that does not stack over it is refused when
+the job is made (`loosens_lower_layer`), and the files are judged and the new
+revisions made by the version stacked over the base, as a reception runs it;
+each new revision's line records the base in force. A target
+is a subject, a session or a scan; with none it is the whole tenant. `--reason`
+is recorded in the audit log with the request. `--preview` writes nothing: its
+tallies count what would change, by element and action
+(`rerun|element|00180060|remove`), the files left alone (`rerun|unchanged`) and
+the files that would be held, with no value.
+
+The archived file is the only original there is, and what the version that made
+it decided is already done in it (a hash, a remapped UID, a shifted date), so a
+re-run does not run the newer version whole. It does, to each archived file,
+what the newer version decides otherwise than the older one and only where it
+lets through less: an element it removes, empties, replaces by a constant,
+generalizes or cleans, or adds. Each file that changes becomes a new revision
+through the path `correction edit` uses: the superseded revision stays on every
+copy until the purge, `correction undo` gives it back before then (the file's
+profile version and the scan's catalog values with it), the scan's metadata and
+checksums name the new revision, and the new revision's method record
+(De-identification Method, 0012,0063) names the newer version. The check after
+runs over each new revision before it is written, searching for the values the
+newer version took out and for its text lists. A file the newer version changes
+nothing in is skipped and not rewritten. An instance archived as received
+passes with a note: a profile run over it is a reception's work.
+
+A file is not written, and `job failures` lists it with a fixed detail, when:
+
+- the check after holds it (`residual_value/...`, `deid_failed/...`);
+- the newer version would hash, remap, shift or look up an element the older one
+  left (`deid_failed/rerun_needs_original`): the value would have to be made
+  from the original;
+- the newer version changes an element the catalog is built on, such as a UID,
+  the study date, the character set or how the pixel data is laid out
+  (`deid_failed/rerun_catalog_element`);
+- the file's character set would not be kept by a rewrite
+  (`deid_failed/rerun_charset`), or the newer version has pixel rules
+  (`deid_failed/rerun_pixel_rules`);
+- the newer version lets through more than the older one, or cannot be compared
+  with it, by the layer rule of [the tenant's base profile](#a-tenants-base-profile-and-the-effective-profile-of-a-receiver)
+  (`loosens_lower_layer`, `incomparable_actions`): a looser version would need the
+  original, which de-identified data does not keep;
+- a hold covers the instance (`held_by_hold`).
+
+Each instance is its own correction, in the name of the key that made the job
+(which is checked again before each one), so holds, the overlap with other
+corrections and the purge apply as to an edit, and the job goes on after a
+restart: an instance already at the newer version is met again as unchanged.
+A job stops being served when its key is revoked or loses the admin role: the
+remaining instances are refused as `key_refused`.
+
+### Try a version over a receiver's last receptions before pointing it there
+
+`receiver set --profile` needs the new version tried first, whether the receiver runs another version or archives as received:
+
+```sh
+nopacs receiver try-profile lab1 scanner1 --profile research@5
+nopacs receiver set lab1 scanner1 --profile research@5
+```
+
+The trial runs the version over the first archived file of each scan of the
+receiver's newest sessions (the setting `deid.change-trial-sessions`, 20 by
+default, 1 to 200), as `deid rerun --preview` does, and records how many files
+it would change and hold. It answers the counts, each element it changes with
+its action and in how many files, and why files would be held; no value of any
+file. The command that points the receiver is refused when the version was
+never tried for that receiver, when its trial read no file (a receiver that
+has received nothing shows nothing), or when its trial found files it would
+hold. `--force` with `--force-reason` makes the change anyway; the audit entry
+of the change says it was forced, why, and what the trial had found. The same
+gate stands in front of the other ways to run a version on a receiver: making
+a rule set active (`CreateRuleSet` with `activate`) or activating one
+(`ActivateRuleSet`) when an archive rule names a profile version the receiver
+does not already run needs each such version tried, or `force` with a reason,
+audited alike. A change of the tenant's base profile (`deid.base-profile`) is
+not gated by trials, since a base applies to every receiver: it is checked
+for strictness against every receiver and rule set, and audited. The trial reads
+one file of each scan, not every instance: a file of the scan that differs
+from the first is found by `deid rerun --preview` over the whole target.

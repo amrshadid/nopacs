@@ -101,7 +101,8 @@ const (
 // decode, more bytes of native pixels than the frames stated, a pixel
 // rule's rectangle wholly outside the image, compressed
 // segments that are not searched under a profile that holds them, a
-// detector finding more than text covers); and those of the check after de-identification,
+// detector finding more than text covers, an image at risk of burned-in
+// text that no pixel template of the tenant fits); and those of the check after de-identification,
 // which could not judge the file: too large, too many values to search
 // for, or unreadable to its end (a deflated file among them); and a file
 // whose own subject label is not its session's subject (subject_mismatch),
@@ -110,7 +111,7 @@ var DeidCauses = []string{"no_subject", "lookup_missing", "bad_value", "too_deep
 	"no_profile", "recorded_as_received", "profile_unusable", "unreadable", "unwritable", "uid_not_remapped",
 	"check_too_large", "check_too_many_needles", "check_unreadable",
 	"pixels_too_large", "pixels_unsupported", "pixels_undecodable", "pixel_region_outside", "pixel_text_unsearched",
-	"detect_implausible", "frames_mismatch", "subject_mismatch"}
+	"detect_implausible", "frames_mismatch", "subject_mismatch", "no_pixel_template"}
 
 // BurnedInCauses are the causes a burned_in_risk record names: Burned In
 // Annotation (0028,0301) is YES; the image is a secondary capture, of a

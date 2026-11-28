@@ -73,8 +73,10 @@ with only Float or Double Float Pixel Data is not judged by the gate. Pixel data
 inside a sequence item, and the Icon Image Sequence, are always removed. A pixel
 rule: `redact` fills rectangles in every frame
 (the image is then written uncompressed), `detect` fills what the text detector
-finds (opt-in, and slow: every frame is decoded and searched), `accept`
-archives it as it is, with a reason. Comment and application segments of JPEG
+finds (opt-in, and slow: every frame is decoded and searched), `redact_by_template`
+fills the rectangles the tenant keeps for the device and image size
+([pixel templates](../use/pixel-templates.md); an image at risk with no template
+is held as `no_pixel_template`), `accept` archives it as it is, with a reason. Comment and application segments of JPEG
 pixel data, and comment segments of JPEG 2000 and HTJ2K pixel data (in the main
 header and in every tile-part header, the tile-part's length and its TLM entry
 lowered to match) and the main header's CPF and CRG segments, are always removed, the image data copied byte for byte; a

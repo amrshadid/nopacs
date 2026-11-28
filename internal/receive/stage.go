@@ -174,7 +174,11 @@ func (p *Pipeline) deidentify(ctx context.Context, r tenant.Reception, rcv tenan
 	if reason != "" {
 		return hold(reason, details)
 	}
-	en, err := p.engineFor(ctx, ref)
+	base, err := p.baseProfile(ctx)
+	if err != nil {
+		return wr, nil, err
+	}
+	en, err := p.engineFor(ctx, ref, base)
 	if errors.Is(err, errProfileUnusable) {
 		return hold(tenant.QuarantineDeidFailed, map[string]string{"cause": "profile_unusable"})
 	}
@@ -217,11 +221,12 @@ func (p *Pipeline) deidentify(ctx context.Context, r tenant.Reception, rcv tenan
 		return wr, nil, err
 	}
 	p.at("archive.after-deid")
-	wr.made, wr.size, wr.sum, wr.profile = true, made.Size, made.SHA256, ref
+	wr.made, wr.size, wr.sum, wr.profile, wr.base = true, made.Size, made.SHA256, ref, base
 	// An image at risk of burned-in text that a pixel rule accepted as it is
 	// is recorded with the file, so no sender sends it unless marked
 	// (tenant.SendRefusal).
 	wr.pixelRiskAccepted = rec.Pixels.RiskAccepted()
+	wr.unnamed, wr.unnamedOver = unnamedOf(rec)
 	out, size, err := p.area.OpenDerived(wr.f.Incoming)
 	if err != nil {
 		return wr, nil, err

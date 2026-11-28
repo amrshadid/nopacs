@@ -43,8 +43,8 @@ func TestExpandedFormStoresWhatValidationDecided(t *testing.T) {
 	}
 	// A document that uses nothing of a later edition is written as
 	// edition 1, as it was before any later edition existed; this build
-	// writes edition 3, which adds text lists.
-	if e.GetLanguageEdition() != 1 || profile.LanguageEdition != 3 {
+	// writes edition 4, which adds the pixel action that fills by template.
+	if e.GetLanguageEdition() != 1 || profile.LanguageEdition != 4 {
 		t.Errorf("language edition %d", e.GetLanguageEdition())
 	}
 	p, err := profile.Compile(e)

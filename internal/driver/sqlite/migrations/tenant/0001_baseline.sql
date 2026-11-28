@@ -884,7 +884,7 @@ CREATE TABLE senders (
 -- progress event, which is written at most once in a period.
 CREATE TABLE jobs (
     id                  TEXT    NOT NULL PRIMARY KEY,
-    kind                TEXT    NOT NULL CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch', 'transfer', 'search_backfill')),
+    kind                TEXT    NOT NULL CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch', 'transfer', 'search_backfill', 'deid_coverage')),
     sender              TEXT    NOT NULL,
     subject_label       TEXT    NOT NULL,
     session_label       TEXT    NOT NULL,
@@ -925,7 +925,7 @@ CREATE TABLE jobs (
     failures_not_listed INTEGER NOT NULL,
     progress_at         INTEGER,
     progress_mark       INTEGER NOT NULL,
-    deid_mode           TEXT    NOT NULL CHECK (deid_mode IN ('', 'dry_run', 'check')),
+    deid_mode           TEXT    NOT NULL CHECK (deid_mode IN ('', 'dry_run', 'check', 'rerun', 'rerun_preview')),
     profile_name        TEXT    NOT NULL,
     profile_version     INTEGER NOT NULL CHECK (profile_version >= 0),
     CHECK ((kind = 'deid') = (deid_mode <> '')),
@@ -2165,6 +2165,39 @@ CREATE TABLE search_backfill_jobs (
     skipped       INTEGER NOT NULL CHECK (skipped >= 0)
 ) STRICT;
 
+-- A coverage job's own part: the place it reached, the scans it could not read,
+-- the instances it counted and how many carried a record (and how many of
+-- those were cut at the per-file bound), the occurrences past the report's
+-- bound, the elements it listed, and whether it is the tenant's report.
+CREATE TABLE deid_coverage_jobs (
+    job_id        TEXT    NOT NULL PRIMARY KEY,
+    after_scan_id INTEGER NOT NULL CHECK (after_scan_id >= 0),
+    skipped       INTEGER NOT NULL CHECK (skipped >= 0),
+    instances     INTEGER NOT NULL CHECK (instances >= 0),
+    recorded      INTEGER NOT NULL CHECK (recorded >= 0 AND recorded <= instances),
+    capped        INTEGER NOT NULL CHECK (capped >= 0 AND capped <= recorded),
+    not_listed    INTEGER NOT NULL CHECK (not_listed >= 0),
+    elements      INTEGER NOT NULL CHECK (elements >= 0),
+    reported      INTEGER NOT NULL CHECK (reported IN (0, 1))
+) STRICT;
+
+CREATE UNIQUE INDEX deid_coverage_jobs_reported ON deid_coverage_jobs (reported) WHERE reported = 1;
+
+-- The elements a coverage job found that no rule named: the tag, the private
+-- creator ('' for a public tag, and for a creator withheld because it held a
+-- removed value or a list term), its VR and counts; never a value.
+CREATE TABLE deid_coverage_elements (
+    job_id      TEXT    NOT NULL,
+    tag         INTEGER NOT NULL CHECK (tag BETWEEN 0 AND 4294967295),
+    creator     TEXT    NOT NULL,
+    withheld    INTEGER NOT NULL CHECK (withheld IN (0, 1)),
+    vr          TEXT    NOT NULL,
+    instances   INTEGER NOT NULL CHECK (instances >= 1),
+    occurrences INTEGER NOT NULL CHECK (occurrences >= instances),
+    CHECK (withheld = 0 OR creator = ''),
+    PRIMARY KEY (job_id, tag, creator, withheld, vr)
+) STRICT, WITHOUT ROWID;
+
 -- A receiver's routing rule sets: each version's body (the JSON of its
 -- archive and forward rules), when it was made and by which key. A version
 -- is never changed once made, which the trigger holds: a reception's
@@ -2491,3 +2524,37 @@ INSERT INTO search_attributes (field, state) SELECT 'AcquisitionDateTime', CASE 
 INSERT INTO search_attributes (field, state) SELECT 'ImageType', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
 INSERT INTO search_attributes (field, state) SELECT 'ScanningSequence', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
 INSERT INTO search_attributes (field, state) SELECT 'OperatorsName', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+
+-- What trying a profile version over a receiver's latest receptions found:
+-- when and by which key, how many sessions and files it read, and how many
+-- files the version would change or hold; counts only, never a value.
+CREATE TABLE profile_trials (
+    receiver        TEXT    NOT NULL,
+    profile_name    TEXT    NOT NULL,
+    profile_version INTEGER NOT NULL CHECK (profile_version >= 1),
+    tried           INTEGER NOT NULL,
+    key_id          TEXT    NOT NULL,
+    sessions        INTEGER NOT NULL CHECK (sessions >= 0),
+    files           INTEGER NOT NULL CHECK (files >= 0),
+    changed         INTEGER NOT NULL CHECK (changed >= 0),
+    held            INTEGER NOT NULL CHECK (held >= 0),
+    PRIMARY KEY (receiver, profile_name, profile_version),
+    CHECK (changed + held <= files)
+) STRICT, WITHOUT ROWID;
+
+-- The rectangles to fill in the images of one device and size (a pixel rule
+-- that fills by template). The key is the folded manufacturer and model,
+-- the image's size and its SOP class ('' for any class); the manufacturer
+-- and model are kept as written. rectangles is a JSON list of x, y, w, h
+-- and, when true, r and b (measured from the right and bottom edges).
+CREATE TABLE pixel_templates (
+    manufacturer_key TEXT    NOT NULL,
+    model_key        TEXT    NOT NULL,
+    image_rows       INTEGER NOT NULL CHECK (image_rows BETWEEN 1 AND 65535),
+    image_columns    INTEGER NOT NULL CHECK (image_columns BETWEEN 1 AND 65535),
+    sop_class        TEXT    NOT NULL,
+    manufacturer     TEXT    NOT NULL,
+    model            TEXT    NOT NULL,
+    rectangles       TEXT    NOT NULL,
+    PRIMARY KEY (manufacturer_key, model_key, image_rows, image_columns, sop_class)
+) STRICT, WITHOUT ROWID;

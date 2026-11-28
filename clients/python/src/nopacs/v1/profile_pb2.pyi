@@ -362,7 +362,7 @@ class RemoveUnlessRequiredAction(_message.Message):
     def __init__(self, fallback: _Optional[_Union[RequiredFallback, str]] = ...) -> None: ...
 
 class PixelRule(_message.Message):
-    __slots__ = ("name", "when", "rows", "columns", "redact", "detect", "accept", "reason")
+    __slots__ = ("name", "when", "rows", "columns", "redact", "detect", "accept", "redact_by_template", "reason")
     NAME_FIELD_NUMBER: _ClassVar[int]
     WHEN_FIELD_NUMBER: _ClassVar[int]
     ROWS_FIELD_NUMBER: _ClassVar[int]
@@ -370,6 +370,7 @@ class PixelRule(_message.Message):
     REDACT_FIELD_NUMBER: _ClassVar[int]
     DETECT_FIELD_NUMBER: _ClassVar[int]
     ACCEPT_FIELD_NUMBER: _ClassVar[int]
+    REDACT_BY_TEMPLATE_FIELD_NUMBER: _ClassVar[int]
     REASON_FIELD_NUMBER: _ClassVar[int]
     name: str
     when: _containers.RepeatedCompositeFieldContainer[ProfileCondition]
@@ -378,8 +379,9 @@ class PixelRule(_message.Message):
     redact: RedactPixels
     detect: DetectText
     accept: AcceptPixels
+    redact_by_template: RedactByTemplate
     reason: str
-    def __init__(self, name: _Optional[str] = ..., when: _Optional[_Iterable[_Union[ProfileCondition, _Mapping]]] = ..., rows: _Optional[int] = ..., columns: _Optional[int] = ..., redact: _Optional[_Union[RedactPixels, _Mapping]] = ..., detect: _Optional[_Union[DetectText, _Mapping]] = ..., accept: _Optional[_Union[AcceptPixels, _Mapping]] = ..., reason: _Optional[str] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., when: _Optional[_Iterable[_Union[ProfileCondition, _Mapping]]] = ..., rows: _Optional[int] = ..., columns: _Optional[int] = ..., redact: _Optional[_Union[RedactPixels, _Mapping]] = ..., detect: _Optional[_Union[DetectText, _Mapping]] = ..., accept: _Optional[_Union[AcceptPixels, _Mapping]] = ..., redact_by_template: _Optional[_Union[RedactByTemplate, _Mapping]] = ..., reason: _Optional[str] = ...) -> None: ...
 
 class RedactPixels(_message.Message):
     __slots__ = ("rectangles",)
@@ -403,6 +405,10 @@ class PixelRectangle(_message.Message):
     from_bottom: bool
     def __init__(self, x: _Optional[int] = ..., y: _Optional[int] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., from_right: _Optional[bool] = ..., from_bottom: _Optional[bool] = ...) -> None: ...
 
+class RedactByTemplate(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
 class DetectText(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
@@ -412,7 +418,7 @@ class AcceptPixels(_message.Message):
     def __init__(self) -> None: ...
 
 class ExpandedProfile(_message.Message):
-    __slots__ = ("rules", "unnamed", "date_shift_days", "pixel_rules", "bases", "language_edition", "unsearched_segments", "text_lists")
+    __slots__ = ("rules", "unnamed", "date_shift_days", "pixel_rules", "bases", "language_edition", "unsearched_segments", "text_lists", "layers")
     RULES_FIELD_NUMBER: _ClassVar[int]
     UNNAMED_FIELD_NUMBER: _ClassVar[int]
     DATE_SHIFT_DAYS_FIELD_NUMBER: _ClassVar[int]
@@ -421,6 +427,7 @@ class ExpandedProfile(_message.Message):
     LANGUAGE_EDITION_FIELD_NUMBER: _ClassVar[int]
     UNSEARCHED_SEGMENTS_FIELD_NUMBER: _ClassVar[int]
     TEXT_LISTS_FIELD_NUMBER: _ClassVar[int]
+    LAYERS_FIELD_NUMBER: _ClassVar[int]
     rules: _containers.RepeatedCompositeFieldContainer[ExpandedRule]
     unnamed: UnnamedElements
     date_shift_days: int
@@ -429,7 +436,18 @@ class ExpandedProfile(_message.Message):
     language_edition: int
     unsearched_segments: UnsearchedSegments
     text_lists: _containers.RepeatedCompositeFieldContainer[TextList]
-    def __init__(self, rules: _Optional[_Iterable[_Union[ExpandedRule, _Mapping]]] = ..., unnamed: _Optional[_Union[UnnamedElements, str]] = ..., date_shift_days: _Optional[int] = ..., pixel_rules: _Optional[_Iterable[_Union[ExpandedPixelRule, _Mapping]]] = ..., bases: _Optional[_Iterable[str]] = ..., language_edition: _Optional[int] = ..., unsearched_segments: _Optional[_Union[UnsearchedSegments, str]] = ..., text_lists: _Optional[_Iterable[_Union[TextList, _Mapping]]] = ...) -> None: ...
+    layers: _containers.RepeatedCompositeFieldContainer[ExpandedLayer]
+    def __init__(self, rules: _Optional[_Iterable[_Union[ExpandedRule, _Mapping]]] = ..., unnamed: _Optional[_Union[UnnamedElements, str]] = ..., date_shift_days: _Optional[int] = ..., pixel_rules: _Optional[_Iterable[_Union[ExpandedPixelRule, _Mapping]]] = ..., bases: _Optional[_Iterable[str]] = ..., language_edition: _Optional[int] = ..., unsearched_segments: _Optional[_Union[UnsearchedSegments, str]] = ..., text_lists: _Optional[_Iterable[_Union[TextList, _Mapping]]] = ..., layers: _Optional[_Iterable[_Union[ExpandedLayer, _Mapping]]] = ...) -> None: ...
+
+class ExpandedLayer(_message.Message):
+    __slots__ = ("rules", "pixel_rules", "unnamed")
+    RULES_FIELD_NUMBER: _ClassVar[int]
+    PIXEL_RULES_FIELD_NUMBER: _ClassVar[int]
+    UNNAMED_FIELD_NUMBER: _ClassVar[int]
+    rules: int
+    pixel_rules: int
+    unnamed: UnnamedElements
+    def __init__(self, rules: _Optional[int] = ..., pixel_rules: _Optional[int] = ..., unnamed: _Optional[_Union[UnnamedElements, str]] = ...) -> None: ...
 
 class ExpandedRule(_message.Message):
     __slots__ = ("rule", "origin", "vrs")
@@ -988,28 +1006,53 @@ class ProfileEffectChange(_message.Message):
     def __init__(self, selector: _Optional[_Union[ProfileSelector, _Mapping]] = ..., when: _Optional[_Iterable[_Union[ProfileCondition, _Mapping]]] = ..., to: _Optional[_Union[ProfileAction, _Mapping]] = ..., from_position: _Optional[int] = ..., to_position: _Optional[int] = ..., order_changed: _Optional[bool] = ..., **kwargs) -> None: ...
 
 class DescribeProfileRequest(_message.Message):
-    __slots__ = ("tenant", "profile")
+    __slots__ = ("tenant", "profile", "effective_receiver")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     PROFILE_FIELD_NUMBER: _ClassVar[int]
+    EFFECTIVE_RECEIVER_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     profile: TrialProfile
-    def __init__(self, tenant: _Optional[str] = ..., profile: _Optional[_Union[TrialProfile, _Mapping]] = ...) -> None: ...
+    effective_receiver: str
+    def __init__(self, tenant: _Optional[str] = ..., profile: _Optional[_Union[TrialProfile, _Mapping]] = ..., effective_receiver: _Optional[str] = ...) -> None: ...
 
 class DescribeProfileResponse(_message.Message):
-    __slots__ = ("version", "checksum", "classes", "notes", "method", "text_lists")
+    __slots__ = ("version", "checksum", "classes", "notes", "method", "text_lists", "effective")
     VERSION_FIELD_NUMBER: _ClassVar[int]
     CHECKSUM_FIELD_NUMBER: _ClassVar[int]
     CLASSES_FIELD_NUMBER: _ClassVar[int]
     NOTES_FIELD_NUMBER: _ClassVar[int]
     METHOD_FIELD_NUMBER: _ClassVar[int]
     TEXT_LISTS_FIELD_NUMBER: _ClassVar[int]
+    EFFECTIVE_FIELD_NUMBER: _ClassVar[int]
     version: ProfileVersion
     checksum: str
     classes: _containers.RepeatedCompositeFieldContainer[ProfileClassEffects]
     notes: _containers.RepeatedScalarFieldContainer[str]
     method: ProfileMethod
     text_lists: _containers.RepeatedCompositeFieldContainer[TextListSummary]
-    def __init__(self, version: _Optional[_Union[ProfileVersion, _Mapping]] = ..., checksum: _Optional[str] = ..., classes: _Optional[_Iterable[_Union[ProfileClassEffects, _Mapping]]] = ..., notes: _Optional[_Iterable[str]] = ..., method: _Optional[_Union[ProfileMethod, _Mapping]] = ..., text_lists: _Optional[_Iterable[_Union[TextListSummary, _Mapping]]] = ...) -> None: ...
+    effective: _containers.RepeatedCompositeFieldContainer[EffectiveElement]
+    def __init__(self, version: _Optional[_Union[ProfileVersion, _Mapping]] = ..., checksum: _Optional[str] = ..., classes: _Optional[_Iterable[_Union[ProfileClassEffects, _Mapping]]] = ..., notes: _Optional[_Iterable[str]] = ..., method: _Optional[_Union[ProfileMethod, _Mapping]] = ..., text_lists: _Optional[_Iterable[_Union[TextListSummary, _Mapping]]] = ..., effective: _Optional[_Iterable[_Union[EffectiveElement, _Mapping]]] = ...) -> None: ...
+
+class EffectiveElement(_message.Message):
+    __slots__ = ("what", "action", "conditional", "layer", "layer_profile", "rule", "rule_name", "origin")
+    WHAT_FIELD_NUMBER: _ClassVar[int]
+    CLASS_FIELD_NUMBER: _ClassVar[int]
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    CONDITIONAL_FIELD_NUMBER: _ClassVar[int]
+    LAYER_FIELD_NUMBER: _ClassVar[int]
+    LAYER_PROFILE_FIELD_NUMBER: _ClassVar[int]
+    RULE_FIELD_NUMBER: _ClassVar[int]
+    RULE_NAME_FIELD_NUMBER: _ClassVar[int]
+    ORIGIN_FIELD_NUMBER: _ClassVar[int]
+    what: str
+    action: str
+    conditional: bool
+    layer: str
+    layer_profile: str
+    rule: int
+    rule_name: str
+    origin: str
+    def __init__(self, what: _Optional[str] = ..., action: _Optional[str] = ..., conditional: _Optional[bool] = ..., layer: _Optional[str] = ..., layer_profile: _Optional[str] = ..., rule: _Optional[int] = ..., rule_name: _Optional[str] = ..., origin: _Optional[str] = ..., **kwargs) -> None: ...
 
 class ProfileClassEffects(_message.Message):
     __slots__ = ("effects",)

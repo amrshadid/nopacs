@@ -220,7 +220,12 @@ func (c *core) checkDeidentification(ctx context.Context, p tenant.Pipeline, st 
 		}
 		return nil
 	}
-	return c.checkProfileVersion(ctx, p, "receiver.profile", r.Profile)
+	if err := c.checkProfileVersion(ctx, p, "receiver.profile", r.Profile); err != nil {
+		return err
+	}
+	// The receiver's profile is a layer over the tenant's base: it may only
+	// tighten it (deid_base.go).
+	return c.checkReceiverBase(ctx, p, "receiver.profile", r.Profile)
 }
 
 // checkProfileVersion checks a profile version a receiver or one of its

@@ -222,11 +222,12 @@ func Contract() Table {
 		nopacsv1connect.StorageServiceTestStorageProcedure:   onTenant(func() *nopacsv1.TestStorageRequest { return &nopacsv1.TestStorageRequest{} }, master.RoleAdmin),
 
 		// ReceiverService: the same lines.
-		nopacsv1connect.ReceiverServiceAddReceiverProcedure:    onTenant(func() *nopacsv1.AddReceiverRequest { return &nopacsv1.AddReceiverRequest{} }, master.RoleAdmin),
-		nopacsv1connect.ReceiverServiceGetReceiverProcedure:    onTenant(func() *nopacsv1.GetReceiverRequest { return &nopacsv1.GetReceiverRequest{} }, master.RoleReader),
-		nopacsv1connect.ReceiverServiceListReceiversProcedure:  onTenant(func() *nopacsv1.ListReceiversRequest { return &nopacsv1.ListReceiversRequest{} }, master.RoleReader),
-		nopacsv1connect.ReceiverServiceSetReceiverProcedure:    onTenant(func() *nopacsv1.SetReceiverRequest { return &nopacsv1.SetReceiverRequest{} }, master.RoleAdmin),
-		nopacsv1connect.ReceiverServiceRemoveReceiverProcedure: onTenant(func() *nopacsv1.RemoveReceiverRequest { return &nopacsv1.RemoveReceiverRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReceiverServiceAddReceiverProcedure:        onTenant(func() *nopacsv1.AddReceiverRequest { return &nopacsv1.AddReceiverRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReceiverServiceGetReceiverProcedure:        onTenant(func() *nopacsv1.GetReceiverRequest { return &nopacsv1.GetReceiverRequest{} }, master.RoleReader),
+		nopacsv1connect.ReceiverServiceListReceiversProcedure:      onTenant(func() *nopacsv1.ListReceiversRequest { return &nopacsv1.ListReceiversRequest{} }, master.RoleReader),
+		nopacsv1connect.ReceiverServiceSetReceiverProcedure:        onTenant(func() *nopacsv1.SetReceiverRequest { return &nopacsv1.SetReceiverRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReceiverServiceTryReceiverProfileProcedure: onTenant(func() *nopacsv1.TryReceiverProfileRequest { return &nopacsv1.TryReceiverProfileRequest{} }, master.RoleAdmin),
+		nopacsv1connect.ReceiverServiceRemoveReceiverProcedure:     onTenant(func() *nopacsv1.RemoveReceiverRequest { return &nopacsv1.RemoveReceiverRequest{} }, master.RoleAdmin),
 
 		// RouteService: "admin on the tenant." to make or activate a rule
 		// set, "reader on the tenant." to read one and its hits, "operator
@@ -345,9 +346,14 @@ func Contract() Table {
 		nopacsv1connect.ProfileServiceDescribeProfileProcedure:      onTenant(func() *nopacsv1.DescribeProfileRequest { return &nopacsv1.DescribeProfileRequest{} }, master.RoleOperator),
 		// DeidService: "admin on the tenant." for the forward lookup and an
 		// import, "operator on the tenant." to list the tables.
-		nopacsv1connect.DeidServiceCodeProcedure:              onTenant(func() *nopacsv1.CodeRequest { return &nopacsv1.CodeRequest{} }, master.RoleAdmin),
-		nopacsv1connect.DeidServiceImportLookupCodesProcedure: onTenant(func() *nopacsv1.ImportLookupCodesRequest { return &nopacsv1.ImportLookupCodesRequest{} }, master.RoleAdmin),
-		nopacsv1connect.DeidServiceListLookupTablesProcedure:  onTenant(func() *nopacsv1.ListLookupTablesRequest { return &nopacsv1.ListLookupTablesRequest{} }, master.RoleOperator),
+		nopacsv1connect.DeidServiceCodeProcedure:                onTenant(func() *nopacsv1.CodeRequest { return &nopacsv1.CodeRequest{} }, master.RoleAdmin),
+		nopacsv1connect.DeidServiceImportLookupCodesProcedure:   onTenant(func() *nopacsv1.ImportLookupCodesRequest { return &nopacsv1.ImportLookupCodesRequest{} }, master.RoleAdmin),
+		nopacsv1connect.DeidServiceListLookupTablesProcedure:    onTenant(func() *nopacsv1.ListLookupTablesRequest { return &nopacsv1.ListLookupTablesRequest{} }, master.RoleOperator),
+		nopacsv1connect.DeidServiceAddPixelTemplatesProcedure:   onTenant(func() *nopacsv1.AddPixelTemplatesRequest { return &nopacsv1.AddPixelTemplatesRequest{} }, master.RoleAdmin),
+		nopacsv1connect.DeidServiceRemovePixelTemplateProcedure: onTenant(func() *nopacsv1.RemovePixelTemplateRequest { return &nopacsv1.RemovePixelTemplateRequest{} }, master.RoleAdmin),
+		nopacsv1connect.DeidServiceListPixelTemplatesProcedure:  onTenant(func() *nopacsv1.ListPixelTemplatesRequest { return &nopacsv1.ListPixelTemplatesRequest{} }, master.RoleOperator),
+		nopacsv1connect.DeidServiceGetCoverageProcedure:         onTenant(func() *nopacsv1.GetCoverageRequest { return &nopacsv1.GetCoverageRequest{} }, master.RoleOperator),
+		nopacsv1connect.DeidServiceRefreshCoverageProcedure:     onTenant(func() *nopacsv1.RefreshCoverageRequest { return &nopacsv1.RefreshCoverageRequest{} }, master.RoleOperator),
 
 		// CorrectionService: "admin on the tenant." for every change,
 		// "operator on the tenant." to read corrections, "reader on the

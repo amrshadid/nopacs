@@ -82,6 +82,9 @@ func jobMessage(j tenant.Job, held string) *v1.Job {
 	case tenant.JobSearchBackfill:
 		// Its attributes are the job's own row, which a view reads.
 		m.Kind = &v1.Job_SearchBackfill{SearchBackfill: &v1.SearchBackfillJob{}}
+	case tenant.JobDeidCoverage:
+		// Its counts are the job's own row, which a view reads.
+		m.Kind = &v1.Job_DeidCoverage{DeidCoverage: &v1.DeidCoverageJob{}}
 	}
 	return m
 }

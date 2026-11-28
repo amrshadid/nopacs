@@ -8,13 +8,542 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { Job } from "./job_pb.js";
+import { file_nopacs_v1_job } from "./job_pb.js";
+import type { PixelRectangle } from "./profile_pb.js";
+import { file_nopacs_v1_profile } from "./profile_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file nopacs/v1/deid.proto.
  */
 export const file_nopacs_v1_deid: GenFile = /*@__PURE__*/
-  fileDesc("ChRub3BhY3MvdjEvZGVpZC5wcm90bxIJbm9wYWNzLnYxIoMBCgtDb2RlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSEQoJYXR0cmlidXRlGAIgASgJEhIKBXZhbHVlGAMgASgJQgOAAQESKgoGaXNzdWVyGAQgASgLMhoubm9wYWNzLnYxLlBhdGllbnRJRElzc3VlchIRCgluYW1lc3BhY2UYBSABKAkiswIKD1BhdGllbnRJRElzc3VlchITCgZpc3N1ZXIYASABKAlCA4ABARIgChN1bml2ZXJzYWxfZW50aXR5X2lkGAIgASgJQgOAAQESJQoYdW5pdmVyc2FsX2VudGl0eV9pZF90eXBlGAMgASgJQgOAAQESIQoUaWRlbnRpZmllcl90eXBlX2NvZGUYBCABKAlCA4ABARI3ChJhc3NpZ25pbmdfZmFjaWxpdHkYBSABKAsyGy5ub3BhY3MudjEuSXNzdWVyRGVzaWduYXRvchI1ChZhc3NpZ25pbmdfanVyaXNkaWN0aW9uGAYgASgLMhUubm9wYWNzLnYxLklzc3VlckNvZGUSLwoQYXNzaWduaW5nX2FnZW5jeRgHIAEoCzIVLm5vcGFjcy52MS5Jc3N1ZXJDb2RlIoMBChBJc3N1ZXJEZXNpZ25hdG9yEiYKGWxvY2FsX25hbWVzcGFjZV9lbnRpdHlfaWQYASABKAlCA4ABARIgChN1bml2ZXJzYWxfZW50aXR5X2lkGAIgASgJQgOAAQESJQoYdW5pdmVyc2FsX2VudGl0eV9pZF90eXBlGAMgASgJQgOAAQEihwEKCklzc3VlckNvZGUSFwoKY29kZV92YWx1ZRgBIAEoCUIDgAEBEiUKGGNvZGluZ19zY2hlbWVfZGVzaWduYXRvchgCIAEoCUIDgAEBEhwKD2xvbmdfY29kZV92YWx1ZRgDIAEoCUIDgAEBEhsKDnVybl9jb2RlX3ZhbHVlGAQgASgJQgOAAQEiiwEKDENvZGVSZXNwb25zZRIRCglhdHRyaWJ1dGUYASABKAkSDAoEY29kZRgCIAEoCRItCghzdWJqZWN0cxgDIAMoCzIbLm5vcGFjcy52MS5TdWJqZWN0TGFiZWxDb2RlEisKB2xvb2t1cHMYBCADKAsyGi5ub3BhY3MudjEuTG9va3VwVGFibGVDb2RlIkkKEFN1YmplY3RMYWJlbENvZGUSEAoIcmVjZWl2ZXIYASABKAkSFQoNc3ViamVjdF9sYWJlbBgCIAEoCRIMCgRoZWxkGAMgASgIIi4KD0xvb2t1cFRhYmxlQ29kZRINCgV0YWJsZRgBIAEoCRIMCgRjb2RlGAIgASgJImIKGEltcG9ydExvb2t1cENvZGVzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSDQoFdGFibGUYAiABKAkSJwoHZW50cmllcxgDIAMoCzIWLm5vcGFjcy52MS5Mb29rdXBFbnRyeSJuCgtMb29rdXBFbnRyeRISCgV2YWx1ZRgBIAEoCUIDgAEBEgwKBGNvZGUYAiABKAkSKgoGaXNzdWVyGAMgASgLMhoubm9wYWNzLnYxLlBhdGllbnRJRElzc3VlchIRCgluYW1lc3BhY2UYBCABKAkiWwoZSW1wb3J0TG9va3VwQ29kZXNSZXNwb25zZRINCgV0YWJsZRgBIAEoCRINCgVhZGRlZBgCIAEoBRIRCgl1bmNoYW5nZWQYAyABKAUSDQoFY29kZXMYBCABKAMiUAoXTGlzdExvb2t1cFRhYmxlc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIlsKGExpc3RMb29rdXBUYWJsZXNSZXNwb25zZRImCgZ0YWJsZXMYASADKAsyFi5ub3BhY3MudjEuTG9va3VwVGFibGUSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIioKC0xvb2t1cFRhYmxlEgwKBG5hbWUYASABKAkSDQoFY29kZXMYAiABKAMyjQIKC0RlaWRTZXJ2aWNlEjcKBENvZGUSFi5ub3BhY3MudjEuQ29kZVJlcXVlc3QaFy5ub3BhY3MudjEuQ29kZVJlc3BvbnNlEmMKEUltcG9ydExvb2t1cENvZGVzEiMubm9wYWNzLnYxLkltcG9ydExvb2t1cENvZGVzUmVxdWVzdBokLm5vcGFjcy52MS5JbXBvcnRMb29rdXBDb2Rlc1Jlc3BvbnNlIgOQAgISYAoQTGlzdExvb2t1cFRhYmxlcxIiLm5vcGFjcy52MS5MaXN0TG9va3VwVGFibGVzUmVxdWVzdBojLm5vcGFjcy52MS5MaXN0TG9va3VwVGFibGVzUmVzcG9uc2UiA5ACAWIGcHJvdG8z");
+  fileDesc("ChRub3BhY3MvdjEvZGVpZC5wcm90bxIJbm9wYWNzLnYxIpUBCg1QaXhlbFRlbXBsYXRlEhQKDG1hbnVmYWN0dXJlchgBIAEoCRINCgVtb2RlbBgCIAEoCRIMCgRyb3dzGAMgASgFEg8KB2NvbHVtbnMYBCABKAUSEQoJc29wX2NsYXNzGAUgASgJEi0KCnJlY3RhbmdsZXMYBiADKAsyGS5ub3BhY3MudjEuUGl4ZWxSZWN0YW5nbGUiVwoYQWRkUGl4ZWxUZW1wbGF0ZXNSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIrCgl0ZW1wbGF0ZXMYAiADKAsyGC5ub3BhY3MudjEuUGl4ZWxUZW1wbGF0ZSIqChlBZGRQaXhlbFRlbXBsYXRlc1Jlc3BvbnNlEg0KBWFkZGVkGAEgASgFIoMBChpSZW1vdmVQaXhlbFRlbXBsYXRlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSFAoMbWFudWZhY3R1cmVyGAIgASgJEg0KBW1vZGVsGAMgASgJEgwKBHJvd3MYBCABKAUSDwoHY29sdW1ucxgFIAEoBRIRCglzb3BfY2xhc3MYBiABKAkiHQobUmVtb3ZlUGl4ZWxUZW1wbGF0ZVJlc3BvbnNlIlIKGUxpc3RQaXhlbFRlbXBsYXRlc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJImIKGkxpc3RQaXhlbFRlbXBsYXRlc1Jlc3BvbnNlEisKCXRlbXBsYXRlcxgBIAMoCzIYLm5vcGFjcy52MS5QaXhlbFRlbXBsYXRlEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJLChJHZXRDb3ZlcmFnZVJlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIqsBChNHZXRDb3ZlcmFnZVJlc3BvbnNlEikKBnJlcG9ydBgBIAEoCzIZLm5vcGFjcy52MS5Db3ZlcmFnZVJlcG9ydBIiCgpyZWZyZXNoaW5nGAIgASgLMg4ubm9wYWNzLnYxLkpvYhIsCghlbGVtZW50cxgDIAMoCzIaLm5vcGFjcy52MS5Db3ZlcmFnZUVsZW1lbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAQgASgJIvoBCg5Db3ZlcmFnZVJlcG9ydBIOCgZqb2JfaWQYASABKAkSLAoIZW5kX3RpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNjYW5zX3JlYWQYAyABKAMSFQoNc2NhbnNfc2tpcHBlZBgEIAEoAxIRCglpbnN0YW5jZXMYBSABKAMSGgoSaW5zdGFuY2VzX3JlY29yZGVkGAYgASgDEhgKEGluc3RhbmNlc19jYXBwZWQYByABKAMSGwoTZWxlbWVudHNfbm90X2xpc3RlZBgIIAEoAxIZChFkaXN0aW5jdF9lbGVtZW50cxgJIAEoAyKWAQoPQ292ZXJhZ2VFbGVtZW50EgsKA3RhZxgBIAEoCRIPCgdwcml2YXRlGAIgASgIEhcKD3ByaXZhdGVfY3JlYXRvchgDIAEoCRIYChBjcmVhdG9yX3dpdGhoZWxkGAQgASgIEgoKAnZyGAUgASgJEhEKCWluc3RhbmNlcxgGIAEoAxITCgtvY2N1cnJlbmNlcxgHIAEoAyIoChZSZWZyZXNoQ292ZXJhZ2VSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCSI2ChdSZWZyZXNoQ292ZXJhZ2VSZXNwb25zZRIbCgNqb2IYASABKAsyDi5ub3BhY3MudjEuSm9iIoMBCgtDb2RlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSEQoJYXR0cmlidXRlGAIgASgJEhIKBXZhbHVlGAMgASgJQgOAAQESKgoGaXNzdWVyGAQgASgLMhoubm9wYWNzLnYxLlBhdGllbnRJRElzc3VlchIRCgluYW1lc3BhY2UYBSABKAkiswIKD1BhdGllbnRJRElzc3VlchITCgZpc3N1ZXIYASABKAlCA4ABARIgChN1bml2ZXJzYWxfZW50aXR5X2lkGAIgASgJQgOAAQESJQoYdW5pdmVyc2FsX2VudGl0eV9pZF90eXBlGAMgASgJQgOAAQESIQoUaWRlbnRpZmllcl90eXBlX2NvZGUYBCABKAlCA4ABARI3ChJhc3NpZ25pbmdfZmFjaWxpdHkYBSABKAsyGy5ub3BhY3MudjEuSXNzdWVyRGVzaWduYXRvchI1ChZhc3NpZ25pbmdfanVyaXNkaWN0aW9uGAYgASgLMhUubm9wYWNzLnYxLklzc3VlckNvZGUSLwoQYXNzaWduaW5nX2FnZW5jeRgHIAEoCzIVLm5vcGFjcy52MS5Jc3N1ZXJDb2RlIoMBChBJc3N1ZXJEZXNpZ25hdG9yEiYKGWxvY2FsX25hbWVzcGFjZV9lbnRpdHlfaWQYASABKAlCA4ABARIgChN1bml2ZXJzYWxfZW50aXR5X2lkGAIgASgJQgOAAQESJQoYdW5pdmVyc2FsX2VudGl0eV9pZF90eXBlGAMgASgJQgOAAQEihwEKCklzc3VlckNvZGUSFwoKY29kZV92YWx1ZRgBIAEoCUIDgAEBEiUKGGNvZGluZ19zY2hlbWVfZGVzaWduYXRvchgCIAEoCUIDgAEBEhwKD2xvbmdfY29kZV92YWx1ZRgDIAEoCUIDgAEBEhsKDnVybl9jb2RlX3ZhbHVlGAQgASgJQgOAAQEiiwEKDENvZGVSZXNwb25zZRIRCglhdHRyaWJ1dGUYASABKAkSDAoEY29kZRgCIAEoCRItCghzdWJqZWN0cxgDIAMoCzIbLm5vcGFjcy52MS5TdWJqZWN0TGFiZWxDb2RlEisKB2xvb2t1cHMYBCADKAsyGi5ub3BhY3MudjEuTG9va3VwVGFibGVDb2RlIkkKEFN1YmplY3RMYWJlbENvZGUSEAoIcmVjZWl2ZXIYASABKAkSFQoNc3ViamVjdF9sYWJlbBgCIAEoCRIMCgRoZWxkGAMgASgIIi4KD0xvb2t1cFRhYmxlQ29kZRINCgV0YWJsZRgBIAEoCRIMCgRjb2RlGAIgASgJImIKGEltcG9ydExvb2t1cENvZGVzUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSDQoFdGFibGUYAiABKAkSJwoHZW50cmllcxgDIAMoCzIWLm5vcGFjcy52MS5Mb29rdXBFbnRyeSJuCgtMb29rdXBFbnRyeRISCgV2YWx1ZRgBIAEoCUIDgAEBEgwKBGNvZGUYAiABKAkSKgoGaXNzdWVyGAMgASgLMhoubm9wYWNzLnYxLlBhdGllbnRJRElzc3VlchIRCgluYW1lc3BhY2UYBCABKAkiWwoZSW1wb3J0TG9va3VwQ29kZXNSZXNwb25zZRINCgV0YWJsZRgBIAEoCRINCgVhZGRlZBgCIAEoBRIRCgl1bmNoYW5nZWQYAyABKAUSDQoFY29kZXMYBCABKAMiUAoXTGlzdExvb2t1cFRhYmxlc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIlsKGExpc3RMb29rdXBUYWJsZXNSZXNwb25zZRImCgZ0YWJsZXMYASADKAsyFi5ub3BhY3MudjEuTG9va3VwVGFibGUSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIioKC0xvb2t1cFRhYmxlEgwKBG5hbWUYASABKAkSDQoFY29kZXMYAiABKAMy8gUKC0RlaWRTZXJ2aWNlEjcKBENvZGUSFi5ub3BhY3MudjEuQ29kZVJlcXVlc3QaFy5ub3BhY3MudjEuQ29kZVJlc3BvbnNlEmMKEUltcG9ydExvb2t1cENvZGVzEiMubm9wYWNzLnYxLkltcG9ydExvb2t1cENvZGVzUmVxdWVzdBokLm5vcGFjcy52MS5JbXBvcnRMb29rdXBDb2Rlc1Jlc3BvbnNlIgOQAgISYAoQTGlzdExvb2t1cFRhYmxlcxIiLm5vcGFjcy52MS5MaXN0TG9va3VwVGFibGVzUmVxdWVzdBojLm5vcGFjcy52MS5MaXN0TG9va3VwVGFibGVzUmVzcG9uc2UiA5ACARJRCgtHZXRDb3ZlcmFnZRIdLm5vcGFjcy52MS5HZXRDb3ZlcmFnZVJlcXVlc3QaHi5ub3BhY3MudjEuR2V0Q292ZXJhZ2VSZXNwb25zZSIDkAIBElgKD1JlZnJlc2hDb3ZlcmFnZRIhLm5vcGFjcy52MS5SZWZyZXNoQ292ZXJhZ2VSZXF1ZXN0GiIubm9wYWNzLnYxLlJlZnJlc2hDb3ZlcmFnZVJlc3BvbnNlEmMKEUFkZFBpeGVsVGVtcGxhdGVzEiMubm9wYWNzLnYxLkFkZFBpeGVsVGVtcGxhdGVzUmVxdWVzdBokLm5vcGFjcy52MS5BZGRQaXhlbFRlbXBsYXRlc1Jlc3BvbnNlIgOQAgISaQoTUmVtb3ZlUGl4ZWxUZW1wbGF0ZRIlLm5vcGFjcy52MS5SZW1vdmVQaXhlbFRlbXBsYXRlUmVxdWVzdBomLm5vcGFjcy52MS5SZW1vdmVQaXhlbFRlbXBsYXRlUmVzcG9uc2UiA5ACAhJmChJMaXN0UGl4ZWxUZW1wbGF0ZXMSJC5ub3BhY3MudjEuTGlzdFBpeGVsVGVtcGxhdGVzUmVxdWVzdBolLm5vcGFjcy52MS5MaXN0UGl4ZWxUZW1wbGF0ZXNSZXNwb25zZSIDkAIBYgZwcm90bzM", [file_google_protobuf_timestamp, file_nopacs_v1_job, file_nopacs_v1_profile]);
+
+/**
+ * PixelTemplate is the part of an image of one device and size to fill.
+ *
+ * @generated from message nopacs.v1.PixelTemplate
+ */
+export type PixelTemplate = Message<"nopacs.v1.PixelTemplate"> & {
+  /**
+   * Manufacturer (0008,0070) of the device, as written; compared with case
+   * folded and the padding of a DICOM value removed. Required.
+   *
+   * @generated from field: string manufacturer = 1;
+   */
+  manufacturer: string;
+
+  /**
+   * Manufacturer's Model Name (0008,1090), compared as the manufacturer is.
+   * Required.
+   *
+   * @generated from field: string model = 2;
+   */
+  model: string;
+
+  /**
+   * The image's Rows (0028,0010), matched exactly: 1 to 65535.
+   *
+   * @generated from field: int32 rows = 3;
+   */
+  rows: number;
+
+  /**
+   * The image's Columns (0028,0011), matched exactly: 1 to 65535.
+   *
+   * @generated from field: int32 columns = 4;
+   */
+  columns: number;
+
+  /**
+   * The SOP Class UID the template is for, or empty for any class. A
+   * template of the file's class is used before one for any class.
+   *
+   * @generated from field: string sop_class = 5;
+   */
+  sopClass: string;
+
+  /**
+   * What is filled, in every frame: 1 to 64 rectangles, each inside the
+   * image's size.
+   *
+   * @generated from field: repeated nopacs.v1.PixelRectangle rectangles = 6;
+   */
+  rectangles: PixelRectangle[];
+};
+
+/**
+ * Describes the message nopacs.v1.PixelTemplate.
+ * Use `create(PixelTemplateSchema)` to create a new message.
+ */
+export const PixelTemplateSchema: GenMessage<PixelTemplate> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 0);
+
+/**
+ * AddPixelTemplatesRequest is the templates to store.
+ *
+ * @generated from message nopacs.v1.AddPixelTemplatesRequest
+ */
+export type AddPixelTemplatesRequest = Message<"nopacs.v1.AddPixelTemplatesRequest"> & {
+  /**
+   * The tenant, by name. Required.
+   *
+   * @generated from field: string tenant = 1;
+   */
+  tenant: string;
+
+  /**
+   * The templates: 1 to 1000.
+   *
+   * @generated from field: repeated nopacs.v1.PixelTemplate templates = 2;
+   */
+  templates: PixelTemplate[];
+};
+
+/**
+ * Describes the message nopacs.v1.AddPixelTemplatesRequest.
+ * Use `create(AddPixelTemplatesRequestSchema)` to create a new message.
+ */
+export const AddPixelTemplatesRequestSchema: GenMessage<AddPixelTemplatesRequest> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 1);
+
+/**
+ * AddPixelTemplatesResponse says what was stored.
+ *
+ * @generated from message nopacs.v1.AddPixelTemplatesResponse
+ */
+export type AddPixelTemplatesResponse = Message<"nopacs.v1.AddPixelTemplatesResponse"> & {
+  /**
+   * How many templates were stored.
+   *
+   * @generated from field: int32 added = 1;
+   */
+  added: number;
+};
+
+/**
+ * Describes the message nopacs.v1.AddPixelTemplatesResponse.
+ * Use `create(AddPixelTemplatesResponseSchema)` to create a new message.
+ */
+export const AddPixelTemplatesResponseSchema: GenMessage<AddPixelTemplatesResponse> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 2);
+
+/**
+ * RemovePixelTemplateRequest names the template to remove by its match
+ * keys.
+ *
+ * @generated from message nopacs.v1.RemovePixelTemplateRequest
+ */
+export type RemovePixelTemplateRequest = Message<"nopacs.v1.RemovePixelTemplateRequest"> & {
+  /**
+   * The tenant, by name. Required.
+   *
+   * @generated from field: string tenant = 1;
+   */
+  tenant: string;
+
+  /**
+   * The template's manufacturer, compared with case folded. Required.
+   *
+   * @generated from field: string manufacturer = 2;
+   */
+  manufacturer: string;
+
+  /**
+   * The template's model, compared with case folded. Required.
+   *
+   * @generated from field: string model = 3;
+   */
+  model: string;
+
+  /**
+   * The template's rows, 1 to 65535.
+   *
+   * @generated from field: int32 rows = 4;
+   */
+  rows: number;
+
+  /**
+   * The template's columns, 1 to 65535.
+   *
+   * @generated from field: int32 columns = 5;
+   */
+  columns: number;
+
+  /**
+   * The template's SOP class, or empty for the template of any class.
+   *
+   * @generated from field: string sop_class = 6;
+   */
+  sopClass: string;
+};
+
+/**
+ * Describes the message nopacs.v1.RemovePixelTemplateRequest.
+ * Use `create(RemovePixelTemplateRequestSchema)` to create a new message.
+ */
+export const RemovePixelTemplateRequestSchema: GenMessage<RemovePixelTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 3);
+
+/**
+ * RemovePixelTemplateResponse is empty: the template is gone.
+ *
+ * @generated from message nopacs.v1.RemovePixelTemplateResponse
+ */
+export type RemovePixelTemplateResponse = Message<"nopacs.v1.RemovePixelTemplateResponse"> & {
+};
+
+/**
+ * Describes the message nopacs.v1.RemovePixelTemplateResponse.
+ * Use `create(RemovePixelTemplateResponseSchema)` to create a new message.
+ */
+export const RemovePixelTemplateResponseSchema: GenMessage<RemovePixelTemplateResponse> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 4);
+
+/**
+ * ListPixelTemplatesRequest asks for a page of a tenant's pixel templates.
+ *
+ * @generated from message nopacs.v1.ListPixelTemplatesRequest
+ */
+export type ListPixelTemplatesRequest = Message<"nopacs.v1.ListPixelTemplatesRequest"> & {
+  /**
+   * The tenant, by name. Required.
+   *
+   * @generated from field: string tenant = 1;
+   */
+  tenant: string;
+
+  /**
+   * The most templates to answer: zero means 100; at most 1000. A larger or
+   * negative value is invalid.
+   *
+   * @generated from field: int32 page_size = 2;
+   */
+  pageSize: number;
+
+  /**
+   * The next_page_token of the previous page, or empty for the first page.
+   * Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+   * one it was made with.
+   *
+   * @generated from field: string page_token = 3;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message nopacs.v1.ListPixelTemplatesRequest.
+ * Use `create(ListPixelTemplatesRequestSchema)` to create a new message.
+ */
+export const ListPixelTemplatesRequestSchema: GenMessage<ListPixelTemplatesRequest> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 5);
+
+/**
+ * ListPixelTemplatesResponse is a page of pixel templates.
+ *
+ * @generated from message nopacs.v1.ListPixelTemplatesResponse
+ */
+export type ListPixelTemplatesResponse = Message<"nopacs.v1.ListPixelTemplatesResponse"> & {
+  /**
+   * The templates of this page.
+   *
+   * @generated from field: repeated nopacs.v1.PixelTemplate templates = 1;
+   */
+  templates: PixelTemplate[];
+
+  /**
+   * The page_token that asks for the next page. Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message nopacs.v1.ListPixelTemplatesResponse.
+ * Use `create(ListPixelTemplatesResponseSchema)` to create a new message.
+ */
+export const ListPixelTemplatesResponseSchema: GenMessage<ListPixelTemplatesResponse> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 6);
+
+/**
+ * GetCoverageRequest asks for a page of the coverage report.
+ *
+ * @generated from message nopacs.v1.GetCoverageRequest
+ */
+export type GetCoverageRequest = Message<"nopacs.v1.GetCoverageRequest"> & {
+  /**
+   * The tenant, by name. Required.
+   *
+   * @generated from field: string tenant = 1;
+   */
+  tenant: string;
+
+  /**
+   * The most elements to answer: zero means 500; at most 1000. A larger or
+   * negative value is invalid.
+   *
+   * @generated from field: int32 page_size = 2;
+   */
+  pageSize: number;
+
+  /**
+   * The next_page_token of the previous page, or empty for the first page.
+   * Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+   * one it was made with.
+   *
+   * @generated from field: string page_token = 3;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message nopacs.v1.GetCoverageRequest.
+ * Use `create(GetCoverageRequestSchema)` to create a new message.
+ */
+export const GetCoverageRequestSchema: GenMessage<GetCoverageRequest> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 7);
+
+/**
+ * GetCoverageResponse is a page of the coverage report.
+ *
+ * @generated from message nopacs.v1.GetCoverageResponse
+ */
+export type GetCoverageResponse = Message<"nopacs.v1.GetCoverageResponse"> & {
+  /**
+   * What the report was made from. Absent when no job has ended yet.
+   *
+   * @generated from field: nopacs.v1.CoverageReport report = 1;
+   */
+  report?: CoverageReport | undefined;
+
+  /**
+   * The job that is making the next report, while one is not ended. Absent
+   * otherwise.
+   *
+   * @generated from field: nopacs.v1.Job refreshing = 2;
+   */
+  refreshing?: Job | undefined;
+
+  /**
+   * The elements of this page, in order of tag, then creator, then VR.
+   *
+   * @generated from field: repeated nopacs.v1.CoverageElement elements = 3;
+   */
+  elements: CoverageElement[];
+
+  /**
+   * The page_token that asks for the next page. Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 4;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message nopacs.v1.GetCoverageResponse.
+ * Use `create(GetCoverageResponseSchema)` to create a new message.
+ */
+export const GetCoverageResponseSchema: GenMessage<GetCoverageResponse> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 8);
+
+/**
+ * CoverageReport says what a coverage report was made from.
+ *
+ * @generated from message nopacs.v1.CoverageReport
+ */
+export type CoverageReport = Message<"nopacs.v1.CoverageReport"> & {
+  /**
+   * The id of the job that made it.
+   *
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+
+  /**
+   * When the job ended.
+   *
+   * @generated from field: google.protobuf.Timestamp end_time = 2;
+   */
+  endTime?: Timestamp | undefined;
+
+  /**
+   * How many scans the job read.
+   *
+   * @generated from field: int64 scans_read = 3;
+   */
+  scansRead: bigint;
+
+  /**
+   * How many scans it could not read (their metadata was missing or not in
+   * its form), which make the report partial.
+   *
+   * @generated from field: int64 scans_skipped = 4;
+   */
+  scansSkipped: bigint;
+
+  /**
+   * How many instances' lines it read.
+   *
+   * @generated from field: int64 instances = 5;
+   */
+  instances: bigint;
+
+  /**
+   * How many of those lines recorded their unnamed elements.
+   *
+   * @generated from field: int64 instances_recorded = 6;
+   */
+  instancesRecorded: bigint;
+
+  /**
+   * How many of those recorded only the first 1024 distinct ones (the rest
+   * are counted, not listed, in elements_not_listed).
+   *
+   * @generated from field: int64 instances_capped = 7;
+   */
+  instancesCapped: bigint;
+
+  /**
+   * How many occurrences of elements the job could not list: those past a
+   * line's 1024 distinct elements, and those of a distinct element past the
+   * 100,000 the report holds.
+   *
+   * @generated from field: int64 elements_not_listed = 8;
+   */
+  elementsNotListed: bigint;
+
+  /**
+   * How many distinct elements the report lists, all pages together.
+   *
+   * @generated from field: int64 distinct_elements = 9;
+   */
+  distinctElements: bigint;
+};
+
+/**
+ * Describes the message nopacs.v1.CoverageReport.
+ * Use `create(CoverageReportSchema)` to create a new message.
+ */
+export const CoverageReportSchema: GenMessage<CoverageReport> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 9);
+
+/**
+ * CoverageElement is one element no rule named, in files of the tenant.
+ *
+ * @generated from message nopacs.v1.CoverageElement
+ */
+export type CoverageElement = Message<"nopacs.v1.CoverageElement"> & {
+  /**
+   * The element's tag as "gggg,eeee" in upper case hexadecimal; for a
+   * private element its group and its element within its creator's block,
+   * as "gggg,xxee": the block number, which a file chooses (PS3.5 7.8.1),
+   * is written xx.
+   *
+   * @generated from field: string tag = 1;
+   */
+  tag: string;
+
+  /**
+   * Whether it is a private element (an odd group).
+   *
+   * @generated from field: bool private = 2;
+   */
+  private: boolean;
+
+  /**
+   * The private creator of a private element's block, without padding;
+   * empty for a standard element, for a private element whose block has no
+   * creator, and when creator_withheld.
+   *
+   * @generated from field: string private_creator = 3;
+   */
+  privateCreator: string;
+
+  /**
+   * Whether the creator is not given: it was not printable ASCII of at most
+   * 64 bytes, or held a value the profile removed from the file or a term of
+   * its text lists. The elements of every such creator are counted together
+   * for one tag and VR.
+   *
+   * @generated from field: bool creator_withheld = 4;
+   */
+  creatorWithheld: boolean;
+
+  /**
+   * The VR as the file gave it ("UN" for a private element of a file in
+   * Implicit VR).
+   *
+   * @generated from field: string vr = 5;
+   */
+  vr: string;
+
+  /**
+   * How many instances held it.
+   *
+   * @generated from field: int64 instances = 6;
+   */
+  instances: bigint;
+
+  /**
+   * How many times they held it in all, at any depth of sequences.
+   *
+   * @generated from field: int64 occurrences = 7;
+   */
+  occurrences: bigint;
+};
+
+/**
+ * Describes the message nopacs.v1.CoverageElement.
+ * Use `create(CoverageElementSchema)` to create a new message.
+ */
+export const CoverageElementSchema: GenMessage<CoverageElement> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 10);
+
+/**
+ * RefreshCoverageRequest asks for a new coverage report.
+ *
+ * @generated from message nopacs.v1.RefreshCoverageRequest
+ */
+export type RefreshCoverageRequest = Message<"nopacs.v1.RefreshCoverageRequest"> & {
+  /**
+   * The tenant, by name. Required.
+   *
+   * @generated from field: string tenant = 1;
+   */
+  tenant: string;
+};
+
+/**
+ * Describes the message nopacs.v1.RefreshCoverageRequest.
+ * Use `create(RefreshCoverageRequestSchema)` to create a new message.
+ */
+export const RefreshCoverageRequestSchema: GenMessage<RefreshCoverageRequest> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 11);
+
+/**
+ * RefreshCoverageResponse is the job made.
+ *
+ * @generated from message nopacs.v1.RefreshCoverageResponse
+ */
+export type RefreshCoverageResponse = Message<"nopacs.v1.RefreshCoverageResponse"> & {
+  /**
+   * The job, queued, of kind deid_coverage.
+   *
+   * @generated from field: nopacs.v1.Job job = 1;
+   */
+  job?: Job | undefined;
+};
+
+/**
+ * Describes the message nopacs.v1.RefreshCoverageResponse.
+ * Use `create(RefreshCoverageResponseSchema)` to create a new message.
+ */
+export const RefreshCoverageResponseSchema: GenMessage<RefreshCoverageResponse> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_deid, 12);
 
 /**
  * CodeRequest is one value whose codes are asked for.
@@ -78,7 +607,7 @@ export type CodeRequest = Message<"nopacs.v1.CodeRequest"> & {
  * Use `create(CodeRequestSchema)` to create a new message.
  */
 export const CodeRequestSchema: GenMessage<CodeRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 0);
+  messageDesc(file_nopacs_v1_deid, 13);
 
 /**
  * PatientIDIssuer is who gave a Patient ID (PS3.3 C.7.1.1, and its Issuer
@@ -150,7 +679,7 @@ export type PatientIDIssuer = Message<"nopacs.v1.PatientIDIssuer"> & {
  * Use `create(PatientIDIssuerSchema)` to create a new message.
  */
 export const PatientIDIssuerSchema: GenMessage<PatientIDIssuer> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 1);
+  messageDesc(file_nopacs_v1_deid, 14);
 
 /**
  * IssuerDesignator is an HL7v2 hierarchic designator (PS3.3 Table 10-17).
@@ -185,7 +714,7 @@ export type IssuerDesignator = Message<"nopacs.v1.IssuerDesignator"> & {
  * Use `create(IssuerDesignatorSchema)` to create a new message.
  */
 export const IssuerDesignatorSchema: GenMessage<IssuerDesignator> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 2);
+  messageDesc(file_nopacs_v1_deid, 15);
 
 /**
  * IssuerCode is a coded entry's identifying values (PS3.3 Table 8.8-1a);
@@ -229,7 +758,7 @@ export type IssuerCode = Message<"nopacs.v1.IssuerCode"> & {
  * Use `create(IssuerCodeSchema)` to create a new message.
  */
 export const IssuerCodeSchema: GenMessage<IssuerCode> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 3);
+  messageDesc(file_nopacs_v1_deid, 16);
 
 /**
  * CodeResponse is what the archive gives the value.
@@ -280,7 +809,7 @@ export type CodeResponse = Message<"nopacs.v1.CodeResponse"> & {
  * Use `create(CodeResponseSchema)` to create a new message.
  */
 export const CodeResponseSchema: GenMessage<CodeResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 4);
+  messageDesc(file_nopacs_v1_deid, 17);
 
 /**
  * SubjectLabelCode is the subject label one receiver gives a value.
@@ -315,7 +844,7 @@ export type SubjectLabelCode = Message<"nopacs.v1.SubjectLabelCode"> & {
  * Use `create(SubjectLabelCodeSchema)` to create a new message.
  */
 export const SubjectLabelCodeSchema: GenMessage<SubjectLabelCode> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 5);
+  messageDesc(file_nopacs_v1_deid, 18);
 
 /**
  * LookupTableCode is the code one lookup table holds for a value.
@@ -343,7 +872,7 @@ export type LookupTableCode = Message<"nopacs.v1.LookupTableCode"> & {
  * Use `create(LookupTableCodeSchema)` to create a new message.
  */
 export const LookupTableCodeSchema: GenMessage<LookupTableCode> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 6);
+  messageDesc(file_nopacs_v1_deid, 19);
 
 /**
  * ImportLookupCodesRequest is the codes to put in one table.
@@ -378,7 +907,7 @@ export type ImportLookupCodesRequest = Message<"nopacs.v1.ImportLookupCodesReque
  * Use `create(ImportLookupCodesRequestSchema)` to create a new message.
  */
 export const ImportLookupCodesRequestSchema: GenMessage<ImportLookupCodesRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 7);
+  messageDesc(file_nopacs_v1_deid, 20);
 
 /**
  * LookupEntry is one value and the code that replaces it.
@@ -431,7 +960,7 @@ export type LookupEntry = Message<"nopacs.v1.LookupEntry"> & {
  * Use `create(LookupEntrySchema)` to create a new message.
  */
 export const LookupEntrySchema: GenMessage<LookupEntry> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 8);
+  messageDesc(file_nopacs_v1_deid, 21);
 
 /**
  * ImportLookupCodesResponse says what the import stored.
@@ -474,7 +1003,7 @@ export type ImportLookupCodesResponse = Message<"nopacs.v1.ImportLookupCodesResp
  * Use `create(ImportLookupCodesResponseSchema)` to create a new message.
  */
 export const ImportLookupCodesResponseSchema: GenMessage<ImportLookupCodesResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 9);
+  messageDesc(file_nopacs_v1_deid, 22);
 
 /**
  * ListLookupTablesRequest asks for a page of a tenant's lookup tables.
@@ -512,7 +1041,7 @@ export type ListLookupTablesRequest = Message<"nopacs.v1.ListLookupTablesRequest
  * Use `create(ListLookupTablesRequestSchema)` to create a new message.
  */
 export const ListLookupTablesRequestSchema: GenMessage<ListLookupTablesRequest> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 10);
+  messageDesc(file_nopacs_v1_deid, 23);
 
 /**
  * ListLookupTablesResponse is a page of lookup tables.
@@ -540,7 +1069,7 @@ export type ListLookupTablesResponse = Message<"nopacs.v1.ListLookupTablesRespon
  * Use `create(ListLookupTablesResponseSchema)` to create a new message.
  */
 export const ListLookupTablesResponseSchema: GenMessage<ListLookupTablesResponse> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 11);
+  messageDesc(file_nopacs_v1_deid, 24);
 
 /**
  * LookupTable is a lookup table in a list.
@@ -568,7 +1097,7 @@ export type LookupTable = Message<"nopacs.v1.LookupTable"> & {
  * Use `create(LookupTableSchema)` to create a new message.
  */
 export const LookupTableSchema: GenMessage<LookupTable> = /*@__PURE__*/
-  messageDesc(file_nopacs_v1_deid, 12);
+  messageDesc(file_nopacs_v1_deid, 25);
 
 /**
  * DeidService reaches what a tenant's de-identification keeps that is
@@ -586,8 +1115,11 @@ export const LookupTableSchema: GenMessage<LookupTable> = /*@__PURE__*/
  * pseudonym, so it is for an admin alone, one value at a time, at a
  * bounded rate, and every call is in the audit log, without the value: its
  * entry is written before the answer is sent, and a call whose entry
- * cannot be written is refused. No method of this service is served over
- * HTTP GET, so a value never travels in a URL.
+ * cannot be written is refused. No method of this service that takes a
+ * value is served over HTTP GET, so a value never travels in a URL.
+ *
+ * The service also holds the tenant's coverage report, the elements of
+ * archived files that no rule of a profile named, which holds no value.
  *
  * A value given to this service is the caller's own data: each is marked
  * debug_redact, and no log line, audit entry, event or error carries one.
@@ -736,6 +1268,163 @@ export const DeidService: GenService<{
     methodKind: "unary";
     input: typeof ListLookupTablesRequestSchema;
     output: typeof ListLookupTablesResponseSchema;
+  },
+  /**
+   * GetCoverage answers the tenant's coverage report: every public element
+   * and every private element (by its private creator and its element
+   * within the creator's block) that files archived by a receiver that
+   * de-identifies held, as received, and that no rule of the profile named,
+   * so the profile's default decided it (a private element removed, any
+   * other as the profile's unnamed says). For each, its VR as the file gave
+   * it, how many instances held it and how many times in all. It is what a
+   * profile never decided, the private elements a vendor writes among them,
+   * and a person reads it to name the ones that matter.
+   *
+   * The report holds no value of any file, and nothing a value could be
+   * read from but a private creator, which is a vendor's name written in
+   * the file. A creator that is not printable ASCII of at most 64 bytes, or
+   * that holds a value the profile removed from the file or a term of its
+   * text lists, is never given: its elements are counted under
+   * creator_withheld. For that reason a masked key may read the report.
+   *
+   * It is made by RefreshCoverage, from what each instance's metadata line
+   * records; the answer is the report of the latest job that ended, with
+   * when it ended and what it read, and the job that is making the next one
+   * when there is one. An instance archived before the line recorded this,
+   * or as received, is counted in the report's instances but not in
+   * instances_recorded, and contributes no element. Elements are in order
+   * of tag, then creator, then VR.
+   *
+   * Role: operator on the tenant.
+   * Audit: one entry in the tenant's log.
+   * Errors: unauthenticated, permission denied (no grant; also a tenant
+   * that does not exist, for a caller who may not list every tenant),
+   * invalid (a page_size that is negative or past 1000, a page_token that
+   * is not one of this call), not found (a tenant that does not exist, for
+   * a caller who may list every tenant), unavailable (the tenant's database
+   * does not answer, or the tenant is not ready).
+   *
+   * @generated from rpc nopacs.v1.DeidService.GetCoverage
+   */
+  getCoverage: {
+    methodKind: "unary";
+    input: typeof GetCoverageRequestSchema;
+    output: typeof GetCoverageResponseSchema;
+  },
+  /**
+   * RefreshCoverage makes the job (kind deid_coverage) that builds the
+   * coverage report again: it reads each scan's metadata file once, line by
+   * line within the reader's bounds, and counts the elements each line
+   * records as unnamed, then replaces the stored report when it ends. It
+   * writes the tenant's database only; it reads storages, never writes one,
+   * and never reads an instance's file. A scan whose metadata cannot be
+   * read is counted skipped, and the job ends partial. A restart goes on
+   * after the last page of scans written, so no scan is counted twice.
+   * One runs at a time for a tenant, and none while a rebuild runs. As for
+   * every job, the operator role is enough.
+   *
+   * Role: operator on the tenant.
+   * Audit: one entry in the tenant's log, with the job's id as its object.
+   * Errors: unauthenticated, permission denied (no grant; also a tenant
+   * that does not exist, for a caller who may not list every tenant), not
+   * found (a tenant that does not exist, for a caller who may list every
+   * tenant), precondition (a coverage job not ended; a rebuild running),
+   * unavailable (the tenant's database does not answer, or the tenant is
+   * not ready).
+   *
+   * @generated from rpc nopacs.v1.DeidService.RefreshCoverage
+   */
+  refreshCoverage: {
+    methodKind: "unary";
+    input: typeof RefreshCoverageRequestSchema;
+    output: typeof RefreshCoverageResponseSchema;
+  },
+  /**
+   * AddPixelTemplates stores pixel templates in the tenant: for a device
+   * (manufacturer and model, compared with case folded) and an image size
+   * (rows and columns, exactly) and, optionally, a SOP class, the rectangles
+   * of the image that burned-in text is drawn in. A pixel rule of a profile
+   * whose action is redact_by_template fills the rectangles of the template
+   * that fits the file's header as received, and holds an image at risk of
+   * burned-in text that no template fits (deid_failed, cause
+   * "no_pixel_template"). The table is empty until an admin fills it: the
+   * server ships none, since which rectangles hold text is for the site to
+   * know of its own devices.
+   *
+   * All or nothing: every template is stored in one transaction, or none.
+   * Refused, storing nothing: a template whose manufacturer or model is
+   * empty after its padding, is longer than 256 bytes or not UTF-8 without
+   * control characters; rows or columns not 1 to 65535; a SOP class that is
+   * not a UID; no rectangle or more than 64; a rectangle with a negative
+   * position, a side not 1 to 65535, or reaching past the image's size,
+   * measured from the edge it names; two templates of one device, size and
+   * SOP class in the request, or one the tenant already holds (precondition:
+   * remove it first), each named by its position from 1. A tenant holds at
+   * most 10000 templates, and a request carries 1 to 1000.
+   *
+   * A masked key (Key.masked) is refused, whatever its role: a template is
+   * part of what removes identity from images, and is changed only by a
+   * person who may see them.
+   *
+   * Role: admin on the tenant.
+   * Audit: one entry in the tenant's log, with the number of templates in
+   * its details, written with the templates; an entry of a request refused
+   * after its tenant was found is written before the answer.
+   * Errors: unauthenticated, permission denied (no grant, a masked key; also
+   * a tenant that does not exist, for a caller who may not list every
+   * tenant), invalid, not found (a tenant that does not exist, for a caller
+   * who may list every tenant), precondition (a template held already; the
+   * bound of 10000 passed), unavailable (the tenant's database does not
+   * answer, the tenant is not ready, or the audit entry cannot be written).
+   *
+   * @generated from rpc nopacs.v1.DeidService.AddPixelTemplates
+   */
+  addPixelTemplates: {
+    methodKind: "unary";
+    input: typeof AddPixelTemplatesRequestSchema;
+    output: typeof AddPixelTemplatesResponseSchema;
+  },
+  /**
+   * RemovePixelTemplate removes the template of one device, size and SOP
+   * class. Images that matched it are held (cause "no_pixel_template") when
+   * they are at risk of burned-in text, from the next file on.
+   *
+   * A masked key is refused, as for AddPixelTemplates.
+   *
+   * Role: admin on the tenant.
+   * Audit: one entry in the tenant's log, with the template's key as its
+   * object.
+   * Errors: unauthenticated, permission denied (no grant, a masked key),
+   * invalid (a key that names no template: no manufacturer or model, rows or
+   * columns not 1 to 65535, a SOP class that is not a UID), not found (the
+   * tenant has no such template; also a tenant that does not exist, for a
+   * caller who may list every tenant), unavailable.
+   *
+   * @generated from rpc nopacs.v1.DeidService.RemovePixelTemplate
+   */
+  removePixelTemplate: {
+    methodKind: "unary";
+    input: typeof RemovePixelTemplateRequestSchema;
+    output: typeof RemovePixelTemplateResponseSchema;
+  },
+  /**
+   * ListPixelTemplates answers a page of the tenant's pixel templates, in
+   * order of manufacturer, model, rows, columns and SOP class, each as it was
+   * written.
+   *
+   * Role: operator on the tenant.
+   * Audit: one entry in the tenant's log.
+   * Errors: unauthenticated, permission denied (no grant; also a tenant
+   * that does not exist, for a caller who may not list every tenant),
+   * invalid, not found (a tenant that does not exist, for a caller who may
+   * list every tenant), unavailable.
+   *
+   * @generated from rpc nopacs.v1.DeidService.ListPixelTemplates
+   */
+  listPixelTemplates: {
+    methodKind: "unary";
+    input: typeof ListPixelTemplatesRequestSchema;
+    output: typeof ListPixelTemplatesResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_nopacs_v1_deid, 0);

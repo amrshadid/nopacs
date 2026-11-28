@@ -84,6 +84,25 @@
 // key) and zeroed when the unit ends; it answers whether a UID was found,
 // never a pseudonym.
 //
+// # A re-run
+//
+// In the modes rerun and rerun_preview a unit runs a newer version over each
+// archived file that an older version de-identified, with receive.TightenFile:
+// only what the newer version decides otherwise than the older one, and only
+// where it lets through less, is done to the archived file (what the older
+// version did, a hash or a remapped UID or a shifted date, is never done
+// again under other keys), and the check after runs over the result. The
+// layer rule (profile.Stack, the older version under the newer) refuses a
+// version that lets through more. A file the check holds, one that would need
+// the original, and one a hold covers are refused with a fixed detail and
+// never written; a file the version changes nothing in is skipped. A rerun
+// hands each new file to a Reviser (Config.Revisions), which the server backs
+// with the corrections' own edit path, one correction per instance, so
+// superseded revisions, undo, purge, holds, records on every copy, audit and
+// events are an edit's. A preview asks for none. Supervisor.TryChange runs the
+// same judge over the first file of each scan of a receiver's newest sessions,
+// for change control.
+//
 // # What is recorded
 //
 // The verdicts are recorded (tenant.JobWork.RecordJobProgress) in batches

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	connect "connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -232,10 +233,28 @@ func TestSwitchRefusalShowsItsReason(t *testing.T) {
 	openReplicas(r)
 	r.key("s")
 	r.key("c")
-	r.fake.FailWithReason(nopacsv1connect.ReplicaServiceSwitchStorageProcedure, fault.Precondition, "a switch of this storage is already running", "STORAGE_SWITCHING", 20*time.Second)
+	// The server answers a running switch as unavailable; the reason and the
+	// delay travel in the details only for a reason of the answer's own kind.
+	r.fake.FailWithReason(nopacsv1connect.ReplicaServiceSwitchStorageProcedure, fault.Unavailable, "a switch of this storage is already running", "STORAGE_SWITCHING", 20*time.Second)
 	r.typeText("main")
 	r.key("enter", "enter", "enter")
 	r.expect("switch: STORAGE_SWITCHING: a switch of this storage is already running (try again in 20s)", "refused: every write resumes on the old place")
+}
+
+// TestSwitchRefusalWithoutDetailsShowsItsMessage guards an answer that carries
+// no error details: the screen shows the server's message, with no reason and no
+// delay, and nothing fails on the missing details.
+func TestSwitchRefusalWithoutDetailsShowsItsMessage(t *testing.T) {
+	r := newRig(t, 140, 30, replicaSetup)
+	openReplicas(r)
+	r.key("s")
+	r.key("c")
+	r.fake.FailWithoutDetails(nopacsv1connect.ReplicaServiceSwitchStorageProcedure, connect.CodeFailedPrecondition, "a switch of this storage is already running")
+	r.typeText("main")
+	r.key("enter", "enter", "enter")
+	r.expect("switch: a switch of this storage is already running", "refused: every write resumes on the old place")
+	r.refuse("try again in")
+	r.refuse("STORAGE_SWITCHING")
 }
 
 // TestSwitchUnavailableAnswerIsARefusal guards the state of the switch screen:

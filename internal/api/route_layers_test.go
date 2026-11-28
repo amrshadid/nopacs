@@ -42,7 +42,8 @@ func TestReceiverProfileChangeKeepsLayers(t *testing.T) {
 	mustCall[*v1.CreateRuleSetResponse](t, "make", createRuleSet("deid", rs, true)(f.as(f.lab1Admin)))
 	set := func(name string) outcome {
 		return call(f.as(f.lab1Admin).receivers.SetReceiver, &v1.SetReceiverRequest{Tenant: "lab1", Receiver: &v1.Receiver{Name: "deid",
-			Deidentification: &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: name, Version: 1}}}, UpdateMask: mask("deidentification")})
+			Deidentification: &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: name, Version: 1}}}, UpdateMask: mask("deidentification"),
+			Force: true, ForceReason: "a version this test does not try over receptions"})
 	}
 	if o := set("stricter"); o.err == nil {
 		t.Errorf("the receiver's profile was changed to one the active destination profile loosens")
@@ -86,12 +87,12 @@ func TestArchiveRuleProfileCannotLoosenReceiver(t *testing.T) {
 	// a receiver change back to the stricter profile is then refused.
 	mustCall[*v1.SetReceiverResponse](t, "loose receiver", call(f.as(f.lab1Admin).receivers.SetReceiver, &v1.SetReceiverRequest{Tenant: "lab1",
 		Receiver:   &v1.Receiver{Name: "deid", Deidentification: &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: "loose", Version: 1}}},
-		UpdateMask: mask("deidentification")}))
+		UpdateMask: mask("deidentification"), Force: true, ForceReason: "a version this test does not try over receptions"}))
 	mustCall[*v1.ActivateRuleSetResponse](t, "activate", call(f.as(f.lab1Admin).routes.ActivateRuleSet,
 		&v1.ActivateRuleSetRequest{Tenant: "lab1", Receiver: "deid", Version: 1}))
 	if o := call(f.as(f.lab1Admin).receivers.SetReceiver, &v1.SetReceiverRequest{Tenant: "lab1",
 		Receiver:   &v1.Receiver{Name: "deid", Deidentification: &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: "stricter", Version: 1}}},
-		UpdateMask: mask("deidentification")}); o.err == nil {
+		UpdateMask: mask("deidentification"), Force: true, ForceReason: "a version this test does not try over receptions"}); o.err == nil {
 		t.Errorf("a receiver's profile was changed to one the active archive rule's profile loosens")
 	}
 }

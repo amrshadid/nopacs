@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file nopacs/v1/receiver.proto.
  */
 export const file_nopacs_v1_receiver: GenFile = /*@__PURE__*/
-  fileDesc("Chhub3BhY3MvdjEvcmVjZWl2ZXIucHJvdG8SCW5vcGFjcy52MSKABgoIUmVjZWl2ZXISDAoEbmFtZRgBIAEoCRIpCgVkaW1zZRgCIAEoCzIYLm5vcGFjcy52MS5EaW1zZVJlY2VpdmVySAASJwoEc3RvdxgMIAEoCzIXLm5vcGFjcy52MS5TdG93UmVjZWl2ZXJIABItCghpbXBvcnRlchgRIAEoCzIZLm5vcGFjcy52MS5JbXBvcnRSZWNlaXZlckgAEiUKA2pvYhgUIAEoCzIWLm5vcGFjcy52MS5Kb2JSZWNlaXZlckgAEg8KB2VuYWJsZWQYAyABKAgSDwoHc3RvcmFnZRgEIAEoCRIlCgZuYW1pbmcYBSABKAsyFS5ub3BhY3MudjEuTmFtaW5nUnVsZRIRCgluYW1lc3BhY2UYEiABKAkSLwoMcXVpZXRfcGVyaW9kGAYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEjAKDW1heF9vcGVuX3RpbWUYByABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SFgoObWF4X2ZpbGVfYnl0ZXMYCCABKAMSKQoGaGVhbHRoGAkgASgLMhkubm9wYWNzLnYxLlJlY2VpdmVySGVhbHRoEi8KC2NyZWF0ZV90aW1lGAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKZm9yd2FyZF90bxgNIAMoCRIsCgthc19yZWNlaXZlZBgOIAEoCzIVLm5vcGFjcy52MS5Bc1JlY2VpdmVkSAESLwoHcHJvZmlsZRgPIAEoCzIcLm5vcGFjcy52MS5Qcm9maWxlVmVyc2lvblJlZkgBEi8KB3JvdXRpbmcYECABKAsyGi5ub3BhY3MudjEuUmVjZWl2ZXJSb3V0aW5nQgIYARIYChBydWxlX3NldF92ZXJzaW9uGBMgASgFQgYKBHR5cGVCEgoQZGVpZGVudGlmaWNhdGlvbiJVCg9SZWNlaXZlclJvdXRpbmcSIAoGcm91dGVzGAEgAygLMhAubm9wYWNzLnYxLlJvdXRlEhwKFHF1YXJhbnRpbmVfdW5tYXRjaGVkGAIgASgIOgIYASK5AQoFUm91dGUSDAoEbmFtZRgBIAEoCRIvCgpjb25kaXRpb25zGAIgAygLMhsubm9wYWNzLnYxLlByb2ZpbGVDb25kaXRpb24SDwoHc3RvcmFnZRgDIAEoCRItCgdwcm9maWxlGAQgASgLMhwubm9wYWNzLnYxLlByb2ZpbGVWZXJzaW9uUmVmEi0KCmZvcndhcmRfdG8YBSABKAsyGS5ub3BhY3MudjEuUm91dGVGb3J3YXJkVG86AhgBIiUKDlJvdXRlRm9yd2FyZFRvEg8KB3NlbmRlcnMYASADKAk6AhgBIgwKCkFzUmVjZWl2ZWQiMgoRUHJvZmlsZVZlcnNpb25SZWYSDAoEbmFtZRgBIAEoCRIPCgd2ZXJzaW9uGAIgASgFIvEBCg1EaW1zZVJlY2VpdmVyEgwKBHBvcnQYASABKAUSFAoMYmluZF9hZGRyZXNzGAIgASgJEhAKCGFlX3RpdGxlGAMgASgJEjQKD2FsbG93ZWRfY2FsbGVycxgEIAEoCzIZLm5vcGFjcy52MS5BbGxvd2VkQ2FsbGVyc0gAEhQKCmFueV9jYWxsZXIYBSABKAhIABIjCgN0bHMYBiABKAsyFi5ub3BhY3MudjEuUmVjZWl2ZXJUbHMSEwoLc29wX2NsYXNzZXMYByADKAkSGQoRdHJhbnNmZXJfc3ludGF4ZXMYCCADKAlCCQoHY2FsbGVycyI6CgxTdG93UmVjZWl2ZXISDwoHa2V5X2lkcxgBIAMoCRIZChFtYXhfcmVxdWVzdF9ieXRlcxgCIAEoAyLlAQoOSW1wb3J0UmVjZWl2ZXISDAoEcm9vdBgBIAEoCRInCgZsYXlvdXQYAiABKA4yFy5ub3BhY3MudjEuSW1wb3J0TGF5b3V0EhQKDHBhdGhfcGF0dGVybhgDIAEoCRISCgp1bml0X2RlcHRoGAQgASgFEhUKCG1hcF9maWxlGAUgASgJQgOAAQESFwoPbWFwX2tleV9jb2x1bW5zGAYgAygJEhgKEG1hcF92YWx1ZV9jb2x1bW4YByABKAkSFQoNbWFwX2tleV9wYXJ0cxgIIAMoCRIRCgltYXBfZ2l2ZXMYCSABKAkiNgoOQWxsb3dlZENhbGxlcnMSJAoFcnVsZXMYASADKAsyFS5ub3BhY3MudjEuQ2FsbGVyUnVsZSI9CgpDYWxsZXJSdWxlEhgKEGNhbGxpbmdfYWVfdGl0bGUYASABKAkSFQoNYWRkcmVzc19yYW5nZRgCIAEoCSJBCgtSZWNlaXZlclRscxIYChBjZXJ0aWZpY2F0ZV9maWxlGAEgASgJEhgKEHByaXZhdGVfa2V5X2ZpbGUYAiABKAkiZwoKTmFtaW5nUnVsZRIPCgdzdWJqZWN0GAEgASgJEg8KB3Nlc3Npb24YAiABKAkSDAoEc2NhbhgDIAEoCRIpCgdwYXR0ZXJuGAQgASgLMhgubm9wYWNzLnYxLk5hbWluZ1BhdHRlcm4iNgoNTmFtaW5nUGF0dGVybhIRCglhdHRyaWJ1dGUYASABKAkSEgoKZXhwcmVzc2lvbhgCIAEoCSKoAQoOUmVjZWl2ZXJIZWFsdGgSJwoFc3RhdGUYASABKA4yGC5ub3BhY3MudjEuUmVjZWl2ZXJTdGF0ZRIyCgtkb3duX3JlYXNvbhgCIAEoDjIdLm5vcGFjcy52MS5SZWNlaXZlckRvd25SZWFzb24SDgoGZGV0YWlsGAMgASgJEikKBXNpbmNlGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJLChJBZGRSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiUKCHJlY2VpdmVyGAIgASgLMhMubm9wYWNzLnYxLlJlY2VpdmVyIjwKE0FkZFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiMgoSR2V0UmVjZWl2ZXJSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIjwKE0dldFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiTQoUTGlzdFJlY2VpdmVyc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIlgKFUxpc3RSZWNlaXZlcnNSZXNwb25zZRImCglyZWNlaXZlcnMYASADKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXISFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIrYBChJTZXRSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiUKCHJlY2VpdmVyGAIgASgLMhMubm9wYWNzLnYxLlJlY2VpdmVyEi8KC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzaxI4ChRleHBlY3RlZF91cGRhdGVfdGltZRgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiPAoTU2V0UmVjZWl2ZXJSZXNwb25zZRIlCghyZWNlaXZlchgBIAEoCzITLm5vcGFjcy52MS5SZWNlaXZlciI1ChVSZW1vdmVSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEgwKBG5hbWUYAiABKAkiPwoWUmVtb3ZlUmVjZWl2ZXJSZXNwb25zZRIlCghyZWNlaXZlchgBIAEoCzITLm5vcGFjcy52MS5SZWNlaXZlciINCgtKb2JSZWNlaXZlcipnCgxJbXBvcnRMYXlvdXQSHQoZSU1QT1JUX0xBWU9VVF9VTlNQRUNJRklFRBAAEhcKE0lNUE9SVF9MQVlPVVRfUExBSU4QARIZChVJTVBPUlRfTEFZT1VUX1BBVFRFUk4QAyIECAIQAiqVAQoNUmVjZWl2ZXJTdGF0ZRIeChpSRUNFSVZFUl9TVEFURV9VTlNQRUNJRklFRBAAEhsKF1JFQ0VJVkVSX1NUQVRFX1NUQVJUSU5HEAESFQoRUkVDRUlWRVJfU1RBVEVfVVAQAhIXChNSRUNFSVZFUl9TVEFURV9ET1dOEAMSFwoTUkVDRUlWRVJfU1RBVEVfSURMRRAEKr0DChJSZWNlaXZlckRvd25SZWFzb24SJAogUkVDRUlWRVJfRE9XTl9SRUFTT05fVU5TUEVDSUZJRUQQABIhCh1SRUNFSVZFUl9ET1dOX1JFQVNPTl9ESVNBQkxFRBABEicKI1JFQ0VJVkVSX0RPV05fUkVBU09OX0FERFJFU1NfSU5fVVNFEAISKgomUkVDRUlWRVJfRE9XTl9SRUFTT05fUEVSTUlTU0lPTl9ERU5JRUQQAxIuCipSRUNFSVZFUl9ET1dOX1JFQVNPTl9BRERSRVNTX05PVF9BVkFJTEFCTEUQBBIcChhSRUNFSVZFUl9ET1dOX1JFQVNPTl9UTFMQBRIkCiBSRUNFSVZFUl9ET1dOX1JFQVNPTl9ORUFSTFlfRlVMTBAGEikKJVJFQ0VJVkVSX0RPV05fUkVBU09OX1RFTkFOVF9OT1RfUkVBRFkQBxIhCh1SRUNFSVZFUl9ET1dOX1JFQVNPTl9TVE9QUElORxAIEh4KGlJFQ0VJVkVSX0RPV05fUkVBU09OX09USEVSEAkSJwojUkVDRUlWRVJfRE9XTl9SRUFTT05fSU5DT01JTkdfTElNSVQQCjK6AwoPUmVjZWl2ZXJTZXJ2aWNlEkwKC0FkZFJlY2VpdmVyEh0ubm9wYWNzLnYxLkFkZFJlY2VpdmVyUmVxdWVzdBoeLm5vcGFjcy52MS5BZGRSZWNlaXZlclJlc3BvbnNlElEKC0dldFJlY2VpdmVyEh0ubm9wYWNzLnYxLkdldFJlY2VpdmVyUmVxdWVzdBoeLm5vcGFjcy52MS5HZXRSZWNlaXZlclJlc3BvbnNlIgOQAgESVwoNTGlzdFJlY2VpdmVycxIfLm5vcGFjcy52MS5MaXN0UmVjZWl2ZXJzUmVxdWVzdBogLm5vcGFjcy52MS5MaXN0UmVjZWl2ZXJzUmVzcG9uc2UiA5ACARJRCgtTZXRSZWNlaXZlchIdLm5vcGFjcy52MS5TZXRSZWNlaXZlclJlcXVlc3QaHi5ub3BhY3MudjEuU2V0UmVjZWl2ZXJSZXNwb25zZSIDkAICEloKDlJlbW92ZVJlY2VpdmVyEiAubm9wYWNzLnYxLlJlbW92ZVJlY2VpdmVyUmVxdWVzdBohLm5vcGFjcy52MS5SZW1vdmVSZWNlaXZlclJlc3BvbnNlIgOQAgJiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp, file_nopacs_v1_profile]);
+  fileDesc("Chhub3BhY3MvdjEvcmVjZWl2ZXIucHJvdG8SCW5vcGFjcy52MSKABgoIUmVjZWl2ZXISDAoEbmFtZRgBIAEoCRIpCgVkaW1zZRgCIAEoCzIYLm5vcGFjcy52MS5EaW1zZVJlY2VpdmVySAASJwoEc3RvdxgMIAEoCzIXLm5vcGFjcy52MS5TdG93UmVjZWl2ZXJIABItCghpbXBvcnRlchgRIAEoCzIZLm5vcGFjcy52MS5JbXBvcnRSZWNlaXZlckgAEiUKA2pvYhgUIAEoCzIWLm5vcGFjcy52MS5Kb2JSZWNlaXZlckgAEg8KB2VuYWJsZWQYAyABKAgSDwoHc3RvcmFnZRgEIAEoCRIlCgZuYW1pbmcYBSABKAsyFS5ub3BhY3MudjEuTmFtaW5nUnVsZRIRCgluYW1lc3BhY2UYEiABKAkSLwoMcXVpZXRfcGVyaW9kGAYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEjAKDW1heF9vcGVuX3RpbWUYByABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SFgoObWF4X2ZpbGVfYnl0ZXMYCCABKAMSKQoGaGVhbHRoGAkgASgLMhkubm9wYWNzLnYxLlJlY2VpdmVySGVhbHRoEi8KC2NyZWF0ZV90aW1lGAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKZm9yd2FyZF90bxgNIAMoCRIsCgthc19yZWNlaXZlZBgOIAEoCzIVLm5vcGFjcy52MS5Bc1JlY2VpdmVkSAESLwoHcHJvZmlsZRgPIAEoCzIcLm5vcGFjcy52MS5Qcm9maWxlVmVyc2lvblJlZkgBEi8KB3JvdXRpbmcYECABKAsyGi5ub3BhY3MudjEuUmVjZWl2ZXJSb3V0aW5nQgIYARIYChBydWxlX3NldF92ZXJzaW9uGBMgASgFQgYKBHR5cGVCEgoQZGVpZGVudGlmaWNhdGlvbiJVCg9SZWNlaXZlclJvdXRpbmcSIAoGcm91dGVzGAEgAygLMhAubm9wYWNzLnYxLlJvdXRlEhwKFHF1YXJhbnRpbmVfdW5tYXRjaGVkGAIgASgIOgIYASK5AQoFUm91dGUSDAoEbmFtZRgBIAEoCRIvCgpjb25kaXRpb25zGAIgAygLMhsubm9wYWNzLnYxLlByb2ZpbGVDb25kaXRpb24SDwoHc3RvcmFnZRgDIAEoCRItCgdwcm9maWxlGAQgASgLMhwubm9wYWNzLnYxLlByb2ZpbGVWZXJzaW9uUmVmEi0KCmZvcndhcmRfdG8YBSABKAsyGS5ub3BhY3MudjEuUm91dGVGb3J3YXJkVG86AhgBIiUKDlJvdXRlRm9yd2FyZFRvEg8KB3NlbmRlcnMYASADKAk6AhgBIgwKCkFzUmVjZWl2ZWQiMgoRUHJvZmlsZVZlcnNpb25SZWYSDAoEbmFtZRgBIAEoCRIPCgd2ZXJzaW9uGAIgASgFIvEBCg1EaW1zZVJlY2VpdmVyEgwKBHBvcnQYASABKAUSFAoMYmluZF9hZGRyZXNzGAIgASgJEhAKCGFlX3RpdGxlGAMgASgJEjQKD2FsbG93ZWRfY2FsbGVycxgEIAEoCzIZLm5vcGFjcy52MS5BbGxvd2VkQ2FsbGVyc0gAEhQKCmFueV9jYWxsZXIYBSABKAhIABIjCgN0bHMYBiABKAsyFi5ub3BhY3MudjEuUmVjZWl2ZXJUbHMSEwoLc29wX2NsYXNzZXMYByADKAkSGQoRdHJhbnNmZXJfc3ludGF4ZXMYCCADKAlCCQoHY2FsbGVycyI6CgxTdG93UmVjZWl2ZXISDwoHa2V5X2lkcxgBIAMoCRIZChFtYXhfcmVxdWVzdF9ieXRlcxgCIAEoAyLlAQoOSW1wb3J0UmVjZWl2ZXISDAoEcm9vdBgBIAEoCRInCgZsYXlvdXQYAiABKA4yFy5ub3BhY3MudjEuSW1wb3J0TGF5b3V0EhQKDHBhdGhfcGF0dGVybhgDIAEoCRISCgp1bml0X2RlcHRoGAQgASgFEhUKCG1hcF9maWxlGAUgASgJQgOAAQESFwoPbWFwX2tleV9jb2x1bW5zGAYgAygJEhgKEG1hcF92YWx1ZV9jb2x1bW4YByABKAkSFQoNbWFwX2tleV9wYXJ0cxgIIAMoCRIRCgltYXBfZ2l2ZXMYCSABKAkiNgoOQWxsb3dlZENhbGxlcnMSJAoFcnVsZXMYASADKAsyFS5ub3BhY3MudjEuQ2FsbGVyUnVsZSI9CgpDYWxsZXJSdWxlEhgKEGNhbGxpbmdfYWVfdGl0bGUYASABKAkSFQoNYWRkcmVzc19yYW5nZRgCIAEoCSJBCgtSZWNlaXZlclRscxIYChBjZXJ0aWZpY2F0ZV9maWxlGAEgASgJEhgKEHByaXZhdGVfa2V5X2ZpbGUYAiABKAkiZwoKTmFtaW5nUnVsZRIPCgdzdWJqZWN0GAEgASgJEg8KB3Nlc3Npb24YAiABKAkSDAoEc2NhbhgDIAEoCRIpCgdwYXR0ZXJuGAQgASgLMhgubm9wYWNzLnYxLk5hbWluZ1BhdHRlcm4iNgoNTmFtaW5nUGF0dGVybhIRCglhdHRyaWJ1dGUYASABKAkSEgoKZXhwcmVzc2lvbhgCIAEoCSKoAQoOUmVjZWl2ZXJIZWFsdGgSJwoFc3RhdGUYASABKA4yGC5ub3BhY3MudjEuUmVjZWl2ZXJTdGF0ZRIyCgtkb3duX3JlYXNvbhgCIAEoDjIdLm5vcGFjcy52MS5SZWNlaXZlckRvd25SZWFzb24SDgoGZGV0YWlsGAMgASgJEikKBXNpbmNlGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJLChJBZGRSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiUKCHJlY2VpdmVyGAIgASgLMhMubm9wYWNzLnYxLlJlY2VpdmVyIjwKE0FkZFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiMgoSR2V0UmVjZWl2ZXJSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIjwKE0dldFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiTQoUTGlzdFJlY2VpdmVyc1JlcXVlc3QSDgoGdGVuYW50GAEgASgJEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIlgKFUxpc3RSZWNlaXZlcnNSZXNwb25zZRImCglyZWNlaXZlcnMYASADKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXISFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJItsBChJTZXRSZWNlaXZlclJlcXVlc3QSDgoGdGVuYW50GAEgASgJEiUKCHJlY2VpdmVyGAIgASgLMhMubm9wYWNzLnYxLlJlY2VpdmVyEi8KC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzaxI4ChRleHBlY3RlZF91cGRhdGVfdGltZRgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFZm9yY2UYBSABKAgSFAoMZm9yY2VfcmVhc29uGAYgASgJIjwKE1NldFJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiNQoVUmVtb3ZlUmVjZWl2ZXJSZXF1ZXN0Eg4KBnRlbmFudBgBIAEoCRIMCgRuYW1lGAIgASgJIj8KFlJlbW92ZVJlY2VpdmVyUmVzcG9uc2USJQoIcmVjZWl2ZXIYASABKAsyEy5ub3BhY3MudjEuUmVjZWl2ZXIiDQoLSm9iUmVjZWl2ZXIiZwoZVHJ5UmVjZWl2ZXJQcm9maWxlUmVxdWVzdBIOCgZ0ZW5hbnQYASABKAkSEAoIcmVjZWl2ZXIYAiABKAkSDwoHcHJvZmlsZRgDIAEoCRIXCg9wcm9maWxlX3ZlcnNpb24YBCABKAUipwIKGlRyeVJlY2VpdmVyUHJvZmlsZVJlc3BvbnNlEg8KB3Byb2ZpbGUYASABKAkSFwoPcHJvZmlsZV92ZXJzaW9uGAIgASgFEikKBXRyaWVkGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIQCghzZXNzaW9ucxgEIAEoAxINCgVmaWxlcxgFIAEoAxIPCgdjaGFuZ2VkGAYgASgDEgwKBGhlbGQYByABKAMSEQoJdW5jaGFuZ2VkGAggASgDEg8KB3NraXBwZWQYCSABKAMSKgoIZWxlbWVudHMYCiADKAsyGC5ub3BhY3MudjEuQ2hhbmdlRWxlbWVudBIkCgVob2xkcxgLIAMoCzIVLm5vcGFjcy52MS5DaGFuZ2VIb2xkIjsKDUNoYW5nZUVsZW1lbnQSCwoDdGFnGAEgASgJEg4KBmFjdGlvbhgCIAEoCRINCgVmaWxlcxgDIAEoAyIrCgpDaGFuZ2VIb2xkEg4KBnJlYXNvbhgBIAEoCRINCgVmaWxlcxgCIAEoAypnCgxJbXBvcnRMYXlvdXQSHQoZSU1QT1JUX0xBWU9VVF9VTlNQRUNJRklFRBAAEhcKE0lNUE9SVF9MQVlPVVRfUExBSU4QARIZChVJTVBPUlRfTEFZT1VUX1BBVFRFUk4QAyIECAIQAiqVAQoNUmVjZWl2ZXJTdGF0ZRIeChpSRUNFSVZFUl9TVEFURV9VTlNQRUNJRklFRBAAEhsKF1JFQ0VJVkVSX1NUQVRFX1NUQVJUSU5HEAESFQoRUkVDRUlWRVJfU1RBVEVfVVAQAhIXChNSRUNFSVZFUl9TVEFURV9ET1dOEAMSFwoTUkVDRUlWRVJfU1RBVEVfSURMRRAEKr0DChJSZWNlaXZlckRvd25SZWFzb24SJAogUkVDRUlWRVJfRE9XTl9SRUFTT05fVU5TUEVDSUZJRUQQABIhCh1SRUNFSVZFUl9ET1dOX1JFQVNPTl9ESVNBQkxFRBABEicKI1JFQ0VJVkVSX0RPV05fUkVBU09OX0FERFJFU1NfSU5fVVNFEAISKgomUkVDRUlWRVJfRE9XTl9SRUFTT05fUEVSTUlTU0lPTl9ERU5JRUQQAxIuCipSRUNFSVZFUl9ET1dOX1JFQVNPTl9BRERSRVNTX05PVF9BVkFJTEFCTEUQBBIcChhSRUNFSVZFUl9ET1dOX1JFQVNPTl9UTFMQBRIkCiBSRUNFSVZFUl9ET1dOX1JFQVNPTl9ORUFSTFlfRlVMTBAGEikKJVJFQ0VJVkVSX0RPV05fUkVBU09OX1RFTkFOVF9OT1RfUkVBRFkQBxIhCh1SRUNFSVZFUl9ET1dOX1JFQVNPTl9TVE9QUElORxAIEh4KGlJFQ0VJVkVSX0RPV05fUkVBU09OX09USEVSEAkSJwojUkVDRUlWRVJfRE9XTl9SRUFTT05fSU5DT01JTkdfTElNSVQQCjKdBAoPUmVjZWl2ZXJTZXJ2aWNlEkwKC0FkZFJlY2VpdmVyEh0ubm9wYWNzLnYxLkFkZFJlY2VpdmVyUmVxdWVzdBoeLm5vcGFjcy52MS5BZGRSZWNlaXZlclJlc3BvbnNlElEKC0dldFJlY2VpdmVyEh0ubm9wYWNzLnYxLkdldFJlY2VpdmVyUmVxdWVzdBoeLm5vcGFjcy52MS5HZXRSZWNlaXZlclJlc3BvbnNlIgOQAgESVwoNTGlzdFJlY2VpdmVycxIfLm5vcGFjcy52MS5MaXN0UmVjZWl2ZXJzUmVxdWVzdBogLm5vcGFjcy52MS5MaXN0UmVjZWl2ZXJzUmVzcG9uc2UiA5ACARJRCgtTZXRSZWNlaXZlchIdLm5vcGFjcy52MS5TZXRSZWNlaXZlclJlcXVlc3QaHi5ub3BhY3MudjEuU2V0UmVjZWl2ZXJSZXNwb25zZSIDkAICEloKDlJlbW92ZVJlY2VpdmVyEiAubm9wYWNzLnYxLlJlbW92ZVJlY2VpdmVyUmVxdWVzdBohLm5vcGFjcy52MS5SZW1vdmVSZWNlaXZlclJlc3BvbnNlIgOQAgISYQoSVHJ5UmVjZWl2ZXJQcm9maWxlEiQubm9wYWNzLnYxLlRyeVJlY2VpdmVyUHJvZmlsZVJlcXVlc3QaJS5ub3BhY3MudjEuVHJ5UmVjZWl2ZXJQcm9maWxlUmVzcG9uc2ViBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp, file_nopacs_v1_profile]);
 
 /**
  * Receiver is a way for data to arrive at a tenant, and how what arrives is
@@ -1449,6 +1449,28 @@ export type SetReceiverRequest = Message<"nopacs.v1.SetReceiverRequest"> & {
    * @generated from field: google.protobuf.Timestamp expected_update_time = 4;
    */
   expectedUpdateTime?: Timestamp | undefined;
+
+  /**
+   * Point the receiver at a profile version that was not tried over its last
+   * receptions (TryReceiverProfile), whose trial read no file, or whose trial
+   * found files it would hold. A receiver that archives as received is gated
+   * the same when it is given a profile. Without it such a change is refused as a precondition failure.
+   * Needs force_reason, which is audited. Only a change of the receiver's
+   * profile reads it. A change of the tenant's base profile
+   * (deid.base-profile) is not gated by trials: it applies to every receiver,
+   * and is checked for strictness and audited.
+   *
+   * @generated from field: bool force = 5;
+   */
+  force: boolean;
+
+  /**
+   * Why the change is forced: 1 to 1,000 characters, required with force,
+   * and empty without it. Recorded in the audit entry.
+   *
+   * @generated from field: string force_reason = 6;
+   */
+  forceReason: string;
 };
 
 /**
@@ -1544,6 +1566,209 @@ export type JobReceiver = Message<"nopacs.v1.JobReceiver"> & {
  */
 export const JobReceiverSchema: GenMessage<JobReceiver> = /*@__PURE__*/
   messageDesc(file_nopacs_v1_receiver, 25);
+
+/**
+ * TryReceiverProfileRequest names the receiver and the profile version to try.
+ *
+ * @generated from message nopacs.v1.TryReceiverProfileRequest
+ */
+export type TryReceiverProfileRequest = Message<"nopacs.v1.TryReceiverProfileRequest"> & {
+  /**
+   * The tenant, by name. Required.
+   *
+   * @generated from field: string tenant = 1;
+   */
+  tenant: string;
+
+  /**
+   * The receiver's name. Required.
+   *
+   * @generated from field: string receiver = 2;
+   */
+  receiver: string;
+
+  /**
+   * The profile whose version is tried. Required.
+   *
+   * @generated from field: string profile = 3;
+   */
+  profile: string;
+
+  /**
+   * The version of profile: 0 for its latest, which the trial fixes and
+   * answers.
+   *
+   * @generated from field: int32 profile_version = 4;
+   */
+  profileVersion: number;
+};
+
+/**
+ * Describes the message nopacs.v1.TryReceiverProfileRequest.
+ * Use `create(TryReceiverProfileRequestSchema)` to create a new message.
+ */
+export const TryReceiverProfileRequestSchema: GenMessage<TryReceiverProfileRequest> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_receiver, 26);
+
+/**
+ * TryReceiverProfileResponse is what the trial found.
+ *
+ * @generated from message nopacs.v1.TryReceiverProfileResponse
+ */
+export type TryReceiverProfileResponse = Message<"nopacs.v1.TryReceiverProfileResponse"> & {
+  /**
+   * The profile tried.
+   *
+   * @generated from field: string profile = 1;
+   */
+  profile: string;
+
+  /**
+   * The version of profile tried, as fixed.
+   *
+   * @generated from field: int32 profile_version = 2;
+   */
+  profileVersion: number;
+
+  /**
+   * When the trial ran; the record SetReceiver reads is this one.
+   *
+   * @generated from field: google.protobuf.Timestamp tried = 3;
+   */
+  tried?: Timestamp | undefined;
+
+  /**
+   * The sessions read: at most deid.change-trial-sessions.
+   *
+   * @generated from field: int64 sessions = 4;
+   */
+  sessions: bigint;
+
+  /**
+   * The files read: the first of each scan of those sessions.
+   *
+   * @generated from field: int64 files = 5;
+   */
+  files: bigint;
+
+  /**
+   * How many files the version would give a new revision.
+   *
+   * @generated from field: int64 changed = 6;
+   */
+  changed: bigint;
+
+  /**
+   * How many files the version would hold: its check after holds them, it
+   * needs the original value of an element it would hash, remap or shift, it
+   * loosens what made the file, or it has pixel rules.
+   *
+   * @generated from field: int64 held = 7;
+   */
+  held: bigint;
+
+  /**
+   * How many files the version changes nothing in.
+   *
+   * @generated from field: int64 unchanged = 8;
+   */
+  unchanged: bigint;
+
+  /**
+   * How many files were not judged: archived as received, too large, or
+   * damaged.
+   *
+   * @generated from field: int64 skipped = 9;
+   */
+  skipped: bigint;
+
+  /**
+   * The elements the version changes, most files first: never a value.
+   *
+   * @generated from field: repeated nopacs.v1.ChangeElement elements = 10;
+   */
+  elements: ChangeElement[];
+
+  /**
+   * Why files would be held, most files first.
+   *
+   * @generated from field: repeated nopacs.v1.ChangeHold holds = 11;
+   */
+  holds: ChangeHold[];
+};
+
+/**
+ * Describes the message nopacs.v1.TryReceiverProfileResponse.
+ * Use `create(TryReceiverProfileResponseSchema)` to create a new message.
+ */
+export const TryReceiverProfileResponseSchema: GenMessage<TryReceiverProfileResponse> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_receiver, 27);
+
+/**
+ * ChangeElement is an element a profile version changes in some of the files
+ * tried.
+ *
+ * @generated from message nopacs.v1.ChangeElement
+ */
+export type ChangeElement = Message<"nopacs.v1.ChangeElement"> & {
+  /**
+   * The element's tag as eight upper-case hexadecimal digits ("00180060").
+   *
+   * @generated from field: string tag = 1;
+   */
+  tag: string;
+
+  /**
+   * The version's action: remove, empty, replace, set, dummy,
+   * remove_unless_required, generalize, clean, redact or create.
+   *
+   * @generated from field: string action = 2;
+   */
+  action: string;
+
+  /**
+   * In how many files it changes. An element the version leaves as it is
+   * is not listed.
+   *
+   * @generated from field: int64 files = 3;
+   */
+  files: bigint;
+};
+
+/**
+ * Describes the message nopacs.v1.ChangeElement.
+ * Use `create(ChangeElementSchema)` to create a new message.
+ */
+export const ChangeElementSchema: GenMessage<ChangeElement> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_receiver, 28);
+
+/**
+ * ChangeHold is a reason a profile version would hold files.
+ *
+ * @generated from message nopacs.v1.ChangeHold
+ */
+export type ChangeHold = Message<"nopacs.v1.ChangeHold"> & {
+  /**
+   * The quarantine reason and the cause, "reason/cause", fixed words.
+   *
+   * @generated from field: string reason = 1;
+   */
+  reason: string;
+
+  /**
+   * How many files.
+   *
+   * @generated from field: int64 files = 2;
+   */
+  files: bigint;
+};
+
+/**
+ * Describes the message nopacs.v1.ChangeHold.
+ * Use `create(ChangeHoldSchema)` to create a new message.
+ */
+export const ChangeHoldSchema: GenMessage<ChangeHold> = /*@__PURE__*/
+  messageDesc(file_nopacs_v1_receiver, 29);
 
 /**
  * ImportLayout is how an import receiver reads a file's path for labels.
@@ -2000,6 +2225,37 @@ export const ReceiverService: GenService<{
     methodKind: "unary";
     input: typeof RemoveReceiverRequestSchema;
     output: typeof RemoveReceiverResponseSchema;
+  },
+  /**
+   * TryReceiverProfile tries a profile version over what a receiver last
+   * received (change control), before the receiver is pointed at it: the
+   * version is run, as a re-run's preview runs it, over the first archived
+   * file of each scan of the receiver's newest deid.change-trial-sessions
+   * sessions, which changes nothing. The answer counts the files the
+   * version would change, leave and hold, names each element it changes
+   * with its action and how many files, and why files would be held; it
+   * holds no value of any file. The result is recorded for the receiver and
+   * version, and SetReceiver then points the receiver at the version only
+   * when it was tried and held no file, or with force and a reason. A
+   * receiver that received nothing is tried over no file, and the trial
+   * says so.
+   *
+   * Role: admin on the tenant, never a masked key: what the archive's files say is a person's choice.
+   * Audit: one entry in the tenant's log, with the receiver's name as its
+   * object, and the version and the counts in details.
+   * Errors: unauthenticated, permission denied (no grant; also a tenant that
+   * does not exist, for a caller who may not list every tenant; a masked
+   * key), invalid, not found (the tenant has no such receiver or profile
+   * version), precondition (the receiver's newest sessions hold more scans
+   * than one trial reads), unavailable (the tenant's database does not
+   * answer, or the tenant is not ready).
+   *
+   * @generated from rpc nopacs.v1.ReceiverService.TryReceiverProfile
+   */
+  tryReceiverProfile: {
+    methodKind: "unary";
+    input: typeof TryReceiverProfileRequestSchema;
+    output: typeof TryReceiverProfileResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_nopacs_v1_receiver, 0);

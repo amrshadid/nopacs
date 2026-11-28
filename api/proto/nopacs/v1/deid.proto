@@ -5,6 +5,10 @@ syntax = "proto3";
 // access.proto.
 package nopacs.v1;
 
+import "google/protobuf/timestamp.proto";
+import "nopacs/v1/job.proto";
+import "nopacs/v1/profile.proto";
+
 // DeidService reaches what a tenant's de-identification keeps that is
 // keyed by an original value: the codes the tenant's naming key gives a
 // value (the keyed hash a naming rule's {#X} and a profile's hash action
@@ -20,8 +24,11 @@ package nopacs.v1;
 // pseudonym, so it is for an admin alone, one value at a time, at a
 // bounded rate, and every call is in the audit log, without the value: its
 // entry is written before the answer is sent, and a call whose entry
-// cannot be written is refused. No method of this service is served over
-// HTTP GET, so a value never travels in a URL.
+// cannot be written is refused. No method of this service that takes a
+// value is served over HTTP GET, so a value never travels in a URL.
+//
+// The service also holds the tenant's coverage report, the elements of
+// archived files that no rule of a profile named, which holds no value.
 //
 // A value given to this service is the caller's own data: each is marked
 // debug_redact, and no log line, audit entry, event or error carries one.
@@ -150,6 +157,335 @@ service DeidService {
   rpc ListLookupTables(ListLookupTablesRequest) returns (ListLookupTablesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // GetCoverage answers the tenant's coverage report: every public element
+  // and every private element (by its private creator and its element
+  // within the creator's block) that files archived by a receiver that
+  // de-identifies held, as received, and that no rule of the profile named,
+  // so the profile's default decided it (a private element removed, any
+  // other as the profile's unnamed says). For each, its VR as the file gave
+  // it, how many instances held it and how many times in all. It is what a
+  // profile never decided, the private elements a vendor writes among them,
+  // and a person reads it to name the ones that matter.
+  //
+  // The report holds no value of any file, and nothing a value could be
+  // read from but a private creator, which is a vendor's name written in
+  // the file. A creator that is not printable ASCII of at most 64 bytes, or
+  // that holds a value the profile removed from the file or a term of its
+  // text lists, is never given: its elements are counted under
+  // creator_withheld. For that reason a masked key may read the report.
+  //
+  // It is made by RefreshCoverage, from what each instance's metadata line
+  // records; the answer is the report of the latest job that ended, with
+  // when it ended and what it read, and the job that is making the next one
+  // when there is one. An instance archived before the line recorded this,
+  // or as received, is counted in the report's instances but not in
+  // instances_recorded, and contributes no element. Elements are in order
+  // of tag, then creator, then VR.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant
+  // that does not exist, for a caller who may not list every tenant),
+  // invalid (a page_size that is negative or past 1000, a page_token that
+  // is not one of this call), not found (a tenant that does not exist, for
+  // a caller who may list every tenant), unavailable (the tenant's database
+  // does not answer, or the tenant is not ready).
+  rpc GetCoverage(GetCoverageRequest) returns (GetCoverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // RefreshCoverage makes the job (kind deid_coverage) that builds the
+  // coverage report again: it reads each scan's metadata file once, line by
+  // line within the reader's bounds, and counts the elements each line
+  // records as unnamed, then replaces the stored report when it ends. It
+  // writes the tenant's database only; it reads storages, never writes one,
+  // and never reads an instance's file. A scan whose metadata cannot be
+  // read is counted skipped, and the job ends partial. A restart goes on
+  // after the last page of scans written, so no scan is counted twice.
+  // One runs at a time for a tenant, and none while a rebuild runs. As for
+  // every job, the operator role is enough.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log, with the job's id as its object.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant
+  // that does not exist, for a caller who may not list every tenant), not
+  // found (a tenant that does not exist, for a caller who may list every
+  // tenant), precondition (a coverage job not ended; a rebuild running),
+  // unavailable (the tenant's database does not answer, or the tenant is
+  // not ready).
+  rpc RefreshCoverage(RefreshCoverageRequest) returns (RefreshCoverageResponse);
+
+  // AddPixelTemplates stores pixel templates in the tenant: for a device
+  // (manufacturer and model, compared with case folded) and an image size
+  // (rows and columns, exactly) and, optionally, a SOP class, the rectangles
+  // of the image that burned-in text is drawn in. A pixel rule of a profile
+  // whose action is redact_by_template fills the rectangles of the template
+  // that fits the file's header as received, and holds an image at risk of
+  // burned-in text that no template fits (deid_failed, cause
+  // "no_pixel_template"). The table is empty until an admin fills it: the
+  // server ships none, since which rectangles hold text is for the site to
+  // know of its own devices.
+  //
+  // All or nothing: every template is stored in one transaction, or none.
+  // Refused, storing nothing: a template whose manufacturer or model is
+  // empty after its padding, is longer than 256 bytes or not UTF-8 without
+  // control characters; rows or columns not 1 to 65535; a SOP class that is
+  // not a UID; no rectangle or more than 64; a rectangle with a negative
+  // position, a side not 1 to 65535, or reaching past the image's size,
+  // measured from the edge it names; two templates of one device, size and
+  // SOP class in the request, or one the tenant already holds (precondition:
+  // remove it first), each named by its position from 1. A tenant holds at
+  // most 10000 templates, and a request carries 1 to 1000.
+  //
+  // A masked key (Key.masked) is refused, whatever its role: a template is
+  // part of what removes identity from images, and is changed only by a
+  // person who may see them.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the number of templates in
+  // its details, written with the templates; an entry of a request refused
+  // after its tenant was found is written before the answer.
+  // Errors: unauthenticated, permission denied (no grant, a masked key; also
+  // a tenant that does not exist, for a caller who may not list every
+  // tenant), invalid, not found (a tenant that does not exist, for a caller
+  // who may list every tenant), precondition (a template held already; the
+  // bound of 10000 passed), unavailable (the tenant's database does not
+  // answer, the tenant is not ready, or the audit entry cannot be written).
+  rpc AddPixelTemplates(AddPixelTemplatesRequest) returns (AddPixelTemplatesResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // RemovePixelTemplate removes the template of one device, size and SOP
+  // class. Images that matched it are held (cause "no_pixel_template") when
+  // they are at risk of burned-in text, from the next file on.
+  //
+  // A masked key is refused, as for AddPixelTemplates.
+  //
+  // Role: admin on the tenant.
+  // Audit: one entry in the tenant's log, with the template's key as its
+  // object.
+  // Errors: unauthenticated, permission denied (no grant, a masked key),
+  // invalid (a key that names no template: no manufacturer or model, rows or
+  // columns not 1 to 65535, a SOP class that is not a UID), not found (the
+  // tenant has no such template; also a tenant that does not exist, for a
+  // caller who may list every tenant), unavailable.
+  rpc RemovePixelTemplate(RemovePixelTemplateRequest) returns (RemovePixelTemplateResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListPixelTemplates answers a page of the tenant's pixel templates, in
+  // order of manufacturer, model, rows, columns and SOP class, each as it was
+  // written.
+  //
+  // Role: operator on the tenant.
+  // Audit: one entry in the tenant's log.
+  // Errors: unauthenticated, permission denied (no grant; also a tenant
+  // that does not exist, for a caller who may not list every tenant),
+  // invalid, not found (a tenant that does not exist, for a caller who may
+  // list every tenant), unavailable.
+  rpc ListPixelTemplates(ListPixelTemplatesRequest) returns (ListPixelTemplatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// PixelTemplate is the part of an image of one device and size to fill.
+message PixelTemplate {
+  // Manufacturer (0008,0070) of the device, as written; compared with case
+  // folded and the padding of a DICOM value removed. Required.
+  string manufacturer = 1;
+
+  // Manufacturer's Model Name (0008,1090), compared as the manufacturer is.
+  // Required.
+  string model = 2;
+
+  // The image's Rows (0028,0010), matched exactly: 1 to 65535.
+  int32 rows = 3;
+
+  // The image's Columns (0028,0011), matched exactly: 1 to 65535.
+  int32 columns = 4;
+
+  // The SOP Class UID the template is for, or empty for any class. A
+  // template of the file's class is used before one for any class.
+  string sop_class = 5;
+
+  // What is filled, in every frame: 1 to 64 rectangles, each inside the
+  // image's size.
+  repeated PixelRectangle rectangles = 6;
+}
+
+// AddPixelTemplatesRequest is the templates to store.
+message AddPixelTemplatesRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The templates: 1 to 1000.
+  repeated PixelTemplate templates = 2;
+}
+
+// AddPixelTemplatesResponse says what was stored.
+message AddPixelTemplatesResponse {
+  // How many templates were stored.
+  int32 added = 1;
+}
+
+// RemovePixelTemplateRequest names the template to remove by its match
+// keys.
+message RemovePixelTemplateRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The template's manufacturer, compared with case folded. Required.
+  string manufacturer = 2;
+
+  // The template's model, compared with case folded. Required.
+  string model = 3;
+
+  // The template's rows, 1 to 65535.
+  int32 rows = 4;
+
+  // The template's columns, 1 to 65535.
+  int32 columns = 5;
+
+  // The template's SOP class, or empty for the template of any class.
+  string sop_class = 6;
+}
+
+// RemovePixelTemplateResponse is empty: the template is gone.
+message RemovePixelTemplateResponse {}
+
+// ListPixelTemplatesRequest asks for a page of a tenant's pixel templates.
+message ListPixelTemplatesRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The most templates to answer: zero means 100; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 2;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+  // one it was made with.
+  string page_token = 3;
+}
+
+// ListPixelTemplatesResponse is a page of pixel templates.
+message ListPixelTemplatesResponse {
+  // The templates of this page.
+  repeated PixelTemplate templates = 1;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// GetCoverageRequest asks for a page of the coverage report.
+message GetCoverageRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+
+  // The most elements to answer: zero means 500; at most 1000. A larger or
+  // negative value is invalid.
+  int32 page_size = 2;
+
+  // The next_page_token of the previous page, or empty for the first page.
+  // Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+  // one it was made with.
+  string page_token = 3;
+}
+
+// GetCoverageResponse is a page of the coverage report.
+message GetCoverageResponse {
+  // What the report was made from. Absent when no job has ended yet.
+  CoverageReport report = 1;
+
+  // The job that is making the next report, while one is not ended. Absent
+  // otherwise.
+  Job refreshing = 2;
+
+  // The elements of this page, in order of tag, then creator, then VR.
+  repeated CoverageElement elements = 3;
+
+  // The page_token that asks for the next page. Empty on the last page.
+  string next_page_token = 4;
+}
+
+// CoverageReport says what a coverage report was made from.
+message CoverageReport {
+  // The id of the job that made it.
+  string job_id = 1;
+
+  // When the job ended.
+  google.protobuf.Timestamp end_time = 2;
+
+  // How many scans the job read.
+  int64 scans_read = 3;
+
+  // How many scans it could not read (their metadata was missing or not in
+  // its form), which make the report partial.
+  int64 scans_skipped = 4;
+
+  // How many instances' lines it read.
+  int64 instances = 5;
+
+  // How many of those lines recorded their unnamed elements.
+  int64 instances_recorded = 6;
+
+  // How many of those recorded only the first 1024 distinct ones (the rest
+  // are counted, not listed, in elements_not_listed).
+  int64 instances_capped = 7;
+
+  // How many occurrences of elements the job could not list: those past a
+  // line's 1024 distinct elements, and those of a distinct element past the
+  // 100,000 the report holds.
+  int64 elements_not_listed = 8;
+
+  // How many distinct elements the report lists, all pages together.
+  int64 distinct_elements = 9;
+}
+
+// CoverageElement is one element no rule named, in files of the tenant.
+message CoverageElement {
+  // The element's tag as "gggg,eeee" in upper case hexadecimal; for a
+  // private element its group and its element within its creator's block,
+  // as "gggg,xxee": the block number, which a file chooses (PS3.5 7.8.1),
+  // is written xx.
+  string tag = 1;
+
+  // Whether it is a private element (an odd group).
+  bool private = 2;
+
+  // The private creator of a private element's block, without padding;
+  // empty for a standard element, for a private element whose block has no
+  // creator, and when creator_withheld.
+  string private_creator = 3;
+
+  // Whether the creator is not given: it was not printable ASCII of at most
+  // 64 bytes, or held a value the profile removed from the file or a term of
+  // its text lists. The elements of every such creator are counted together
+  // for one tag and VR.
+  bool creator_withheld = 4;
+
+  // The VR as the file gave it ("UN" for a private element of a file in
+  // Implicit VR).
+  string vr = 5;
+
+  // How many instances held it.
+  int64 instances = 6;
+
+  // How many times they held it in all, at any depth of sequences.
+  int64 occurrences = 7;
+}
+
+// RefreshCoverageRequest asks for a new coverage report.
+message RefreshCoverageRequest {
+  // The tenant, by name. Required.
+  string tenant = 1;
+}
+
+// RefreshCoverageResponse is the job made.
+message RefreshCoverageResponse {
+  // The job, queued, of kind deid_coverage.
+  Job job = 1;
 }
 
 // CodeRequest is one value whose codes are asked for.

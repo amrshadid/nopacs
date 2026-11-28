@@ -22,9 +22,12 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
+from nopacs.v1 import job_pb2 as nopacs_dot_v1_dot_job__pb2
+from nopacs.v1 import profile_pb2 as nopacs_dot_v1_dot_profile__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14nopacs/v1/deid.proto\x12\tnopacs.v1\"\x83\x01\n\x0b\x43odeRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\x11\n\tattribute\x18\x02 \x01(\t\x12\x12\n\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01\x12*\n\x06issuer\x18\x04 \x01(\x0b\x32\x1a.nopacs.v1.PatientIDIssuer\x12\x11\n\tnamespace\x18\x05 \x01(\t\"\xb3\x02\n\x0fPatientIDIssuer\x12\x13\n\x06issuer\x18\x01 \x01(\tB\x03\x80\x01\x01\x12 \n\x13universal_entity_id\x18\x02 \x01(\tB\x03\x80\x01\x01\x12%\n\x18universal_entity_id_type\x18\x03 \x01(\tB\x03\x80\x01\x01\x12!\n\x14identifier_type_code\x18\x04 \x01(\tB\x03\x80\x01\x01\x12\x37\n\x12\x61ssigning_facility\x18\x05 \x01(\x0b\x32\x1b.nopacs.v1.IssuerDesignator\x12\x35\n\x16\x61ssigning_jurisdiction\x18\x06 \x01(\x0b\x32\x15.nopacs.v1.IssuerCode\x12/\n\x10\x61ssigning_agency\x18\x07 \x01(\x0b\x32\x15.nopacs.v1.IssuerCode\"\x83\x01\n\x10IssuerDesignator\x12&\n\x19local_namespace_entity_id\x18\x01 \x01(\tB\x03\x80\x01\x01\x12 \n\x13universal_entity_id\x18\x02 \x01(\tB\x03\x80\x01\x01\x12%\n\x18universal_entity_id_type\x18\x03 \x01(\tB\x03\x80\x01\x01\"\x87\x01\n\nIssuerCode\x12\x17\n\ncode_value\x18\x01 \x01(\tB\x03\x80\x01\x01\x12%\n\x18\x63oding_scheme_designator\x18\x02 \x01(\tB\x03\x80\x01\x01\x12\x1c\n\x0flong_code_value\x18\x03 \x01(\tB\x03\x80\x01\x01\x12\x1b\n\x0eurn_code_value\x18\x04 \x01(\tB\x03\x80\x01\x01\"\x8b\x01\n\x0c\x43odeResponse\x12\x11\n\tattribute\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12-\n\x08subjects\x18\x03 \x03(\x0b\x32\x1b.nopacs.v1.SubjectLabelCode\x12+\n\x07lookups\x18\x04 \x03(\x0b\x32\x1a.nopacs.v1.LookupTableCode\"I\n\x10SubjectLabelCode\x12\x10\n\x08receiver\x18\x01 \x01(\t\x12\x15\n\rsubject_label\x18\x02 \x01(\t\x12\x0c\n\x04held\x18\x03 \x01(\x08\".\n\x0fLookupTableCode\x12\r\n\x05table\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\"b\n\x18ImportLookupCodesRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\r\n\x05table\x18\x02 \x01(\t\x12\'\n\x07\x65ntries\x18\x03 \x03(\x0b\x32\x16.nopacs.v1.LookupEntry\"n\n\x0bLookupEntry\x12\x12\n\x05value\x18\x01 \x01(\tB\x03\x80\x01\x01\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12*\n\x06issuer\x18\x03 \x01(\x0b\x32\x1a.nopacs.v1.PatientIDIssuer\x12\x11\n\tnamespace\x18\x04 \x01(\t\"[\n\x19ImportLookupCodesResponse\x12\r\n\x05table\x18\x01 \x01(\t\x12\r\n\x05\x61\x64\x64\x65\x64\x18\x02 \x01(\x05\x12\x11\n\tunchanged\x18\x03 \x01(\x05\x12\r\n\x05\x63odes\x18\x04 \x01(\x03\"P\n\x17ListLookupTablesRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"[\n\x18ListLookupTablesResponse\x12&\n\x06tables\x18\x01 \x03(\x0b\x32\x16.nopacs.v1.LookupTable\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"*\n\x0bLookupTable\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05\x63odes\x18\x02 \x01(\x03\x32\x8d\x02\n\x0b\x44\x65idService\x12\x37\n\x04\x43ode\x12\x16.nopacs.v1.CodeRequest\x1a\x17.nopacs.v1.CodeResponse\x12\x63\n\x11ImportLookupCodes\x12#.nopacs.v1.ImportLookupCodesRequest\x1a$.nopacs.v1.ImportLookupCodesResponse\"\x03\x90\x02\x02\x12`\n\x10ListLookupTables\x12\".nopacs.v1.ListLookupTablesRequest\x1a#.nopacs.v1.ListLookupTablesResponse\"\x03\x90\x02\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14nopacs/v1/deid.proto\x12\tnopacs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13nopacs/v1/job.proto\x1a\x17nopacs/v1/profile.proto\"\x95\x01\n\rPixelTemplate\x12\x14\n\x0cmanufacturer\x18\x01 \x01(\t\x12\r\n\x05model\x18\x02 \x01(\t\x12\x0c\n\x04rows\x18\x03 \x01(\x05\x12\x0f\n\x07\x63olumns\x18\x04 \x01(\x05\x12\x11\n\tsop_class\x18\x05 \x01(\t\x12-\n\nrectangles\x18\x06 \x03(\x0b\x32\x19.nopacs.v1.PixelRectangle\"W\n\x18\x41\x64\x64PixelTemplatesRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12+\n\ttemplates\x18\x02 \x03(\x0b\x32\x18.nopacs.v1.PixelTemplate\"*\n\x19\x41\x64\x64PixelTemplatesResponse\x12\r\n\x05\x61\x64\x64\x65\x64\x18\x01 \x01(\x05\"\x83\x01\n\x1aRemovePixelTemplateRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\x14\n\x0cmanufacturer\x18\x02 \x01(\t\x12\r\n\x05model\x18\x03 \x01(\t\x12\x0c\n\x04rows\x18\x04 \x01(\x05\x12\x0f\n\x07\x63olumns\x18\x05 \x01(\x05\x12\x11\n\tsop_class\x18\x06 \x01(\t\"\x1d\n\x1bRemovePixelTemplateResponse\"R\n\x19ListPixelTemplatesRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"b\n\x1aListPixelTemplatesResponse\x12+\n\ttemplates\x18\x01 \x03(\x0b\x32\x18.nopacs.v1.PixelTemplate\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"K\n\x12GetCoverageRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"\xab\x01\n\x13GetCoverageResponse\x12)\n\x06report\x18\x01 \x01(\x0b\x32\x19.nopacs.v1.CoverageReport\x12\"\n\nrefreshing\x18\x02 \x01(\x0b\x32\x0e.nopacs.v1.Job\x12,\n\x08\x65lements\x18\x03 \x03(\x0b\x32\x1a.nopacs.v1.CoverageElement\x12\x17\n\x0fnext_page_token\x18\x04 \x01(\t\"\xfa\x01\n\x0e\x43overageReport\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12,\n\x08\x65nd_time\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x12\n\nscans_read\x18\x03 \x01(\x03\x12\x15\n\rscans_skipped\x18\x04 \x01(\x03\x12\x11\n\tinstances\x18\x05 \x01(\x03\x12\x1a\n\x12instances_recorded\x18\x06 \x01(\x03\x12\x18\n\x10instances_capped\x18\x07 \x01(\x03\x12\x1b\n\x13\x65lements_not_listed\x18\x08 \x01(\x03\x12\x19\n\x11\x64istinct_elements\x18\t \x01(\x03\"\x96\x01\n\x0f\x43overageElement\x12\x0b\n\x03tag\x18\x01 \x01(\t\x12\x0f\n\x07private\x18\x02 \x01(\x08\x12\x17\n\x0fprivate_creator\x18\x03 \x01(\t\x12\x18\n\x10\x63reator_withheld\x18\x04 \x01(\x08\x12\n\n\x02vr\x18\x05 \x01(\t\x12\x11\n\tinstances\x18\x06 \x01(\x03\x12\x13\n\x0boccurrences\x18\x07 \x01(\x03\"(\n\x16RefreshCoverageRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\"6\n\x17RefreshCoverageResponse\x12\x1b\n\x03job\x18\x01 \x01(\x0b\x32\x0e.nopacs.v1.Job\"\x83\x01\n\x0b\x43odeRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\x11\n\tattribute\x18\x02 \x01(\t\x12\x12\n\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01\x12*\n\x06issuer\x18\x04 \x01(\x0b\x32\x1a.nopacs.v1.PatientIDIssuer\x12\x11\n\tnamespace\x18\x05 \x01(\t\"\xb3\x02\n\x0fPatientIDIssuer\x12\x13\n\x06issuer\x18\x01 \x01(\tB\x03\x80\x01\x01\x12 \n\x13universal_entity_id\x18\x02 \x01(\tB\x03\x80\x01\x01\x12%\n\x18universal_entity_id_type\x18\x03 \x01(\tB\x03\x80\x01\x01\x12!\n\x14identifier_type_code\x18\x04 \x01(\tB\x03\x80\x01\x01\x12\x37\n\x12\x61ssigning_facility\x18\x05 \x01(\x0b\x32\x1b.nopacs.v1.IssuerDesignator\x12\x35\n\x16\x61ssigning_jurisdiction\x18\x06 \x01(\x0b\x32\x15.nopacs.v1.IssuerCode\x12/\n\x10\x61ssigning_agency\x18\x07 \x01(\x0b\x32\x15.nopacs.v1.IssuerCode\"\x83\x01\n\x10IssuerDesignator\x12&\n\x19local_namespace_entity_id\x18\x01 \x01(\tB\x03\x80\x01\x01\x12 \n\x13universal_entity_id\x18\x02 \x01(\tB\x03\x80\x01\x01\x12%\n\x18universal_entity_id_type\x18\x03 \x01(\tB\x03\x80\x01\x01\"\x87\x01\n\nIssuerCode\x12\x17\n\ncode_value\x18\x01 \x01(\tB\x03\x80\x01\x01\x12%\n\x18\x63oding_scheme_designator\x18\x02 \x01(\tB\x03\x80\x01\x01\x12\x1c\n\x0flong_code_value\x18\x03 \x01(\tB\x03\x80\x01\x01\x12\x1b\n\x0eurn_code_value\x18\x04 \x01(\tB\x03\x80\x01\x01\"\x8b\x01\n\x0c\x43odeResponse\x12\x11\n\tattribute\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12-\n\x08subjects\x18\x03 \x03(\x0b\x32\x1b.nopacs.v1.SubjectLabelCode\x12+\n\x07lookups\x18\x04 \x03(\x0b\x32\x1a.nopacs.v1.LookupTableCode\"I\n\x10SubjectLabelCode\x12\x10\n\x08receiver\x18\x01 \x01(\t\x12\x15\n\rsubject_label\x18\x02 \x01(\t\x12\x0c\n\x04held\x18\x03 \x01(\x08\".\n\x0fLookupTableCode\x12\r\n\x05table\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\"b\n\x18ImportLookupCodesRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\r\n\x05table\x18\x02 \x01(\t\x12\'\n\x07\x65ntries\x18\x03 \x03(\x0b\x32\x16.nopacs.v1.LookupEntry\"n\n\x0bLookupEntry\x12\x12\n\x05value\x18\x01 \x01(\tB\x03\x80\x01\x01\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12*\n\x06issuer\x18\x03 \x01(\x0b\x32\x1a.nopacs.v1.PatientIDIssuer\x12\x11\n\tnamespace\x18\x04 \x01(\t\"[\n\x19ImportLookupCodesResponse\x12\r\n\x05table\x18\x01 \x01(\t\x12\r\n\x05\x61\x64\x64\x65\x64\x18\x02 \x01(\x05\x12\x11\n\tunchanged\x18\x03 \x01(\x05\x12\r\n\x05\x63odes\x18\x04 \x01(\x03\"P\n\x17ListLookupTablesRequest\x12\x0e\n\x06tenant\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"[\n\x18ListLookupTablesResponse\x12&\n\x06tables\x18\x01 \x03(\x0b\x32\x16.nopacs.v1.LookupTable\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"*\n\x0bLookupTable\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05\x63odes\x18\x02 \x01(\x03\x32\xf2\x05\n\x0b\x44\x65idService\x12\x37\n\x04\x43ode\x12\x16.nopacs.v1.CodeRequest\x1a\x17.nopacs.v1.CodeResponse\x12\x63\n\x11ImportLookupCodes\x12#.nopacs.v1.ImportLookupCodesRequest\x1a$.nopacs.v1.ImportLookupCodesResponse\"\x03\x90\x02\x02\x12`\n\x10ListLookupTables\x12\".nopacs.v1.ListLookupTablesRequest\x1a#.nopacs.v1.ListLookupTablesResponse\"\x03\x90\x02\x01\x12Q\n\x0bGetCoverage\x12\x1d.nopacs.v1.GetCoverageRequest\x1a\x1e.nopacs.v1.GetCoverageResponse\"\x03\x90\x02\x01\x12X\n\x0fRefreshCoverage\x12!.nopacs.v1.RefreshCoverageRequest\x1a\".nopacs.v1.RefreshCoverageResponse\x12\x63\n\x11\x41\x64\x64PixelTemplates\x12#.nopacs.v1.AddPixelTemplatesRequest\x1a$.nopacs.v1.AddPixelTemplatesResponse\"\x03\x90\x02\x02\x12i\n\x13RemovePixelTemplate\x12%.nopacs.v1.RemovePixelTemplateRequest\x1a&.nopacs.v1.RemovePixelTemplateResponse\"\x03\x90\x02\x02\x12\x66\n\x12ListPixelTemplates\x12$.nopacs.v1.ListPixelTemplatesRequest\x1a%.nopacs.v1.ListPixelTemplatesResponse\"\x03\x90\x02\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -61,32 +64,66 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_DEIDSERVICE'].methods_by_name['ImportLookupCodes']._serialized_options = b'\220\002\002'
   _globals['_DEIDSERVICE'].methods_by_name['ListLookupTables']._loaded_options = None
   _globals['_DEIDSERVICE'].methods_by_name['ListLookupTables']._serialized_options = b'\220\002\001'
-  _globals['_CODEREQUEST']._serialized_start=36
-  _globals['_CODEREQUEST']._serialized_end=167
-  _globals['_PATIENTIDISSUER']._serialized_start=170
-  _globals['_PATIENTIDISSUER']._serialized_end=477
-  _globals['_ISSUERDESIGNATOR']._serialized_start=480
-  _globals['_ISSUERDESIGNATOR']._serialized_end=611
-  _globals['_ISSUERCODE']._serialized_start=614
-  _globals['_ISSUERCODE']._serialized_end=749
-  _globals['_CODERESPONSE']._serialized_start=752
-  _globals['_CODERESPONSE']._serialized_end=891
-  _globals['_SUBJECTLABELCODE']._serialized_start=893
-  _globals['_SUBJECTLABELCODE']._serialized_end=966
-  _globals['_LOOKUPTABLECODE']._serialized_start=968
-  _globals['_LOOKUPTABLECODE']._serialized_end=1014
-  _globals['_IMPORTLOOKUPCODESREQUEST']._serialized_start=1016
-  _globals['_IMPORTLOOKUPCODESREQUEST']._serialized_end=1114
-  _globals['_LOOKUPENTRY']._serialized_start=1116
-  _globals['_LOOKUPENTRY']._serialized_end=1226
-  _globals['_IMPORTLOOKUPCODESRESPONSE']._serialized_start=1228
-  _globals['_IMPORTLOOKUPCODESRESPONSE']._serialized_end=1319
-  _globals['_LISTLOOKUPTABLESREQUEST']._serialized_start=1321
-  _globals['_LISTLOOKUPTABLESREQUEST']._serialized_end=1401
-  _globals['_LISTLOOKUPTABLESRESPONSE']._serialized_start=1403
-  _globals['_LISTLOOKUPTABLESRESPONSE']._serialized_end=1494
-  _globals['_LOOKUPTABLE']._serialized_start=1496
-  _globals['_LOOKUPTABLE']._serialized_end=1538
-  _globals['_DEIDSERVICE']._serialized_start=1541
-  _globals['_DEIDSERVICE']._serialized_end=1810
+  _globals['_DEIDSERVICE'].methods_by_name['GetCoverage']._loaded_options = None
+  _globals['_DEIDSERVICE'].methods_by_name['GetCoverage']._serialized_options = b'\220\002\001'
+  _globals['_DEIDSERVICE'].methods_by_name['AddPixelTemplates']._loaded_options = None
+  _globals['_DEIDSERVICE'].methods_by_name['AddPixelTemplates']._serialized_options = b'\220\002\002'
+  _globals['_DEIDSERVICE'].methods_by_name['RemovePixelTemplate']._loaded_options = None
+  _globals['_DEIDSERVICE'].methods_by_name['RemovePixelTemplate']._serialized_options = b'\220\002\002'
+  _globals['_DEIDSERVICE'].methods_by_name['ListPixelTemplates']._loaded_options = None
+  _globals['_DEIDSERVICE'].methods_by_name['ListPixelTemplates']._serialized_options = b'\220\002\001'
+  _globals['_PIXELTEMPLATE']._serialized_start=115
+  _globals['_PIXELTEMPLATE']._serialized_end=264
+  _globals['_ADDPIXELTEMPLATESREQUEST']._serialized_start=266
+  _globals['_ADDPIXELTEMPLATESREQUEST']._serialized_end=353
+  _globals['_ADDPIXELTEMPLATESRESPONSE']._serialized_start=355
+  _globals['_ADDPIXELTEMPLATESRESPONSE']._serialized_end=397
+  _globals['_REMOVEPIXELTEMPLATEREQUEST']._serialized_start=400
+  _globals['_REMOVEPIXELTEMPLATEREQUEST']._serialized_end=531
+  _globals['_REMOVEPIXELTEMPLATERESPONSE']._serialized_start=533
+  _globals['_REMOVEPIXELTEMPLATERESPONSE']._serialized_end=562
+  _globals['_LISTPIXELTEMPLATESREQUEST']._serialized_start=564
+  _globals['_LISTPIXELTEMPLATESREQUEST']._serialized_end=646
+  _globals['_LISTPIXELTEMPLATESRESPONSE']._serialized_start=648
+  _globals['_LISTPIXELTEMPLATESRESPONSE']._serialized_end=746
+  _globals['_GETCOVERAGEREQUEST']._serialized_start=748
+  _globals['_GETCOVERAGEREQUEST']._serialized_end=823
+  _globals['_GETCOVERAGERESPONSE']._serialized_start=826
+  _globals['_GETCOVERAGERESPONSE']._serialized_end=997
+  _globals['_COVERAGEREPORT']._serialized_start=1000
+  _globals['_COVERAGEREPORT']._serialized_end=1250
+  _globals['_COVERAGEELEMENT']._serialized_start=1253
+  _globals['_COVERAGEELEMENT']._serialized_end=1403
+  _globals['_REFRESHCOVERAGEREQUEST']._serialized_start=1405
+  _globals['_REFRESHCOVERAGEREQUEST']._serialized_end=1445
+  _globals['_REFRESHCOVERAGERESPONSE']._serialized_start=1447
+  _globals['_REFRESHCOVERAGERESPONSE']._serialized_end=1501
+  _globals['_CODEREQUEST']._serialized_start=1504
+  _globals['_CODEREQUEST']._serialized_end=1635
+  _globals['_PATIENTIDISSUER']._serialized_start=1638
+  _globals['_PATIENTIDISSUER']._serialized_end=1945
+  _globals['_ISSUERDESIGNATOR']._serialized_start=1948
+  _globals['_ISSUERDESIGNATOR']._serialized_end=2079
+  _globals['_ISSUERCODE']._serialized_start=2082
+  _globals['_ISSUERCODE']._serialized_end=2217
+  _globals['_CODERESPONSE']._serialized_start=2220
+  _globals['_CODERESPONSE']._serialized_end=2359
+  _globals['_SUBJECTLABELCODE']._serialized_start=2361
+  _globals['_SUBJECTLABELCODE']._serialized_end=2434
+  _globals['_LOOKUPTABLECODE']._serialized_start=2436
+  _globals['_LOOKUPTABLECODE']._serialized_end=2482
+  _globals['_IMPORTLOOKUPCODESREQUEST']._serialized_start=2484
+  _globals['_IMPORTLOOKUPCODESREQUEST']._serialized_end=2582
+  _globals['_LOOKUPENTRY']._serialized_start=2584
+  _globals['_LOOKUPENTRY']._serialized_end=2694
+  _globals['_IMPORTLOOKUPCODESRESPONSE']._serialized_start=2696
+  _globals['_IMPORTLOOKUPCODESRESPONSE']._serialized_end=2787
+  _globals['_LISTLOOKUPTABLESREQUEST']._serialized_start=2789
+  _globals['_LISTLOOKUPTABLESREQUEST']._serialized_end=2869
+  _globals['_LISTLOOKUPTABLESRESPONSE']._serialized_start=2871
+  _globals['_LISTLOOKUPTABLESRESPONSE']._serialized_end=2962
+  _globals['_LOOKUPTABLE']._serialized_start=2964
+  _globals['_LOOKUPTABLE']._serialized_end=3006
+  _globals['_DEIDSERVICE']._serialized_start=3009
+  _globals['_DEIDSERVICE']._serialized_end=3763
 # @@protoc_insertion_point(module_scope)

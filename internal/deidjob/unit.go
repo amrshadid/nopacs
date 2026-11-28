@@ -104,6 +104,29 @@ func (t *tenantRun) work(p tenant.Pipeline, st tenant.Store, w tenant.Work) {
 		unusable: map[tenant.ProfileRef]bool{}, headerLimit: headerLimit, pixelLimit: min(pixelLimit, MaxPixelBytes),
 		tried: sup.cfg.seams.tried, subject: start.Scan.Path.Subject,
 		memory: sup.cfg.Memory}
+	if start.Job.Mode.Rerun() {
+		j.expanded = expandedOf{}
+		j.sums = map[tenant.ProfileRef]string{}
+		j.rr = &rerunState{jobID: start.Job.ID, keyID: start.Job.CreatedByKeyID, scan: start.Scan.Path,
+			loosening: map[[2]tenant.ProfileRef]string{}}
+		if start.Job.Mode == tenant.DeidRerun {
+			if sup.cfg.Revisions == nil {
+				u.log.Warn("deid jobs: this server publishes no re-runs; the unit is given back")
+				now := sup.cfg.Now()
+				u.write("ReleaseJobUnit", p.ReleaseJobUnit(context.WithoutCancel(ctx), u.fence, now.Add(SlotDelay), reasonInternal, now))
+				return
+			}
+			reviser, release, err := sup.cfg.Revisions(ctx, t.name, st)
+			if err != nil {
+				u.log.Warn("deid jobs: the corrections of the tenant are not ready; the unit is tried again later", "reason", fault.Message(err))
+				_, ferr := p.FailWork(context.WithoutCancel(ctx), u.fence, reasonDatabase, sup.cfg.Now())
+				u.write("FailWork", ferr)
+				return
+			}
+			defer release()
+			j.rr.reviser = reviser
+		}
+	}
 	makeKeys := throwawayKeys
 	if sup.cfg.seams.keys != nil {
 		makeKeys = sup.cfg.seams.keys

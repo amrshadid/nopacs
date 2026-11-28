@@ -1249,6 +1249,20 @@ message PixelRule {
 
     // The image is archived as it is. The rule's reason is required.
     AcceptPixels accept = 7;
+
+    // The rectangles the tenant's pixel template for the image's device
+    // and size names are filled, as redact fills: the template is found by
+    // the image's Manufacturer (0008,0070) and Manufacturer's Model Name
+    // (0008,1090) as received, compared with case folded, its Rows and
+    // Columns exactly, and its SOP Class UID (a template for any class
+    // matches when none is for the class). The templates are the tenant's,
+    // kept by AddPixelTemplates. An image that matches the rule and has no
+    // template is held (deid_failed, cause "no_pixel_template") when its
+    // pixels may carry burned-in text (the risk this message describes),
+    // never archived unfilled; an image not at risk with no template is
+    // left as it is. The record and the failures of a redact rule apply to
+    // what is filled. A profile that uses it is of language edition 4.
+    RedactByTemplate redact_by_template = 9;
   }
 
   // Why the rule exists. At most 1024 bytes; required with accept.
@@ -1286,6 +1300,11 @@ message PixelRectangle {
   bool from_bottom = 6;
 }
 
+// RedactByTemplate fills the rectangles of the tenant's template for the
+// image's device and size. It has no fields: the rectangles are the
+// tenant's, not the profile's.
+message RedactByTemplate {}
+
 // DetectText fills text found by detection. It has no fields.
 message DetectText {}
 
@@ -1321,7 +1340,8 @@ message ExpandedProfile {
   // describes them. A server runs only a version of an edition it knows,
   // and keeps the meaning of every edition it has shipped, so a stored
   // version never changes what it does when the language grows. Edition 2
-  // adds value patterns and redact, edition 3 text lists; a version is of
+  // adds value patterns and redact, edition 3 text lists, edition 4 the
+  // pixel action redact_by_template; a version is of
   // the oldest edition that has everything it uses.
   int32 language_edition = 6;
 
@@ -1334,6 +1354,27 @@ message ExpandedProfile {
   // The document's text lists, as written: part of the checksum, so a
   // version's terms never change. Bases have none.
   repeated TextList text_lists = 8;
+
+  // Set only on a profile that stacks layers (a tenant's base, a receiver's
+  // profile, a route's, a destination's), never on a stored version: the
+  // layers in order from the lowest, each with how many of the rules and
+  // pixel rules above are its own. Each layer decides an element apart, and
+  // the strictest decision wins; an image is decided by the lowest layer
+  // with a pixel rule that matches it.
+  repeated ExpandedLayer layers = 9;
+}
+
+// ExpandedLayer is one layer of a stacked ExpandedProfile.
+message ExpandedLayer {
+  // How many of the profile's rules are this layer's: the rules of the layers
+  // in order are the profile's rules.
+  int32 rules = 1;
+
+  // How many of the profile's pixel rules are this layer's, likewise.
+  int32 pixel_rules = 2;
+
+  // What the layer does with an element none of its rules names.
+  UnnamedElements unnamed = 3;
 }
 
 // ExpandedRule is a rule of an expanded profile, where it came from, and
@@ -2289,8 +2330,16 @@ message DescribeProfileRequest {
   // The tenant, by name. Required.
   string tenant = 1;
 
-  // The profile: a stored version or an unsaved document. Required.
+  // The profile: a stored version or an unsaved document. Required, unless
+  // effective_receiver is given, in which case it must be absent.
   TrialProfile profile = 2;
+
+  // A receiver of the tenant, by name, whose effective profile is described
+  // instead of a profile of the request: the profile the receiver
+  // de-identifies with, stacked over the tenant's base profile
+  // (deid.base-profile, when it has one). The answer then holds effective
+  // and no class, note, method or list. Absent or empty describes profile.
+  string effective_receiver = 3;
 }
 
 // DescribeProfileResponse is what a profile does, in plain terms, and the
@@ -2316,6 +2365,51 @@ message DescribeProfileResponse {
   // Each text list of the profile, in its order: name, version, count of
   // terms and checksum, never a term.
   repeated TextListSummary text_lists = 6;
+
+  // For a request with effective_receiver: what decides each class of
+  // elements once the layers are stacked, in the order each first appears
+  // (the base's rules, then the receiver's), and the layer each decision
+  // came from. For a selector both layers name, the receiver's rule is the
+  // one listed: a layer is accepted only when it is at least as strict as
+  // the layer below it, so it is the strictest. Empty for any other
+  // request.
+  repeated EffectiveElement effective = 7;
+}
+
+// EffectiveElement is what decides one selector of the effective profile of
+// a receiver, and the layer it came from. It holds no value of a file.
+message EffectiveElement {
+  // What the rule selects, in plain words: an element's keyword (its tag
+  // where it has none), or a wider selector ("every DA element", "group
+  // 0010", "private 'SIEMENS CSA HEADER' 0010").
+  string what = 1;
+
+  // The class of what it selects.
+  ProfileElementClass class = 2;
+
+  // The action, as ProfileAction's field names it ("remove", "keep",
+  // "hash", ...).
+  string action = 3;
+
+  // Whether the rule holds only under conditions, so the action is not
+  // given in every file.
+  bool conditional = 4;
+
+  // The layer the rule is in: "tenant" (the base) or "receiver".
+  string layer = 5;
+
+  // The profile version of that layer, "name@version".
+  string layer_profile = 6;
+
+  // The rule's position in its layer's expanded rules, from 1.
+  int32 rule = 7;
+
+  // The rule's name, empty when it has none.
+  string rule_name = 8;
+
+  // The base the rule was copied from into its layer's profile ("own" is
+  // empty).
+  string origin = 9;
 }
 
 // ProfileElementClass is a class of element a description groups the

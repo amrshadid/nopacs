@@ -31,6 +31,8 @@ func runDeidentification(t *testing.T, open OpenPipeline) {
 		{"ProfileGuarded", testProfileGuarded},
 		{"ProfileAtOnce", testProfileAtOnce},
 		{"InstanceProfile", testInstanceProfile},
+		{"ProfileTrials", testProfileTrials},
+		{"PixelTemplates", testPixelTemplates},
 		{"LookupCodes", testLookupCodes},
 		{"LookupRefusals", testLookupRefusals},
 		{"LookupAtOnce", testLookupAtOnce},

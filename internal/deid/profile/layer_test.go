@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	v1 "github.com/amrshadid/nopacs/gen/nopacs/v1"
 	"github.com/amrshadid/nopacs/internal/deid/profile"
 )
@@ -236,5 +238,66 @@ func TestEffectiveDescribe(t *testing.T) {
 		if g.What != w.What || g.Action != w.Action || g.Layer != w.Layer || g.LayerName != w.LayerName || g.Rule != w.Rule || g.RuleName != w.RuleName || g.Conditional != w.Conditional {
 			t.Errorf("row %d: %+v, want %+v", i, g, w)
 		}
+	}
+}
+
+// TestLayerOverriddenRuleIsNotJudged guards that a layer is judged by the
+// rule that decides an element, not by one of its own that a later rule of
+// the same selector replaces: a layer that begins with a base's weaker action
+// for an element and then states the stricter one the layer below requires is
+// accepted, since the later wins; the same layer with the weaker action last,
+// or with no stricter one, is refused.
+func TestLayerOverriddenRuleIsNotJudged(t *testing.T) {
+	base := layer(t, profile.LayerTenant, "base@1", rules(rl("station", kw("StationName"), remove())))
+	for name, c := range map[string]struct {
+		doc  *v1.ProfileDocument
+		want bool
+	}{
+		"weaker first, stricter after": {rules(rl("weak", kw("StationName"), empty()), rl("strict", kw("StationName"), remove())), true},
+		"stricter first, weaker after": {rules(rl("strict", kw("StationName"), remove()), rl("weak", kw("StationName"), empty())), false},
+		"the weaker alone":             {rules(rl("weak", kw("StationName"), empty())), false},
+	} {
+		_, problems := profile.Stack(base, layer(t, profile.LayerReceiver, "ct@1", c.doc))
+		if (problems == nil) != c.want {
+			t.Errorf("%s: accepted %v, want %v (%v)", name, problems == nil, c.want, problems)
+		}
+	}
+}
+
+// TestReceptionStacksOverTheBase guards the profile a receiver runs with a
+// base: what only the base decides is in it, the stricter of what both
+// decide wins, the pixel rules of the base come before the receiver's, a
+// receiver that loosens the base gets none, and neither input is changed.
+func TestReceptionStacksOverTheBase(t *testing.T) {
+	baseDoc := rules(rl("station", kw("StationName"), remove()), rl("desc", kw("StudyDescription"), clean()))
+	recvDoc := rules(rl("desc-gone", kw("StudyDescription"), remove()))
+	base, recv := mustExpand(t, baseDoc, testCatalog(t)), mustExpand(t, recvDoc, testCatalog(t))
+	base.PixelRules = []*v1.ExpandedPixelRule{{}}
+	recv.PixelRules = []*v1.ExpandedPixelRule{{}, {}}
+	got, problems := profile.Reception("floor@1", base, "ct@1", recv)
+	if problems != nil {
+		t.Fatal(problems)
+	}
+	noPixels := proto.Clone(got).(*v1.ExpandedProfile)
+	noPixels.PixelRules = nil
+	for _, l := range noPixels.Layers {
+		l.PixelRules = 0
+	}
+	prog, err := profile.Compile(noPixels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := prog.Decide(profile.Location{Tag: 0x00081010, VR: "SH"}, facts{}); d.Action.GetRemove() == nil {
+		t.Errorf("Station Name, which only the base names, is decided by %v", d.Action)
+	}
+	if d := prog.Decide(profile.Location{Tag: 0x00081030, VR: "LO"}, facts{}); d.Action.GetRemove() == nil {
+		t.Errorf("Study Description is decided by %v, want the receiver's remove", d.Action)
+	}
+	if len(got.GetPixelRules()) != 3 || len(base.GetPixelRules()) != 1 || len(recv.GetPixelRules()) != 2 {
+		t.Errorf("%d pixel rules, and the inputs hold %d and %d", len(got.GetPixelRules()), len(base.GetPixelRules()), len(recv.GetPixelRules()))
+	}
+	loose := mustExpand(t, rules(rl("desc-kept", kw("StudyDescription"), keep())), testCatalog(t))
+	if got, problems := profile.Reception("floor@1", base, "mr@1", loose); got != nil || len(problems) == 0 {
+		t.Errorf("a receiver that keeps what the base cleans got a profile: %v", problems)
 	}
 }

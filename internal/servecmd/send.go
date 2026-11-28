@@ -108,7 +108,8 @@ func destinationCopies(values settingvalue.Reader, reg *registry.Registry) func(
 // server's one count, and those a replica served in counts; storages are
 // opened as the senders open them; a
 // check reads the tenant's UID key from the registry, as a reception does.
-func newDeidJobs(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots, counts *checkedread.Counts, memory check.Memory) (*deidjob.Supervisor, error) {
+func newDeidJobs(d Deps, reg *registry.Registry, wake func(tenantName string), reads *checkedread.Slots, counts *checkedread.Counts, memory check.Memory,
+	revisions func(ctx context.Context, name string, st tenant.Store) (deidjob.Reviser, func(), error)) (*deidjob.Supervisor, error) {
 	values := settingvalue.Reader{Master: d.Master}
 	opener := place.Opener{Values: values, Keys: d.Keys, StaleUploadAge: -1}
 	tenantID := func(ctx context.Context, name string) (string, error) {
@@ -122,12 +123,13 @@ func newDeidJobs(d Deps, reg *registry.Registry, wake func(tenantName string), r
 		OpenStorages: func(name string, p tenant.Pipeline) deidjob.Storages {
 			return checkedread.NewStores(opener, tenantID, p, name).WithCounts(counts)
 		},
-		UIDKey: reg.UIDKey,
-		Reads:  reads,
-		Now:    clock.Now,
-		Memory: memory,
-		Wake:   wake,
-		Logger: d.Log,
+		UIDKey:    reg.UIDKey,
+		Revisions: revisions,
+		Reads:     reads,
+		Now:       clock.Now,
+		Memory:    memory,
+		Wake:      wake,
+		Logger:    d.Log,
 	})
 }
 
@@ -146,6 +148,7 @@ type senderHealths struct {
 var (
 	_ api.SenderHealths = senderHealths{}
 	_ api.SenderChanges = senderHealths{}
+	_ api.ChangeTrials  = senderHealths{}
 	_ api.SenderTester  = senderTests{}
 )
 
@@ -168,6 +171,15 @@ func (h senderHealths) SendersChanged(tenantName string) {
 	if h.rebuilds != nil {
 		h.rebuilds.Poke(tenantName)
 	}
+}
+
+// TryChange runs a profile version over what a receiver last received, on the
+// supervisor of deid jobs (deidjob.Supervisor.TryChange).
+func (h senderHealths) TryChange(ctx context.Context, tenantName string, t deidjob.ChangeTrial) (deidjob.ChangeTrialResult, error) {
+	if h.deid == nil {
+		return deidjob.ChangeTrialResult{}, fault.New(fault.Unavailable, "the server's deid jobs are not ready")
+	}
+	return h.deid.TryChange(ctx, tenantName, t)
 }
 
 // SenderHealth returns the supervisor's health of the sender. One the

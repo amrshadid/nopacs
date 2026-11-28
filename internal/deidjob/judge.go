@@ -94,6 +94,15 @@ type judge struct {
 	subject string
 	// memory is Config.Memory.
 	memory check.Memory
+	// expanded are the expanded profiles of the versions compiled, which a
+	// re-run's layer rule compares; rr is a re-run's own state, nil for any
+	// other mode.
+	expanded expandedOf
+	rr       *rerunState
+	// sums are the checksums of the versions compiled, and base the tenant's
+	// base profile read for the unit: what a re-run's new lines record.
+	sums map[tenant.ProfileRef]string
+	base tenant.ProfileRef
 }
 
 // throwawayKeys makes three random keys of the unit's own, never a
@@ -168,8 +177,39 @@ func (j *judge) engineFor(ctx context.Context, ref tenant.ProfileRef) (*engine.E
 		// text against its checksum, as a reception loads it.
 		if version, lerr := profile.Load(v.Name, v.Version, v.Source, v.Expanded, v.Checksum); lerr == nil {
 			expanded := version.Expanded()
-			en, _ = engine.New(expanded, j.keys, engine.Options{Lookups: lookups, Method: ref.String()})
-			j.rules[ref] = expanded.GetRules()
+			// The layer rule of a re-run compares the versions themselves: a
+			// newer version at least as strict as the older, each already
+			// stacked over the base by the checks above and at job creation.
+			if j.expanded != nil {
+				j.expanded[ref] = expanded
+			}
+			// A file is judged by what a reception runs: the version
+			// stacked over the tenant's base, so a file never cleaned to
+			// the base is found. A base that cannot be stacked leaves the
+			// version unusable.
+			base, berr := receive.BaseOf(ctx, j.p)
+			if berr != nil {
+				return nil, berr
+			}
+			j.base = base
+			if j.sums != nil {
+				j.sums[ref] = v.Checksum
+			}
+			if !base.IsZero() {
+				stacked, usable, serr := receive.StackedProfile(ctx, store, base, ref, expanded)
+				if serr != nil {
+					return nil, serr
+				}
+				if !usable {
+					expanded = nil
+				} else {
+					expanded = stacked
+				}
+			}
+			if expanded != nil {
+				en, _ = engine.New(expanded, j.keys, engine.Options{Lookups: lookups, Method: ref.String()})
+				j.rules[ref] = expanded.GetRules()
+			}
 		}
 	}
 	if en == nil {
@@ -199,9 +239,12 @@ func (j *judge) judgeFile(ctx context.Context, in tenant.ScanInstance, file []by
 		return verdict{}, err
 	}
 	facts.rec.Subject = j.subject
-	if j.mode == tenant.DeidCheck {
+	switch {
+	case j.mode == tenant.DeidCheck:
 		err = j.check(ctx, in, file, h, herr, facts, &v)
-	} else {
+	case j.mode.Rerun():
+		err = j.rerun(ctx, in, file, facts, &v)
+	default:
 		err = j.dryRun(ctx, in, file, facts, &v)
 	}
 	if err != nil {

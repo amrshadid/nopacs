@@ -13,6 +13,7 @@ package nopacsv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -24,6 +25,917 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// PixelTemplate is the part of an image of one device and size to fill.
+type PixelTemplate struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Manufacturer (0008,0070) of the device, as written; compared with case
+	// folded and the padding of a DICOM value removed. Required.
+	Manufacturer string `protobuf:"bytes,1,opt,name=manufacturer,proto3" json:"manufacturer,omitempty"`
+	// Manufacturer's Model Name (0008,1090), compared as the manufacturer is.
+	// Required.
+	Model string `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	// The image's Rows (0028,0010), matched exactly: 1 to 65535.
+	Rows int32 `protobuf:"varint,3,opt,name=rows,proto3" json:"rows,omitempty"`
+	// The image's Columns (0028,0011), matched exactly: 1 to 65535.
+	Columns int32 `protobuf:"varint,4,opt,name=columns,proto3" json:"columns,omitempty"`
+	// The SOP Class UID the template is for, or empty for any class. A
+	// template of the file's class is used before one for any class.
+	SopClass string `protobuf:"bytes,5,opt,name=sop_class,json=sopClass,proto3" json:"sop_class,omitempty"`
+	// What is filled, in every frame: 1 to 64 rectangles, each inside the
+	// image's size.
+	Rectangles    []*PixelRectangle `protobuf:"bytes,6,rep,name=rectangles,proto3" json:"rectangles,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PixelTemplate) Reset() {
+	*x = PixelTemplate{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PixelTemplate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PixelTemplate) ProtoMessage() {}
+
+func (x *PixelTemplate) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PixelTemplate.ProtoReflect.Descriptor instead.
+func (*PixelTemplate) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *PixelTemplate) GetManufacturer() string {
+	if x != nil {
+		return x.Manufacturer
+	}
+	return ""
+}
+
+func (x *PixelTemplate) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *PixelTemplate) GetRows() int32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+func (x *PixelTemplate) GetColumns() int32 {
+	if x != nil {
+		return x.Columns
+	}
+	return 0
+}
+
+func (x *PixelTemplate) GetSopClass() string {
+	if x != nil {
+		return x.SopClass
+	}
+	return ""
+}
+
+func (x *PixelTemplate) GetRectangles() []*PixelRectangle {
+	if x != nil {
+		return x.Rectangles
+	}
+	return nil
+}
+
+// AddPixelTemplatesRequest is the templates to store.
+type AddPixelTemplatesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tenant, by name. Required.
+	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// The templates: 1 to 1000.
+	Templates     []*PixelTemplate `protobuf:"bytes,2,rep,name=templates,proto3" json:"templates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddPixelTemplatesRequest) Reset() {
+	*x = AddPixelTemplatesRequest{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddPixelTemplatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddPixelTemplatesRequest) ProtoMessage() {}
+
+func (x *AddPixelTemplatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddPixelTemplatesRequest.ProtoReflect.Descriptor instead.
+func (*AddPixelTemplatesRequest) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AddPixelTemplatesRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+func (x *AddPixelTemplatesRequest) GetTemplates() []*PixelTemplate {
+	if x != nil {
+		return x.Templates
+	}
+	return nil
+}
+
+// AddPixelTemplatesResponse says what was stored.
+type AddPixelTemplatesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How many templates were stored.
+	Added         int32 `protobuf:"varint,1,opt,name=added,proto3" json:"added,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddPixelTemplatesResponse) Reset() {
+	*x = AddPixelTemplatesResponse{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddPixelTemplatesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddPixelTemplatesResponse) ProtoMessage() {}
+
+func (x *AddPixelTemplatesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddPixelTemplatesResponse.ProtoReflect.Descriptor instead.
+func (*AddPixelTemplatesResponse) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AddPixelTemplatesResponse) GetAdded() int32 {
+	if x != nil {
+		return x.Added
+	}
+	return 0
+}
+
+// RemovePixelTemplateRequest names the template to remove by its match
+// keys.
+type RemovePixelTemplateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tenant, by name. Required.
+	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// The template's manufacturer, compared with case folded. Required.
+	Manufacturer string `protobuf:"bytes,2,opt,name=manufacturer,proto3" json:"manufacturer,omitempty"`
+	// The template's model, compared with case folded. Required.
+	Model string `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	// The template's rows, 1 to 65535.
+	Rows int32 `protobuf:"varint,4,opt,name=rows,proto3" json:"rows,omitempty"`
+	// The template's columns, 1 to 65535.
+	Columns int32 `protobuf:"varint,5,opt,name=columns,proto3" json:"columns,omitempty"`
+	// The template's SOP class, or empty for the template of any class.
+	SopClass      string `protobuf:"bytes,6,opt,name=sop_class,json=sopClass,proto3" json:"sop_class,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovePixelTemplateRequest) Reset() {
+	*x = RemovePixelTemplateRequest{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovePixelTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovePixelTemplateRequest) ProtoMessage() {}
+
+func (x *RemovePixelTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovePixelTemplateRequest.ProtoReflect.Descriptor instead.
+func (*RemovePixelTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RemovePixelTemplateRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+func (x *RemovePixelTemplateRequest) GetManufacturer() string {
+	if x != nil {
+		return x.Manufacturer
+	}
+	return ""
+}
+
+func (x *RemovePixelTemplateRequest) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *RemovePixelTemplateRequest) GetRows() int32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+func (x *RemovePixelTemplateRequest) GetColumns() int32 {
+	if x != nil {
+		return x.Columns
+	}
+	return 0
+}
+
+func (x *RemovePixelTemplateRequest) GetSopClass() string {
+	if x != nil {
+		return x.SopClass
+	}
+	return ""
+}
+
+// RemovePixelTemplateResponse is empty: the template is gone.
+type RemovePixelTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovePixelTemplateResponse) Reset() {
+	*x = RemovePixelTemplateResponse{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovePixelTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovePixelTemplateResponse) ProtoMessage() {}
+
+func (x *RemovePixelTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovePixelTemplateResponse.ProtoReflect.Descriptor instead.
+func (*RemovePixelTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{4}
+}
+
+// ListPixelTemplatesRequest asks for a page of a tenant's pixel templates.
+type ListPixelTemplatesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tenant, by name. Required.
+	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// The most templates to answer: zero means 100; at most 1000. A larger or
+	// negative value is invalid.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// The next_page_token of the previous page, or empty for the first page.
+	// Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+	// one it was made with.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPixelTemplatesRequest) Reset() {
+	*x = ListPixelTemplatesRequest{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPixelTemplatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPixelTemplatesRequest) ProtoMessage() {}
+
+func (x *ListPixelTemplatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPixelTemplatesRequest.ProtoReflect.Descriptor instead.
+func (*ListPixelTemplatesRequest) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListPixelTemplatesRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+func (x *ListPixelTemplatesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListPixelTemplatesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ListPixelTemplatesResponse is a page of pixel templates.
+type ListPixelTemplatesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The templates of this page.
+	Templates []*PixelTemplate `protobuf:"bytes,1,rep,name=templates,proto3" json:"templates,omitempty"`
+	// The page_token that asks for the next page. Empty on the last page.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPixelTemplatesResponse) Reset() {
+	*x = ListPixelTemplatesResponse{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPixelTemplatesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPixelTemplatesResponse) ProtoMessage() {}
+
+func (x *ListPixelTemplatesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPixelTemplatesResponse.ProtoReflect.Descriptor instead.
+func (*ListPixelTemplatesResponse) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListPixelTemplatesResponse) GetTemplates() []*PixelTemplate {
+	if x != nil {
+		return x.Templates
+	}
+	return nil
+}
+
+func (x *ListPixelTemplatesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// GetCoverageRequest asks for a page of the coverage report.
+type GetCoverageRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tenant, by name. Required.
+	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// The most elements to answer: zero means 500; at most 1000. A larger or
+	// negative value is invalid.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// The next_page_token of the previous page, or empty for the first page.
+	// Opaque; at most 1 KiB; refused as invalid with a tenant other than the
+	// one it was made with.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCoverageRequest) Reset() {
+	*x = GetCoverageRequest{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCoverageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCoverageRequest) ProtoMessage() {}
+
+func (x *GetCoverageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCoverageRequest.ProtoReflect.Descriptor instead.
+func (*GetCoverageRequest) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetCoverageRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+func (x *GetCoverageRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *GetCoverageRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// GetCoverageResponse is a page of the coverage report.
+type GetCoverageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the report was made from. Absent when no job has ended yet.
+	Report *CoverageReport `protobuf:"bytes,1,opt,name=report,proto3" json:"report,omitempty"`
+	// The job that is making the next report, while one is not ended. Absent
+	// otherwise.
+	Refreshing *Job `protobuf:"bytes,2,opt,name=refreshing,proto3" json:"refreshing,omitempty"`
+	// The elements of this page, in order of tag, then creator, then VR.
+	Elements []*CoverageElement `protobuf:"bytes,3,rep,name=elements,proto3" json:"elements,omitempty"`
+	// The page_token that asks for the next page. Empty on the last page.
+	NextPageToken string `protobuf:"bytes,4,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCoverageResponse) Reset() {
+	*x = GetCoverageResponse{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCoverageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCoverageResponse) ProtoMessage() {}
+
+func (x *GetCoverageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCoverageResponse.ProtoReflect.Descriptor instead.
+func (*GetCoverageResponse) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *GetCoverageResponse) GetReport() *CoverageReport {
+	if x != nil {
+		return x.Report
+	}
+	return nil
+}
+
+func (x *GetCoverageResponse) GetRefreshing() *Job {
+	if x != nil {
+		return x.Refreshing
+	}
+	return nil
+}
+
+func (x *GetCoverageResponse) GetElements() []*CoverageElement {
+	if x != nil {
+		return x.Elements
+	}
+	return nil
+}
+
+func (x *GetCoverageResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// CoverageReport says what a coverage report was made from.
+type CoverageReport struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The id of the job that made it.
+	JobId string `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// When the job ended.
+	EndTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	// How many scans the job read.
+	ScansRead int64 `protobuf:"varint,3,opt,name=scans_read,json=scansRead,proto3" json:"scans_read,omitempty"`
+	// How many scans it could not read (their metadata was missing or not in
+	// its form), which make the report partial.
+	ScansSkipped int64 `protobuf:"varint,4,opt,name=scans_skipped,json=scansSkipped,proto3" json:"scans_skipped,omitempty"`
+	// How many instances' lines it read.
+	Instances int64 `protobuf:"varint,5,opt,name=instances,proto3" json:"instances,omitempty"`
+	// How many of those lines recorded their unnamed elements.
+	InstancesRecorded int64 `protobuf:"varint,6,opt,name=instances_recorded,json=instancesRecorded,proto3" json:"instances_recorded,omitempty"`
+	// How many of those recorded only the first 1024 distinct ones (the rest
+	// are counted, not listed, in elements_not_listed).
+	InstancesCapped int64 `protobuf:"varint,7,opt,name=instances_capped,json=instancesCapped,proto3" json:"instances_capped,omitempty"`
+	// How many occurrences of elements the job could not list: those past a
+	// line's 1024 distinct elements, and those of a distinct element past the
+	// 100,000 the report holds.
+	ElementsNotListed int64 `protobuf:"varint,8,opt,name=elements_not_listed,json=elementsNotListed,proto3" json:"elements_not_listed,omitempty"`
+	// How many distinct elements the report lists, all pages together.
+	DistinctElements int64 `protobuf:"varint,9,opt,name=distinct_elements,json=distinctElements,proto3" json:"distinct_elements,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CoverageReport) Reset() {
+	*x = CoverageReport{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CoverageReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CoverageReport) ProtoMessage() {}
+
+func (x *CoverageReport) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CoverageReport.ProtoReflect.Descriptor instead.
+func (*CoverageReport) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CoverageReport) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *CoverageReport) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+func (x *CoverageReport) GetScansRead() int64 {
+	if x != nil {
+		return x.ScansRead
+	}
+	return 0
+}
+
+func (x *CoverageReport) GetScansSkipped() int64 {
+	if x != nil {
+		return x.ScansSkipped
+	}
+	return 0
+}
+
+func (x *CoverageReport) GetInstances() int64 {
+	if x != nil {
+		return x.Instances
+	}
+	return 0
+}
+
+func (x *CoverageReport) GetInstancesRecorded() int64 {
+	if x != nil {
+		return x.InstancesRecorded
+	}
+	return 0
+}
+
+func (x *CoverageReport) GetInstancesCapped() int64 {
+	if x != nil {
+		return x.InstancesCapped
+	}
+	return 0
+}
+
+func (x *CoverageReport) GetElementsNotListed() int64 {
+	if x != nil {
+		return x.ElementsNotListed
+	}
+	return 0
+}
+
+func (x *CoverageReport) GetDistinctElements() int64 {
+	if x != nil {
+		return x.DistinctElements
+	}
+	return 0
+}
+
+// CoverageElement is one element no rule named, in files of the tenant.
+type CoverageElement struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The element's tag as "gggg,eeee" in upper case hexadecimal; for a
+	// private element its group and its element within its creator's block,
+	// as "gggg,xxee": the block number, which a file chooses (PS3.5 7.8.1),
+	// is written xx.
+	Tag string `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	// Whether it is a private element (an odd group).
+	Private bool `protobuf:"varint,2,opt,name=private,proto3" json:"private,omitempty"`
+	// The private creator of a private element's block, without padding;
+	// empty for a standard element, for a private element whose block has no
+	// creator, and when creator_withheld.
+	PrivateCreator string `protobuf:"bytes,3,opt,name=private_creator,json=privateCreator,proto3" json:"private_creator,omitempty"`
+	// Whether the creator is not given: it was not printable ASCII of at most
+	// 64 bytes, or held a value the profile removed from the file or a term of
+	// its text lists. The elements of every such creator are counted together
+	// for one tag and VR.
+	CreatorWithheld bool `protobuf:"varint,4,opt,name=creator_withheld,json=creatorWithheld,proto3" json:"creator_withheld,omitempty"`
+	// The VR as the file gave it ("UN" for a private element of a file in
+	// Implicit VR).
+	Vr string `protobuf:"bytes,5,opt,name=vr,proto3" json:"vr,omitempty"`
+	// How many instances held it.
+	Instances int64 `protobuf:"varint,6,opt,name=instances,proto3" json:"instances,omitempty"`
+	// How many times they held it in all, at any depth of sequences.
+	Occurrences   int64 `protobuf:"varint,7,opt,name=occurrences,proto3" json:"occurrences,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CoverageElement) Reset() {
+	*x = CoverageElement{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CoverageElement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CoverageElement) ProtoMessage() {}
+
+func (x *CoverageElement) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CoverageElement.ProtoReflect.Descriptor instead.
+func (*CoverageElement) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CoverageElement) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *CoverageElement) GetPrivate() bool {
+	if x != nil {
+		return x.Private
+	}
+	return false
+}
+
+func (x *CoverageElement) GetPrivateCreator() string {
+	if x != nil {
+		return x.PrivateCreator
+	}
+	return ""
+}
+
+func (x *CoverageElement) GetCreatorWithheld() bool {
+	if x != nil {
+		return x.CreatorWithheld
+	}
+	return false
+}
+
+func (x *CoverageElement) GetVr() string {
+	if x != nil {
+		return x.Vr
+	}
+	return ""
+}
+
+func (x *CoverageElement) GetInstances() int64 {
+	if x != nil {
+		return x.Instances
+	}
+	return 0
+}
+
+func (x *CoverageElement) GetOccurrences() int64 {
+	if x != nil {
+		return x.Occurrences
+	}
+	return 0
+}
+
+// RefreshCoverageRequest asks for a new coverage report.
+type RefreshCoverageRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tenant, by name. Required.
+	Tenant        string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshCoverageRequest) Reset() {
+	*x = RefreshCoverageRequest{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshCoverageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshCoverageRequest) ProtoMessage() {}
+
+func (x *RefreshCoverageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshCoverageRequest.ProtoReflect.Descriptor instead.
+func (*RefreshCoverageRequest) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RefreshCoverageRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+// RefreshCoverageResponse is the job made.
+type RefreshCoverageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The job, queued, of kind deid_coverage.
+	Job           *Job `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshCoverageResponse) Reset() {
+	*x = RefreshCoverageResponse{}
+	mi := &file_nopacs_v1_deid_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshCoverageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshCoverageResponse) ProtoMessage() {}
+
+func (x *RefreshCoverageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nopacs_v1_deid_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshCoverageResponse.ProtoReflect.Descriptor instead.
+func (*RefreshCoverageResponse) Descriptor() ([]byte, []int) {
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RefreshCoverageResponse) GetJob() *Job {
+	if x != nil {
+		return x.Job
+	}
+	return nil
+}
 
 // CodeRequest is one value whose codes are asked for.
 type CodeRequest struct {
@@ -59,7 +971,7 @@ type CodeRequest struct {
 
 func (x *CodeRequest) Reset() {
 	*x = CodeRequest{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[0]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -71,7 +983,7 @@ func (x *CodeRequest) String() string {
 func (*CodeRequest) ProtoMessage() {}
 
 func (x *CodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[0]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -84,7 +996,7 @@ func (x *CodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CodeRequest.ProtoReflect.Descriptor instead.
 func (*CodeRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{0}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CodeRequest) GetTenant() string {
@@ -154,7 +1066,7 @@ type PatientIDIssuer struct {
 
 func (x *PatientIDIssuer) Reset() {
 	*x = PatientIDIssuer{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[1]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -166,7 +1078,7 @@ func (x *PatientIDIssuer) String() string {
 func (*PatientIDIssuer) ProtoMessage() {}
 
 func (x *PatientIDIssuer) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[1]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -179,7 +1091,7 @@ func (x *PatientIDIssuer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PatientIDIssuer.ProtoReflect.Descriptor instead.
 func (*PatientIDIssuer) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{1}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PatientIDIssuer) GetIssuer() string {
@@ -246,7 +1158,7 @@ type IssuerDesignator struct {
 
 func (x *IssuerDesignator) Reset() {
 	*x = IssuerDesignator{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[2]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -258,7 +1170,7 @@ func (x *IssuerDesignator) String() string {
 func (*IssuerDesignator) ProtoMessage() {}
 
 func (x *IssuerDesignator) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[2]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -271,7 +1183,7 @@ func (x *IssuerDesignator) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssuerDesignator.ProtoReflect.Descriptor instead.
 func (*IssuerDesignator) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{2}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *IssuerDesignator) GetLocalNamespaceEntityId() string {
@@ -314,7 +1226,7 @@ type IssuerCode struct {
 
 func (x *IssuerCode) Reset() {
 	*x = IssuerCode{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[3]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -326,7 +1238,7 @@ func (x *IssuerCode) String() string {
 func (*IssuerCode) ProtoMessage() {}
 
 func (x *IssuerCode) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[3]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -339,7 +1251,7 @@ func (x *IssuerCode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssuerCode.ProtoReflect.Descriptor instead.
 func (*IssuerCode) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{3}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *IssuerCode) GetCodeValue() string {
@@ -396,7 +1308,7 @@ type CodeResponse struct {
 
 func (x *CodeResponse) Reset() {
 	*x = CodeResponse{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[4]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -408,7 +1320,7 @@ func (x *CodeResponse) String() string {
 func (*CodeResponse) ProtoMessage() {}
 
 func (x *CodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[4]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -421,7 +1333,7 @@ func (x *CodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CodeResponse.ProtoReflect.Descriptor instead.
 func (*CodeResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{4}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CodeResponse) GetAttribute() string {
@@ -467,7 +1379,7 @@ type SubjectLabelCode struct {
 
 func (x *SubjectLabelCode) Reset() {
 	*x = SubjectLabelCode{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[5]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -479,7 +1391,7 @@ func (x *SubjectLabelCode) String() string {
 func (*SubjectLabelCode) ProtoMessage() {}
 
 func (x *SubjectLabelCode) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[5]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -492,7 +1404,7 @@ func (x *SubjectLabelCode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubjectLabelCode.ProtoReflect.Descriptor instead.
 func (*SubjectLabelCode) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{5}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SubjectLabelCode) GetReceiver() string {
@@ -529,7 +1441,7 @@ type LookupTableCode struct {
 
 func (x *LookupTableCode) Reset() {
 	*x = LookupTableCode{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[6]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -541,7 +1453,7 @@ func (x *LookupTableCode) String() string {
 func (*LookupTableCode) ProtoMessage() {}
 
 func (x *LookupTableCode) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[6]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -554,7 +1466,7 @@ func (x *LookupTableCode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupTableCode.ProtoReflect.Descriptor instead.
 func (*LookupTableCode) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{6}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *LookupTableCode) GetTable() string {
@@ -586,7 +1498,7 @@ type ImportLookupCodesRequest struct {
 
 func (x *ImportLookupCodesRequest) Reset() {
 	*x = ImportLookupCodesRequest{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[7]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +1510,7 @@ func (x *ImportLookupCodesRequest) String() string {
 func (*ImportLookupCodesRequest) ProtoMessage() {}
 
 func (x *ImportLookupCodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[7]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +1523,7 @@ func (x *ImportLookupCodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportLookupCodesRequest.ProtoReflect.Descriptor instead.
 func (*ImportLookupCodesRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{7}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ImportLookupCodesRequest) GetTenant() string {
@@ -663,7 +1575,7 @@ type LookupEntry struct {
 
 func (x *LookupEntry) Reset() {
 	*x = LookupEntry{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[8]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -675,7 +1587,7 @@ func (x *LookupEntry) String() string {
 func (*LookupEntry) ProtoMessage() {}
 
 func (x *LookupEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[8]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -688,7 +1600,7 @@ func (x *LookupEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupEntry.ProtoReflect.Descriptor instead.
 func (*LookupEntry) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{8}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *LookupEntry) GetValue() string {
@@ -737,7 +1649,7 @@ type ImportLookupCodesResponse struct {
 
 func (x *ImportLookupCodesResponse) Reset() {
 	*x = ImportLookupCodesResponse{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[9]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -749,7 +1661,7 @@ func (x *ImportLookupCodesResponse) String() string {
 func (*ImportLookupCodesResponse) ProtoMessage() {}
 
 func (x *ImportLookupCodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[9]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -762,7 +1674,7 @@ func (x *ImportLookupCodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportLookupCodesResponse.ProtoReflect.Descriptor instead.
 func (*ImportLookupCodesResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{9}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ImportLookupCodesResponse) GetTable() string {
@@ -811,7 +1723,7 @@ type ListLookupTablesRequest struct {
 
 func (x *ListLookupTablesRequest) Reset() {
 	*x = ListLookupTablesRequest{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[10]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +1735,7 @@ func (x *ListLookupTablesRequest) String() string {
 func (*ListLookupTablesRequest) ProtoMessage() {}
 
 func (x *ListLookupTablesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[10]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +1748,7 @@ func (x *ListLookupTablesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLookupTablesRequest.ProtoReflect.Descriptor instead.
 func (*ListLookupTablesRequest) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{10}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListLookupTablesRequest) GetTenant() string {
@@ -873,7 +1785,7 @@ type ListLookupTablesResponse struct {
 
 func (x *ListLookupTablesResponse) Reset() {
 	*x = ListLookupTablesResponse{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[11]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -885,7 +1797,7 @@ func (x *ListLookupTablesResponse) String() string {
 func (*ListLookupTablesResponse) ProtoMessage() {}
 
 func (x *ListLookupTablesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[11]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -898,7 +1810,7 @@ func (x *ListLookupTablesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLookupTablesResponse.ProtoReflect.Descriptor instead.
 func (*ListLookupTablesResponse) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{11}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListLookupTablesResponse) GetTables() []*LookupTable {
@@ -928,7 +1840,7 @@ type LookupTable struct {
 
 func (x *LookupTable) Reset() {
 	*x = LookupTable{}
-	mi := &file_nopacs_v1_deid_proto_msgTypes[12]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -940,7 +1852,7 @@ func (x *LookupTable) String() string {
 func (*LookupTable) ProtoMessage() {}
 
 func (x *LookupTable) ProtoReflect() protoreflect.Message {
-	mi := &file_nopacs_v1_deid_proto_msgTypes[12]
+	mi := &file_nopacs_v1_deid_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -953,7 +1865,7 @@ func (x *LookupTable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupTable.ProtoReflect.Descriptor instead.
 func (*LookupTable) Descriptor() ([]byte, []int) {
-	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{12}
+	return file_nopacs_v1_deid_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *LookupTable) GetName() string {
@@ -974,7 +1886,72 @@ var File_nopacs_v1_deid_proto protoreflect.FileDescriptor
 
 const file_nopacs_v1_deid_proto_rawDesc = "" +
 	"\n" +
-	"\x14nopacs/v1/deid.proto\x12\tnopacs.v1\"\xb0\x01\n" +
+	"\x14nopacs/v1/deid.proto\x12\tnopacs.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13nopacs/v1/job.proto\x1a\x17nopacs/v1/profile.proto\"\xcf\x01\n" +
+	"\rPixelTemplate\x12\"\n" +
+	"\fmanufacturer\x18\x01 \x01(\tR\fmanufacturer\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12\x12\n" +
+	"\x04rows\x18\x03 \x01(\x05R\x04rows\x12\x18\n" +
+	"\acolumns\x18\x04 \x01(\x05R\acolumns\x12\x1b\n" +
+	"\tsop_class\x18\x05 \x01(\tR\bsopClass\x129\n" +
+	"\n" +
+	"rectangles\x18\x06 \x03(\v2\x19.nopacs.v1.PixelRectangleR\n" +
+	"rectangles\"j\n" +
+	"\x18AddPixelTemplatesRequest\x12\x16\n" +
+	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x126\n" +
+	"\ttemplates\x18\x02 \x03(\v2\x18.nopacs.v1.PixelTemplateR\ttemplates\"1\n" +
+	"\x19AddPixelTemplatesResponse\x12\x14\n" +
+	"\x05added\x18\x01 \x01(\x05R\x05added\"\xb9\x01\n" +
+	"\x1aRemovePixelTemplateRequest\x12\x16\n" +
+	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\"\n" +
+	"\fmanufacturer\x18\x02 \x01(\tR\fmanufacturer\x12\x14\n" +
+	"\x05model\x18\x03 \x01(\tR\x05model\x12\x12\n" +
+	"\x04rows\x18\x04 \x01(\x05R\x04rows\x12\x18\n" +
+	"\acolumns\x18\x05 \x01(\x05R\acolumns\x12\x1b\n" +
+	"\tsop_class\x18\x06 \x01(\tR\bsopClass\"\x1d\n" +
+	"\x1bRemovePixelTemplateResponse\"o\n" +
+	"\x19ListPixelTemplatesRequest\x12\x16\n" +
+	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"|\n" +
+	"\x1aListPixelTemplatesResponse\x126\n" +
+	"\ttemplates\x18\x01 \x03(\v2\x18.nopacs.v1.PixelTemplateR\ttemplates\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"h\n" +
+	"\x12GetCoverageRequest\x12\x16\n" +
+	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\xd8\x01\n" +
+	"\x13GetCoverageResponse\x121\n" +
+	"\x06report\x18\x01 \x01(\v2\x19.nopacs.v1.CoverageReportR\x06report\x12.\n" +
+	"\n" +
+	"refreshing\x18\x02 \x01(\v2\x0e.nopacs.v1.JobR\n" +
+	"refreshing\x126\n" +
+	"\belements\x18\x03 \x03(\v2\x1a.nopacs.v1.CoverageElementR\belements\x12&\n" +
+	"\x0fnext_page_token\x18\x04 \x01(\tR\rnextPageToken\"\xf7\x02\n" +
+	"\x0eCoverageReport\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x125\n" +
+	"\bend_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x1d\n" +
+	"\n" +
+	"scans_read\x18\x03 \x01(\x03R\tscansRead\x12#\n" +
+	"\rscans_skipped\x18\x04 \x01(\x03R\fscansSkipped\x12\x1c\n" +
+	"\tinstances\x18\x05 \x01(\x03R\tinstances\x12-\n" +
+	"\x12instances_recorded\x18\x06 \x01(\x03R\x11instancesRecorded\x12)\n" +
+	"\x10instances_capped\x18\a \x01(\x03R\x0finstancesCapped\x12.\n" +
+	"\x13elements_not_listed\x18\b \x01(\x03R\x11elementsNotListed\x12+\n" +
+	"\x11distinct_elements\x18\t \x01(\x03R\x10distinctElements\"\xe1\x01\n" +
+	"\x0fCoverageElement\x12\x10\n" +
+	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x18\n" +
+	"\aprivate\x18\x02 \x01(\bR\aprivate\x12'\n" +
+	"\x0fprivate_creator\x18\x03 \x01(\tR\x0eprivateCreator\x12)\n" +
+	"\x10creator_withheld\x18\x04 \x01(\bR\x0fcreatorWithheld\x12\x0e\n" +
+	"\x02vr\x18\x05 \x01(\tR\x02vr\x12\x1c\n" +
+	"\tinstances\x18\x06 \x01(\x03R\tinstances\x12 \n" +
+	"\voccurrences\x18\a \x01(\x03R\voccurrences\"0\n" +
+	"\x16RefreshCoverageRequest\x12\x16\n" +
+	"\x06tenant\x18\x01 \x01(\tR\x06tenant\";\n" +
+	"\x17RefreshCoverageResponse\x12 \n" +
+	"\x03job\x18\x01 \x01(\v2\x0e.nopacs.v1.JobR\x03job\"\xb0\x01\n" +
 	"\vCodeRequest\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1c\n" +
 	"\tattribute\x18\x02 \x01(\tR\tattribute\x12\x19\n" +
@@ -1036,11 +2013,16 @@ const file_nopacs_v1_deid_proto_rawDesc = "" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"7\n" +
 	"\vLookupTable\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05codes\x18\x02 \x01(\x03R\x05codes2\x8d\x02\n" +
+	"\x05codes\x18\x02 \x01(\x03R\x05codes2\xf2\x05\n" +
 	"\vDeidService\x127\n" +
 	"\x04Code\x12\x16.nopacs.v1.CodeRequest\x1a\x17.nopacs.v1.CodeResponse\x12c\n" +
 	"\x11ImportLookupCodes\x12#.nopacs.v1.ImportLookupCodesRequest\x1a$.nopacs.v1.ImportLookupCodesResponse\"\x03\x90\x02\x02\x12`\n" +
-	"\x10ListLookupTables\x12\".nopacs.v1.ListLookupTablesRequest\x1a#.nopacs.v1.ListLookupTablesResponse\"\x03\x90\x02\x01B\x93\x01\n" +
+	"\x10ListLookupTables\x12\".nopacs.v1.ListLookupTablesRequest\x1a#.nopacs.v1.ListLookupTablesResponse\"\x03\x90\x02\x01\x12Q\n" +
+	"\vGetCoverage\x12\x1d.nopacs.v1.GetCoverageRequest\x1a\x1e.nopacs.v1.GetCoverageResponse\"\x03\x90\x02\x01\x12X\n" +
+	"\x0fRefreshCoverage\x12!.nopacs.v1.RefreshCoverageRequest\x1a\".nopacs.v1.RefreshCoverageResponse\x12c\n" +
+	"\x11AddPixelTemplates\x12#.nopacs.v1.AddPixelTemplatesRequest\x1a$.nopacs.v1.AddPixelTemplatesResponse\"\x03\x90\x02\x02\x12i\n" +
+	"\x13RemovePixelTemplate\x12%.nopacs.v1.RemovePixelTemplateRequest\x1a&.nopacs.v1.RemovePixelTemplateResponse\"\x03\x90\x02\x02\x12f\n" +
+	"\x12ListPixelTemplates\x12$.nopacs.v1.ListPixelTemplatesRequest\x1a%.nopacs.v1.ListPixelTemplatesResponse\"\x03\x90\x02\x01B\x93\x01\n" +
 	"\rcom.nopacs.v1B\tDeidProtoP\x01Z2github.com/amrshadid/nopacs/gen/nopacs/v1;nopacsv1\xa2\x02\x03NXX\xaa\x02\tNopacs.V1\xca\x02\tNopacs\\V1\xe2\x02\x15Nopacs\\V1\\GPBMetadata\xea\x02\n" +
 	"Nopacs::V1b\x06proto3"
 
@@ -1056,43 +2038,77 @@ func file_nopacs_v1_deid_proto_rawDescGZIP() []byte {
 	return file_nopacs_v1_deid_proto_rawDescData
 }
 
-var file_nopacs_v1_deid_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_nopacs_v1_deid_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_nopacs_v1_deid_proto_goTypes = []any{
-	(*CodeRequest)(nil),               // 0: nopacs.v1.CodeRequest
-	(*PatientIDIssuer)(nil),           // 1: nopacs.v1.PatientIDIssuer
-	(*IssuerDesignator)(nil),          // 2: nopacs.v1.IssuerDesignator
-	(*IssuerCode)(nil),                // 3: nopacs.v1.IssuerCode
-	(*CodeResponse)(nil),              // 4: nopacs.v1.CodeResponse
-	(*SubjectLabelCode)(nil),          // 5: nopacs.v1.SubjectLabelCode
-	(*LookupTableCode)(nil),           // 6: nopacs.v1.LookupTableCode
-	(*ImportLookupCodesRequest)(nil),  // 7: nopacs.v1.ImportLookupCodesRequest
-	(*LookupEntry)(nil),               // 8: nopacs.v1.LookupEntry
-	(*ImportLookupCodesResponse)(nil), // 9: nopacs.v1.ImportLookupCodesResponse
-	(*ListLookupTablesRequest)(nil),   // 10: nopacs.v1.ListLookupTablesRequest
-	(*ListLookupTablesResponse)(nil),  // 11: nopacs.v1.ListLookupTablesResponse
-	(*LookupTable)(nil),               // 12: nopacs.v1.LookupTable
+	(*PixelTemplate)(nil),               // 0: nopacs.v1.PixelTemplate
+	(*AddPixelTemplatesRequest)(nil),    // 1: nopacs.v1.AddPixelTemplatesRequest
+	(*AddPixelTemplatesResponse)(nil),   // 2: nopacs.v1.AddPixelTemplatesResponse
+	(*RemovePixelTemplateRequest)(nil),  // 3: nopacs.v1.RemovePixelTemplateRequest
+	(*RemovePixelTemplateResponse)(nil), // 4: nopacs.v1.RemovePixelTemplateResponse
+	(*ListPixelTemplatesRequest)(nil),   // 5: nopacs.v1.ListPixelTemplatesRequest
+	(*ListPixelTemplatesResponse)(nil),  // 6: nopacs.v1.ListPixelTemplatesResponse
+	(*GetCoverageRequest)(nil),          // 7: nopacs.v1.GetCoverageRequest
+	(*GetCoverageResponse)(nil),         // 8: nopacs.v1.GetCoverageResponse
+	(*CoverageReport)(nil),              // 9: nopacs.v1.CoverageReport
+	(*CoverageElement)(nil),             // 10: nopacs.v1.CoverageElement
+	(*RefreshCoverageRequest)(nil),      // 11: nopacs.v1.RefreshCoverageRequest
+	(*RefreshCoverageResponse)(nil),     // 12: nopacs.v1.RefreshCoverageResponse
+	(*CodeRequest)(nil),                 // 13: nopacs.v1.CodeRequest
+	(*PatientIDIssuer)(nil),             // 14: nopacs.v1.PatientIDIssuer
+	(*IssuerDesignator)(nil),            // 15: nopacs.v1.IssuerDesignator
+	(*IssuerCode)(nil),                  // 16: nopacs.v1.IssuerCode
+	(*CodeResponse)(nil),                // 17: nopacs.v1.CodeResponse
+	(*SubjectLabelCode)(nil),            // 18: nopacs.v1.SubjectLabelCode
+	(*LookupTableCode)(nil),             // 19: nopacs.v1.LookupTableCode
+	(*ImportLookupCodesRequest)(nil),    // 20: nopacs.v1.ImportLookupCodesRequest
+	(*LookupEntry)(nil),                 // 21: nopacs.v1.LookupEntry
+	(*ImportLookupCodesResponse)(nil),   // 22: nopacs.v1.ImportLookupCodesResponse
+	(*ListLookupTablesRequest)(nil),     // 23: nopacs.v1.ListLookupTablesRequest
+	(*ListLookupTablesResponse)(nil),    // 24: nopacs.v1.ListLookupTablesResponse
+	(*LookupTable)(nil),                 // 25: nopacs.v1.LookupTable
+	(*PixelRectangle)(nil),              // 26: nopacs.v1.PixelRectangle
+	(*Job)(nil),                         // 27: nopacs.v1.Job
+	(*timestamppb.Timestamp)(nil),       // 28: google.protobuf.Timestamp
 }
 var file_nopacs_v1_deid_proto_depIdxs = []int32{
-	1,  // 0: nopacs.v1.CodeRequest.issuer:type_name -> nopacs.v1.PatientIDIssuer
-	2,  // 1: nopacs.v1.PatientIDIssuer.assigning_facility:type_name -> nopacs.v1.IssuerDesignator
-	3,  // 2: nopacs.v1.PatientIDIssuer.assigning_jurisdiction:type_name -> nopacs.v1.IssuerCode
-	3,  // 3: nopacs.v1.PatientIDIssuer.assigning_agency:type_name -> nopacs.v1.IssuerCode
-	5,  // 4: nopacs.v1.CodeResponse.subjects:type_name -> nopacs.v1.SubjectLabelCode
-	6,  // 5: nopacs.v1.CodeResponse.lookups:type_name -> nopacs.v1.LookupTableCode
-	8,  // 6: nopacs.v1.ImportLookupCodesRequest.entries:type_name -> nopacs.v1.LookupEntry
-	1,  // 7: nopacs.v1.LookupEntry.issuer:type_name -> nopacs.v1.PatientIDIssuer
-	12, // 8: nopacs.v1.ListLookupTablesResponse.tables:type_name -> nopacs.v1.LookupTable
-	0,  // 9: nopacs.v1.DeidService.Code:input_type -> nopacs.v1.CodeRequest
-	7,  // 10: nopacs.v1.DeidService.ImportLookupCodes:input_type -> nopacs.v1.ImportLookupCodesRequest
-	10, // 11: nopacs.v1.DeidService.ListLookupTables:input_type -> nopacs.v1.ListLookupTablesRequest
-	4,  // 12: nopacs.v1.DeidService.Code:output_type -> nopacs.v1.CodeResponse
-	9,  // 13: nopacs.v1.DeidService.ImportLookupCodes:output_type -> nopacs.v1.ImportLookupCodesResponse
-	11, // 14: nopacs.v1.DeidService.ListLookupTables:output_type -> nopacs.v1.ListLookupTablesResponse
-	12, // [12:15] is the sub-list for method output_type
-	9,  // [9:12] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	26, // 0: nopacs.v1.PixelTemplate.rectangles:type_name -> nopacs.v1.PixelRectangle
+	0,  // 1: nopacs.v1.AddPixelTemplatesRequest.templates:type_name -> nopacs.v1.PixelTemplate
+	0,  // 2: nopacs.v1.ListPixelTemplatesResponse.templates:type_name -> nopacs.v1.PixelTemplate
+	9,  // 3: nopacs.v1.GetCoverageResponse.report:type_name -> nopacs.v1.CoverageReport
+	27, // 4: nopacs.v1.GetCoverageResponse.refreshing:type_name -> nopacs.v1.Job
+	10, // 5: nopacs.v1.GetCoverageResponse.elements:type_name -> nopacs.v1.CoverageElement
+	28, // 6: nopacs.v1.CoverageReport.end_time:type_name -> google.protobuf.Timestamp
+	27, // 7: nopacs.v1.RefreshCoverageResponse.job:type_name -> nopacs.v1.Job
+	14, // 8: nopacs.v1.CodeRequest.issuer:type_name -> nopacs.v1.PatientIDIssuer
+	15, // 9: nopacs.v1.PatientIDIssuer.assigning_facility:type_name -> nopacs.v1.IssuerDesignator
+	16, // 10: nopacs.v1.PatientIDIssuer.assigning_jurisdiction:type_name -> nopacs.v1.IssuerCode
+	16, // 11: nopacs.v1.PatientIDIssuer.assigning_agency:type_name -> nopacs.v1.IssuerCode
+	18, // 12: nopacs.v1.CodeResponse.subjects:type_name -> nopacs.v1.SubjectLabelCode
+	19, // 13: nopacs.v1.CodeResponse.lookups:type_name -> nopacs.v1.LookupTableCode
+	21, // 14: nopacs.v1.ImportLookupCodesRequest.entries:type_name -> nopacs.v1.LookupEntry
+	14, // 15: nopacs.v1.LookupEntry.issuer:type_name -> nopacs.v1.PatientIDIssuer
+	25, // 16: nopacs.v1.ListLookupTablesResponse.tables:type_name -> nopacs.v1.LookupTable
+	13, // 17: nopacs.v1.DeidService.Code:input_type -> nopacs.v1.CodeRequest
+	20, // 18: nopacs.v1.DeidService.ImportLookupCodes:input_type -> nopacs.v1.ImportLookupCodesRequest
+	23, // 19: nopacs.v1.DeidService.ListLookupTables:input_type -> nopacs.v1.ListLookupTablesRequest
+	7,  // 20: nopacs.v1.DeidService.GetCoverage:input_type -> nopacs.v1.GetCoverageRequest
+	11, // 21: nopacs.v1.DeidService.RefreshCoverage:input_type -> nopacs.v1.RefreshCoverageRequest
+	1,  // 22: nopacs.v1.DeidService.AddPixelTemplates:input_type -> nopacs.v1.AddPixelTemplatesRequest
+	3,  // 23: nopacs.v1.DeidService.RemovePixelTemplate:input_type -> nopacs.v1.RemovePixelTemplateRequest
+	5,  // 24: nopacs.v1.DeidService.ListPixelTemplates:input_type -> nopacs.v1.ListPixelTemplatesRequest
+	17, // 25: nopacs.v1.DeidService.Code:output_type -> nopacs.v1.CodeResponse
+	22, // 26: nopacs.v1.DeidService.ImportLookupCodes:output_type -> nopacs.v1.ImportLookupCodesResponse
+	24, // 27: nopacs.v1.DeidService.ListLookupTables:output_type -> nopacs.v1.ListLookupTablesResponse
+	8,  // 28: nopacs.v1.DeidService.GetCoverage:output_type -> nopacs.v1.GetCoverageResponse
+	12, // 29: nopacs.v1.DeidService.RefreshCoverage:output_type -> nopacs.v1.RefreshCoverageResponse
+	2,  // 30: nopacs.v1.DeidService.AddPixelTemplates:output_type -> nopacs.v1.AddPixelTemplatesResponse
+	4,  // 31: nopacs.v1.DeidService.RemovePixelTemplate:output_type -> nopacs.v1.RemovePixelTemplateResponse
+	6,  // 32: nopacs.v1.DeidService.ListPixelTemplates:output_type -> nopacs.v1.ListPixelTemplatesResponse
+	25, // [25:33] is the sub-list for method output_type
+	17, // [17:25] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_nopacs_v1_deid_proto_init() }
@@ -1100,13 +2116,15 @@ func file_nopacs_v1_deid_proto_init() {
 	if File_nopacs_v1_deid_proto != nil {
 		return
 	}
+	file_nopacs_v1_job_proto_init()
+	file_nopacs_v1_profile_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nopacs_v1_deid_proto_rawDesc), len(file_nopacs_v1_deid_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

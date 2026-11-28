@@ -32,7 +32,7 @@ The pages are grouped by what you came to do:
 **You work with the data.**
 [The command line](use/command-line.md) (with contexts for many installations, and the
 interactive program), [receiving](use/receiving.md), [reading](use/reading.md), [searching](use/searching.md),
-[sending on](use/sending.md), [importing](use/importing.md), [copying and moving between tenants](use/transferring.md), [correcting](use/correcting.md) and
+[sending on](use/sending.md), [pixel templates for burned-in text](use/pixel-templates.md), [importing](use/importing.md), [copying and moving between tenants](use/transferring.md), [correcting](use/correcting.md) and
 [retention rules and holds](use/retention.md).
 
 **You build on the API.**

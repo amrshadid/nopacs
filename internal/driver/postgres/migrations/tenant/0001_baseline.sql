@@ -1026,13 +1026,13 @@ CREATE TABLE jobs (
     profile_version     integer     NOT NULL DEFAULT 0,
     CONSTRAINT jobs_pkey PRIMARY KEY (id),
     CONSTRAINT jobs_key UNIQUE (unique_key),
-    CONSTRAINT jobs_kind_check CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch', 'transfer', 'search_backfill')),
+    CONSTRAINT jobs_kind_check CHECK (kind IN ('send', 'deid', 'import', 'scrub', 'rebuild', 'replicate', 'repair', 'dispose', 'delete_batch', 'transfer', 'search_backfill', 'deid_coverage')),
     CONSTRAINT jobs_state_check CHECK (state IN ('queued', 'running', 'done', 'partial', 'failed', 'canceled')),
     CONSTRAINT jobs_scans_check CHECK (scans >= 0 AND scans_done >= 0 AND scans_done <= scans),
     CONSTRAINT jobs_counts_check CHECK (sent >= 0 AND warned >= 0 AND refused >= 0 AND sent + warned + refused <= instances),
     CONSTRAINT jobs_bytes_check CHECK (sent_bytes >= 0 AND warned_bytes >= 0 AND refused_bytes >= 0
         AND sent_bytes + warned_bytes + refused_bytes <= bytes),
-    CONSTRAINT jobs_deid_mode_check CHECK (deid_mode IN ('', 'dry_run', 'check')),
+    CONSTRAINT jobs_deid_mode_check CHECK (deid_mode IN ('', 'dry_run', 'check', 'rerun', 'rerun_preview')),
     CONSTRAINT jobs_deid_kind_check CHECK ((kind = 'deid') = (deid_mode <> '')),
     CONSTRAINT jobs_profile_version_check CHECK (profile_version >= 0)
 );
@@ -2371,6 +2371,43 @@ CREATE TABLE search_backfill_jobs (
     CONSTRAINT search_backfill_jobs_counts_check CHECK (after_scan_id >= 0 AND skipped >= 0)
 );
 
+-- A coverage job's own part: the place it reached, the scans it could not read,
+-- the instances it counted and how many carried a record (and how many of
+-- those were cut at the per-file bound), the occurrences past the report's
+-- bound, the elements it listed, and whether it is the tenant's report.
+CREATE TABLE deid_coverage_jobs (
+    job_id        text   COLLATE "C" NOT NULL,
+    after_scan_id bigint NOT NULL,
+    skipped       bigint NOT NULL,
+    instances     bigint NOT NULL,
+    recorded      bigint NOT NULL,
+    capped        bigint NOT NULL,
+    not_listed    bigint NOT NULL,
+    elements      bigint NOT NULL,
+    reported      smallint NOT NULL,
+    CONSTRAINT deid_coverage_jobs_pkey PRIMARY KEY (job_id),
+    CONSTRAINT deid_coverage_jobs_counts_check CHECK (after_scan_id >= 0 AND skipped >= 0 AND instances >= 0 AND recorded >= 0
+        AND recorded <= instances AND capped >= 0 AND capped <= recorded AND not_listed >= 0 AND elements >= 0 AND reported IN (0, 1))
+);
+
+CREATE UNIQUE INDEX deid_coverage_jobs_reported ON deid_coverage_jobs (reported) WHERE reported = 1;
+
+-- The elements a coverage job found that no rule named: the tag, the private
+-- creator ('' for a public tag, and for a creator withheld because it held a
+-- removed value or a list term), its VR and counts; never a value.
+CREATE TABLE deid_coverage_elements (
+    job_id      text     COLLATE "C" NOT NULL,
+    tag         bigint   NOT NULL,
+    creator     text     COLLATE "C" NOT NULL,
+    withheld    smallint NOT NULL,
+    vr          text     COLLATE "C" NOT NULL,
+    instances   bigint   NOT NULL,
+    occurrences bigint   NOT NULL,
+    CONSTRAINT deid_coverage_elements_pkey PRIMARY KEY (job_id, tag, creator, withheld, vr),
+    CONSTRAINT deid_coverage_elements_check CHECK (tag BETWEEN 0 AND 4294967295 AND withheld IN (0, 1)
+        AND instances >= 1 AND occurrences >= instances AND (withheld = 0 OR creator = ''))
+);
+
 -- A receiver's routing rule sets: each version's body (the JSON of its
 -- archive and forward rules), when it was made and by which key. A version
 -- is never changed once made, which the trigger holds: a reception's
@@ -2691,3 +2728,39 @@ INSERT INTO search_attributes (field, state) SELECT 'AcquisitionDateTime', CASE 
 INSERT INTO search_attributes (field, state) SELECT 'ImageType', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
 INSERT INTO search_attributes (field, state) SELECT 'ScanningSequence', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
 INSERT INTO search_attributes (field, state) SELECT 'OperatorsName', CASE WHEN EXISTS (SELECT 1 FROM scans) THEN 'building' ELSE 'ready' END;
+
+-- What trying a profile version over a receiver's latest receptions found:
+-- when and by which key, how many sessions and files it read, and how many
+-- files the version would change or hold; counts only, never a value.
+CREATE TABLE profile_trials (
+    receiver        text        COLLATE "C" NOT NULL,
+    profile_name    text        COLLATE "C" NOT NULL,
+    profile_version integer     NOT NULL,
+    tried           timestamptz NOT NULL,
+    key_id          text        COLLATE "C" NOT NULL,
+    sessions        bigint      NOT NULL,
+    files           bigint      NOT NULL,
+    changed         bigint      NOT NULL,
+    held            bigint      NOT NULL,
+    CONSTRAINT profile_trials_pkey PRIMARY KEY (receiver, profile_name, profile_version),
+    CONSTRAINT profile_trials_check CHECK (profile_version >= 1 AND sessions >= 0 AND files >= 0 AND changed >= 0 AND held >= 0
+        AND changed + held <= files)
+);
+
+-- The rectangles to fill in the images of one device and size (a pixel rule
+-- that fills by template). The key is the folded manufacturer and model,
+-- the image's size and its SOP class ('' for any class); the manufacturer
+-- and model are kept as written. rectangles is a JSON list of x, y, w, h
+-- and, when true, r and b (measured from the right and bottom edges).
+CREATE TABLE pixel_templates (
+    manufacturer_key text    COLLATE "C" NOT NULL,
+    model_key        text    COLLATE "C" NOT NULL,
+    image_rows       integer NOT NULL,
+    image_columns    integer NOT NULL,
+    sop_class        text    COLLATE "C" NOT NULL,
+    manufacturer     text    COLLATE "C" NOT NULL,
+    model            text    COLLATE "C" NOT NULL,
+    rectangles       text    COLLATE "C" NOT NULL,
+    CONSTRAINT pixel_templates_pkey PRIMARY KEY (manufacturer_key, model_key, image_rows, image_columns, sop_class),
+    CONSTRAINT pixel_templates_check CHECK (image_rows BETWEEN 1 AND 65535 AND image_columns BETWEEN 1 AND 65535)
+);

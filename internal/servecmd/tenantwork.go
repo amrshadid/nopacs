@@ -91,7 +91,6 @@ type tenantWork struct {
 	// wakeFeed, when set, is called with a tenant's name after its
 	// background work wrote events, so a watcher reads them at once.
 	wakeFeed func(name string)
-
 	// quota holds the running quota watches, for the metrics.
 	quota quotaWatches
 
@@ -139,6 +138,7 @@ type tenantDB interface {
 	tenant.Disposal
 	tenant.SearchBackfills
 	tenant.Holds
+	tenant.SearchBackfills
 }
 
 // dbOf returns st as every part of a tenant's database, or an Internal
@@ -570,6 +570,7 @@ func (w *tenantWork) startSet(ctx context.Context, name string, st tenantDB, epo
 	run((&tenantBatches{w: w, name: name, st: db, base: st, log: log}).run)
 	run((&tenantSearchFills{w: w, name: name, st: db, log: log}).run)
 	run((&tenantTransfers{w: w, name: name, st: db, base: st, log: log}).run)
+	run((&tenantDeidCoverages{w: w, name: name, st: db, log: log}).run)
 	run(w.holdRecords(id, name, db, open, sw.Gate(), log))
 	return nil
 }

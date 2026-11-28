@@ -333,6 +333,11 @@ func (c *core) tryProfile(ctx context.Context, req *v1.TryProfileRequest, pipe t
 	for i := range inputs {
 		inputs[i].receiver = rcv
 	}
+	if rcv != nil {
+		if target, err = c.trialOverBase(ctx, pipe, target, masked); err != nil {
+			return nil, nil, "", err
+		}
+	}
 	records, err := heldRecords(ctx, pipe, "quarantine_records", req.GetQuarantineRecords())
 	if err != nil {
 		return nil, nil, "", err
@@ -473,6 +478,11 @@ func (c *core) explainProfile(ctx context.Context, req *v1.ExplainProfileRequest
 	defer leave()
 	if record != nil {
 		if in, err = c.heldInput(ctx, req.GetTenant(), pipe, *record); err != nil {
+			return nil, "", err
+		}
+	}
+	if in.receiver != nil {
+		if target, err = c.trialOverBase(ctx, pipe, target, masked); err != nil {
 			return nil, "", err
 		}
 	}

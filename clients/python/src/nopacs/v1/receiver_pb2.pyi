@@ -295,16 +295,20 @@ class ListReceiversResponse(_message.Message):
     def __init__(self, receivers: _Optional[_Iterable[_Union[Receiver, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
 class SetReceiverRequest(_message.Message):
-    __slots__ = ("tenant", "receiver", "update_mask", "expected_update_time")
+    __slots__ = ("tenant", "receiver", "update_mask", "expected_update_time", "force", "force_reason")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     RECEIVER_FIELD_NUMBER: _ClassVar[int]
     UPDATE_MASK_FIELD_NUMBER: _ClassVar[int]
     EXPECTED_UPDATE_TIME_FIELD_NUMBER: _ClassVar[int]
+    FORCE_FIELD_NUMBER: _ClassVar[int]
+    FORCE_REASON_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     receiver: Receiver
     update_mask: _field_mask_pb2.FieldMask
     expected_update_time: _timestamp_pb2.Timestamp
-    def __init__(self, tenant: _Optional[str] = ..., receiver: _Optional[_Union[Receiver, _Mapping]] = ..., update_mask: _Optional[_Union[_field_mask_pb2.FieldMask, _Mapping]] = ..., expected_update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    force: bool
+    force_reason: str
+    def __init__(self, tenant: _Optional[str] = ..., receiver: _Optional[_Union[Receiver, _Mapping]] = ..., update_mask: _Optional[_Union[_field_mask_pb2.FieldMask, _Mapping]] = ..., expected_update_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., force: _Optional[bool] = ..., force_reason: _Optional[str] = ...) -> None: ...
 
 class SetReceiverResponse(_message.Message):
     __slots__ = ("receiver",)
@@ -329,3 +333,59 @@ class RemoveReceiverResponse(_message.Message):
 class JobReceiver(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class TryReceiverProfileRequest(_message.Message):
+    __slots__ = ("tenant", "receiver", "profile", "profile_version")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    RECEIVER_FIELD_NUMBER: _ClassVar[int]
+    PROFILE_FIELD_NUMBER: _ClassVar[int]
+    PROFILE_VERSION_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    receiver: str
+    profile: str
+    profile_version: int
+    def __init__(self, tenant: _Optional[str] = ..., receiver: _Optional[str] = ..., profile: _Optional[str] = ..., profile_version: _Optional[int] = ...) -> None: ...
+
+class TryReceiverProfileResponse(_message.Message):
+    __slots__ = ("profile", "profile_version", "tried", "sessions", "files", "changed", "held", "unchanged", "skipped", "elements", "holds")
+    PROFILE_FIELD_NUMBER: _ClassVar[int]
+    PROFILE_VERSION_FIELD_NUMBER: _ClassVar[int]
+    TRIED_FIELD_NUMBER: _ClassVar[int]
+    SESSIONS_FIELD_NUMBER: _ClassVar[int]
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    CHANGED_FIELD_NUMBER: _ClassVar[int]
+    HELD_FIELD_NUMBER: _ClassVar[int]
+    UNCHANGED_FIELD_NUMBER: _ClassVar[int]
+    SKIPPED_FIELD_NUMBER: _ClassVar[int]
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    HOLDS_FIELD_NUMBER: _ClassVar[int]
+    profile: str
+    profile_version: int
+    tried: _timestamp_pb2.Timestamp
+    sessions: int
+    files: int
+    changed: int
+    held: int
+    unchanged: int
+    skipped: int
+    elements: _containers.RepeatedCompositeFieldContainer[ChangeElement]
+    holds: _containers.RepeatedCompositeFieldContainer[ChangeHold]
+    def __init__(self, profile: _Optional[str] = ..., profile_version: _Optional[int] = ..., tried: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., sessions: _Optional[int] = ..., files: _Optional[int] = ..., changed: _Optional[int] = ..., held: _Optional[int] = ..., unchanged: _Optional[int] = ..., skipped: _Optional[int] = ..., elements: _Optional[_Iterable[_Union[ChangeElement, _Mapping]]] = ..., holds: _Optional[_Iterable[_Union[ChangeHold, _Mapping]]] = ...) -> None: ...
+
+class ChangeElement(_message.Message):
+    __slots__ = ("tag", "action", "files")
+    TAG_FIELD_NUMBER: _ClassVar[int]
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    tag: str
+    action: str
+    files: int
+    def __init__(self, tag: _Optional[str] = ..., action: _Optional[str] = ..., files: _Optional[int] = ...) -> None: ...
+
+class ChangeHold(_message.Message):
+    __slots__ = ("reason", "files")
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    reason: str
+    files: int
+    def __init__(self, reason: _Optional[str] = ..., files: _Optional[int] = ...) -> None: ...

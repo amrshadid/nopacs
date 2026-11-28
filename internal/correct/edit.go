@@ -116,7 +116,7 @@ func (e *Engine) Edit(ctx context.Context, r EditRequest) (tenant.Correction, er
 	if err := e.reached(c, "records"); err != nil {
 		return c, err
 	}
-	return e.writeEdit(ctx, c, targets, r.Changes, r.fromArchive)
+	return e.writeEdit(ctx, c, targets, editWith{changes: r.Changes, fromArchive: r.fromArchive})
 }
 
 // writeEdit writes a prepared edit's new revisions and each scan's
@@ -124,8 +124,7 @@ func (e *Engine) Edit(ctx context.Context, r EditRequest) (tenant.Correction, er
 // gates are held from before the first write until the publish is
 // answered, as a replace holds its storage's, so a switch never leaves a
 // new revision on a place the catalog then names no longer.
-func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []tenant.EditTarget, changes []EditChange,
-	fromArchive bool) (tenant.Correction, error) {
+func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []tenant.EditTarget, w editWith) (tenant.Correction, error) {
 	prepared := make(map[string]tenant.EditedInstance, len(c.Edits))
 	for _, in := range c.Edits {
 		prepared[in.UID] = in
@@ -139,7 +138,7 @@ func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []t
 		release()
 		return e.abandon(ctx, c, why, err)
 	}
-	values, named := editValues(changes)
+	values, named := editValues(w.changes)
 	cc := tenant.CorrectionCommit{ID: c.ID, Manifests: map[string]tenant.SHA256{}, Sidecars: map[string]tenant.SHA256{}}
 	if named {
 		cc.Values = map[string]tenant.EditValues{}
@@ -162,7 +161,7 @@ func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []t
 			if !ok {
 				return abandon(reasonChanged, fault.New(fault.Internal, "an instance of the edit was not prepared"))
 			}
-			line, file, w, why, err := e.editOne(ctx, st, t, in, changes, fromArchive)
+			line, file, written, why, err := e.editOne(ctx, st, t, in, w)
 			if err != nil {
 				return abandon(why, err)
 			}
@@ -170,7 +169,7 @@ func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []t
 				return c, err
 			}
 			lines[t.UID], files[t.UID] = line, file
-			cc.Edits = append(cc.Edits, w)
+			cc.Edits = append(cc.Edits, written)
 		}
 		var change func(*sidecar.Values)
 		if named {
@@ -209,8 +208,8 @@ func (e *Engine) writeEdit(ctx context.Context, c tenant.Correction, targets []t
 // its line of the scan's metadata, its manifest entry and what was written;
 // on failure, the state reason to abandon with. fromArchive is the
 // request's (EditedFile.FromArchive).
-func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget, in tenant.EditedInstance, changes []EditChange,
-	fromArchive bool) (sidecar.Instance, manifest.File, tenant.EditWritten, string, error) {
+func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget, in tenant.EditedInstance,
+	w editWith) (sidecar.Instance, manifest.File, tenant.EditWritten, string, error) {
 	var none sidecar.Instance
 	old, err := readAll(ctx, st, t.Key, t.Size)
 	if err == nil && (int64(len(old)) != t.Size || tenant.SHA256(sha256.Sum256(old)) != t.SHA256) {
@@ -219,16 +218,19 @@ func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget
 	if err != nil {
 		return none, manifest.File{}, tenant.EditWritten{}, reasonUnreadable, err
 	}
-	if err := receive.CheckRewritable(old, 0); err != nil {
-		return none, manifest.File{}, tenant.EditWritten{}, reasonCharset, err
-	}
-	nb, err := receive.RewriteFile(old, 0, func(ds *dataset.Dataset) error { return applyChanges(ds, changes) })
-	if err != nil {
-		return none, manifest.File{}, tenant.EditWritten{}, reasonUnreadable, err
-	}
-	if err := e.cfg.Judge.JudgeEdit(ctx, EditedFile{Target: t, File: nb, Set: setTags(changes), Removed: removedTags(changes),
-		FromArchive: fromArchive}); err != nil {
-		return none, manifest.File{}, tenant.EditWritten{}, reasonRefused, err
+	nb := w.file
+	if nb == nil {
+		if err := receive.CheckRewritable(old, 0); err != nil {
+			return none, manifest.File{}, tenant.EditWritten{}, reasonCharset, err
+		}
+		nb, err = receive.RewriteFile(old, 0, func(ds *dataset.Dataset) error { return applyChanges(ds, w.changes) })
+		if err != nil {
+			return none, manifest.File{}, tenant.EditWritten{}, reasonUnreadable, err
+		}
+		if err := e.cfg.Judge.JudgeEdit(ctx, EditedFile{Target: t, File: nb, Set: setTags(w.changes), Removed: removedTags(w.changes),
+			FromArchive: w.fromArchive}); err != nil {
+			return none, manifest.File{}, tenant.EditWritten{}, reasonRefused, err
+		}
 	}
 	sum := tenant.SHA256(sha256.Sum256(nb))
 	size := int64(len(nb))
@@ -236,8 +238,8 @@ func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget
 	if err != nil {
 		return none, manifest.File{}, tenant.EditWritten{}, reasonUnreadable, fault.Wrap(fault.Internal, err, "a revision key cannot be made")
 	}
-	w, err := st.Put(ctx, key, bytes.NewReader(nb))
-	if err == nil && (w.Size != size || tenant.SHA256(w.SHA256) != sum) {
+	put, err := st.Put(ctx, key, bytes.NewReader(nb))
+	if err == nil && (put.Size != size || tenant.SHA256(put.SHA256) != sum) {
 		err = errCopy
 	}
 	if err == nil {
@@ -258,6 +260,14 @@ func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget
 		return none, manifest.File{}, tenant.EditWritten{}, reasonUnreadable, fault.Wrap(fault.Internal, err, "the new revision's line cannot be made")
 	}
 	line.Key, line.Revision = key, in.NewRevision
+	if w.file != nil {
+		// A revision a profile made is described by that profile's run, not
+		// by the revision it replaces: the version, its checksum, the base
+		// in force and the elements no rule named. An edit keeps the old
+		// line's, since it changes values and not the profile.
+		line.Profile, line.ProfileSHA256, line.BaseProfile = w.profile, w.profileSHA256, w.base
+		line.Unnamed, line.UnnamedOver = w.unnamed, w.unnamedOver
+	}
 	// The checksum the instance was received with stays the catalog's (a
 	// file sent again is still the same file); the line names it whenever
 	// it is not the archived one, as a rebuild reads it back.
@@ -276,6 +286,22 @@ func (e *Engine) editOne(ctx context.Context, st blob.Store, t tenant.EditTarget
 		return none, manifest.File{}, tenant.EditWritten{}, reasonUnreadable, fault.Wrap(fault.Internal, err, "the new revision's line cannot be kept")
 	}
 	return line, file, tenant.EditWritten{UID: t.UID, SHA256: sum, Size: size, Line: kept}, "", nil
+}
+
+// editWith is how an edit makes each instance's new revision: by applying
+// changes to the instance's data set, or, for a profile re-run, by writing
+// a file already made and checked (file), whose version the instance's line
+// then names (profile) and whose catalog values changes name.
+type editWith struct {
+	changes     []EditChange
+	fromArchive bool
+	file        []byte
+	profile     string
+	// profileSHA256, base, unnamed and unnamedOver are what the line of a
+	// revision made by a profile records of the run.
+	profileSHA256, base string
+	unnamed             []sidecar.UnnamedElement
+	unnamedOver         int
 }
 
 // applyValues gives a scan header's values those an edit sets.

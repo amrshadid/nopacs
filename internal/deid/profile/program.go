@@ -96,6 +96,18 @@ type Program struct {
 	// the lists each clean or redact rule names, by position.
 	lists    *TextLists
 	listMask map[int]uint32
+	// layers, when the profile stacks layers (ExpandedProfile.Layers), are
+	// the span of rules and of pixel rules each owns and what it does with
+	// an element it does not name; empty for a profile of one layer.
+	layers []layerSpan
+}
+
+// layerSpan is one layer of a stacked profile: its rules are rules[from:to],
+// its pixel rules pixels[pixFrom:pixTo], and unnamed is what it does with an
+// element none of its rules names.
+type layerSpan struct {
+	from, to, pixFrom, pixTo int
+	unnamed                  v1.UnnamedElements
 }
 
 // privateKey is a private block: its creator and group.
@@ -202,8 +214,14 @@ func compile(e *v1.ExpandedProfile, shared bool) (*Program, error) {
 			p.byVR[sel.vr] = append(p.byVR[sel.vr], i)
 		}
 	}
+	if err := p.spanLayers(e); err != nil {
+		return nil, err
+	}
 	for i, ep := range e.GetPixelRules() {
 		r := ep.GetRule()
+		if ed < templateEdition && usesTemplate(r) {
+			return nil, fmt.Errorf("profile: %s: pixel rule %d fills by template, which language edition %d does not have", CodeBadEdition, i+1, ed)
+		}
 		c, ok := checkPixelRule(at{c: chk, pixelRule: i + 1, name: r.GetName()}, r, map[string]int{})
 		if !ok {
 			return nil, fmt.Errorf("profile: the expanded profile: %w", chk.list)
@@ -212,6 +230,27 @@ func compile(e *v1.ExpandedProfile, shared bool) (*Program, error) {
 		p.pixels = append(p.pixels, c)
 	}
 	return p, nil
+}
+
+// spanLayers reads the layers of a stacked profile: each owns the next rules
+// and pixel rules, and together they own every one.
+func (p *Program) spanLayers(e *v1.ExpandedProfile) error {
+	rules, pixels := 0, 0
+	for _, l := range e.GetLayers() {
+		if l.GetRules() < 0 || l.GetPixelRules() < 0 {
+			return fmt.Errorf("profile: a layer has a number of rules below none")
+		}
+		if _, known := v1.UnnamedElements_name[int32(l.GetUnnamed())]; !known || l.GetUnnamed() == v1.UnnamedElements_UNNAMED_ELEMENTS_UNSPECIFIED {
+			return fmt.Errorf("profile: a layer states what it does with an element it does not name")
+		}
+		p.layers = append(p.layers, layerSpan{from: rules, to: rules + int(l.GetRules()), pixFrom: pixels, pixTo: pixels + int(l.GetPixelRules()), unnamed: l.GetUnnamed()})
+		rules += int(l.GetRules())
+		pixels += int(l.GetPixelRules())
+	}
+	if len(p.layers) > 0 && (rules != len(e.GetRules()) || pixels != len(e.GetPixelRules())) {
+		return fmt.Errorf("profile: the layers of a stacked profile own its rules and pixel rules, each once")
+	}
+	return nil
 }
 
 // Unnamed returns what happens to an element no rule decides, other than a
@@ -239,13 +278,43 @@ func (p *Program) HoldsUnsearchedSegments() bool {
 // rule; one that would have read a value the engine could not read
 // (loc.ValueUnread) does not select it, and the decision says so
 // (PatternUnread).
+//
+// A profile that stacks layers is decided by each layer apart, as it would
+// be alone, and the strictest of the decisions wins (CompareActions): a rule
+// of a layer is never weakened by a more specific selector of another, and
+// where two decisions cannot be compared the lower layer's stands.
 func (p *Program) Decide(loc Location, f Facts) Decision {
+	if len(p.layers) == 0 {
+		return p.decideIn(loc, f, 0, len(p.rules), p.Unnamed())
+	}
+	var cur Decision
+	for k, l := range p.layers {
+		d := p.decideIn(loc, f, l.from, l.to, l.unnamed)
+		if k == 0 {
+			cur = d
+			continue
+		}
+		unread := cur.PatternUnread || d.PatternUnread
+		if CompareActions(d.Action, cur.Action) == OrderStricter {
+			cur = d
+		}
+		cur.PatternUnread = unread
+	}
+	return cur
+}
+
+// decideIn is Decide over the rules from to to alone, with unnamed for an
+// element none names.
+func (p *Program) decideIn(loc Location, f Facts, from, to int, unnamed v1.UnnamedElements) Decision {
 	unread := false
 	for _, candidates := range p.tiers(loc) {
 		// The rules of a tier are in order, so the last that applies is
 		// the later rule.
 		for j := len(candidates) - 1; j >= 0; j-- {
 			i := candidates[j]
+			if i < from || i >= to {
+				continue
+			}
 			r := p.rules[i]
 			var matches []string
 			var over bool
@@ -270,7 +339,7 @@ func (p *Program) Decide(loc Location, f Facts) Decision {
 				PatternMatches: matches, PatternOver: over, PatternUnread: unread, Redact: r.redact, Lists: p.listMask[i]}
 		}
 	}
-	if group(loc.Tag)%2 == 1 || p.Unnamed() == v1.UnnamedElements_UNNAMED_ELEMENTS_REMOVE {
+	if group(loc.Tag)%2 == 1 || unnamed == v1.UnnamedElements_UNNAMED_ELEMENTS_REMOVE {
 		return Decision{Index: -1, Action: removeAction, PatternUnread: unread}
 	}
 	return Decision{Index: -1, Action: keepAction, PatternUnread: unread}
@@ -298,12 +367,20 @@ func (p *Program) ReadsValues() bool { return len(p.values) > 0 }
 // Pixels returns the pixel rule that decides for an image of rows and
 // columns, given the file's and the reception's facts: the last that
 // matches. ok is false when none does, and an image at risk is then
-// quarantined.
+// quarantined. In a profile that stacks layers the lowest layer with a rule
+// that matches decides, the last of its own that does: a layer above never
+// replaces what a layer below does to an image it matches.
 func (p *Program) Pixels(rows, columns int, f Facts) (r *v1.ExpandedPixelRule, ok bool) {
-	for i := len(p.pixels) - 1; i >= 0; i-- {
-		c := p.pixels[i]
-		if (c.rows == 0 || int(c.rows) == rows) && (c.cols == 0 || int(c.cols) == columns) && allHold(c.when, f) {
-			return p.expanded.GetPixelRules()[i], true
+	from, to := 0, len(p.pixels)
+	for k := 0; k == 0 || k < len(p.layers); k++ {
+		if len(p.layers) > 0 {
+			from, to = p.layers[k].pixFrom, p.layers[k].pixTo
+		}
+		for i := to - 1; i >= from; i-- {
+			c := p.pixels[i]
+			if (c.rows == 0 || int(c.rows) == rows) && (c.cols == 0 || int(c.cols) == columns) && allHold(c.when, f) {
+				return p.expanded.GetPixelRules()[i], true
+			}
 		}
 	}
 	return nil, false

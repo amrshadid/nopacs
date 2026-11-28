@@ -121,9 +121,10 @@ type Definition struct {
 	TenantSetByInstallation bool
 	// TenantOnly reports that the setting has no installation value: the
 	// installation scope is refused, and what applies to a tenant without a
-	// value of its own is the built-in default. It needs
-	// TenantSetByInstallation, since a default the installation sets for
-	// every tenant would make sense for any other setting.
+	// value of its own is the built-in default. It needs TenantOverride. A
+	// tenant's own admin sets it unless TenantSetByInstallation says
+	// otherwise: it holds what only one tenant's database can name, such as
+	// a profile version.
 	TenantOnly bool
 	// Validate returns an error, whose text is for the person who wrote the
 	// value, unless the value is one this setting accepts. Whether an empty
@@ -277,7 +278,7 @@ func Builtin() []Definition {
 		Validate:       func(v string) error { _, err := ParseRetention(v); return err },
 	}}, append(append(append(append(accessDefinitions(), senderDefinitions()...), auditDefinitions()...), readDefinitions()...),
 		append(append(append(append(scrubDefinitions(), importDefinitions()...), correctionDefinitions()...), backupDefinitions()...),
-			append(append(append(replicaDefinitions(), quotaDefinitions()...), searchDefinitions()...), transferDefinitions()...)...)...)...)
+			append(append(append(append(replicaDefinitions(), quotaDefinitions()...), searchDefinitions()...), transferDefinitions()...), append(deidDefinitions(), deidTrialDefinitions()...)...)...)...)...)
 }
 
 // New returns a table of defs. It refuses a name that is not valid or given
@@ -296,8 +297,8 @@ func New(defs ...Definition) (*Table, error) {
 			return nil, errors.New("settings: " + d.Name + " has no Validate function")
 		case d.TenantSetByInstallation && !d.TenantOverride:
 			return nil, errors.New("settings: " + d.Name + " is set on a tenant by the installation, so it takes a tenant's value")
-		case d.TenantOnly && !d.TenantSetByInstallation:
-			return nil, errors.New("settings: " + d.Name + " has no installation value, which only a setting the installation sets on each tenant may lack")
+		case d.TenantOnly && !d.TenantOverride:
+			return nil, errors.New("settings: " + d.Name + " has no installation value, so it takes a tenant's value")
 		case len(d.Default) > MaxValueLength:
 			return nil, errors.New("settings: the default of " + d.Name + " is longer than 64 KiB")
 		}

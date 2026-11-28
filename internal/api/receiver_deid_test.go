@@ -91,8 +91,9 @@ func TestReceiverDeidentification(t *testing.T) {
 	if o := set(&v1.Receiver{Name: "deid"}, "deidentification"); o.code() != connect.CodeFailedPrecondition {
 		t.Errorf("a receiver changed to as received with the setting off: %v", o.err)
 	}
-	if o := set(&v1.Receiver{Name: "plain", Deidentification: &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: "research", Version: 1}}},
-		"deidentification"); o.err != nil || o.res.(*v1.SetReceiverResponse).GetReceiver().GetProfile().GetName() != "research" {
+	if o := call(f.as(f.lab1Admin).receivers.SetReceiver, &v1.SetReceiverRequest{Tenant: "lab1", UpdateMask: mask("deidentification"),
+		Receiver: &v1.Receiver{Name: "plain", Deidentification: &v1.Receiver_Profile{Profile: &v1.ProfileVersionRef{Name: "research", Version: 1}}},
+		Force:    true, ForceReason: "a version this test does not try over receptions"}); o.err != nil || o.res.(*v1.SetReceiverResponse).GetReceiver().GetProfile().GetName() != "research" {
 		t.Errorf("a receiver changed to a profile version: %v", o.err)
 	}
 	if o := set(&v1.Receiver{Name: "deid", Naming: &v1.NamingRule{Subject: "sub-{PatientID}", Session: "ses-{#StudyInstanceUID}",

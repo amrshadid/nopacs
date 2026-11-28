@@ -41,6 +41,7 @@ func TestBuiltin(t *testing.T) {
 		DeidPixelLimit:          {SetByInstallation, "1GiB", false},
 		DeidMemory:              {InstallationOnly, "2GiB", false},
 		DeidListCacheBytes:      {InstallationOnly, "256MiB", false},
+		DeidBaseProfile:         {Ordinary, "", true},
 		APICORSOrigins:          {InstallationOnly, "", false},
 		AccessTrustedProxies:    {InstallationOnly, "", false},
 		AccessForwardedHeader:   {InstallationOnly, "x-forwarded-for", false},
@@ -58,6 +59,7 @@ func TestBuiltin(t *testing.T) {
 		SenderMaxAssociations:       {InstallationOnly, "32", false},
 		SenderTenantMaxAssociations: {SetByInstallation, "8", false},
 		JobFailuresKept:             {Ordinary, "10000", false},
+		DeidChangeTrialSessions:     {Ordinary, "20", false},
 
 		AuditSealInterval: {InstallationOnly, "10m", false},
 		AuditRetention:    {InstallationOnly, "0", false},
@@ -141,7 +143,7 @@ func TestNewRefusesMistakes(t *testing.T) {
 		"bad default": {{Name: "a", Validate: no}},
 		"reserved":    {{Name: ReservedPrefix + "x", Validate: ok}},
 		"set by the installation without a tenant value": {{Name: "a", Validate: ok, TenantSetByInstallation: true}},
-		"tenant only, set by its own admin":              {{Name: "a", Validate: ok, TenantOverride: true, TenantOnly: true}},
+		"tenant only, with no tenant value":              {{Name: "a", Validate: ok, TenantOnly: true}},
 	} {
 		if _, err := New(defs...); err == nil {
 			t.Errorf("%s: accepted", name)
